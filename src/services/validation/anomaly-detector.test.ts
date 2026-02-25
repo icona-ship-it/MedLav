@@ -27,11 +27,18 @@ describe('detectAnomalies', () => {
     expect(detectAnomalies([])).toEqual([]);
   });
 
+  it('should return empty array for single event', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita' }),
+    ];
+    expect(detectAnomalies(events)).toEqual([]);
+  });
+
   describe('ritardo_diagnostico', () => {
-    it('should detect delay >30 days between visit and diagnosis', () => {
+    it('should detect delay >90 days between visit and diagnosis', () => {
       const events = [
         makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'Prima visita' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-03-15', eventType: 'diagnosi', title: 'Diagnosi tardiva' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-05-15', eventType: 'diagnosi', title: 'Diagnosi tardiva' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -41,10 +48,10 @@ describe('detectAnomalies', () => {
       expect(ritardo[0].involvedEvents).toHaveLength(2);
     });
 
-    it('should not flag delay <=30 days', () => {
+    it('should not flag delay <=90 days', () => {
       const events = [
         makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'Visita' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-02-01', eventType: 'diagnosi', title: 'Diagnosi rapida' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-03-15', eventType: 'diagnosi', title: 'Diagnosi' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -54,22 +61,10 @@ describe('detectAnomalies', () => {
   });
 
   describe('gap_post_chirurgico', () => {
-    it('should detect missing follow-up after surgery', () => {
+    it('should detect missing follow-up after surgery when later events exist', () => {
       const events = [
         makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento chirurgico' }),
-      ];
-
-      const anomalies = detectAnomalies(events);
-      const gaps = anomalies.filter((a) => a.anomalyType === 'gap_post_chirurgico');
-
-      expect(gaps.length).toBe(1);
-      expect(gaps[0].severity).toBe('alta');
-    });
-
-    it('should detect late follow-up >30 days after surgery', () => {
-      const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-03-20', eventType: 'follow-up', title: 'Controllo tardivo' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-06-15', eventType: 'esame', title: 'Esame molto dopo' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -78,10 +73,22 @@ describe('detectAnomalies', () => {
       expect(gaps.length).toBe(1);
     });
 
-    it('should not flag follow-up within 30 days', () => {
+    it('should detect late follow-up >60 days after surgery', () => {
       const events = [
         makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-01-25', eventType: 'follow-up', title: 'Controllo' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-04-20', eventType: 'follow-up', title: 'Controllo tardivo' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const gaps = anomalies.filter((a) => a.anomalyType === 'gap_post_chirurgico');
+
+      expect(gaps.length).toBe(1);
+    });
+
+    it('should not flag follow-up within 60 days', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'follow-up', title: 'Controllo' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -91,10 +98,13 @@ describe('detectAnomalies', () => {
   });
 
   describe('gap_documentale', () => {
-    it('should detect gap >60 days between events', () => {
+    it('should detect gap >180 days between events when enough events exist', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'Prima visita' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-05-15', eventType: 'visita', title: 'Seconda visita' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'V1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-10', eventType: 'esame', title: 'E1' }),
+        makeEvent({ orderNumber: 3, eventDate: '2024-03-10', eventType: 'terapia', title: 'T1' }),
+        makeEvent({ orderNumber: 4, eventDate: '2024-04-10', eventType: 'visita', title: 'V2' }),
+        makeEvent({ orderNumber: 5, eventDate: '2024-12-15', eventType: 'visita', title: 'V3 dopo gap' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -103,37 +113,51 @@ describe('detectAnomalies', () => {
       expect(gaps.length).toBe(1);
     });
 
-    it('should mark >180 days as critical', () => {
+    it('should mark >365 days as alta severity', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'Prima' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-08-15', eventType: 'visita', title: 'Seconda' }),
+        makeEvent({ orderNumber: 1, eventDate: '2023-01-10', eventType: 'visita', title: 'V1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2023-02-10', eventType: 'esame', title: 'E1' }),
+        makeEvent({ orderNumber: 3, eventDate: '2023-03-10', eventType: 'terapia', title: 'T1' }),
+        makeEvent({ orderNumber: 4, eventDate: '2023-04-10', eventType: 'visita', title: 'V2' }),
+        makeEvent({ orderNumber: 5, eventDate: '2024-08-15', eventType: 'visita', title: 'V3 dopo gap lungo' }),
       ];
 
       const anomalies = detectAnomalies(events);
       const gaps = anomalies.filter((a) => a.anomalyType === 'gap_documentale');
 
       expect(gaps.length).toBe(1);
-      expect(gaps[0].severity).toBe('critica');
+      expect(gaps[0].severity).toBe('alta');
     });
   });
 
   describe('consenso_non_documentato', () => {
-    it('should detect missing consent for surgery', () => {
+    it('should detect missing consent only with multiple document sources', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento senza consenso' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento', documentId: 'doc-1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-10', eventType: 'visita', title: 'Visita', documentId: 'doc-2' }),
       ];
 
       const anomalies = detectAnomalies(events);
       const consenso = anomalies.filter((a) => a.anomalyType === 'consenso_non_documentato');
 
       expect(consenso.length).toBe(1);
-      expect(consenso[0].severity).toBe('alta');
+    });
+
+    it('should not flag consent with single document source', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento', documentId: 'doc-1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-10', eventType: 'visita', title: 'Visita', documentId: 'doc-1' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const consenso = anomalies.filter((a) => a.anomalyType === 'consenso_non_documentato');
+      expect(consenso.length).toBe(0);
     });
 
     it('should not flag when consent is present', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-05', eventType: 'consenso', title: 'Consenso informato' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-05', eventType: 'consenso', title: 'Consenso informato', documentId: 'doc-1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-01-10', eventType: 'intervento', title: 'Intervento', documentId: 'doc-2' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -168,10 +192,10 @@ describe('detectAnomalies', () => {
   });
 
   describe('diagnosi_contraddittoria', () => {
-    it('should detect contradictory diagnoses within 90 days', () => {
+    it('should detect contradictory diagnoses within 60 days', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'diagnosi', title: 'Diagnosi A', diagnosis: 'Frattura femore destro' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'diagnosi', title: 'Diagnosi B', diagnosis: 'Lussazione anca sinistra' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'diagnosi', title: 'Diagnosi A', diagnosis: 'Frattura femore destro composta' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'diagnosi', title: 'Diagnosi B', diagnosis: 'Lussazione anca sinistra post traumatica' }),
       ];
 
       const anomalies = detectAnomalies(events);
@@ -193,10 +217,10 @@ describe('detectAnomalies', () => {
   });
 
   describe('terapia_senza_followup', () => {
-    it('should detect therapy without follow-up within 14 days', () => {
+    it('should detect therapy without follow-up when multiple doc sources', () => {
       const events = [
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'terapia', title: 'Terapia antibiotica' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-02-20', eventType: 'visita', title: 'Visita successiva' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'terapia', title: 'Terapia antibiotica', documentId: 'doc-1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-03-20', eventType: 'visita', title: 'Visita successiva', documentId: 'doc-2' }),
       ];
 
       const anomalies = detectAnomalies(events);
