@@ -3,7 +3,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateCaseCode } from '@/lib/case-code';
 import type { CaseType, CaseRole } from '@/types';
 
 export async function createCase(formData: FormData) {
@@ -24,36 +23,69 @@ export async function createCase(formData: FormData) {
     return { error: 'Tipo caso e tipo incarico sono obbligatori' };
   }
 
-  // Count existing cases to generate sequential code
-  const { count } = await supabase
+  // Generate unique case code with retry on collision
+  const year = new Date().getFullYear();
+  const prefix = `CASO-${year}-`;
+
+  // Find the highest existing code number for this user
+  const { data: latestCase } = await supabase
     .from('cases')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id);
+    .select('code')
+    .eq('user_id', user.id)
+    .like('code', `${prefix}%`)
+    .order('code', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const code = generateCaseCode(count ?? 0);
+  let nextNumber = 1;
+  if (latestCase?.code) {
+    const lastPart = (latestCase.code as string).split('-').pop();
+    const parsed = parseInt(lastPart ?? '0', 10);
+    if (!isNaN(parsed)) nextNumber = parsed + 1;
+  }
 
-  const { data: newCase, error } = await supabase
-    .from('cases')
-    .insert({
-      user_id: user.id,
-      code,
-      case_type: caseType,
-      case_role: caseRole,
-      patient_initials: patientInitials || null,
-      practice_reference: practiceReference || null,
-      notes: notes || null,
-      status: 'bozza',
-      document_count: 0,
-    })
-    .select('id')
-    .single();
+  // Try inserting with retry on unique violation (up to 3 attempts)
+  let newCaseId: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const code = `${prefix}${(nextNumber + attempt).toString().padStart(3, '0')}`;
 
-  if (error) {
+    const { data: newCase, error } = await supabase
+      .from('cases')
+      .insert({
+        user_id: user.id,
+        code,
+        case_type: caseType,
+        case_role: caseRole,
+        patient_initials: patientInitials || null,
+        practice_reference: practiceReference || null,
+        notes: notes || null,
+        status: 'bozza',
+        document_count: 0,
+      })
+      .select('id')
+      .single();
+
+    if (!error && newCase) {
+      newCaseId = newCase.id as string;
+      break;
+    }
+
+    // If it's a unique violation, retry with next number
+    if (error?.code === '23505') {
+      console.error(`[createCase] Code collision on attempt ${attempt + 1}, retrying`);
+      continue;
+    }
+
+    // Any other error, bail out
     console.error(`[createCase] Failed for user ${user.id}: ${error.message} (code: ${error.code})`);
     return { error: 'Errore nella creazione del caso. Riprova.' };
   }
 
-  redirect(`/cases/${newCase.id}`);
+  if (!newCaseId) {
+    return { error: 'Errore nella creazione del caso. Riprova.' };
+  }
+
+  redirect(`/cases/${newCaseId}`);
 }
 
 export async function getCases(status?: string) {
