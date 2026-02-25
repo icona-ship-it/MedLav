@@ -1,23 +1,19 @@
 import { Mistral } from '@mistralai/mistralai';
 
-let mistralClient: Mistral | null = null;
-
 export function getMistralClient(): Mistral {
-  if (!mistralClient) {
-    const apiKey = process.env.MISTRAL_API_KEY;
-    if (!apiKey) {
-      throw new Error('MISTRAL_API_KEY environment variable is not set');
-    }
-    mistralClient = new Mistral({ apiKey });
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) {
+    throw new Error('MISTRAL_API_KEY environment variable is not set');
   }
-  return mistralClient;
+  return new Mistral({ apiKey });
 }
 
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 2000;
+const MAX_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 3000;
 
 /**
- * Retry a Mistral API call with exponential backoff on transient errors (500, 503).
+ * Retry a Mistral API call with exponential backoff on transient errors
+ * (server errors + network failures like fetch failed, ECONNRESET, etc).
  */
 export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -27,7 +23,10 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
       const message = err instanceof Error ? err.message : String(err);
       const isTransient = message.includes('500') || message.includes('503') ||
         message.includes('Service unavailable') || message.includes('internal_server_error') ||
-        message.includes('overloaded');
+        message.includes('overloaded') ||
+        message.includes('fetch failed') || message.includes('ECONNRESET') ||
+        message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') ||
+        message.includes('socket hang up') || message.includes('network');
 
       if (isTransient && attempt < MAX_RETRIES - 1) {
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
