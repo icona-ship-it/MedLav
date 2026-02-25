@@ -1,11 +1,11 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
-import { extractionResponseSchema, extractedEventSchema } from './extraction-schemas';
-import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
+import { extractionResponseSchema, extractionJsonSchema } from './extraction-schemas';
+import type { ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 
-// Mistral Large has 128k context; leave room for system prompt + response
+// Mistral Small has 128k context; leave room for system prompt + response
 const MAX_CHUNK_CHARS = 80_000;
 
 export interface ExtractionParams {
@@ -23,8 +23,7 @@ interface PageBlock {
 
 /**
  * Extract clinical events from a document's OCR text.
- * Pre-processes with table annotation, then handles long documents
- * by chunking on page boundaries with overlap.
+ * Uses Mistral Small with json_schema for fast + reliable structured output.
  */
 export async function extractEventsFromDocument(
   params: ExtractionParams,
@@ -47,7 +46,7 @@ export async function extractEventsFromDocument(
 }
 
 /**
- * Extract events from a single text chunk.
+ * Extract events from a single text chunk using Mistral Small + json_schema.
  */
 async function extractFromSingleChunk(
   params: ExtractionParams,
@@ -56,6 +55,8 @@ async function extractFromSingleChunk(
   const client = getMistralClient();
 
   const startMs = Date.now();
+  console.log(`[extraction] Starting Mistral Small call for "${fileName}" (${documentText.length} chars)`);
+
   const response = await withMistralRetry(
     () => client.chat.complete({
       model: MISTRAL_MODELS.MISTRAL_SMALL,
@@ -69,21 +70,28 @@ async function extractFromSingleChunk(
           content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
         },
       ],
-      responseFormat: { type: 'json_object' },
+      responseFormat: {
+        type: 'json_schema',
+        jsonSchema: {
+          name: 'extraction_response',
+          schemaDefinition: extractionJsonSchema,
+        },
+      },
       temperature,
       maxTokens: 16384,
     }),
     'extraction',
   );
-  console.log(`[extraction] Mistral Small API call took ${Date.now() - startMs}ms for ${documentText.length} chars input`);
 
+  const elapsedMs = Date.now() - startMs;
   const content = extractResponseContent(response);
+  console.log(`[extraction] Mistral Small responded in ${elapsedMs}ms (${content.length} chars response)`);
+
   return parseExtractionResponse(content);
 }
 
 /**
  * Extract events from a long document by splitting into overlapping chunks.
- * Merges results from all chunks.
  */
 async function extractFromChunks(
   params: ExtractionParams,
@@ -91,7 +99,7 @@ async function extractFromChunks(
   const { documentText, fileName, documentType, caseType } = params;
   const chunks = splitTextIntoChunks(documentText, MAX_CHUNK_CHARS);
 
-  const allEvents: ExtractedEvent[] = [];
+  const allEvents: ExtractionResponse['events'] = [];
   const allAbbreviations: Array<{ abbreviation: string; expansion: string }> = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -109,7 +117,6 @@ async function extractFromChunks(
     }
   }
 
-  // Deduplicate abbreviations
   const uniqueAbbreviations = deduplicateAbbreviations(allAbbreviations);
 
   return {
@@ -120,8 +127,6 @@ async function extractFromChunks(
 
 /**
  * Smart chunking: split on page boundaries when page markers are present.
- * Falls back to character-based chunking if no markers found.
- * Overlap = repeat last page of previous chunk at start of next chunk.
  */
 function splitTextIntoChunks(
   text: string,
@@ -130,16 +135,12 @@ function splitTextIntoChunks(
   const pageBlocks = extractPageBlocks(text);
 
   if (pageBlocks.length === 0) {
-    // No page markers — fallback to character-based chunking
     return splitByCharacterBoundaries(text, maxChunkSize);
   }
 
   return splitPageBlocksIntoChunks(pageBlocks, maxChunkSize);
 }
 
-/**
- * Extract text blocks per page using [PAGE_START:N] / [PAGE_END:N] markers.
- */
 function extractPageBlocks(text: string): PageBlock[] {
   const blocks: PageBlock[] = [];
   const regex = /\[PAGE_START:(\d+)\]([\s\S]*?)\[PAGE_END:\d+\]/g;
@@ -148,17 +149,13 @@ function extractPageBlocks(text: string): PageBlock[] {
   while ((match = regex.exec(text)) !== null) {
     blocks.push({
       pageNumber: parseInt(match[1], 10),
-      text: match[0], // Keep markers so LLM can see page numbers
+      text: match[0],
     });
   }
 
   return blocks;
 }
 
-/**
- * Accumulate page blocks into chunks up to maxChunkSize.
- * Overlap = repeat the last page of the previous chunk at start of next.
- */
 function splitPageBlocksIntoChunks(
   blocks: PageBlock[],
   maxChunkSize: number,
@@ -171,9 +168,7 @@ function splitPageBlocksIntoChunks(
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
 
-    // Single page exceeds max — split it with character chunking
     if (block.text.length > maxChunkSize) {
-      // Flush current chunk first
       if (currentPages.length > 0) {
         chunks.push(currentPages.join('\n'));
         lastPageOfPrevChunk = currentPages[currentPages.length - 1];
@@ -183,17 +178,14 @@ function splitPageBlocksIntoChunks(
 
       const subChunks = splitByCharacterBoundaries(block.text, maxChunkSize);
       chunks.push(...subChunks);
-      lastPageOfPrevChunk = null; // Can't cleanly overlap a split page
+      lastPageOfPrevChunk = null;
       continue;
     }
 
-    // Would adding this page exceed the limit?
     if (currentSize + block.text.length > maxChunkSize && currentPages.length > 0) {
-      // Flush current chunk
       chunks.push(currentPages.join('\n'));
       lastPageOfPrevChunk = currentPages[currentPages.length - 1];
 
-      // Start new chunk with overlap (last page of previous chunk)
       currentPages = lastPageOfPrevChunk ? [lastPageOfPrevChunk] : [];
       currentSize = lastPageOfPrevChunk ? lastPageOfPrevChunk.length : 0;
     }
@@ -202,7 +194,6 @@ function splitPageBlocksIntoChunks(
     currentSize += block.text.length;
   }
 
-  // Flush remaining
   if (currentPages.length > 0) {
     chunks.push(currentPages.join('\n'));
   }
@@ -210,9 +201,6 @@ function splitPageBlocksIntoChunks(
   return chunks;
 }
 
-/**
- * Fallback: split text into overlapping chunks at natural boundaries.
- */
 function splitByCharacterBoundaries(
   text: string,
   maxChunkSize: number,
@@ -224,7 +212,6 @@ function splitByCharacterBoundaries(
   while (start < text.length) {
     let end = Math.min(start + maxChunkSize, text.length);
 
-    // Try to break at a natural boundary (double newline, section separator)
     if (end < text.length) {
       const searchStart = Math.max(end - 1000, start);
       const searchText = text.slice(searchStart, end);
@@ -242,19 +229,14 @@ function splitByCharacterBoundaries(
 
     chunks.push(text.slice(start, end));
 
-    // Next chunk starts with overlap from the end of current
     start = Math.max(end - overlapSize, start + 1);
 
-    // Avoid infinite loop for very small remaining text
     if (end >= text.length) break;
   }
 
   return chunks;
 }
 
-/**
- * Extract text content from Mistral response.
- */
 function extractResponseContent(response: unknown): string {
   const res = response as {
     choices?: Array<{
@@ -266,48 +248,32 @@ function extractResponseContent(response: unknown): string {
 
 /**
  * Parse and validate the extraction response JSON.
- * Lenient: handles LLM output variations, logs details on failure.
+ * With json_schema mode, structure is guaranteed. Zod is a safety net.
  */
 function parseExtractionResponse(content: string): ExtractionResponse {
   try {
     const parsed = JSON.parse(content) as unknown;
     const validated = extractionResponseSchema.parse(parsed);
-    console.log(`[extraction] Parsed ${validated.events.length} events successfully`);
+    console.log(`[extraction] Parsed ${validated.events.length} events`);
     return validated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Log first 500 chars of response for debugging
-    const preview = content.slice(0, 500);
-    console.error(`[extraction] Parse error: ${message}`);
-    console.error(`[extraction] Response preview: ${preview}`);
+    console.error(`[extraction] Zod validation failed: ${message}`);
+    console.error(`[extraction] Raw response (first 1000 chars): ${content.slice(0, 1000)}`);
 
-    // Attempt raw extraction: find any array of objects with eventDate
+    // Fallback: try raw JSON parse without Zod
     try {
-      const raw = JSON.parse(content) as Record<string, unknown>;
-      // Try to find an array in any top-level key
-      for (const key of Object.keys(raw)) {
-        const value = raw[key];
-        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null && 'eventDate' in value[0]) {
-          console.log(`[extraction] Recovered ${value.length} events from key "${key}"`);
-          const events = value.map((e: unknown) => {
-            try { return extractedEventSchema.parse(e); } catch { return null; }
-          }).filter((e): e is ExtractedEvent => e !== null);
-          if (events.length > 0) {
-            console.log(`[extraction] Recovered ${events.length} valid events after lenient parse`);
-            return { events };
-          }
-        }
+      const raw = JSON.parse(content) as { events?: unknown[] };
+      if (Array.isArray(raw.events)) {
+        console.log(`[extraction] Fallback: found ${raw.events.length} raw events, returning without Zod validation`);
+        return { events: raw.events as ExtractionResponse['events'] };
       }
-    } catch { /* JSON parse already failed above */ }
+    } catch { /* ignore */ }
 
-    console.error('[extraction] Could not recover any events, returning empty');
     return { events: [] };
   }
 }
 
-/**
- * Remove duplicate abbreviations, keeping the first occurrence.
- */
 function deduplicateAbbreviations(
   abbreviations: Array<{ abbreviation: string; expansion: string }>,
 ): Array<{ abbreviation: string; expansion: string }> {

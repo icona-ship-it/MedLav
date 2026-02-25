@@ -1,80 +1,51 @@
 import { z } from 'zod';
 
-// Allowed values with fallback
-const EVENT_TYPES = [
-  'visita', 'esame', 'diagnosi', 'intervento', 'terapia',
-  'ricovero', 'follow-up', 'referto', 'prescrizione',
-  'consenso', 'complicanza', 'altro',
-] as const;
-
-const SOURCE_TYPES = [
-  'cartella_clinica', 'referto_controllo',
-  'esame_strumentale', 'esame_ematochimico', 'altro',
-] as const;
-
-const DATE_PRECISIONS = ['giorno', 'mese', 'anno', 'sconosciuta'] as const;
-
 /**
- * Lenient Zod schema for a single extracted clinical event.
- * Uses coercion and defaults to handle LLM output variations.
+ * Zod schema for a single extracted clinical event.
+ * Used for validation AFTER json_schema mode ensures structure.
  */
 export const extractedEventSchema = z.object({
-  eventDate: z.string().default('1900-01-01'),
-  datePrecision: z.string().transform((v) => {
-    const normalized = v.toLowerCase().replace(/\s+/g, '');
-    if ((DATE_PRECISIONS as readonly string[]).includes(normalized)) return normalized as typeof DATE_PRECISIONS[number];
-    return 'sconosciuta' as const;
-  }).default('sconosciuta'),
-  eventType: z.string().transform((v) => {
-    const normalized = v.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-');
-    if ((EVENT_TYPES as readonly string[]).includes(normalized)) return normalized as typeof EVENT_TYPES[number];
-    return 'altro' as const;
-  }).default('altro'),
-  title: z.string().default('Evento clinico'),
-  description: z.string().default(''),
-  sourceType: z.string().transform((v) => {
-    const normalized = v.toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
-    if ((SOURCE_TYPES as readonly string[]).includes(normalized)) return normalized as typeof SOURCE_TYPES[number];
-    return 'altro' as const;
-  }).default('altro'),
+  eventDate: z.string(),
+  datePrecision: z.enum(['giorno', 'mese', 'anno', 'sconosciuta']),
+  eventType: z.enum([
+    'visita', 'esame', 'diagnosi', 'intervento', 'terapia',
+    'ricovero', 'follow-up', 'referto', 'prescrizione',
+    'consenso', 'complicanza', 'altro',
+  ]),
+  title: z.string(),
+  description: z.string(),
+  sourceType: z.enum([
+    'cartella_clinica', 'referto_controllo',
+    'esame_strumentale', 'esame_ematochimico', 'altro',
+  ]),
   diagnosis: z.string().nullable().optional(),
   doctor: z.string().nullable().optional(),
   facility: z.string().nullable().optional(),
-  confidence: z.number().min(0).max(100).default(70),
-  requiresVerification: z.boolean().default(false),
+  confidence: z.number().min(0).max(100),
+  requiresVerification: z.boolean(),
   reliabilityNotes: z.string().nullable().optional(),
-  sourceText: z.string().default(''),
-  sourcePages: z.array(z.number().int().positive()).default([1]),
-}).passthrough();
+  sourceText: z.string(),
+  sourcePages: z.array(z.number().int().positive()).min(1),
+});
 
 export type ExtractedEvent = z.infer<typeof extractedEventSchema>;
 
 /**
- * Schema for the complete extraction response from Mistral.
- * Handles common LLM variations: "events" vs "Events" vs "eventi".
+ * Schema for the complete extraction response.
  */
 export const extractionResponseSchema = z.object({
-  events: z.array(extractedEventSchema).optional(),
-  Events: z.array(extractedEventSchema).optional(),
-  eventi: z.array(extractedEventSchema).optional(),
+  events: z.array(extractedEventSchema),
   abbreviations: z.array(z.object({
     abbreviation: z.string(),
     expansion: z.string(),
   })).optional(),
-}).passthrough().transform((data) => {
-  // Normalize: accept events/Events/eventi
-  const events = data.events ?? data.Events ?? data.eventi ?? [];
-  return {
-    events,
-    abbreviations: data.abbreviations,
-  };
 });
 
-export type ExtractionResponse = { events: ExtractedEvent[]; abbreviations?: Array<{ abbreviation: string; expansion: string }> };
+export type ExtractionResponse = z.infer<typeof extractionResponseSchema>;
 
 /**
- * JSON Schema representation for Mistral structured output.
- * Kept for reference, not used with json_object mode.
+ * JSON Schema for Mistral json_schema response format.
+ * This is what forces the model to output the exact structure.
  */
 export const extractionJsonSchema = {
   type: 'object' as const,
@@ -84,7 +55,7 @@ export const extractionJsonSchema = {
       items: {
         type: 'object' as const,
         properties: {
-          eventDate: { type: 'string' as const, description: 'Data evento YYYY-MM-DD' },
+          eventDate: { type: 'string' as const },
           datePrecision: { type: 'string' as const, enum: ['giorno', 'mese', 'anno', 'sconosciuta'] },
           eventType: {
             type: 'string' as const,
