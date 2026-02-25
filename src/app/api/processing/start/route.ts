@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
@@ -14,6 +15,16 @@ const requestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
+    const rateCheck = checkRateLimit({ key: `processing:${ip}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429 },
+      );
+    }
+
     const supabase = await createClient();
 
     // Auth check

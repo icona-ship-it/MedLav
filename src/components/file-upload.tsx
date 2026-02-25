@@ -3,8 +3,20 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, X, FileText, Image, FileSpreadsheet, File, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
+
+const DOCUMENT_TYPES = [
+  { value: 'cartella_clinica', label: 'Cartella Clinica' },
+  { value: 'referto_specialistico', label: 'Referto Specialistico' },
+  { value: 'esame_strumentale', label: 'Esame Strumentale' },
+  { value: 'esame_laboratorio', label: 'Esame di Laboratorio' },
+  { value: 'lettera_dimissione', label: 'Lettera di Dimissione' },
+  { value: 'certificato', label: 'Certificato' },
+  { value: 'perizia_precedente', label: 'Perizia Precedente' },
+  { value: 'altro', label: 'Altro' },
+];
 
 function getFileIcon(type: string) {
   if (type.startsWith('image/')) return Image;
@@ -32,6 +44,7 @@ interface UploadProgress {
 
 export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
+  const [fileTypes, setFileTypes] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -107,12 +120,14 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
       newProgress[i] = { ...newProgress[i], status: 'saving' };
       setProgress([...newProgress]);
 
+      const documentType = fileTypes[`${file.name}-${file.size}`] ?? 'altro';
       const result = await saveDocumentMetadata({
         caseId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
         storagePath,
+        documentType,
       });
 
       if (result?.error) {
@@ -192,6 +207,19 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
                     {formatFileSize(file.size)}
                   </span>
                 </div>
+                <Select
+                  value={fileTypes[`${file.name}-${file.size}`] ?? 'altro'}
+                  onValueChange={(v) => setFileTypes((prev) => ({ ...prev, [`${file.name}-${file.size}`]: v }))}
+                >
+                  <SelectTrigger className="h-7 w-[140px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENT_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
