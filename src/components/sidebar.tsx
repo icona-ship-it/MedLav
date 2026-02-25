@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { signOut } from '@/app/(auth)/actions';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -70,7 +71,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           <Settings className="h-4 w-4" />
           Impostazioni
         </Link>
-        <form action="/auth/signout" method="post">
+        <form action={signOut}>
           <button
             type="submit"
             className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"

@@ -33,23 +33,24 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users to login
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/register') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
+  const publicPaths = ['/landing', '/login', '/register', '/auth'];
+  const isPublicPath = publicPaths.some((path) =>
+    request.nextUrl.pathname.startsWith(path),
+  );
+
+  // Redirect unauthenticated users to landing page
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = '/landing';
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from public pages to dashboard
   if (
     user &&
     (request.nextUrl.pathname.startsWith('/login') ||
-      request.nextUrl.pathname.startsWith('/register'))
+      request.nextUrl.pathname.startsWith('/register') ||
+      request.nextUrl.pathname.startsWith('/landing'))
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
