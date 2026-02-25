@@ -1,28 +1,9 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, FileText, AlertTriangle, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { FileText, AlertTriangle, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport } from '../../actions';
+import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCasePageImages } from '../../actions';
+import { getSignedUrl } from '@/lib/supabase/storage';
 import { CaseDetailClient } from './client';
-
-const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
-  bozza: { label: 'Bozza', variant: 'secondary' },
-  in_revisione: { label: 'In Revisione', variant: 'warning' },
-  definitivo: { label: 'Definitivo', variant: 'success' },
-  archiviato: { label: 'Archiviato', variant: 'outline' },
-};
-
-const caseTypeLabels: Record<string, string> = {
-  ortopedica: 'Malasanita Ortopedica',
-  oncologica: 'Ritardo Diagnostico Oncologico',
-  ostetrica: 'Errore Ostetrico',
-  anestesiologica: 'Errore Anestesiologico',
-  infezione_nosocomiale: 'Infezione Nosocomiale',
-  errore_diagnostico: 'Errore Diagnostico',
-  generica: 'Responsabilita Generica',
-};
 
 const processingLabels: Record<string, string> = {
   caricato: 'Caricato',
@@ -46,45 +27,34 @@ export default async function CaseDetailPage({
     notFound();
   }
 
-  const [documents, events, anomalies, missingDocs, report] = await Promise.all([
+  const [documents, events, anomalies, missingDocs, report, pageImagesMap] = await Promise.all([
     getCaseDocuments(id),
     getCaseEvents(id),
     getCaseAnomalies(id),
     getCaseMissingDocs(id),
     getCaseReport(id),
+    getCasePageImages(id),
   ]);
 
-  const status = statusConfig[caseData.status] ?? statusConfig.bozza;
+  // Generate signed URLs for images
+  const documentImages: Record<string, string[]> = {};
+  for (const [docId, paths] of Object.entries(pageImagesMap)) {
+    const urls: string[] = [];
+    for (const path of paths) {
+      try {
+        const url = await getSignedUrl(path);
+        urls.push(url);
+      } catch {
+        // Skip images that fail to generate signed URLs
+      }
+    }
+    if (urls.length > 0) {
+      documentImages[docId] = urls;
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold tracking-tight">
-                {caseData.code}
-              </h1>
-              <Badge variant={status.variant}>{status.label}</Badge>
-              <Badge variant="outline">
-                {(caseData.case_role as string).toUpperCase()}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground">
-              {caseData.patient_initials || 'N/D'} &mdash;{' '}
-              {caseTypeLabels[caseData.case_type as string] ?? caseData.case_type}
-              {caseData.practice_reference && ` &mdash; ${caseData.practice_reference}`}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -133,15 +103,17 @@ export default async function CaseDetailPage({
         </Card>
       </div>
 
-      {/* Client-side interactive sections */}
+      {/* Client-side interactive sections (includes header) */}
       <CaseDetailClient
         caseId={id}
+        caseData={caseData}
         documents={documents}
         events={events}
         anomalies={anomalies}
         missingDocs={missingDocs}
         report={report}
         processingLabels={processingLabels}
+        documentImages={documentImages}
       />
     </div>
   );

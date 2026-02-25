@@ -38,3 +38,32 @@ export async function downloadFile(storagePath: string): Promise<Blob> {
 
   return data;
 }
+
+/**
+ * Upload a base64-encoded image to Supabase Storage.
+ * Converts base64 data to a Buffer and uploads as PNG.
+ */
+export async function uploadBase64Image(params: {
+  base64Data: string;
+  storagePath: string;
+}): Promise<void> {
+  const supabase = createAdminClient();
+
+  // Strip data URL prefix if present (e.g., "data:image/png;base64,")
+  const rawBase64 = params.base64Data.includes(',')
+    ? params.base64Data.split(',')[1]
+    : params.base64Data;
+
+  const buffer = Buffer.from(rawBase64, 'base64');
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(params.storagePath, buffer, {
+      contentType: 'image/png',
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload image to ${params.storagePath}: ${error.message}`);
+  }
+}

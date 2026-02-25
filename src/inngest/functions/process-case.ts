@@ -1,6 +1,6 @@
 import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getSignedUrl } from '@/lib/supabase/storage';
+import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
 import { consolidateEvents } from '@/services/consolidation/event-consolidator';
@@ -156,7 +156,49 @@ export const processCaseDocuments = inngest.createFunction(
               handwriting_confidence: p.handwritingConfidence,
             }));
 
-            await supabase.from('pages').insert(pageRows);
+            const { data: insertedPages } = await supabase
+              .from('pages')
+              .insert(pageRows)
+              .select('id, page_number');
+
+            // Upload images and update page records with image paths
+            if (insertedPages && ocrResult.images.length > 0) {
+              const pageIdMap = new Map(
+                insertedPages.map((p) => [p.page_number as number, p.id as string]),
+              );
+
+              // Group images by page
+              const imagesByPage = new Map<number, Array<{ figureIndex: number; base64: string }>>();
+              for (const img of ocrResult.images) {
+                const existing = imagesByPage.get(img.pageNumber) ?? [];
+                existing.push({ figureIndex: img.figureIndex, base64: img.imageBase64 });
+                imagesByPage.set(img.pageNumber, existing);
+              }
+
+              for (const [pageNum, images] of imagesByPage) {
+                const pageId = pageIdMap.get(pageNum);
+                if (!pageId) continue;
+
+                const uploadedPaths: string[] = [];
+                for (const img of images) {
+                  const storagePath = `${metadata.userId}/${caseId}/images/${pageId}-${img.figureIndex}.png`;
+                  try {
+                    await uploadBase64Image({ base64Data: img.base64, storagePath });
+                    uploadedPaths.push(storagePath);
+                  } catch (imgError) {
+                    const imgMsg = imgError instanceof Error ? imgError.message : 'Upload failed';
+                    console.error(`[pipeline] Image upload failed for page ${pageId}: ${imgMsg}`);
+                  }
+                }
+
+                if (uploadedPaths.length > 0) {
+                  await supabase
+                    .from('pages')
+                    .update({ image_path: uploadedPaths.join(';') })
+                    .eq('id', pageId);
+                }
+              }
+            }
           }
 
           // Update document with page count

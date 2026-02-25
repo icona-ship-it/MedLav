@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
-  FileText, Image, FileSpreadsheet, File, Play,
+  FileText, Image as ImageIcon, FileSpreadsheet, File, Play,
   Loader2, AlertTriangle, ChevronDown, ChevronUp,
   FileWarning, Plus, Trash2, Save, X, Pencil, Filter,
-  Download, XCircle,
+  Download, XCircle, ArrowLeft, Archive, RotateCcw,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,9 +25,23 @@ import {
 } from '@/components/ui/select';
 import { FileUpload } from '@/components/file-upload';
 import { ProcessingProgress } from '@/components/processing-progress';
-import { updateEvent, deleteEvent, addManualEvent, updateReportStatus } from '../../actions';
+import {
+  updateEvent, deleteEvent, addManualEvent, updateReportStatus,
+  deleteDocument, deleteCase, updateCase, updateCaseStatus,
+} from '../../actions';
 
 // --- Types ---
+
+interface CaseData {
+  id: string;
+  code: string;
+  case_type: string;
+  case_role: string;
+  patient_initials: string | null;
+  practice_reference: string | null;
+  notes: string | null;
+  status: string;
+}
 
 interface Document {
   id: string;
@@ -47,6 +62,7 @@ interface EventRow {
   title: string;
   description: string;
   source_type: string;
+  document_id: string | null;
   diagnosis: string | null;
   doctor: string | null;
   facility: string | null;
@@ -81,12 +97,14 @@ interface ReportRow {
 
 interface CaseDetailClientProps {
   caseId: string;
+  caseData: CaseData;
   documents: Document[];
   events: EventRow[];
   anomalies: AnomalyRow[];
   missingDocs: MissingDocRow[];
   report: ReportRow | null;
   processingLabels: Record<string, string>;
+  documentImages: Record<string, string[]>;
 }
 
 // --- Constants ---
@@ -116,6 +134,33 @@ const SOURCE_TYPES = [
   { value: 'altro', label: 'Altro' },
 ];
 
+const CASE_TYPES = [
+  { value: 'ortopedica', label: 'Malasanita Ortopedica' },
+  { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
+  { value: 'ostetrica', label: 'Errore Ostetrico' },
+  { value: 'anestesiologica', label: 'Errore Anestesiologico' },
+  { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
+  { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
+  { value: 'generica', label: 'Responsabilita Generica' },
+];
+
+const CASE_ROLES = [
+  { value: 'ctu', label: 'CTU' },
+  { value: 'ctp', label: 'CTP' },
+  { value: 'stragiudiziale', label: 'Stragiudiziale' },
+];
+
+const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
+  bozza: { label: 'Bozza', variant: 'secondary' },
+  in_revisione: { label: 'In Revisione', variant: 'warning' },
+  definitivo: { label: 'Definitivo', variant: 'success' },
+  archiviato: { label: 'Archiviato', variant: 'outline' },
+};
+
+const caseTypeLabels: Record<string, string> = Object.fromEntries(
+  CASE_TYPES.map((t) => [t.value, t.label]),
+);
+
 const sourceLabels: Record<string, string> = {
   cartella_clinica: 'Fonte A',
   referto_controllo: 'Fonte B',
@@ -137,7 +182,7 @@ const anomalyTypeLabels: Record<string, string> = {
 // --- Helpers ---
 
 function getFileIcon(type: string) {
-  if (type.startsWith('image/') || type.includes('image')) return Image;
+  if (type.startsWith('image/') || type.includes('image')) return ImageIcon;
   if (type.includes('pdf')) return FileText;
   if (type.includes('sheet') || type.includes('excel')) return FileSpreadsheet;
   return File;
@@ -177,16 +222,22 @@ function confidenceColor(confidence: number): string {
   return 'text-red-600';
 }
 
+function isDocProcessing(status: string): boolean {
+  return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
+}
+
 // --- Main Component ---
 
 export function CaseDetailClient({
   caseId,
+  caseData,
   documents: initialDocuments,
   events,
   anomalies,
   missingDocs,
   report,
   processingLabels,
+  documentImages,
 }: CaseDetailClientProps) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -201,6 +252,13 @@ export function CaseDetailClient({
   // Cancel state
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Case action state
+  const [editCaseOpen, setEditCaseOpen] = useState(false);
+  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
+  const [isDeletingCase, startDeleteCase] = useTransition();
+  const [isArchiving, startArchiving] = useTransition();
+  const [isDeletingDoc, startDeleteDoc] = useTransition();
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> | null>(null);
@@ -210,11 +268,15 @@ export function CaseDetailClient({
   const [filterType, setFilterType] = useState<string>('all');
   const [filterVerification, setFilterVerification] = useState<string>('all');
 
-  const hasProcessingDocs = initialDocuments.some(
-    (d) => ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(d.processing_status),
-  );
+  // Image preview
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
   const hasResults = events.length > 0 || anomalies.length > 0 || report;
+
+  const status = statusConfig[caseData.status] ?? statusConfig.bozza;
+  const isArchived = caseData.status === 'archiviato';
 
   // Filter events
   const filteredEvents = events.filter((e) => {
@@ -325,8 +387,119 @@ export function CaseDetailClient({
     });
   }, []);
 
+  const handleDeleteDocument = useCallback((docId: string, fileName: string) => {
+    if (!confirm(`Eliminare definitivamente "${fileName}"?`)) return;
+    startDeleteDoc(async () => {
+      const result = await deleteDocument({ documentId: docId, caseId });
+      if (result.error) {
+        alert(result.error);
+      }
+      router.refresh();
+    });
+  }, [caseId, router]);
+
+  const handleDeleteCase = useCallback(() => {
+    startDeleteCase(async () => {
+      const result = await deleteCase(caseId);
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      router.push('/');
+    });
+  }, [caseId, router]);
+
+  const handleArchiveToggle = useCallback(() => {
+    startArchiving(async () => {
+      const newStatus = isArchived ? 'bozza' : 'archiviato';
+      const result = await updateCaseStatus({ caseId, newStatus });
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }, [caseId, isArchived, router]);
+
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight">
+                {caseData.code}
+              </h1>
+              <Badge variant={status.variant}>{status.label}</Badge>
+              <Badge variant="outline">
+                {caseData.case_role.toUpperCase()}
+              </Badge>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditCaseOpen(true)} title="Modifica caso">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-muted-foreground">
+              {caseData.patient_initials || 'N/D'} &mdash;{' '}
+              {caseTypeLabels[caseData.case_type] ?? caseData.case_type}
+              {caseData.practice_reference && ` \u2014 ${caseData.practice_reference}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleArchiveToggle}
+            disabled={isArchiving}
+          >
+            {isArchiving ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : isArchived ? (
+              <RotateCcw className="mr-1 h-3 w-3" />
+            ) : (
+              <Archive className="mr-1 h-3 w-3" />
+            )}
+            {isArchived ? 'Ripristina' : 'Archivia'}
+          </Button>
+          <Dialog open={deleteCaseOpen} onOpenChange={setDeleteCaseOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={hasProcessingDocs}>
+                <Trash2 className="mr-1 h-3 w-3" />Elimina caso
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Eliminare il caso {caseData.code}?</DialogTitle>
+                <DialogDescription>
+                  Tutti i documenti, eventi e report verranno eliminati definitivamente. Questa azione non e reversibile.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteCaseOpen(false)}>Annulla</Button>
+                <Button variant="destructive" onClick={handleDeleteCase} disabled={isDeletingCase}>
+                  {isDeletingCase ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+                  Elimina definitivamente
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Edit Case Dialog */}
+      <EditCaseDialog
+        caseData={caseData}
+        open={editCaseOpen}
+        onOpenChange={setEditCaseOpen}
+        onSaved={() => { setEditCaseOpen(false); router.refresh(); }}
+      />
+
       {/* Upload + Documents Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -355,6 +528,7 @@ export function CaseDetailClient({
               <div className="space-y-2">
                 {initialDocuments.map((doc) => {
                   const Icon = getFileIcon(doc.file_type);
+                  const canDelete = !isDocProcessing(doc.processing_status);
                   return (
                     <div key={doc.id} className="flex items-center justify-between rounded-md border px-3 py-2">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -364,9 +538,23 @@ export function CaseDetailClient({
                           <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
                         </div>
                       </div>
-                      <Badge variant={processingVariant(doc.processing_status)}>
-                        {processingLabels[doc.processing_status] ?? doc.processing_status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={processingVariant(doc.processing_status)}>
+                          {processingLabels[doc.processing_status] ?? doc.processing_status}
+                        </Badge>
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
+                            disabled={isDeletingDoc}
+                            title="Elimina documento"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -559,6 +747,8 @@ export function CaseDetailClient({
                       onCancelEdit={() => setEditingEventId(null)}
                       onSaved={() => { setEditingEventId(null); router.refresh(); }}
                       onDeleted={() => router.refresh()}
+                      documentImages={documentImages}
+                      onImageClick={setPreviewImage}
                     />
                   ))}
                   {filteredEvents.length === 0 && (
@@ -676,7 +866,156 @@ export function CaseDetailClient({
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Image Preview Dialog */}
+      {previewImage && (
+        <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle>Immagine documento</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center justify-center overflow-auto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImage}
+                alt="Immagine documento medico"
+                className="max-w-full max-h-[75vh] object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+// --- Edit Case Dialog ---
+
+function EditCaseDialogInner({
+  caseData, onOpenChange, onSaved,
+}: {
+  caseData: CaseData;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [form, setForm] = useState({
+    caseType: caseData.case_type,
+    caseRole: caseData.case_role,
+    patientInitials: caseData.patient_initials ?? '',
+    practiceReference: caseData.practice_reference ?? '',
+    notes: caseData.notes ?? '',
+  });
+
+  const handleSubmit = () => {
+    startTransition(async () => {
+      const result = await updateCase({
+        caseId: caseData.id,
+        caseType: form.caseType as 'ortopedica' | 'oncologica' | 'ostetrica' | 'anestesiologica' | 'infezione_nosocomiale' | 'errore_diagnostico' | 'generica',
+        caseRole: form.caseRole as 'ctu' | 'ctp' | 'stragiudiziale',
+        patientInitials: form.patientInitials || null,
+        practiceReference: form.practiceReference || null,
+        notes: form.notes || null,
+      });
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      onSaved();
+    });
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Modifica Caso {caseData.code}</DialogTitle>
+        <DialogDescription>Modifica le informazioni del caso.</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label>Tipologia caso</Label>
+            <Select value={form.caseType} onValueChange={(v) => setForm({ ...form, caseType: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CASE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Tipo incarico</Label>
+            <Select value={form.caseRole} onValueChange={(v) => setForm({ ...form, caseRole: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CASE_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label>Iniziali paziente</Label>
+            <Input
+              value={form.patientInitials}
+              onChange={(e) => setForm({ ...form, patientInitials: e.target.value })}
+              maxLength={10}
+              placeholder="es. M.R."
+            />
+          </div>
+          <div>
+            <Label>Riferimento pratica</Label>
+            <Input
+              value={form.practiceReference}
+              onChange={(e) => setForm({ ...form, practiceReference: e.target.value })}
+              placeholder="es. RG 1234/2024"
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Note</Label>
+          <Textarea
+            rows={3}
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            placeholder="Note aggiuntive sul caso..."
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>Annulla</Button>
+        <Button onClick={handleSubmit} disabled={isPending}>
+          {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+          Salva
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+/**
+ * Wrapper that remounts the inner form each time the dialog opens,
+ * ensuring fresh state without useEffect + setState.
+ */
+function EditCaseDialog({
+  caseData, open, onOpenChange, onSaved,
+}: {
+  caseData: CaseData;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        {open && (
+          <EditCaseDialogInner
+            caseData={caseData}
+            onOpenChange={onOpenChange}
+            onSaved={onSaved}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -684,6 +1023,7 @@ export function CaseDetailClient({
 
 function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
+  documentImages, onImageClick,
 }: {
   event: EventRow;
   caseId: string;
@@ -694,6 +1034,8 @@ function EventCard({
   onCancelEdit: () => void;
   onSaved: () => void;
   onDeleted: () => void;
+  documentImages: Record<string, string[]>;
+  onImageClick: (url: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [editForm, setEditForm] = useState({
@@ -726,12 +1068,15 @@ function EventCard({
   };
 
   const handleDelete = () => {
-    if (!confirm('Eliminare questo evento? (soft delete — recuperabile)')) return;
+    if (!confirm('Eliminare questo evento? (soft delete \u2014 recuperabile)')) return;
     startTransition(async () => {
       await deleteEvent({ eventId: event.id, caseId });
       onDeleted();
     });
   };
+
+  // Get images for this event's document
+  const eventImages = event.document_id ? (documentImages[event.document_id] ?? []) : [];
 
   return (
     <div className="rounded-md border p-3">
@@ -751,6 +1096,11 @@ function EventCard({
               <Badge variant="secondary" className="text-xs">{sourceLabels[event.source_type] ?? event.source_type}</Badge>
               {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
               <span className={`text-xs ${confidenceColor(event.confidence)}`}>{event.confidence}%</span>
+              {eventImages.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  <ImageIcon className="mr-1 h-2.5 w-2.5" />{eventImages.length} img
+                </Badge>
+              )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
           </div>
@@ -778,6 +1128,29 @@ function EventCard({
           {event.expert_notes && (
             <div className="rounded bg-muted p-2">
               <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
+            </div>
+          )}
+          {/* Document images */}
+          {eventImages.length > 0 && (
+            <div className="pt-2 border-t">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Immagini dal documento</p>
+              <div className="flex flex-wrap gap-2">
+                {eventImages.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                    onClick={() => onImageClick(url)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Immagine ${idx + 1}`}
+                      className="h-20 w-20 object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

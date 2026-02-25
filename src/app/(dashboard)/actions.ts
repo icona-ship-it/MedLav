@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { generateCaseCode } from '@/lib/case-code';
 import type { CaseType, CaseRole } from '@/types';
 
@@ -456,4 +457,325 @@ export async function updateReportStatus(params: {
   });
 
   return { success: true };
+}
+
+/**
+ * Delete a document: remove file from Storage, delete DB row (cascade deletes pages).
+ * Blocks if the document is currently being processed.
+ */
+export async function deleteDocument(params: { documentId: string; caseId: string }) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Fetch document details
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('id, storage_path, processing_status')
+    .eq('id', params.documentId)
+    .eq('case_id', params.caseId)
+    .single();
+
+  if (!doc) return { error: 'Documento non trovato' };
+
+  // Block if currently processing
+  const processingStatuses = ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'];
+  if (processingStatuses.includes(doc.processing_status)) {
+    return { error: 'Impossibile eliminare un documento in elaborazione' };
+  }
+
+  // Fetch pages with image_path to clean up images from Storage
+  const { data: pages } = await supabase
+    .from('pages')
+    .select('image_path')
+    .eq('document_id', params.documentId)
+    .not('image_path', 'is', null);
+
+  // Collect all storage paths to delete (document file + images)
+  const admin = createAdminClient();
+  const pathsToDelete: string[] = [doc.storage_path];
+
+  if (pages) {
+    for (const page of pages) {
+      if (page.image_path) {
+        const imagePaths = (page.image_path as string).split(';').filter(Boolean);
+        pathsToDelete.push(...imagePaths);
+      }
+    }
+  }
+
+  // Delete files from Storage
+  await admin.storage.from('documents').remove(pathsToDelete);
+
+  // Delete document from DB (cascade deletes pages)
+  const { error } = await supabase
+    .from('documents')
+    .delete()
+    .eq('id', params.documentId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore eliminazione documento' };
+
+  // Update document count on case
+  const { count } = await supabase
+    .from('documents')
+    .select('*', { count: 'exact', head: true })
+    .eq('case_id', params.caseId);
+
+  await supabase
+    .from('cases')
+    .update({ document_count: count ?? 0, updated_at: new Date().toISOString() })
+    .eq('id', params.caseId);
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'document.deleted',
+    entity_type: 'document',
+    entity_id: params.documentId,
+    metadata: { caseId: params.caseId },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Delete a case entirely: remove all files from Storage, delete case from DB.
+ * DB cascade handles documents, pages, events, anomalies, missing_documents, reports.
+ * Blocks if any document is currently being processed.
+ */
+export async function deleteCase(caseId: string) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id, code')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Check for documents in processing
+  const { data: processingDocs } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('case_id', caseId)
+    .in('processing_status', ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso']);
+
+  if (processingDocs && processingDocs.length > 0) {
+    return { error: 'Impossibile eliminare: alcuni documenti sono in elaborazione' };
+  }
+
+  // Audit log BEFORE delete (cascade will remove related data)
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'case.deleted',
+    entity_type: 'case',
+    entity_id: caseId,
+    metadata: { caseCode: caseData.code },
+  });
+
+  // Remove all files from Storage for this case (documents + images)
+  const admin = createAdminClient();
+  const storagePath = `${user.id}/${caseId}`;
+  const { data: fileList } = await admin.storage.from('documents').list(storagePath, { limit: 1000 });
+
+  if (fileList && fileList.length > 0) {
+    const filePaths = fileList.map((f) => `${storagePath}/${f.name}`);
+    await admin.storage.from('documents').remove(filePaths);
+  }
+
+  // Also remove images subdirectory
+  const { data: imageList } = await admin.storage.from('documents').list(`${storagePath}/images`, { limit: 1000 });
+  if (imageList && imageList.length > 0) {
+    const imagePaths = imageList.map((f) => `${storagePath}/images/${f.name}`);
+    await admin.storage.from('documents').remove(imagePaths);
+  }
+
+  // Delete case from DB (cascade handles everything)
+  const { error } = await supabase
+    .from('cases')
+    .delete()
+    .eq('id', caseId)
+    .eq('user_id', user.id);
+
+  if (error) return { error: 'Errore eliminazione caso' };
+
+  return { success: true };
+}
+
+/**
+ * Update editable fields on a case.
+ */
+export async function updateCase(params: {
+  caseId: string;
+  caseType?: CaseType;
+  caseRole?: CaseRole;
+  patientInitials?: string | null;
+  practiceReference?: string | null;
+  notes?: string | null;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const updateFields: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (params.caseType !== undefined) updateFields.case_type = params.caseType;
+  if (params.caseRole !== undefined) updateFields.case_role = params.caseRole;
+  if (params.patientInitials !== undefined) updateFields.patient_initials = params.patientInitials;
+  if (params.practiceReference !== undefined) updateFields.practice_reference = params.practiceReference;
+  if (params.notes !== undefined) updateFields.notes = params.notes;
+
+  const { error } = await supabase
+    .from('cases')
+    .update(updateFields)
+    .eq('id', params.caseId)
+    .eq('user_id', user.id);
+
+  if (error) return { error: 'Errore aggiornamento caso' };
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'case.updated',
+    entity_type: 'case',
+    entity_id: params.caseId,
+    metadata: { fields: Object.keys(updateFields) },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Update case status (archive / restore).
+ * Valid transitions: any → archiviato, archiviato → bozza.
+ */
+export async function updateCaseStatus(params: { caseId: string; newStatus: string }) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership and get current status
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id, status')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Validate transitions
+  const currentStatus = caseData.status as string;
+  const { newStatus } = params;
+
+  const isValidTransition =
+    (newStatus === 'archiviato') ||
+    (currentStatus === 'archiviato' && newStatus === 'bozza');
+
+  if (!isValidTransition) {
+    return { error: 'Transizione di stato non valida' };
+  }
+
+  const { error } = await supabase
+    .from('cases')
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq('id', params.caseId)
+    .eq('user_id', user.id);
+
+  if (error) return { error: 'Errore aggiornamento stato caso' };
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'case.status_changed',
+    entity_type: 'case',
+    entity_id: params.caseId,
+    metadata: { previousStatus: currentStatus, newStatus },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Fetch page images for all documents in a case.
+ * Returns a map of documentId → image storage paths.
+ */
+export async function getCasePageImages(caseId: string): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return {};
+
+  // Get all documents for this case
+  const { data: docs } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('case_id', caseId);
+
+  if (!docs || docs.length === 0) return {};
+
+  const docIds = docs.map((d) => d.id);
+
+  // Get pages with images
+  const { data: pages } = await supabase
+    .from('pages')
+    .select('document_id, image_path')
+    .in('document_id', docIds)
+    .not('image_path', 'is', null);
+
+  if (!pages || pages.length === 0) return {};
+
+  const result: Record<string, string[]> = {};
+  for (const page of pages) {
+    const docId = page.document_id as string;
+    const paths = (page.image_path as string).split(';').filter(Boolean);
+    if (!result[docId]) {
+      result[docId] = [];
+    }
+    result[docId].push(...paths);
+  }
+
+  return result;
 }

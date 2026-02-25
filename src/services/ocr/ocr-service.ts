@@ -1,5 +1,5 @@
 import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
-import type { OcrPageResult, OcrDocumentResult } from './ocr-types';
+import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-types';
 
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
 const SUPPORTED_PDF_TYPES = ['application/pdf'];
@@ -33,6 +33,7 @@ export async function ocrDocument(params: {
       pages: [],
       averageConfidence: 0,
       fullText: `[Formato non supportato per OCR diretto: ${fileType}. Convertire il file in PDF per l'elaborazione.]`,
+      images: [],
     };
   }
 
@@ -61,18 +62,41 @@ async function ocrPdf(params: {
       type: 'document_url',
       documentUrl: signedUrl,
     },
+    includeImageBase64: true,
   });
+
+  const allImages: OcrImageResult[] = [];
 
   const pages: OcrPageResult[] = (response.pages ?? []).map((page, index) => {
     const text = page.markdown ?? '';
     const handwritingInfo = detectHandwriting(text);
+    const pageNumber = index + 1;
+
+    // Extract images from page
+    const pageImages: OcrImageResult[] = [];
+    const pageObj = page as { images?: Array<{ id?: string; imageBase64?: string }> };
+    if (pageObj.images && Array.isArray(pageObj.images)) {
+      pageObj.images.forEach((img, figIdx) => {
+        if (img.imageBase64) {
+          const imageResult: OcrImageResult = {
+            imageId: img.id ?? `page-${pageNumber}-fig-${figIdx}`,
+            imageBase64: img.imageBase64,
+            pageNumber,
+            figureIndex: figIdx,
+          };
+          pageImages.push(imageResult);
+          allImages.push(imageResult);
+        }
+      });
+    }
 
     return {
-      pageNumber: index + 1,
+      pageNumber,
       text,
       confidence: estimateConfidence(text),
       hasHandwriting: handwritingInfo.hasHandwriting,
       handwritingConfidence: handwritingInfo.confidence,
+      images: pageImages,
     };
   });
 
@@ -88,6 +112,7 @@ async function ocrPdf(params: {
     pages,
     averageConfidence: Math.round(averageConfidence),
     fullText,
+    images: allImages,
   };
 }
 
@@ -139,6 +164,7 @@ Regole:
     confidence,
     hasHandwriting: handwritingInfo.hasHandwriting,
     handwritingConfidence: handwritingInfo.confidence,
+    images: [],
   };
 
   return {
@@ -148,6 +174,7 @@ Regole:
     pages: [page],
     averageConfidence: confidence,
     fullText: text,
+    images: [],
   };
 }
 

@@ -23,7 +23,9 @@ const caseTypeLabels: Record<string, string> = {
 };
 
 export default async function DashboardPage() {
-  const cases = await getCases();
+  const allCases = await getCases();
+  // Exclude archived cases from main dashboard
+  const cases = allCases.filter((c) => c.status !== 'archiviato');
 
   const inRevisione = cases.filter((c) => c.status === 'in_revisione').length;
   const bozze = cases.filter((c) => c.status === 'bozza').length;
