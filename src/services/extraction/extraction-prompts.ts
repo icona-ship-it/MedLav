@@ -107,6 +107,14 @@ Per blocchi delimitati da [TABLE_START] e [TABLE_END]: ogni RIGA della tabella r
 Riporta nome parametro, valore numerico esatto, unità di misura per ciascuna riga.
 Non aggregare più righe in un unico evento. Evidenzia valori fuori range nel campo reliabilityNotes.
 
+## ATTENZIONE SPECIALE — NON OMETTERE NULLA
+Cerca con particolare cura:
+- Eventi INDIRETTI: riferimenti ad accertamenti precedenti, anamnesi, storia clinica pregressa
+- Dati in TABELLE: valori di laboratorio, parametri vitali tabulati, scale di valutazione
+- Testo MANOSCRITTO: annotazioni, note a margine, firme con commenti
+- Eventi impliciti: date di ricovero/dimissione deducibili dal contesto, durate terapie
+- Informazioni negli HEADER/FOOTER: intestazioni con struttura/reparto, date documento
+
 ## FORMATO OUTPUT
 Rispondi con un JSON valido contenente un array "events" e opzionalmente un array "abbreviations" con le abbreviazioni mediche trovate.`;
 }
