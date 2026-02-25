@@ -54,17 +54,22 @@ export async function createCase(formData: FormData) {
   redirect(`/cases/${newCase.id}`);
 }
 
-export async function getCases() {
+export async function getCases(status?: string) {
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data } = await supabase
+  let query = supabase
     .from('cases')
     .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .eq('user_id', user.id);
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  const { data } = await query.order('created_at', { ascending: false });
 
   return data ?? [];
 }
