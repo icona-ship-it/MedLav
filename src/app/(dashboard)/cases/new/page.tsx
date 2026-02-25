@@ -28,7 +28,9 @@ export default function NewCasePage() {
         setError(result.error);
         setIsSubmitting(false);
       }
-    } catch {
+    } catch (err) {
+      // Re-throw Next.js redirect errors (not actual errors)
+      if (err instanceof Error && 'digest' in err) throw err;
       setError('Errore di rete. Verifica la connessione e riprova.');
       setIsSubmitting(false);
     }

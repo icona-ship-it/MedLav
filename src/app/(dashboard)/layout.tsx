@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { createClient } from '@/lib/supabase/server';
 import { isAdminUser } from '@/lib/admin';
@@ -13,7 +14,9 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen">
-      <Sidebar isAdmin={isAdmin} />
+      <Suspense>
+        <Sidebar isAdmin={isAdmin} />
+      </Suspense>
       <main className="flex-1 overflow-auto">
         <div className="mx-auto max-w-7xl p-6">
           {children}

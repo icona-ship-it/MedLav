@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   FolderPlus,
@@ -16,14 +16,19 @@ import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
-  { name: 'I Miei Casi', href: '/cases', icon: FolderOpen, exact: true },
-  { name: 'Nuovo Caso', href: '/cases/new', icon: FolderPlus, exact: false },
-  { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive, exact: false },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
+  { name: 'Nuovo Caso', href: '/cases/new', icon: FolderPlus },
+  { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive },
 ];
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const currentUrl = searchParams.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -36,9 +41,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       {/* Navigation */}
       <nav aria-label="Menu principale" className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = item.exact
-            ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(item.href.split('?')[0]);
+          const isActive = currentUrl === item.href;
           return (
             <Link
               key={item.name}

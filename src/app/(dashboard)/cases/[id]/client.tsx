@@ -195,7 +195,7 @@ export function CaseDetailClient({
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [isDeletingCase, startDeleteCase] = useTransition();
   const [isArchiving, startArchiving] = useTransition();
-  const [isDeletingDoc, startDeleteDoc] = useTransition();
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -350,15 +350,22 @@ export function CaseDetailClient({
       action: {
         label: 'Elimina',
         onClick: () => {
-          startDeleteDoc(async () => {
-            const result = await deleteDocument({ documentId: docId, caseId });
-            if (result.error) {
-              toast.error(result.error);
-              return;
-            }
-            toast.success('Documento eliminato');
-            router.refresh();
-          });
+          setIsDeletingDoc(true);
+          deleteDocument({ documentId: docId, caseId })
+            .then((result) => {
+              if (result.error) {
+                toast.error(result.error);
+              } else {
+                toast.success('Documento eliminato');
+                router.refresh();
+              }
+            })
+            .catch(() => {
+              toast.error('Errore durante l\'eliminazione del documento');
+            })
+            .finally(() => {
+              setIsDeletingDoc(false);
+            });
         },
       },
       cancel: { label: 'Annulla', onClick: () => {} },
@@ -630,6 +637,20 @@ export function CaseDetailClient({
               )}
             </CardContent>
           </Card>
+
+          {/* Nudge to proceed to step 2 */}
+          {hasUploadedDocs && (
+            <div className="lg:col-span-2">
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => setActiveStep(2)}
+              >
+                <Play className="mr-2 h-4 w-4" />
+                Procedi all&apos;elaborazione (Passaggio 2)
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
