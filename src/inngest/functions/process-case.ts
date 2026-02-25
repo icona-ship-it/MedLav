@@ -2,14 +2,22 @@ import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
-import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
+import { extractEventsWithDualPass } from '@/services/extraction/dual-pass-extraction';
+import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
 import { consolidateNewWithExisting } from '@/services/consolidation/event-consolidator';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
+import { validateExtractedEvents } from '@/services/validation/event-validator';
+import { verifySourceTexts } from '@/services/validation/source-text-verifier';
+import { analyzeCoverage } from '@/services/validation/coverage-analyzer';
+import type { CoverageResult } from '@/services/validation/coverage-analyzer';
+import { reviewExtraction } from '@/services/extraction/extraction-reviewer';
+import type { ReviewCorrection } from '@/services/extraction/extraction-reviewer';
+import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
-import type { CaseType } from '@/types';
 import type { ExtractedEvent } from '@/services/extraction/extraction-schemas';
+import type { CaseType } from '@/types';
 
 interface CaseMetadata {
   caseId: string;
@@ -28,13 +36,21 @@ interface DocumentInfo {
 }
 
 /**
+ * Extended event type with dual-pass metadata for DB insertion.
+ */
+interface ExtractedEventWithMeta extends DualPassEvent {
+  documentId: string;
+}
+
+/**
  * Main Inngest function that orchestrates the document processing pipeline.
  * Each step is independently retryable.
  * IMPORTANT: createAdminClient() must be called inside each step because
  * Inngest re-executes steps independently and closures are not preserved.
  *
- * Pipeline: fetch metadata → OCR docs → extract events → consolidate →
- *           detect anomalies → detect missing docs → generate synthesis → finalize
+ * Pipeline: fetch metadata → OCR docs → extract events (dual-pass) → validate →
+ *           consolidate → link images → detect anomalies → detect missing docs →
+ *           generate synthesis → finalize
  */
 export const processCaseDocuments = inngest.createFunction(
   {
@@ -244,12 +260,16 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('All documents failed OCR processing');
     }
 
-    // Step 3: Extract events from each document
+    // Step 3: Extract events from each document using dual-pass + validate + verify + review
     const extractionResults = await step.run('extract-events-all', async () => {
       const supabase = createAdminClient();
-      const results: Array<{ documentId: string; events: ExtractedEvent[] }> = [];
+      const results: Array<{
+        documentId: string;
+        events: ExtractedEventWithMeta[];
+        coverageResult: CoverageResult | null;
+      }> = [];
 
-      console.log(`[pipeline] Step 3: Extracting events from ${ocrResults.length} documents`);
+      console.log(`[pipeline] Step 3: Extracting events (dual-pass) from ${ocrResults.length} documents`);
 
       for (const ocrResult of ocrResults) {
         // Update status
@@ -262,19 +282,77 @@ export const processCaseDocuments = inngest.createFunction(
           .eq('id', ocrResult.documentId);
 
         try {
-          const extraction = await extractEventsFromDocument({
+          // 3.1: Dual-pass extraction (existing)
+          const dualPassResult = await extractEventsWithDualPass({
             documentText: ocrResult.fullText,
             fileName: ocrResult.fileName,
             documentType: ocrResult.documentType,
             caseType: metadata.caseType,
           });
 
+          // 3.2: Deterministic validation (existing)
+          const { events: validatedEvents, issues } = validateExtractedEvents(dualPassResult.events);
+
+          if (issues.length > 0) {
+            console.log(`[pipeline] Step 3: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
+          }
+
+          // 3.3: Source text verification (NEW — sync, deterministic)
+          const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
+
+          if (verificationResult.unverifiedCount > 0) {
+            console.log(`[pipeline] Step 3: ${verificationResult.unverifiedCount} unverified sourceTexts for doc ${ocrResult.documentId}`);
+          }
+
+          // 3.4: Coverage analysis (NEW — sync, deterministic)
+          const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
+
+          for (const warning of coverageResult.warnings) {
+            console.log(`[pipeline] Step 3: Coverage warning for doc ${ocrResult.documentId}: ${warning}`);
+          }
+
+          // 3.5: LLM review step (NEW — async, non-fatal)
+          let reviewedEvents = verificationResult.events;
+          try {
+            const reviewResult = await reviewExtraction({
+              events: verificationResult.events,
+              fullText: ocrResult.fullText,
+              caseType: metadata.caseType,
+            });
+
+            // Merge missing events
+            if (reviewResult.missingEvents.length > 0) {
+              console.log(`[pipeline] Step 3: Reviewer found ${reviewResult.missingEvents.length} missing events for doc ${ocrResult.documentId}`);
+              reviewedEvents = [...reviewedEvents, ...reviewResult.missingEvents];
+            }
+
+            // Apply corrections (only whitelisted fields)
+            if (reviewResult.corrections.length > 0) {
+              console.log(`[pipeline] Step 3: Reviewer suggested ${reviewResult.corrections.length} corrections for doc ${ocrResult.documentId}`);
+              reviewedEvents = applyReviewCorrections(reviewedEvents, reviewResult.corrections);
+            }
+          } catch (reviewError) {
+            const msg = reviewError instanceof Error ? reviewError.message : 'Review failed';
+            console.error(`[pipeline] Step 3: LLM review failed (non-fatal) for doc ${ocrResult.documentId}: ${msg}`);
+          }
+
+          // Re-attach extractionPass from dual-pass results (new events from reviewer get 'review')
+          const originalCount = dualPassResult.events.length;
+          const eventsWithMeta: ExtractedEventWithMeta[] = reviewedEvents.map((event, i) => ({
+            ...event,
+            extractionPass: i < originalCount
+              ? (dualPassResult.events[i]?.extractionPass ?? 'pass1_only')
+              : 'pass2_only', // reviewer-added events treated as secondary
+            documentId: ocrResult.documentId,
+          }));
+
           results.push({
             documentId: ocrResult.documentId,
-            events: extraction.events,
+            events: eventsWithMeta,
+            coverageResult,
           });
 
-          console.log(`[pipeline] Step 3: Extracted ${extraction.events.length} events from doc ${ocrResult.documentId}`);
+          console.log(`[pipeline] Step 3: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%)`);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Extraction failed';
           await supabase
@@ -321,34 +399,74 @@ export const processCaseDocuments = inngest.createFunction(
         requiresVerification: e.requires_verification as boolean,
         reliabilityNotes: (e.reliability_notes ?? null) as string | null,
         discrepancyNote: null,
+        sourceText: (e.source_text ?? '') as string,
+        sourcePages: e.source_pages ? JSON.parse(e.source_pages as string) as number[] : [],
+      }));
+
+      // Build DocumentEvents for consolidation (strip dual-pass metadata)
+      const docEventsForConsolidation = extractionResults.map((r) => ({
+        documentId: r.documentId,
+        events: r.events.map((e) => ({
+          eventDate: e.eventDate,
+          datePrecision: e.datePrecision,
+          eventType: e.eventType,
+          title: e.title,
+          description: e.description,
+          sourceType: e.sourceType,
+          diagnosis: e.diagnosis,
+          doctor: e.doctor,
+          facility: e.facility,
+          confidence: e.confidence,
+          requiresVerification: e.requiresVerification,
+          reliabilityNotes: e.reliabilityNotes,
+          sourceText: e.sourceText,
+          sourcePages: e.sourcePages,
+        })),
       }));
 
       const { newEventsToInsert, allEvents } = consolidateNewWithExisting(
-        extractionResults,
+        docEventsForConsolidation,
         existingEvents,
       );
 
       console.log(`[pipeline] Step 4: ${newEventsToInsert.length} new events (${existingEvents.length} existing, ${allEvents.length} total)`);
 
+      // Build a lookup for extraction pass by matching events
+      const extractionPassMap = new Map<string, string>();
+      for (const docResult of extractionResults) {
+        for (const e of docResult.events) {
+          const key = `${e.eventDate}|${e.eventType}|${e.title}`;
+          extractionPassMap.set(key, e.extractionPass);
+        }
+      }
+
       // Insert only new (non-duplicate) events
       if (newEventsToInsert.length > 0) {
-        const eventRows = newEventsToInsert.map((e) => ({
-          case_id: caseId,
-          document_id: e.documentId,
-          order_number: e.orderNumber,
-          event_date: e.eventDate,
-          date_precision: e.datePrecision,
-          event_type: e.eventType,
-          title: e.title,
-          description: e.description,
-          source_type: e.sourceType,
-          diagnosis: e.diagnosis ?? null,
-          doctor: e.doctor ?? null,
-          facility: e.facility ?? null,
-          confidence: e.confidence,
-          requires_verification: e.requiresVerification,
-          reliability_notes: e.reliabilityNotes ?? e.discrepancyNote ?? null,
-        }));
+        const eventRows = newEventsToInsert.map((e) => {
+          const passKey = `${e.eventDate}|${e.eventType}|${e.title}`;
+          const extractionPass = extractionPassMap.get(passKey) ?? 'pass1_only';
+
+          return {
+            case_id: caseId,
+            document_id: e.documentId,
+            order_number: e.orderNumber,
+            event_date: e.eventDate,
+            date_precision: e.datePrecision,
+            event_type: e.eventType,
+            title: e.title,
+            description: e.description,
+            source_type: e.sourceType,
+            diagnosis: e.diagnosis ?? null,
+            doctor: e.doctor ?? null,
+            facility: e.facility ?? null,
+            confidence: e.confidence,
+            requires_verification: e.requiresVerification,
+            reliability_notes: e.reliabilityNotes ?? e.discrepancyNote ?? null,
+            source_text: e.sourceText ?? null,
+            source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
+            extraction_pass: extractionPass,
+          };
+        });
 
         await supabase.from('events').insert(eventRows);
       }
@@ -365,6 +483,84 @@ export const processCaseDocuments = inngest.createFunction(
       }
 
       return { allEvents, newEventsCount: newEventsToInsert.length };
+    });
+
+    // Step 4.5: Link images to events based on sourcePages
+    await step.run('link-images-to-events', async () => {
+      const supabase = createAdminClient();
+
+      console.log(`[pipeline] Step 4.5: Linking images to events`);
+
+      // Fetch events with source_pages for this case
+      const { data: eventsRaw } = await supabase
+        .from('events')
+        .select('id, document_id, source_pages')
+        .eq('case_id', caseId)
+        .eq('is_deleted', false)
+        .not('source_pages', 'is', null);
+
+      if (!eventsRaw || eventsRaw.length === 0) {
+        console.log('[pipeline] Step 4.5: No events with source_pages, skipping');
+        return;
+      }
+
+      // Fetch pages with images for documents in this case
+      const { data: docsRaw } = await supabase
+        .from('documents')
+        .select('id')
+        .eq('case_id', caseId);
+
+      if (!docsRaw || docsRaw.length === 0) return;
+
+      const docIds = docsRaw.map((d) => d.id);
+
+      const { data: pagesRaw } = await supabase
+        .from('pages')
+        .select('id, document_id, page_number, image_path')
+        .in('document_id', docIds)
+        .not('image_path', 'is', null);
+
+      if (!pagesRaw || pagesRaw.length === 0) {
+        console.log('[pipeline] Step 4.5: No pages with images, skipping');
+        return;
+      }
+
+      // Delete old event_images for this case's events
+      const eventIds = eventsRaw.map((e) => e.id);
+      if (eventIds.length > 0) {
+        await supabase
+          .from('event_images')
+          .delete()
+          .in('event_id', eventIds);
+      }
+
+      // Build links
+      const events = eventsRaw.map((e) => ({
+        eventId: e.id as string,
+        documentId: (e.document_id ?? null) as string | null,
+        sourcePages: JSON.parse(e.source_pages as string) as number[],
+      }));
+
+      const pagesWithImages = pagesRaw.map((p) => ({
+        pageId: p.id as string,
+        documentId: p.document_id as string,
+        pageNumber: p.page_number as number,
+        imagePath: p.image_path as string,
+      }));
+
+      const links = linkImagesToEvents(events, pagesWithImages);
+
+      if (links.length > 0) {
+        const rows = links.map((l) => ({
+          event_id: l.eventId,
+          page_id: l.pageId,
+          image_path: l.imagePath,
+          page_number: l.pageNumber,
+        }));
+
+        await supabase.from('event_images').insert(rows);
+        console.log(`[pipeline] Step 4.5: Linked ${links.length} images to events`);
+      }
     });
 
     // Step 5: Detect anomalies — delete old, re-detect on ALL events
@@ -494,7 +690,17 @@ export const processCaseDocuments = inngest.createFunction(
         .update({ updated_at: new Date().toISOString() })
         .eq('id', caseId);
 
-      // Audit log (no sensitive data) — includes incremental info
+      // Build coverage summary (only numeric metrics, no sensitive data)
+      const coverageMetrics = extractionResults
+        .filter((r) => r.coverageResult !== null)
+        .map((r) => ({
+          documentId: r.documentId,
+          coveragePercent: r.coverageResult!.coveragePercent,
+          uncoveredBlocks: r.coverageResult!.uncoveredBlocks.length,
+          uncoveredWithMedicalTerms: r.coverageResult!.uncoveredWithMedicalTerms,
+        }));
+
+      // Audit log (no sensitive data) — includes incremental info + coverage metrics
       await supabase.from('audit_log').insert({
         user_id: userId,
         action: 'case.processing.completed',
@@ -508,6 +714,7 @@ export const processCaseDocuments = inngest.createFunction(
           missingDocuments: missingDocs.length,
           reportVersion: synthesisResult.reportVersion,
           synthesisWordCount: synthesisResult.wordCount,
+          coverageMetrics,
         },
       });
     });
@@ -525,3 +732,34 @@ export const processCaseDocuments = inngest.createFunction(
     };
   },
 );
+
+/**
+ * Apply review corrections to events. Only modifies whitelisted fields.
+ * Creates new event objects (immutable).
+ */
+function applyReviewCorrections(
+  events: ExtractedEvent[],
+  corrections: ReviewCorrection[],
+): ExtractedEvent[] {
+  const correctionsByIndex = new Map<number, ReviewCorrection[]>();
+  for (const c of corrections) {
+    const existing = correctionsByIndex.get(c.eventIndex) ?? [];
+    existing.push(c);
+    correctionsByIndex.set(c.eventIndex, existing);
+  }
+
+  return events.map((event, i) => {
+    const eventCorrections = correctionsByIndex.get(i);
+    if (!eventCorrections) return event;
+
+    let corrected = { ...event };
+    for (const c of eventCorrections) {
+      // Verify old value matches before applying
+      const currentValue = corrected[c.field as keyof ExtractedEvent];
+      if (String(currentValue ?? '') === c.oldValue) {
+        corrected = { ...corrected, [c.field]: c.newValue };
+      }
+    }
+    return corrected;
+  });
+}

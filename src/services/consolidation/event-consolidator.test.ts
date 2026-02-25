@@ -16,6 +16,8 @@ function makeEvent(overrides: Partial<ExtractedEvent>): ExtractedEvent {
     confidence: 90,
     requiresVerification: false,
     reliabilityNotes: null,
+    sourceText: 'Test source text for verification',
+    sourcePages: [1],
     ...overrides,
   };
 }

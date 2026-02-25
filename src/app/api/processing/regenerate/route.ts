@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
       requiresVerification: e.requires_verification as boolean,
       reliabilityNotes: (e.reliability_notes ?? null) as string | null,
       discrepancyNote: null,
+      sourceText: (e.source_text ?? '') as string,
+      sourcePages: e.source_pages ? JSON.parse(e.source_pages as string) as number[] : [],
     }));
 
     // Delete old anomalies and missing docs

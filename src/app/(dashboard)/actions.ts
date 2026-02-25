@@ -779,3 +779,94 @@ export async function getCasePageImages(caseId: string): Promise<Record<string, 
 
   return result;
 }
+
+/**
+ * Fetch event-level images for a case.
+ * Uses the event_images junction table (linked by sourcePages).
+ * Falls back to document-level images for events without sourcePages.
+ * Returns a map of eventId → image storage paths.
+ */
+export async function getCaseEventImages(caseId: string): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return {};
+
+  // Get events for this case
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, document_id, source_pages')
+    .eq('case_id', caseId)
+    .eq('is_deleted', false);
+
+  if (!events || events.length === 0) return {};
+
+  const eventIds = events.map((e) => e.id);
+
+  // Get event_images links
+  const { data: eventImagesRaw } = await supabase
+    .from('event_images')
+    .select('event_id, image_path')
+    .in('event_id', eventIds);
+
+  const result: Record<string, string[]> = {};
+
+  // Group by event_id
+  if (eventImagesRaw && eventImagesRaw.length > 0) {
+    for (const row of eventImagesRaw) {
+      const eventId = row.event_id as string;
+      if (!result[eventId]) {
+        result[eventId] = [];
+      }
+      result[eventId].push(row.image_path as string);
+    }
+  }
+
+  // Fallback: for events without event_images, use document-level images
+  const eventsWithoutImages = events.filter(
+    (e) => !result[e.id as string] && e.document_id,
+  );
+
+  if (eventsWithoutImages.length > 0) {
+    const docIds = [...new Set(eventsWithoutImages.map((e) => e.document_id as string))];
+
+    const { data: pages } = await supabase
+      .from('pages')
+      .select('document_id, image_path')
+      .in('document_id', docIds)
+      .not('image_path', 'is', null);
+
+    if (pages && pages.length > 0) {
+      // Build docId → paths map
+      const docImageMap: Record<string, string[]> = {};
+      for (const page of pages) {
+        const docId = page.document_id as string;
+        const paths = (page.image_path as string).split(';').filter(Boolean);
+        if (!docImageMap[docId]) {
+          docImageMap[docId] = [];
+        }
+        docImageMap[docId].push(...paths);
+      }
+
+      // Assign to events
+      for (const event of eventsWithoutImages) {
+        const docId = event.document_id as string;
+        if (docImageMap[docId] && docImageMap[docId].length > 0) {
+          result[event.id as string] = docImageMap[docId];
+        }
+      }
+    }
+  }
+
+  return result;
+}

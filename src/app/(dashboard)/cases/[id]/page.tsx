@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { FileText, AlertTriangle, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCasePageImages } from '../../actions';
+import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { CaseDetailClient } from './client';
 
@@ -27,18 +27,18 @@ export default async function CaseDetailPage({
     notFound();
   }
 
-  const [documents, events, anomalies, missingDocs, report, pageImagesMap] = await Promise.all([
+  const [documents, events, anomalies, missingDocs, report, eventImagesMap] = await Promise.all([
     getCaseDocuments(id),
     getCaseEvents(id),
     getCaseAnomalies(id),
     getCaseMissingDocs(id),
     getCaseReport(id),
-    getCasePageImages(id),
+    getCaseEventImages(id),
   ]);
 
-  // Generate signed URLs for images
-  const documentImages: Record<string, string[]> = {};
-  for (const [docId, paths] of Object.entries(pageImagesMap)) {
+  // Generate signed URLs for event images
+  const eventImages: Record<string, string[]> = {};
+  for (const [eventId, paths] of Object.entries(eventImagesMap)) {
     const urls: string[] = [];
     for (const path of paths) {
       try {
@@ -49,7 +49,7 @@ export default async function CaseDetailPage({
       }
     }
     if (urls.length > 0) {
-      documentImages[docId] = urls;
+      eventImages[eventId] = urls;
     }
   }
 
@@ -113,7 +113,7 @@ export default async function CaseDetailPage({
         missingDocs={missingDocs}
         report={report}
         processingLabels={processingLabels}
-        documentImages={documentImages}
+        eventImages={eventImages}
       />
     </div>
   );

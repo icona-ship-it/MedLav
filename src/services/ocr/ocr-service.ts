@@ -3,19 +3,27 @@ import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-typ
 
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
 const SUPPORTED_PDF_TYPES = ['application/pdf'];
+const SUPPORTED_DOCX_TYPES = [
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+];
 
 function isSupportedForOcr(mimeType: string): boolean {
-  return [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_PDF_TYPES].includes(mimeType);
+  return [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_PDF_TYPES, ...SUPPORTED_DOCX_TYPES].includes(mimeType);
 }
 
 function isImageType(mimeType: string): boolean {
   return SUPPORTED_IMAGE_TYPES.includes(mimeType);
 }
 
+function isDocxType(mimeType: string): boolean {
+  return SUPPORTED_DOCX_TYPES.includes(mimeType);
+}
+
 /**
  * Process a document through Mistral OCR.
- * Supports PDF and image files.
- * For unsupported types (DOC, XLS), returns empty result with error note.
+ * Supports PDF, DOCX, and image files — all use the dedicated OCR API.
+ * For unsupported types (XLS, etc.), returns empty result with error note.
  */
 export async function ocrDocument(params: {
   documentId: string;
@@ -41,30 +49,23 @@ export async function ocrDocument(params: {
     return ocrImage({ documentId, fileName, signedUrl });
   }
 
+  if (isDocxType(fileType)) {
+    return ocrDocx({ documentId, fileName, signedUrl });
+  }
+
   return ocrPdf({ documentId, fileName, signedUrl });
 }
 
 /**
- * OCR a PDF document using Mistral OCR API.
- * The API processes all pages and returns structured results.
+ * Map a Mistral OCR API response to OcrDocumentResult.
+ * Shared by ocrPdf, ocrImage, and ocrDocx.
  */
-async function ocrPdf(params: {
+function mapOcrResponseToResult(params: {
   documentId: string;
   fileName: string;
-  signedUrl: string;
-}): Promise<OcrDocumentResult> {
-  const { documentId, fileName, signedUrl } = params;
-  const client = getMistralClient();
-
-  const response = await client.ocr.process({
-    model: MISTRAL_MODELS.OCR,
-    document: {
-      type: 'document_url',
-      documentUrl: signedUrl,
-    },
-    includeImageBase64: true,
-  });
-
+  response: { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> };
+}): OcrDocumentResult {
+  const { documentId, fileName, response } = params;
   const allImages: OcrImageResult[] = [];
 
   const pages: OcrPageResult[] = (response.pages ?? []).map((page, index) => {
@@ -74,9 +75,8 @@ async function ocrPdf(params: {
 
     // Extract images from page
     const pageImages: OcrImageResult[] = [];
-    const pageObj = page as { images?: Array<{ id?: string; imageBase64?: string }> };
-    if (pageObj.images && Array.isArray(pageObj.images)) {
-      pageObj.images.forEach((img, figIdx) => {
+    if (page.images && Array.isArray(page.images)) {
+      page.images.forEach((img, figIdx) => {
         if (img.imageBase64) {
           const imageResult: OcrImageResult = {
             imageId: img.id ?? `page-${pageNumber}-fig-${figIdx}`,
@@ -100,7 +100,11 @@ async function ocrPdf(params: {
     };
   });
 
-  const fullText = pages.map((p) => p.text).join('\n\n---\n\n');
+  // Full text with page markers for source anchoring
+  const fullText = pages.map((p) =>
+    `[PAGE_START:${p.pageNumber}]\n${p.text}\n[PAGE_END:${p.pageNumber}]`
+  ).join('\n\n');
+
   const averageConfidence = pages.length > 0
     ? pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length
     : 0;
@@ -117,7 +121,34 @@ async function ocrPdf(params: {
 }
 
 /**
- * OCR a single image using Mistral Pixtral vision model.
+ * OCR a PDF document using Mistral OCR API.
+ */
+async function ocrPdf(params: {
+  documentId: string;
+  fileName: string;
+  signedUrl: string;
+}): Promise<OcrDocumentResult> {
+  const { documentId, fileName, signedUrl } = params;
+  const client = getMistralClient();
+
+  const response = await client.ocr.process({
+    model: MISTRAL_MODELS.OCR,
+    document: {
+      type: 'document_url',
+      documentUrl: signedUrl,
+    },
+    includeImageBase64: true,
+  });
+
+  return mapOcrResponseToResult({
+    documentId,
+    fileName,
+    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+  });
+}
+
+/**
+ * OCR a single image using Mistral OCR API (dedicated model, not Pixtral chat).
  * Returns a single-page result.
  */
 async function ocrImage(params: {
@@ -128,66 +159,47 @@ async function ocrImage(params: {
   const { documentId, fileName, signedUrl } = params;
   const client = getMistralClient();
 
-  const response = await client.chat.complete({
-    model: MISTRAL_MODELS.PIXTRAL_LARGE,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            imageUrl: signedUrl,
-          },
-          {
-            type: 'text',
-            text: `Trascrivi INTEGRALMENTE il testo presente in questa immagine di un documento medico.
-Regole:
-- Trascrivi TUTTO il testo visibile, inclusi numeri, date, firme leggibili
-- Mantieni la struttura originale (intestazioni, tabelle, elenchi)
-- Se parti sono manoscritte, trascrivile al meglio e segnala con [MANOSCRITTO] prima della parte
-- Se parti sono illeggibili, indica [ILLEGGIBILE] al posto del testo
-- NON aggiungere interpretazioni o commenti
-- Usa formato Markdown per strutturare il testo`,
-          },
-        ],
-      },
-    ],
+  const response = await client.ocr.process({
+    model: MISTRAL_MODELS.OCR,
+    document: {
+      type: 'image_url',
+      imageUrl: signedUrl,
+    },
+    includeImageBase64: true,
   });
 
-  const text = extractTextFromResponse(response);
-  const handwritingInfo = detectHandwriting(text);
-  const confidence = estimateConfidence(text);
-
-  const page: OcrPageResult = {
-    pageNumber: 1,
-    text,
-    confidence,
-    hasHandwriting: handwritingInfo.hasHandwriting,
-    handwritingConfidence: handwritingInfo.confidence,
-    images: [],
-  };
-
-  return {
+  return mapOcrResponseToResult({
     documentId,
     fileName,
-    pageCount: 1,
-    pages: [page],
-    averageConfidence: confidence,
-    fullText: text,
-    images: [],
-  };
+    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+  });
 }
 
 /**
- * Extract text content from Mistral chat response.
+ * OCR a DOCX document using Mistral OCR API.
  */
-function extractTextFromResponse(response: unknown): string {
-  const res = response as {
-    choices?: Array<{
-      message?: { content?: string | null };
-    }>;
-  };
-  return res.choices?.[0]?.message?.content ?? '';
+async function ocrDocx(params: {
+  documentId: string;
+  fileName: string;
+  signedUrl: string;
+}): Promise<OcrDocumentResult> {
+  const { documentId, fileName, signedUrl } = params;
+  const client = getMistralClient();
+
+  const response = await client.ocr.process({
+    model: MISTRAL_MODELS.OCR,
+    document: {
+      type: 'document_url',
+      documentUrl: signedUrl,
+    },
+    includeImageBase64: true,
+  });
+
+  return mapOcrResponseToResult({
+    documentId,
+    fileName,
+    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+  });
 }
 
 /**

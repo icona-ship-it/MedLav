@@ -34,6 +34,12 @@ export const sourceTypeEnum = pgEnum('source_type', [
   'altro',
 ]);
 
+export const extractionPassEnum = pgEnum('extraction_pass', [
+  'both',
+  'pass1_only',
+  'pass2_only',
+]);
+
 export const events = pgTable('events', {
   id: uuid('id').defaultRandom().primaryKey(),
   caseId: uuid('case_id').references(() => cases.id, { onDelete: 'cascade' }).notNull(),
@@ -52,6 +58,9 @@ export const events = pgTable('events', {
   requiresVerification: boolean('requires_verification').notNull().default(false),
   reliabilityNotes: text('reliability_notes'),
   expertNotes: text('expert_notes'), // annotazioni del perito
+  sourceText: text('source_text'), // porzione esatta del testo OCR da cui estratto
+  sourcePages: text('source_pages'), // JSON array di numeri pagina es. "[1, 2]"
+  extractionPass: extractionPassEnum('extraction_pass'), // 'both' | 'pass1_only' | 'pass2_only'
   isDeleted: boolean('is_deleted').notNull().default(false), // soft delete
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

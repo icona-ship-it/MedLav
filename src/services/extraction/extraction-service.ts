@@ -2,33 +2,48 @@ import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
 import { extractionResponseSchema, extractionJsonSchema } from './extraction-schemas';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
+import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 
 // Mistral Large has 128k context; leave room for system prompt + response
 const MAX_CHUNK_CHARS = 80_000;
-const CHUNK_OVERLAP_CHARS = 2_000;
 
-interface ExtractionParams {
+export interface ExtractionParams {
   documentText: string;
   fileName: string;
   documentType: string;
   caseType: CaseType;
+  temperature?: number;
+}
+
+interface PageBlock {
+  pageNumber: number;
+  text: string;
 }
 
 /**
  * Extract clinical events from a document's OCR text.
- * Handles long documents by chunking with overlap.
+ * Pre-processes with table annotation, then handles long documents
+ * by chunking on page boundaries with overlap.
  */
 export async function extractEventsFromDocument(
   params: ExtractionParams,
 ): Promise<ExtractionResponse> {
-  const { documentText, fileName, documentType, caseType } = params;
+  const { documentText, fileName } = params;
 
-  if (documentText.length <= MAX_CHUNK_CHARS) {
-    return extractFromSingleChunk({ documentText, fileName, documentType, caseType });
+  // Pre-process: annotate tables before chunking
+  const { annotatedText, tableCount } = annotateTablesInText(documentText);
+  if (tableCount > 0) {
+    console.log(`[extraction] Annotated ${tableCount} tables in ${fileName}`);
   }
 
-  return extractFromChunks({ documentText, fileName, documentType, caseType });
+  const processedParams = { ...params, documentText: annotatedText };
+
+  if (annotatedText.length <= MAX_CHUNK_CHARS) {
+    return extractFromSingleChunk(processedParams);
+  }
+
+  return extractFromChunks(processedParams);
 }
 
 /**
@@ -37,7 +52,7 @@ export async function extractEventsFromDocument(
 async function extractFromSingleChunk(
   params: ExtractionParams,
 ): Promise<ExtractionResponse> {
-  const { documentText, fileName, documentType, caseType } = params;
+  const { documentText, fileName, documentType, caseType, temperature = 0.1 } = params;
   const client = getMistralClient();
 
   const response = await client.chat.complete({
@@ -59,7 +74,7 @@ async function extractFromSingleChunk(
         schemaDefinition: extractionJsonSchema,
       },
     },
-    temperature: 0.1,
+    temperature,
   });
 
   const content = extractResponseContent(response);
@@ -74,7 +89,7 @@ async function extractFromChunks(
   params: ExtractionParams,
 ): Promise<ExtractionResponse> {
   const { documentText, fileName, documentType, caseType } = params;
-  const chunks = splitTextIntoChunks(documentText, MAX_CHUNK_CHARS, CHUNK_OVERLAP_CHARS);
+  const chunks = splitTextIntoChunks(documentText, MAX_CHUNK_CHARS);
 
   const allEvents: ExtractedEvent[] = [];
   const allAbbreviations: Array<{ abbreviation: string; expansion: string }> = [];
@@ -104,13 +119,105 @@ async function extractFromChunks(
 }
 
 /**
- * Split text into overlapping chunks at natural boundaries (paragraphs, sections).
+ * Smart chunking: split on page boundaries when page markers are present.
+ * Falls back to character-based chunking if no markers found.
+ * Overlap = repeat last page of previous chunk at start of next chunk.
  */
 function splitTextIntoChunks(
   text: string,
   maxChunkSize: number,
-  overlapSize: number,
 ): string[] {
+  const pageBlocks = extractPageBlocks(text);
+
+  if (pageBlocks.length === 0) {
+    // No page markers — fallback to character-based chunking
+    return splitByCharacterBoundaries(text, maxChunkSize);
+  }
+
+  return splitPageBlocksIntoChunks(pageBlocks, maxChunkSize);
+}
+
+/**
+ * Extract text blocks per page using [PAGE_START:N] / [PAGE_END:N] markers.
+ */
+function extractPageBlocks(text: string): PageBlock[] {
+  const blocks: PageBlock[] = [];
+  const regex = /\[PAGE_START:(\d+)\]([\s\S]*?)\[PAGE_END:\d+\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    blocks.push({
+      pageNumber: parseInt(match[1], 10),
+      text: match[0], // Keep markers so LLM can see page numbers
+    });
+  }
+
+  return blocks;
+}
+
+/**
+ * Accumulate page blocks into chunks up to maxChunkSize.
+ * Overlap = repeat the last page of the previous chunk at start of next.
+ */
+function splitPageBlocksIntoChunks(
+  blocks: PageBlock[],
+  maxChunkSize: number,
+): string[] {
+  const chunks: string[] = [];
+  let currentPages: string[] = [];
+  let currentSize = 0;
+  let lastPageOfPrevChunk: string | null = null;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+
+    // Single page exceeds max — split it with character chunking
+    if (block.text.length > maxChunkSize) {
+      // Flush current chunk first
+      if (currentPages.length > 0) {
+        chunks.push(currentPages.join('\n'));
+        lastPageOfPrevChunk = currentPages[currentPages.length - 1];
+        currentPages = [];
+        currentSize = 0;
+      }
+
+      const subChunks = splitByCharacterBoundaries(block.text, maxChunkSize);
+      chunks.push(...subChunks);
+      lastPageOfPrevChunk = null; // Can't cleanly overlap a split page
+      continue;
+    }
+
+    // Would adding this page exceed the limit?
+    if (currentSize + block.text.length > maxChunkSize && currentPages.length > 0) {
+      // Flush current chunk
+      chunks.push(currentPages.join('\n'));
+      lastPageOfPrevChunk = currentPages[currentPages.length - 1];
+
+      // Start new chunk with overlap (last page of previous chunk)
+      currentPages = lastPageOfPrevChunk ? [lastPageOfPrevChunk] : [];
+      currentSize = lastPageOfPrevChunk ? lastPageOfPrevChunk.length : 0;
+    }
+
+    currentPages.push(block.text);
+    currentSize += block.text.length;
+  }
+
+  // Flush remaining
+  if (currentPages.length > 0) {
+    chunks.push(currentPages.join('\n'));
+  }
+
+  return chunks;
+}
+
+/**
+ * Fallback: split text into overlapping chunks at natural boundaries.
+ */
+function splitByCharacterBoundaries(
+  text: string,
+  maxChunkSize: number,
+): string[] {
+  const overlapSize = 2_000;
   const chunks: string[] = [];
   let start = 0;
 

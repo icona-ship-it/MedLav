@@ -26,7 +26,7 @@ Riportare TUTTI gli esami laboratorio: emocromo, biochimica, coagulazione, marke
 Per ogni esame: data, TUTTI i valori numerici con unita di misura, valori fuori range evidenziati.
 `;
 
-const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
+export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
   ortopedica: `FOCUS ORTOPEDICO: Presta particolare attenzione a:
 - Interventi chirurgici ortopedici (dettagli tecnici, tempi operatori, materiali/protesi)
 - Complicanze post-operatorie (infezioni, mobilizzazione protesi, pseudoartrosi)
@@ -93,12 +93,19 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
-7. **NESSUN NUMERO DI PAGINA**: Non citare MAI numeri di pagina del documento originale.
+7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
+   - **sourceText**: la porzione ESATTA del testo OCR originale da cui hai estratto l'evento. Copia il testo verbatim, senza rielaborarlo. Deve essere sufficiente a verificare l'evento (minimo una frase significativa).
+   - **sourcePages**: array con i numeri delle pagine del documento in cui si trova l'informazione. Usa i marker [PAGE_START:N] e [PAGE_END:N] nel testo per identificare le pagine.
 
 ${SOURCE_RULES}
 
 ## GUIDA SPECIFICA PER TIPO CASO
 ${CASE_TYPE_GUIDANCE[caseType]}
+
+## REGOLA TABELLE
+Per blocchi delimitati da [TABLE_START] e [TABLE_END]: ogni RIGA della tabella rappresenta un dato clinico separato.
+Riporta nome parametro, valore numerico esatto, unita di misura per ciascuna riga.
+Non aggregare piu righe in un unico evento. Evidenzia valori fuori range nel campo reliabilityNotes.
 
 ## FORMATO OUTPUT
 Rispondi con un JSON valido contenente un array "events" e opzionalmente un array "abbreviations" con le abbreviazioni mediche trovate.`;
@@ -119,9 +126,13 @@ export function buildExtractionUserPrompt(params: {
 DOCUMENTO: ${fileName}
 TIPO DOCUMENTO: ${documentType}
 
+NOTA: Il testo contiene marker [PAGE_START:N] e [PAGE_END:N] che delimitano le pagine del documento.
+Usa questi marker per determinare i numeri di pagina (sourcePages) di ciascun evento.
+Per sourceText, copia ESATTAMENTE la porzione di testo OCR originale da cui hai estratto l'evento.
+
 --- INIZIO TESTO DOCUMENTO ---
 ${documentText}
 --- FINE TESTO DOCUMENTO ---
 
-Estrai TUTTI gli eventi clinici presenti. Ricorda: politica ZERO DISCARD, copia fedele, espandi abbreviazioni.`;
+Estrai TUTTI gli eventi clinici presenti. Ricorda: politica ZERO DISCARD, copia fedele, espandi abbreviazioni, sourceText e sourcePages obbligatori.`;
 }

@@ -15,6 +15,8 @@ function makeEvent(overrides: Partial<ConsolidatedEvent> & { orderNumber: number
     confidence: 90,
     requiresVerification: false,
     reliabilityNotes: null,
+    sourceText: 'Test source text for verification',
+    sourcePages: [1],
     discrepancyNote: null,
     ...overrides,
   };

@@ -70,6 +70,9 @@ interface EventRow {
   requires_verification: boolean;
   reliability_notes: string | null;
   expert_notes: string | null;
+  source_text: string | null;
+  source_pages: string | null;
+  extraction_pass: string | null;
 }
 
 interface AnomalyRow {
@@ -104,7 +107,7 @@ interface CaseDetailClientProps {
   missingDocs: MissingDocRow[];
   report: ReportRow | null;
   processingLabels: Record<string, string>;
-  documentImages: Record<string, string[]>;
+  eventImages: Record<string, string[]>;
 }
 
 // --- Constants ---
@@ -237,7 +240,7 @@ export function CaseDetailClient({
   missingDocs,
   report,
   processingLabels,
-  documentImages,
+  eventImages,
 }: CaseDetailClientProps) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -747,7 +750,7 @@ export function CaseDetailClient({
                       onCancelEdit={() => setEditingEventId(null)}
                       onSaved={() => { setEditingEventId(null); router.refresh(); }}
                       onDeleted={() => router.refresh()}
-                      documentImages={documentImages}
+                      eventImages={eventImages}
                       onImageClick={setPreviewImage}
                     />
                   ))}
@@ -1023,7 +1026,7 @@ function EditCaseDialog({
 
 function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  documentImages, onImageClick,
+  eventImages, onImageClick,
 }: {
   event: EventRow;
   caseId: string;
@@ -1034,7 +1037,7 @@ function EventCard({
   onCancelEdit: () => void;
   onSaved: () => void;
   onDeleted: () => void;
-  documentImages: Record<string, string[]>;
+  eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -1075,8 +1078,8 @@ function EventCard({
     });
   };
 
-  // Get images for this event's document
-  const eventImages = event.document_id ? (documentImages[event.document_id] ?? []) : [];
+  // Get images linked to this event (by event ID)
+  const images = eventImages[event.id] ?? [];
 
   return (
     <div className="rounded-md border p-3">
@@ -1095,10 +1098,12 @@ function EventCard({
               <Badge variant="outline" className="text-xs">{event.event_type}</Badge>
               <Badge variant="secondary" className="text-xs">{sourceLabels[event.source_type] ?? event.source_type}</Badge>
               {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
+              {event.extraction_pass === 'both' && <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-100">Confermato</Badge>}
+              {event.extraction_pass === 'pass2_only' && <Badge className="text-xs bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Solo 2a passata</Badge>}
               <span className={`text-xs ${confidenceColor(event.confidence)}`}>{event.confidence}%</span>
-              {eventImages.length > 0 && (
+              {images.length > 0 && (
                 <Badge variant="outline" className="text-xs">
-                  <ImageIcon className="mr-1 h-2.5 w-2.5" />{eventImages.length} img
+                  <ImageIcon className="mr-1 h-2.5 w-2.5" />{images.length} img
                 </Badge>
               )}
             </div>
@@ -1130,12 +1135,16 @@ function EventCard({
               <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
             </div>
           )}
-          {/* Document images */}
-          {eventImages.length > 0 && (
+          {/* Source text anchoring */}
+          {event.source_text && (
+            <SourceTextSection sourceText={event.source_text} sourcePages={event.source_pages} />
+          )}
+          {/* Event images */}
+          {images.length > 0 && (
             <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Immagini dal documento</p>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Immagini associate</p>
               <div className="flex flex-wrap gap-2">
-                {eventImages.map((url, idx) => (
+                {images.map((url, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -1213,6 +1222,39 @@ function EventCard({
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// --- Source Text Section (collapsible) ---
+
+function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; sourcePages: string | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const parsedPages: number[] = sourcePages ? (() => {
+    try { return JSON.parse(sourcePages) as number[]; } catch { return []; }
+  })() : [];
+
+  return (
+    <div className="pt-2 border-t">
+      <button
+        type="button"
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        Testo OCR originale
+        {parsedPages.length > 0 && (
+          <span className="text-xs text-muted-foreground ml-1">
+            (pag. {parsedPages.join(', ')})
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <pre className="mt-2 rounded bg-muted p-3 text-xs whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+          {sourceText}
+        </pre>
       )}
     </div>
   );

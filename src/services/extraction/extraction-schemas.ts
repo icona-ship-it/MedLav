@@ -24,6 +24,8 @@ export const extractedEventSchema = z.object({
   confidence: z.number().min(0).max(100).describe('Affidabilita estrazione 0-100'),
   requiresVerification: z.boolean().describe('True se necessita revisione manuale'),
   reliabilityNotes: z.string().nullable().optional().describe('Spiegazione se affidabilita bassa'),
+  sourceText: z.string().min(5).describe('Porzione esatta del testo OCR originale da cui questo evento e stato estratto'),
+  sourcePages: z.array(z.number().int().positive()).min(1).describe('Numeri delle pagine sorgente del documento da cui proviene questo evento'),
 });
 
 export type ExtractedEvent = z.infer<typeof extractedEventSchema>;
@@ -75,10 +77,18 @@ export const extractionJsonSchema = {
           confidence: { type: 'number' as const, minimum: 0, maximum: 100 },
           requiresVerification: { type: 'boolean' as const },
           reliabilityNotes: { type: ['string', 'null'] as const },
+          sourceText: { type: 'string' as const, description: 'Porzione esatta del testo OCR originale da cui estratto questo evento' },
+          sourcePages: {
+            type: 'array' as const,
+            items: { type: 'integer' as const, minimum: 1 },
+            minItems: 1,
+            description: 'Numeri pagine sorgente',
+          },
         },
         required: [
           'eventDate', 'datePrecision', 'eventType', 'title',
           'description', 'sourceType', 'confidence', 'requiresVerification',
+          'sourceText', 'sourcePages',
         ],
       },
     },
