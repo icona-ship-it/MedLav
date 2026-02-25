@@ -18,6 +18,7 @@ import { detectMissingDocuments } from '@/services/validation/missing-doc-detect
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ExtractedEvent } from '@/services/extraction/extraction-schemas';
 import type { CaseType } from '@/types';
+import { safeJsonParse } from '@/lib/format';
 
 interface CaseMetadata {
   caseId: string;
@@ -336,15 +337,22 @@ export const processCaseDocuments = inngest.createFunction(
             console.error(`[pipeline] Step 3: LLM review failed (non-fatal) for doc ${ocrResult.documentId}: ${msg}`);
           }
 
-          // Re-attach extractionPass from dual-pass results (new events from reviewer get 'review')
-          const originalCount = dualPassResult.events.length;
-          const eventsWithMeta: ExtractedEventWithMeta[] = reviewedEvents.map((event, i) => ({
-            ...event,
-            extractionPass: i < originalCount
-              ? (dualPassResult.events[i]?.extractionPass ?? 'pass1_only')
-              : 'pass2_only', // reviewer-added events treated as secondary
-            documentId: ocrResult.documentId,
-          }));
+          // Re-attach extractionPass from dual-pass results using content matching
+          // (index-based matching would break if validation filters/reorders events)
+          const passMap = new Map<string, string>();
+          for (const dpEvent of dualPassResult.events) {
+            const key = `${dpEvent.eventDate}|${dpEvent.eventType}|${dpEvent.title}`;
+            passMap.set(key, dpEvent.extractionPass);
+          }
+
+          const eventsWithMeta: ExtractedEventWithMeta[] = reviewedEvents.map((event) => {
+            const key = `${event.eventDate}|${event.eventType}|${event.title}`;
+            return {
+              ...event,
+              extractionPass: (passMap.get(key) ?? 'pass2_only') as DualPassEvent['extractionPass'],
+              documentId: ocrResult.documentId,
+            };
+          });
 
           results.push({
             documentId: ocrResult.documentId,
@@ -400,7 +408,7 @@ export const processCaseDocuments = inngest.createFunction(
         reliabilityNotes: (e.reliability_notes ?? null) as string | null,
         discrepancyNote: null,
         sourceText: (e.source_text ?? '') as string,
-        sourcePages: e.source_pages ? JSON.parse(e.source_pages as string) as number[] : [],
+        sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
       }));
 
       // Build DocumentEvents for consolidation (strip dual-pass metadata)
@@ -538,7 +546,7 @@ export const processCaseDocuments = inngest.createFunction(
       const events = eventsRaw.map((e) => ({
         eventId: e.id as string,
         documentId: (e.document_id ?? null) as string | null,
-        sourcePages: JSON.parse(e.source_pages as string) as number[],
+        sourcePages: safeJsonParse<number[]>(e.source_pages as string, []),
       }));
 
       const pagesWithImages = pagesRaw.map((p) => ({
@@ -591,24 +599,16 @@ export const processCaseDocuments = inngest.createFunction(
       return detected;
     });
 
-    // Step 6: Detect missing documents — delete old, check ALL doc types in case
+    // Step 6: Detect missing documents — delete old, re-detect based on event content
     const missingDocs = await step.run('detect-missing-documents', async () => {
       const supabase = createAdminClient();
 
       // Delete previous missing documents for this case
       await supabase.from('missing_documents').delete().eq('case_id', caseId);
 
-      // Fetch ALL document types for this case (not just current batch)
-      const { data: allDocsRaw } = await supabase
-        .from('documents')
-        .select('document_type')
-        .eq('case_id', caseId);
-      const uploadedDocTypes = (allDocsRaw ?? []).map((d) => (d.document_type ?? 'altro') as string);
-
       const missing = detectMissingDocuments({
         events: consolidationResult.allEvents,
         caseType: metadata.caseType,
-        uploadedDocTypes,
       });
 
       console.log(`[pipeline] Step 6: Detected ${missing.length} missing documents (full case)`);

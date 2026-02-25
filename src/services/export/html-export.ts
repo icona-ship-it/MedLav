@@ -1,3 +1,6 @@
+import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
+import { formatDate } from '@/lib/format';
+
 interface ExportEvent {
   order_number: number;
   event_date: string;
@@ -39,35 +42,12 @@ interface HtmlExportParams {
   missingDocs: ExportMissingDoc[];
 }
 
-const sourceLabels: Record<string, string> = {
-  cartella_clinica: 'FONTE A - Cartella Clinica',
-  referto_controllo: 'FONTE B - Referto Controllo',
-  esame_strumentale: 'FONTE C - Esame Strumentale',
-  esame_ematochimico: 'FONTE D - Esami Ematochimici',
-  altro: 'Altro',
-};
-
-const anomalyLabels: Record<string, string> = {
-  ritardo_diagnostico: 'Ritardo Diagnostico',
-  gap_post_chirurgico: 'Gap Post-Chirurgico',
-  gap_documentale: 'Gap Documentale',
-  complicanza_non_gestita: 'Complicanza Non Gestita',
-  consenso_non_documentato: 'Consenso Non Documentato',
-  diagnosi_contraddittoria: 'Diagnosi Contraddittoria',
-  terapia_senza_followup: 'Terapia Senza Follow-up',
-};
-
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
 }
 
 function confidenceClass(confidence: number): string {

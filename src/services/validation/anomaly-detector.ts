@@ -1,5 +1,6 @@
 import type { AnomalyType, AnomalySeverity } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import { formatDate } from '@/lib/format';
 
 export interface DetectedAnomaly {
   anomalyType: AnomalyType;
@@ -288,11 +289,6 @@ function daysDiff(dateA: string, dateB: string): number {
   const a = new Date(dateA);
   const b = new Date(dateB);
   return Math.round(Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
 }
 
 function makeEventRef(event: ConsolidatedEvent): DetectedAnomaly['involvedEvents'][number] {

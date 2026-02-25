@@ -4,23 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
-
-const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
-  bozza: { label: 'Bozza', variant: 'secondary' },
-  in_revisione: { label: 'In Revisione', variant: 'warning' },
-  definitivo: { label: 'Definitivo', variant: 'success' },
-  archiviato: { label: 'Archiviato', variant: 'outline' },
-};
-
-const caseTypeLabels: Record<string, string> = {
-  ortopedica: 'Malasanita Ortopedica',
-  oncologica: 'Ritardo Diagnostico Oncologico',
-  ostetrica: 'Errore Ostetrico',
-  anestesiologica: 'Errore Anestesiologico',
-  infezione_nosocomiale: 'Infezione Nosocomiale',
-  errore_diagnostico: 'Errore Diagnostico',
-  generica: 'Responsabilita Generica',
-};
+import { statusConfig, caseTypeLabels } from '@/lib/constants';
 
 const VALID_STATUSES = ['bozza', 'in_revisione', 'definitivo', 'archiviato'];
 

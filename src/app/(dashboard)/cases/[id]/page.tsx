@@ -4,16 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { CaseDetailClient } from './client';
-
-const processingLabels: Record<string, string> = {
-  caricato: 'Caricato',
-  in_coda: 'In coda',
-  ocr_in_corso: 'OCR in corso',
-  estrazione_in_corso: 'Estrazione in corso',
-  validazione_in_corso: 'Validazione',
-  completato: 'Completato',
-  errore: 'Errore',
-};
+import { processingLabels } from '@/lib/constants';
 
 export default async function CaseDetailPage({
   params,
@@ -36,18 +27,24 @@ export default async function CaseDetailPage({
     getCaseEventImages(id),
   ]);
 
-  // Generate signed URLs for event images
+  // Generate signed URLs for event images (parallel)
   const eventImages: Record<string, string[]> = {};
-  for (const [eventId, paths] of Object.entries(eventImagesMap)) {
-    const urls: string[] = [];
-    for (const path of paths) {
-      try {
-        const url = await getSignedUrl(path);
-        urls.push(url);
-      } catch {
-        // Skip images that fail to generate signed URLs
-      }
-    }
+  const entries = Object.entries(eventImagesMap);
+  const urlResults = await Promise.all(
+    entries.map(async ([eventId, paths]) => {
+      const urls = await Promise.all(
+        paths.map(async (path) => {
+          try {
+            return await getSignedUrl(path);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return { eventId, urls: urls.filter((u): u is string => u !== null) };
+    }),
+  );
+  for (const { eventId, urls } of urlResults) {
     if (urls.length > 0) {
       eventImages[eventId] = urls;
     }

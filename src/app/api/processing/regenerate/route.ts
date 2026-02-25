@@ -7,6 +7,8 @@ import { detectMissingDocuments } from '@/services/validation/missing-doc-detect
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { CaseType } from '@/types';
+import { safeJsonParse } from '@/lib/format';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
@@ -25,6 +27,18 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    // Rate limit: prevent repeated expensive LLM calls
+    const rateCheck = checkRateLimit({
+      key: `regenerate:${user.id}`,
+      ...RATE_LIMITS.PROCESSING,
+    });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppi tentativi. Riprova tra qualche minuto.' },
+        { status: 429 },
+      );
     }
 
     const body = await request.json() as unknown;
@@ -72,7 +86,7 @@ export async function POST(request: NextRequest) {
       reliabilityNotes: (e.reliability_notes ?? null) as string | null,
       discrepancyNote: null,
       sourceText: (e.source_text ?? '') as string,
-      sourcePages: e.source_pages ? JSON.parse(e.source_pages as string) as number[] : [],
+      sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
     }));
 
     // Delete old anomalies and missing docs
@@ -95,16 +109,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Re-detect missing docs
-    const { data: docsRaw } = await admin
-      .from('documents')
-      .select('document_type')
-      .eq('case_id', caseId);
-    const uploadedDocTypes = (docsRaw ?? []).map((d) => (d.document_type ?? 'altro') as string);
-
     const missingDocs = detectMissingDocuments({
       events,
       caseType: caseRow.case_type as CaseType,
-      uploadedDocTypes,
     });
     if (missingDocs.length > 0) {
       await admin.from('missing_documents').insert(

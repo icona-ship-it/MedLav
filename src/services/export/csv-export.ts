@@ -1,4 +1,6 @@
 import Papa from 'papaparse';
+import { sourceLabels } from '@/lib/constants';
+import { formatDate } from '@/lib/format';
 
 interface CsvEvent {
   order_number: number;
@@ -13,19 +15,6 @@ interface CsvEvent {
   facility: string | null;
   confidence: number;
   requires_verification: boolean;
-}
-
-const sourceLabels: Record<string, string> = {
-  cartella_clinica: 'Cartella Clinica',
-  referto_controllo: 'Referto Controllo',
-  esame_strumentale: 'Esame Strumentale',
-  esame_ematochimico: 'Esami Ematochimici',
-  altro: 'Altro',
-};
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
 }
 
 /**

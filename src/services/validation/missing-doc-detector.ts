@@ -1,5 +1,6 @@
 import type { CaseType } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import { formatDate } from '@/lib/format';
 
 export interface MissingDocument {
   documentName: string;
@@ -78,10 +79,9 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
 export function detectMissingDocuments(params: {
   events: ConsolidatedEvent[];
   caseType: CaseType;
-  uploadedDocTypes: string[];
 }): MissingDocument[] {
-  const { events, caseType, uploadedDocTypes } = params;
-  const presence = analyzeDocumentPresence(events, uploadedDocTypes);
+  const { events, caseType } = params;
+  const presence = analyzeDocumentPresence(events);
   const expected = EXPECTED_DOCS_BY_CASE_TYPE[caseType];
   const missing: MissingDocument[] = [];
 
@@ -108,7 +108,6 @@ export function detectMissingDocuments(params: {
  */
 function analyzeDocumentPresence(
   events: ConsolidatedEvent[],
-  uploadedDocTypes: string[],
 ): DocumentPresence {
   const allText = events.map((e) => `${e.title} ${e.description}`.toLowerCase()).join(' ');
   const eventTypes = new Set(events.map((e) => e.eventType));
@@ -128,8 +127,7 @@ function analyzeDocumentPresence(
 
     hasLetteraDimissione:
       allText.includes('dimissione') ||
-      allText.includes('lettera di dimissione') ||
-      uploadedDocTypes.includes('lettera_dimissione'),
+      allText.includes('lettera di dimissione'),
 
     hasFollowUpPostOp:
       eventTypes.has('follow-up') ||
@@ -148,7 +146,7 @@ function analyzeDocumentPresence(
       allText.includes('diario clinico') ||
       allText.includes('diario medico') ||
       allText.includes('diario infermieristico') ||
-      uploadedDocTypes.includes('cartella_clinica'),
+      allText.includes('cartella clinica'),
   };
 }
 
@@ -181,7 +179,3 @@ function findRelatedEvent(
   }
 }
 
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-}

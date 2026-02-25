@@ -2,6 +2,8 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, ShadingType,
 } from 'docx';
+import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
+import { formatDate } from '@/lib/format';
 
 interface DocxEvent {
   order_number: number;
@@ -40,29 +42,6 @@ interface DocxExportParams {
   events: DocxEvent[];
   anomalies: DocxAnomaly[];
   missingDocs: DocxMissingDoc[];
-}
-
-const sourceLabels: Record<string, string> = {
-  cartella_clinica: 'FONTE A - Cartella Clinica',
-  referto_controllo: 'FONTE B - Referto Controllo',
-  esame_strumentale: 'FONTE C - Esame Strumentale',
-  esame_ematochimico: 'FONTE D - Esami Ematochimici',
-  altro: 'Altro',
-};
-
-const anomalyLabels: Record<string, string> = {
-  ritardo_diagnostico: 'Ritardo Diagnostico',
-  gap_post_chirurgico: 'Gap Post-Chirurgico',
-  gap_documentale: 'Gap Documentale',
-  complicanza_non_gestita: 'Complicanza Non Gestita',
-  consenso_non_documentato: 'Consenso Non Documentato',
-  diagnosi_contraddittoria: 'Diagnosi Contraddittoria',
-  terapia_senza_followup: 'Terapia Senza Follow-up',
-};
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
 }
 
 /**

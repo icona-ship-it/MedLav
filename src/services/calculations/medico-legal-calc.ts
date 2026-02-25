@@ -1,3 +1,5 @@
+import { formatDate } from '@/lib/format';
+
 interface CalcEvent {
   event_date: string;
   event_type: string;
@@ -204,7 +206,3 @@ function daysDiff(dateA: string, dateB: string): number {
   return Math.round(Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-}

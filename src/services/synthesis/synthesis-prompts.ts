@@ -2,6 +2,7 @@ import type { CaseType } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
+import { formatDate } from '@/lib/format';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanita Ortopedica',
@@ -120,7 +121,3 @@ ${missingDocsText}
 Genera la sintesi medico-legale completa (900-1300 parole) con le 4 sezioni obbligatorie (A, B, C, D).`;
 }
 
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-}

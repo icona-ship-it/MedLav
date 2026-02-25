@@ -4,23 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getCases } from './actions';
-
-const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
-  bozza: { label: 'Bozza', variant: 'secondary' },
-  in_revisione: { label: 'In Revisione', variant: 'warning' },
-  definitivo: { label: 'Definitivo', variant: 'success' },
-  archiviato: { label: 'Archiviato', variant: 'outline' },
-};
-
-const caseTypeLabels: Record<string, string> = {
-  ortopedica: 'Malasanita Ortopedica',
-  oncologica: 'Ritardo Diagnostico Oncologico',
-  ostetrica: 'Errore Ostetrico',
-  anestesiologica: 'Errore Anestesiologico',
-  infezione_nosocomiale: 'Infezione Nosocomiale',
-  errore_diagnostico: 'Errore Diagnostico',
-  generica: 'Responsabilita Generica',
-};
+import { statusConfig, caseTypeLabels } from '@/lib/constants';
 
 export default async function DashboardPage() {
   const allCases = await getCases();
@@ -52,7 +36,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Casi Totali</CardTitle>
+            <CardTitle className="text-sm font-medium">Casi Attivi</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -91,9 +75,9 @@ export default async function DashboardPage() {
           {cases.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
-              <h3 className="text-lg font-semibold">Nessun caso</h3>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Crea il tuo primo caso per iniziare
+              <h3 className="text-lg font-semibold">Benvenuto in MedLav</h3>
+              <p className="mb-4 text-base text-muted-foreground">
+                Crea il tuo primo caso per iniziare ad analizzare la documentazione clinica.
               </p>
               <Button asChild>
                 <Link href="/cases/new">
@@ -110,7 +94,7 @@ export default async function DashboardPage() {
                   <Link
                     key={caseItem.id}
                     href={`/cases/${caseItem.id}`}
-                    className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent"
+                    className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -121,7 +105,7 @@ export default async function DashboardPage() {
                           {status.label}
                         </Badge>
                         <Badge variant="outline">
-                          {(caseItem.case_role as string).toUpperCase()}
+                          {((caseItem.case_role as string) ?? '').toUpperCase()}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">

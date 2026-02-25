@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  FileText, Image as ImageIcon, FileSpreadsheet, File, Play,
-  Loader2, AlertTriangle, ChevronDown, ChevronUp,
-  FileWarning, Plus, Trash2, Save, X, Pencil, Filter,
+  Play, Loader2, AlertTriangle, ChevronDown, ChevronUp,
+  FileWarning, Plus, Trash2, Save, X, Pencil,
   Download, XCircle, ArrowLeft, Archive, RotateCcw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,14 @@ import {
   updateEvent, deleteEvent, addManualEvent, updateReportStatus,
   deleteDocument, deleteCase, updateCase, updateCaseStatus,
 } from '../../actions';
+import {
+  CASE_TYPES, EVENT_TYPES, SOURCE_TYPES,
+  caseTypeLabels, sourceLabels, anomalyTypeLabels,
+} from '@/lib/constants';
+import {
+  formatDate, formatFileSize, getFileIcon,
+  confidenceColor, confidenceLabel,
+} from '@/lib/format';
 
 // --- Types ---
 
@@ -114,93 +122,14 @@ interface CaseDetailClientProps {
 
 const POLL_INTERVAL_MS = 3000;
 
-const EVENT_TYPES = [
-  { value: 'visita', label: 'Visita' },
-  { value: 'esame', label: 'Esame' },
-  { value: 'diagnosi', label: 'Diagnosi' },
-  { value: 'intervento', label: 'Intervento' },
-  { value: 'terapia', label: 'Terapia' },
-  { value: 'ricovero', label: 'Ricovero' },
-  { value: 'follow-up', label: 'Follow-up' },
-  { value: 'referto', label: 'Referto' },
-  { value: 'prescrizione', label: 'Prescrizione' },
-  { value: 'consenso', label: 'Consenso' },
-  { value: 'complicanza', label: 'Complicanza' },
-  { value: 'altro', label: 'Altro' },
-];
-
-const SOURCE_TYPES = [
-  { value: 'cartella_clinica', label: 'Cartella Clinica' },
-  { value: 'referto_controllo', label: 'Referto Controllo' },
-  { value: 'esame_strumentale', label: 'Esame Strumentale' },
-  { value: 'esame_ematochimico', label: 'Esami Ematochimici' },
-  { value: 'altro', label: 'Altro' },
-];
-
-const CASE_TYPES = [
-  { value: 'ortopedica', label: 'Malasanita Ortopedica' },
-  { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
-  { value: 'ostetrica', label: 'Errore Ostetrico' },
-  { value: 'anestesiologica', label: 'Errore Anestesiologico' },
-  { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
-  { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
-  { value: 'generica', label: 'Responsabilita Generica' },
-];
-
-const CASE_ROLES = [
+// Short role labels for the edit case dialog
+const CASE_ROLES_SHORT = [
   { value: 'ctu', label: 'CTU' },
   { value: 'ctp', label: 'CTP' },
   { value: 'stragiudiziale', label: 'Stragiudiziale' },
 ];
 
-const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
-  bozza: { label: 'Bozza', variant: 'secondary' },
-  in_revisione: { label: 'In Revisione', variant: 'warning' },
-  definitivo: { label: 'Definitivo', variant: 'success' },
-  archiviato: { label: 'Archiviato', variant: 'outline' },
-};
-
-const caseTypeLabels: Record<string, string> = Object.fromEntries(
-  CASE_TYPES.map((t) => [t.value, t.label]),
-);
-
-const sourceLabels: Record<string, string> = {
-  cartella_clinica: 'Fonte A',
-  referto_controllo: 'Fonte B',
-  esame_strumentale: 'Fonte C',
-  esame_ematochimico: 'Fonte D',
-  altro: 'Altro',
-};
-
-const anomalyTypeLabels: Record<string, string> = {
-  ritardo_diagnostico: 'Ritardo Diagnostico',
-  gap_post_chirurgico: 'Gap Post-Chirurgico',
-  gap_documentale: 'Gap Documentale',
-  complicanza_non_gestita: 'Complicanza Non Gestita',
-  consenso_non_documentato: 'Consenso Non Documentato',
-  diagnosi_contraddittoria: 'Diagnosi Contraddittoria',
-  terapia_senza_followup: 'Terapia Senza Follow-up',
-};
-
 // --- Helpers ---
-
-function getFileIcon(type: string) {
-  if (type.startsWith('image/') || type.includes('image')) return ImageIcon;
-  if (type.includes('pdf')) return FileText;
-  if (type.includes('sheet') || type.includes('excel')) return FileSpreadsheet;
-  return File;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-}
 
 function processingVariant(status: string): 'secondary' | 'warning' | 'success' | 'destructive' {
   switch (status) {
@@ -217,12 +146,6 @@ function severityVariant(severity: string): 'destructive' | 'warning' | 'seconda
     case 'media': return 'warning';
     default: return 'secondary';
   }
-}
-
-function confidenceColor(confidence: number): string {
-  if (confidence >= 80) return 'text-green-600';
-  if (confidence >= 50) return 'text-yellow-600';
-  return 'text-red-600';
 }
 
 function isDocProcessing(status: string): boolean {
@@ -267,10 +190,6 @@ export function CaseDetailClient({
   const [searchResults, setSearchResults] = useState<Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Filters
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterVerification, setFilterVerification] = useState<string>('all');
-
   // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -278,16 +197,7 @@ export function CaseDetailClient({
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
   const hasResults = events.length > 0 || anomalies.length > 0 || report;
 
-  const status = statusConfig[caseData.status] ?? statusConfig.bozza;
   const isArchived = caseData.status === 'archiviato';
-
-  // Filter events
-  const filteredEvents = events.filter((e) => {
-    if (filterType !== 'all' && e.event_type !== filterType) return false;
-    if (filterVerification === 'yes' && !e.requires_verification) return false;
-    if (filterVerification === 'no' && e.requires_verification) return false;
-    return true;
-  });
 
   // Poll for processing updates
   useEffect(() => {
@@ -332,18 +242,17 @@ export function CaseDetailClient({
       });
       const result = await response.json() as { success: boolean; error?: string };
       if (!result.success) {
-        alert(result.error ?? 'Errore rigenerazione');
+        toast.error(result.error ?? 'Errore rigenerazione');
       }
       router.refresh();
     } catch {
-      alert('Errore di rete.');
+      toast.error('Errore di rete. Verifica la connessione.');
     } finally {
       setIsRegenerating(false);
     }
   }, [caseId, router]);
 
   const handleCancel = useCallback(async () => {
-    if (!confirm('Annullare l\'elaborazione in corso? I documenti non ancora completati verranno segnati come errore.')) return;
     setIsCancelling(true);
     try {
       const response = await fetch('/api/processing/cancel', {
@@ -353,32 +262,55 @@ export function CaseDetailClient({
       });
       const result = await response.json() as { success: boolean; error?: string };
       if (!result.success) {
-        alert(result.error ?? 'Errore durante l\'annullamento');
+        toast.error(result.error ?? 'Errore durante l\'annullamento');
       }
       router.refresh();
     } catch {
-      alert('Errore di rete.');
+      toast.error('Errore di rete. Verifica la connessione.');
     } finally {
       setIsCancelling(false);
     }
   }, [caseId, router]);
 
-  const handleSearch = useCallback(async (q: string) => {
+  // Debounced search with AbortController to prevent race conditions
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearch = useCallback((q: string) => {
     setSearchQuery(q);
+
+    // Clear previous timer
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
     if (q.trim().length < 2) {
       setSearchResults(null);
+      setIsSearching(false);
       return;
     }
+
     setIsSearching(true);
-    try {
-      const response = await fetch(`/api/cases/${caseId}/search?q=${encodeURIComponent(q.trim())}`);
-      const result = await response.json() as { success: boolean; data?: { results: Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> } };
-      if (result.success && result.data) {
-        setSearchResults(result.data.results);
+
+    searchTimerRef.current = setTimeout(async () => {
+      // Abort previous request
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+
+      try {
+        const response = await fetch(
+          `/api/cases/${caseId}/search?q=${encodeURIComponent(q.trim())}`,
+          { signal: controller.signal },
+        );
+        const result = await response.json() as { success: boolean; data?: { results: Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> } };
+        if (result.success && result.data) {
+          setSearchResults(result.data.results);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      } finally {
+        setIsSearching(false);
       }
-    } catch { /* ignore */ } finally {
-      setIsSearching(false);
-    }
+    }, 300);
   }, [caseId]);
 
   const toggleEvent = useCallback((eventId: string) => {
@@ -391,13 +323,22 @@ export function CaseDetailClient({
   }, []);
 
   const handleDeleteDocument = useCallback((docId: string, fileName: string) => {
-    if (!confirm(`Eliminare definitivamente "${fileName}"?`)) return;
-    startDeleteDoc(async () => {
-      const result = await deleteDocument({ documentId: docId, caseId });
-      if (result.error) {
-        alert(result.error);
-      }
-      router.refresh();
+    toast(`Eliminare "${fileName}"?`, {
+      action: {
+        label: 'Elimina',
+        onClick: () => {
+          startDeleteDoc(async () => {
+            const result = await deleteDocument({ documentId: docId, caseId });
+            if (result.error) {
+              toast.error(result.error);
+              return;
+            }
+            toast.success('Documento eliminato');
+            router.refresh();
+          });
+        },
+      },
+      cancel: { label: 'Annulla', onClick: () => {} },
     });
   }, [caseId, router]);
 
@@ -405,7 +346,7 @@ export function CaseDetailClient({
     startDeleteCase(async () => {
       const result = await deleteCase(caseId);
       if (result.error) {
-        alert(result.error);
+        toast.error(result.error);
         return;
       }
       router.push('/');
@@ -417,9 +358,10 @@ export function CaseDetailClient({
       const newStatus = isArchived ? 'bozza' : 'archiviato';
       const result = await updateCaseStatus({ caseId, newStatus });
       if (result.error) {
-        alert(result.error);
+        toast.error(result.error);
         return;
       }
+      toast.success(isArchived ? 'Caso ripristinato' : 'Caso archiviato');
       router.refresh();
     });
   }, [caseId, isArchived, router]);
@@ -439,10 +381,6 @@ export function CaseDetailClient({
               <h1 className="text-3xl font-bold tracking-tight">
                 {caseData.code}
               </h1>
-              <Badge variant={status.variant}>{status.label}</Badge>
-              <Badge variant="outline">
-                {caseData.case_role.toUpperCase()}
-              </Badge>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditCaseOpen(true)} title="Modifica caso">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
@@ -685,8 +623,8 @@ export function CaseDetailClient({
       {hasResults && (
         <Tabs defaultValue="events" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="events">Cronologia ({events.length})</TabsTrigger>
-            <TabsTrigger value="synthesis">Sintesi</TabsTrigger>
+            <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
+            <TabsTrigger value="synthesis">Report</TabsTrigger>
             <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
             <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
           </TabsList>
@@ -697,48 +635,22 @@ export function CaseDetailClient({
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Cronologia Eventi Clinici</CardTitle>
+                    <CardTitle>Eventi Clinici</CardTitle>
                     <CardDescription>
-                      {filteredEvents.length} di {events.length} eventi
+                      {events.length} eventi estratti
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {/* Filters */}
-                    <Select value={filterType} onValueChange={setFilterType}>
-                      <SelectTrigger className="w-[150px]">
-                        <Filter className="mr-2 h-3 w-3" />
-                        <SelectValue placeholder="Tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tutti i tipi</SelectItem>
-                        {EVENT_TYPES.map((t) => (
-                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={filterVerification} onValueChange={setFilterVerification}>
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Verifica" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tutti</SelectItem>
-                        <SelectItem value="yes">Da verificare</SelectItem>
-                        <SelectItem value="no">Verificati</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {/* Add event button */}
-                    <AddEventDialog
-                      caseId={caseId}
-                      open={addEventOpen}
-                      onOpenChange={setAddEventOpen}
-                      onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
-                    />
-                  </div>
+                  <AddEventDialog
+                    caseId={caseId}
+                    open={addEventOpen}
+                    onOpenChange={setAddEventOpen}
+                    onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
+                  />
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {filteredEvents.map((event) => (
+                  {events.map((event) => (
                     <EventCard
                       key={event.id}
                       event={event}
@@ -754,9 +666,9 @@ export function CaseDetailClient({
                       onImageClick={setPreviewImage}
                     />
                   ))}
-                  {filteredEvents.length === 0 && (
+                  {events.length === 0 && (
                     <p className="py-8 text-center text-sm text-muted-foreground">
-                      Nessun evento corrisponde ai filtri selezionati.
+                      Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.
                     </p>
                   )}
                 </div>
@@ -769,7 +681,7 @@ export function CaseDetailClient({
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Sintesi Medico-Legale</CardTitle>
+                  <CardTitle>Report Medico-Legale</CardTitle>
                   {report && (
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">v{report.version}</Badge>
@@ -921,7 +833,7 @@ function EditCaseDialogInner({
         notes: form.notes || null,
       });
       if (result.error) {
-        alert(result.error);
+        toast.error(result.error);
         return;
       }
       onSaved();
@@ -950,7 +862,7 @@ function EditCaseDialogInner({
             <Select value={form.caseRole} onValueChange={(v) => setForm({ ...form, caseRole: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CASE_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                {CASE_ROLES_SHORT.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1054,7 +966,7 @@ function EventCard({
 
   const handleSave = () => {
     startTransition(async () => {
-      await updateEvent({
+      const result = await updateEvent({
         eventId: event.id,
         caseId,
         title: editForm.title,
@@ -1066,15 +978,31 @@ function EventCard({
         facility: editForm.facility || null,
         expertNotes: editForm.expertNotes || null,
       });
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
       onSaved();
     });
   };
 
   const handleDelete = () => {
-    if (!confirm('Eliminare questo evento? (soft delete \u2014 recuperabile)')) return;
-    startTransition(async () => {
-      await deleteEvent({ eventId: event.id, caseId });
-      onDeleted();
+    toast('Eliminare questo evento?', {
+      description: 'L\'evento potra essere recuperato.',
+      action: {
+        label: 'Elimina',
+        onClick: () => {
+          startTransition(async () => {
+            const result = await deleteEvent({ eventId: event.id, caseId });
+            if (result?.error) {
+              toast.error(result.error);
+              return;
+            }
+            onDeleted();
+          });
+        },
+      },
+      cancel: { label: 'Annulla', onClick: () => {} },
     });
   };
 
@@ -1088,35 +1016,22 @@ function EventCard({
         <button type="button" className="flex flex-1 items-start text-left" onClick={onToggle}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-muted-foreground">#{event.order_number}</span>
               <span className="text-sm font-medium">
                 {formatDate(event.event_date)}
-                {event.date_precision !== 'giorno' && (
-                  <span className="text-xs text-muted-foreground ml-1">[{event.date_precision}]</span>
-                )}
               </span>
               <Badge variant="outline" className="text-xs">{event.event_type}</Badge>
-              <Badge variant="secondary" className="text-xs">{sourceLabels[event.source_type] ?? event.source_type}</Badge>
               {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
-              {event.extraction_pass === 'both' && <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-100">Confermato</Badge>}
-              {event.extraction_pass === 'pass2_only' && <Badge className="text-xs bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Solo 2a passata</Badge>}
-              <span className={`text-xs ${confidenceColor(event.confidence)}`}>{event.confidence}%</span>
-              {images.length > 0 && (
-                <Badge variant="outline" className="text-xs">
-                  <ImageIcon className="mr-1 h-2.5 w-2.5" />{images.length} img
-                </Badge>
-              )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
           </div>
         </button>
         <div className="flex items-center gap-1 ml-2">
           {!isEditing && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica" aria-label="Modifica evento">
               <Pencil className="h-3 w-3" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'}>
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>
@@ -1129,6 +1044,10 @@ function EventCard({
           {event.diagnosis && <p className="text-sm"><span className="font-medium">Diagnosi:</span> {event.diagnosis}</p>}
           {event.doctor && <p className="text-sm"><span className="font-medium">Medico:</span> {event.doctor}</p>}
           {event.facility && <p className="text-sm"><span className="font-medium">Struttura:</span> {event.facility}</p>}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>Fonte: {sourceLabels[event.source_type] ?? event.source_type}</span>
+            <span className={confidenceColor(event.confidence)}>{confidenceLabel(event.confidence)}</span>
+          </div>
           {event.reliability_notes && <p className="text-sm text-muted-foreground italic">{event.reliability_notes}</p>}
           {event.expert_notes && (
             <div className="rounded bg-muted p-2">
@@ -1146,10 +1065,11 @@ function EventCard({
               <div className="flex flex-wrap gap-2">
                 {images.map((url, idx) => (
                   <button
-                    key={idx}
+                    key={url}
                     type="button"
                     className="rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
                     onClick={() => onImageClick(url)}
+                    aria-label={`Visualizza immagine ${idx + 1}`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -1286,7 +1206,7 @@ function AddEventDialog({
   const handleSubmit = () => {
     if (!form.eventDate || !form.title || !form.description) return;
     startTransition(async () => {
-      await addManualEvent({
+      const result = await addManualEvent({
         caseId,
         eventDate: form.eventDate,
         datePrecision: form.datePrecision,
@@ -1298,6 +1218,10 @@ function AddEventDialog({
         doctor: form.doctor || null,
         facility: form.facility || null,
       });
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
       setForm({ eventDate: '', datePrecision: 'giorno', eventType: 'altro', title: '', description: '', sourceType: 'altro', diagnosis: '', doctor: '', facility: '' });
       onSuccess();
     });

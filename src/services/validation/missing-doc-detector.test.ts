@@ -31,7 +31,6 @@ describe('detectMissingDocuments', () => {
     const missing = detectMissingDocuments({
       events,
       caseType: 'ortopedica',
-      uploadedDocTypes: [],
     });
 
     const consentMissing = missing.find((m) => m.documentName.toLowerCase().includes('consenso'));
@@ -47,7 +46,6 @@ describe('detectMissingDocuments', () => {
     const missing = detectMissingDocuments({
       events,
       caseType: 'ortopedica',
-      uploadedDocTypes: [],
     });
 
     const consentMissing = missing.find((m) => m.documentName.toLowerCase().includes('consenso informato chirurgico'));
@@ -62,7 +60,6 @@ describe('detectMissingDocuments', () => {
     const missing = detectMissingDocuments({
       events,
       caseType: 'anestesiologica',
-      uploadedDocTypes: [],
     });
 
     const anesthesiaMissing = missing.find((m) => m.documentName.toLowerCase().includes('anestesiologica'));
@@ -77,13 +74,11 @@ describe('detectMissingDocuments', () => {
     const genericMissing = detectMissingDocuments({
       events,
       caseType: 'generica',
-      uploadedDocTypes: [],
     });
 
     const orthoMissing = detectMissingDocuments({
       events,
       caseType: 'ortopedica',
-      uploadedDocTypes: [],
     });
 
     expect(genericMissing.length).toBeLessThan(orthoMissing.length);
@@ -93,10 +88,36 @@ describe('detectMissingDocuments', () => {
     const missing = detectMissingDocuments({
       events: [],
       caseType: 'generica',
-      uploadedDocTypes: [],
     });
 
-    // Should still check based on uploaded doc types
     expect(Array.isArray(missing)).toBe(true);
+  });
+
+  it('should not flag lettera dimissione when dimissione is in event text', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'ricovero', title: 'Dimissione ospedaliera', description: 'Lettera di dimissione con indicazioni terapeutiche' }),
+    ];
+
+    const missing = detectMissingDocuments({
+      events,
+      caseType: 'generica',
+    });
+
+    const dimissioneMissing = missing.find((m) => m.documentName.toLowerCase().includes('dimissione'));
+    expect(dimissioneMissing).toBeUndefined();
+  });
+
+  it('should not flag diario clinico when cartella clinica is in event text', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'ricovero', title: 'Ricovero', description: 'Cartella clinica completa del ricovero' }),
+    ];
+
+    const missing = detectMissingDocuments({
+      events,
+      caseType: 'infezione_nosocomiale',
+    });
+
+    const diarioMissing = missing.find((m) => m.documentName.toLowerCase().includes('diario clinico'));
+    expect(diarioMissing).toBeUndefined();
   });
 });

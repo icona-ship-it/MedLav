@@ -7,22 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { createCase } from '../../actions';
-
-const caseTypes = [
-  { value: 'ortopedica', label: 'Malasanita Ortopedica' },
-  { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
-  { value: 'ostetrica', label: 'Errore Ostetrico' },
-  { value: 'anestesiologica', label: 'Errore Anestesiologico' },
-  { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
-  { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
-  { value: 'generica', label: 'Responsabilita Professionale Generica' },
-];
-
-const caseRoles = [
-  { value: 'ctu', label: 'CTU - Consulente Tecnico d\'Ufficio' },
-  { value: 'ctp', label: 'CTP - Consulente Tecnico di Parte' },
-  { value: 'stragiudiziale', label: 'Perito Stragiudiziale' },
-];
+import { CASE_TYPES as caseTypes, CASE_ROLES as caseRoles } from '@/lib/constants';
 
 export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,7 +46,7 @@ export default function NewCasePage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Nuovo Caso</h1>
           <p className="text-muted-foreground">
-            Crea un nuovo caso medico-legale
+            Inserisci i dati base. Potrai caricare i documenti subito dopo.
           </p>
         </div>
       </div>
@@ -126,7 +111,7 @@ export default function NewCasePage() {
                 <Input
                   id="patientInitials"
                   name="patientInitials"
-                  placeholder="es. M.R."
+                  placeholder="es. M.R. (facoltativo)"
                   maxLength={10}
                 />
               </div>
@@ -137,7 +122,7 @@ export default function NewCasePage() {
                 <Input
                   id="practiceReference"
                   name="practiceReference"
-                  placeholder="es. RG 1234/2026"
+                  placeholder="es. RG 1234/2026 (facoltativo)"
                 />
               </div>
             </div>
@@ -149,7 +134,7 @@ export default function NewCasePage() {
                 id="notes"
                 name="notes"
                 rows={3}
-                placeholder="Note aggiuntive sul caso..."
+                placeholder="Eventuali note o appunti sul caso (facoltativo)"
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>

@@ -1,35 +1,11 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, FileText, Image, FileSpreadsheet, File, Loader2, CheckCircle2 } from 'lucide-react';
+import { Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
-
-const DOCUMENT_TYPES = [
-  { value: 'cartella_clinica', label: 'Cartella Clinica' },
-  { value: 'referto_specialistico', label: 'Referto Specialistico' },
-  { value: 'esame_strumentale', label: 'Esame Strumentale' },
-  { value: 'esame_laboratorio', label: 'Esame di Laboratorio' },
-  { value: 'lettera_dimissione', label: 'Lettera di Dimissione' },
-  { value: 'certificato', label: 'Certificato' },
-  { value: 'perizia_precedente', label: 'Perizia Precedente' },
-  { value: 'altro', label: 'Altro' },
-];
-
-function getFileIcon(type: string) {
-  if (type.startsWith('image/')) return Image;
-  if (type.includes('pdf')) return FileText;
-  if (type.includes('sheet') || type.includes('excel')) return FileSpreadsheet;
-  return File;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+import { getFileIcon, formatFileSize } from '@/lib/format';
 
 interface FileUploadProps {
   caseId: string;
@@ -44,7 +20,6 @@ interface UploadProgress {
 
 export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
-  const [fileTypes, setFileTypes] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -116,18 +91,17 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
         continue;
       }
 
-      // Save metadata via server action (lightweight, no file data)
+      // Save metadata via server action
       newProgress[i] = { ...newProgress[i], status: 'saving' };
       setProgress([...newProgress]);
 
-      const documentType = fileTypes[`${file.name}-${file.size}`] ?? 'altro';
       const result = await saveDocumentMetadata({
         caseId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
         storagePath,
-        documentType,
+        documentType: 'altro',
       });
 
       if (result?.error) {
@@ -163,18 +137,21 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition-colors ${
           isDragOver
             ? 'border-primary bg-primary/5'
             : 'border-muted-foreground/25 hover:border-primary/50'
         } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
       >
-        <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-        <p className="mb-1 text-sm font-medium">
-          Trascina i file qui o clicca per selezionare
+        <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
+        <p className="mb-2 text-base font-medium">
+          Trascina qui i documenti del caso
         </p>
-        <p className="text-xs text-muted-foreground">
-          PDF, JPG, PNG, TIFF, DOC, DOCX, XLS, XLSX &mdash; nessun limite di dimensione
+        <p className="text-sm text-muted-foreground">
+          oppure clicca per selezionare i file
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Formati accettati: PDF, immagini (JPG, PNG, TIFF), documenti Word ed Excel
         </p>
         <input
           ref={fileInputRef}
@@ -207,24 +184,12 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
                     {formatFileSize(file.size)}
                   </span>
                 </div>
-                <Select
-                  value={fileTypes[`${file.name}-${file.size}`] ?? 'altro'}
-                  onValueChange={(v) => setFileTypes((prev) => ({ ...prev, [`${file.name}-${file.size}`]: v }))}
-                >
-                  <SelectTrigger className="h-7 w-[140px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 shrink-0"
                   onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                  aria-label={`Rimuovi ${file.name}`}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -232,7 +197,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
             );
           })}
 
-          <Button onClick={handleUpload} className="w-full">
+          <Button onClick={handleUpload} className="w-full" size="lg">
             <Upload className="h-4 w-4" />
             Carica {files.length} {files.length === 1 ? 'documento' : 'documenti'}
           </Button>
@@ -245,8 +210,8 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
           <p className="text-sm font-medium">
             {isUploading ? 'Caricamento in corso...' : `Completato: ${doneCount}/${progress.length}`}
           </p>
-          {progress.map((p, i) => (
-            <div key={i} className="flex items-center justify-between rounded-md border px-3 py-2">
+          {progress.map((p) => (
+            <div key={p.fileName} className="flex items-center justify-between rounded-md border px-3 py-2">
               <span className="truncate text-sm">{p.fileName}</span>
               <div className="shrink-0 ml-2">
                 {p.status === 'pending' && (
@@ -277,7 +242,9 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
           }`}
         >
           {errorCount === 0
-            ? `${doneCount} documenti caricati con successo!`
+            ? doneCount === 1
+              ? '1 documento caricato con successo!'
+              : `${doneCount} documenti caricati con successo!`
             : `${doneCount} caricati, ${errorCount} con errori.`}
         </div>
       )}
