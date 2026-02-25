@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Scale,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +19,7 @@ const navigation = [
   { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -53,6 +54,15 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t p-3">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/20"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
         <Link
           href="/settings"
           className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"

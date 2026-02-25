@@ -1,13 +1,19 @@
 import { Sidebar } from '@/components/sidebar';
+import { createClient } from '@/lib/supabase/server';
+import { isAdminUser } from '@/lib/admin';
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAdmin = isAdminUser(user?.email);
+
   return (
     <div className="flex h-screen">
-      <Sidebar />
+      <Sidebar isAdmin={isAdmin} />
       <main className="flex-1 overflow-auto">
         <div className="mx-auto max-w-7xl p-6">
           {children}
