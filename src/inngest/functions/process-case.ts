@@ -56,8 +56,8 @@ interface ExtractedEventWithMeta extends DualPassEvent {
 export const processCaseDocuments = inngest.createFunction(
   {
     id: 'process-case-documents',
-    retries: 2,
-    concurrency: [{ limit: 5 }],
+    retries: 1,
+    concurrency: [{ limit: 3 }],
     cancelOn: [
       { event: 'case/process.cancelled', match: 'data.caseId' },
     ],
@@ -136,27 +136,31 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2: OCR each document
-    const ocrResults = await step.run('ocr-all-documents', async () => {
-      const supabase = createAdminClient();
-      const results = [];
+    // Step 2: OCR each document (one step per document for independent retry)
+    const ocrResults: Array<{
+      documentId: string;
+      fileName: string;
+      documentType: string;
+      fullText: string;
+      pageCount: number;
+      averageConfidence: number;
+    }> = [];
 
-      console.log(`[pipeline] Step 2: Starting OCR for ${documents.length} documents`);
+    for (const doc of documents) {
+      const ocrResult = await step.run(`ocr-doc-${doc.id}`, async () => {
+        const supabase = createAdminClient();
 
-      for (const doc of documents) {
-        // Update status to ocr_in_corso
         await supabase
           .from('documents')
           .update({ processing_status: 'ocr_in_corso', updated_at: new Date().toISOString() })
           .eq('id', doc.id);
 
         try {
-          // Generate fresh signed URL for this document
           const signedUrl = await getSignedUrl(doc.storagePath);
 
           console.log(`[pipeline] Step 2: OCR processing doc ${doc.id}`);
 
-          const ocrResult = await ocrDocument({
+          const result = await ocrDocument({
             documentId: doc.id,
             fileName: doc.fileName,
             fileType: doc.fileType,
@@ -164,8 +168,8 @@ export const processCaseDocuments = inngest.createFunction(
           });
 
           // Save OCR pages to database
-          if (ocrResult.pages.length > 0) {
-            const pageRows = ocrResult.pages.map((p) => ({
+          if (result.pages.length > 0) {
+            const pageRows = result.pages.map((p) => ({
               document_id: doc.id,
               page_number: p.pageNumber,
               ocr_text: p.text,
@@ -179,15 +183,13 @@ export const processCaseDocuments = inngest.createFunction(
               .insert(pageRows)
               .select('id, page_number');
 
-            // Upload images and update page records with image paths
-            if (insertedPages && ocrResult.images.length > 0) {
+            if (insertedPages && result.images.length > 0) {
               const pageIdMap = new Map(
                 insertedPages.map((p) => [p.page_number as number, p.id as string]),
               );
 
-              // Group images by page
               const imagesByPage = new Map<number, Array<{ figureIndex: number; base64: string }>>();
-              for (const img of ocrResult.images) {
+              for (const img of result.images) {
                 const existing = imagesByPage.get(img.pageNumber) ?? [];
                 existing.push({ figureIndex: img.figureIndex, base64: img.imageBase64 });
                 imagesByPage.set(img.pageNumber, existing);
@@ -219,25 +221,21 @@ export const processCaseDocuments = inngest.createFunction(
             }
           }
 
-          // Update document with page count
           await supabase
             .from('documents')
-            .update({
-              page_count: ocrResult.pageCount,
-              updated_at: new Date().toISOString(),
-            })
+            .update({ page_count: result.pageCount, updated_at: new Date().toISOString() })
             .eq('id', doc.id);
 
-          results.push({
+          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${result.pageCount} pages`);
+
+          return {
             documentId: doc.id,
             fileName: doc.fileName,
             documentType: doc.documentType,
-            fullText: ocrResult.fullText,
-            pageCount: ocrResult.pageCount,
-            averageConfidence: ocrResult.averageConfidence,
-          });
-
-          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${ocrResult.pageCount} pages`);
+            fullText: result.fullText,
+            pageCount: result.pageCount,
+            averageConfidence: result.averageConfidence,
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'OCR failed';
           await supabase
@@ -249,41 +247,37 @@ export const processCaseDocuments = inngest.createFunction(
             })
             .eq('id', doc.id);
 
-          // Continue with other documents, don't fail the whole pipeline
           console.error(`[pipeline] OCR failed for doc ${doc.id}: ${message}`);
+          return null;
         }
-      }
+      });
 
-      return results;
-    });
+      if (ocrResult) {
+        ocrResults.push(ocrResult);
+      }
+    }
 
     if (ocrResults.length === 0) {
       throw new Error('All documents failed OCR processing');
     }
 
-    // Step 3: Extract events from each document using dual-pass + validate + verify + review
-    const extractionResults = await step.run('extract-events-all', async () => {
-      const supabase = createAdminClient();
-      const results: Array<{
-        documentId: string;
-        events: ExtractedEventWithMeta[];
-        coverageResult: CoverageResult | null;
-      }> = [];
+    // Step 3: Extract events per document (one step per doc for independent retry)
+    const extractionResults: Array<{
+      documentId: string;
+      events: ExtractedEventWithMeta[];
+      coverageResult: CoverageResult | null;
+    }> = [];
 
-      console.log(`[pipeline] Step 3: Extracting events (dual-pass) from ${ocrResults.length} documents`);
+    for (const ocrResult of ocrResults) {
+      const extractionResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
+        const supabase = createAdminClient();
 
-      for (const ocrResult of ocrResults) {
-        // Update status
         await supabase
           .from('documents')
-          .update({
-            processing_status: 'estrazione_in_corso',
-            updated_at: new Date().toISOString(),
-          })
+          .update({ processing_status: 'estrazione_in_corso', updated_at: new Date().toISOString() })
           .eq('id', ocrResult.documentId);
 
         try {
-          // 3.1: Dual-pass extraction (existing)
           const dualPassResult = await extractEventsWithDualPass({
             documentText: ocrResult.fullText,
             fileName: ocrResult.fileName,
@@ -291,28 +285,14 @@ export const processCaseDocuments = inngest.createFunction(
             caseType: metadata.caseType,
           });
 
-          // 3.2: Deterministic validation (existing)
           const { events: validatedEvents, issues } = validateExtractedEvents(dualPassResult.events);
-
           if (issues.length > 0) {
             console.log(`[pipeline] Step 3: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
           }
 
-          // 3.3: Source text verification (NEW — sync, deterministic)
           const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
-
-          if (verificationResult.unverifiedCount > 0) {
-            console.log(`[pipeline] Step 3: ${verificationResult.unverifiedCount} unverified sourceTexts for doc ${ocrResult.documentId}`);
-          }
-
-          // 3.4: Coverage analysis (NEW — sync, deterministic)
           const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
 
-          for (const warning of coverageResult.warnings) {
-            console.log(`[pipeline] Step 3: Coverage warning for doc ${ocrResult.documentId}: ${warning}`);
-          }
-
-          // 3.5: LLM review step (NEW — async, non-fatal)
           let reviewedEvents = verificationResult.events;
           try {
             const reviewResult = await reviewExtraction({
@@ -320,16 +300,10 @@ export const processCaseDocuments = inngest.createFunction(
               fullText: ocrResult.fullText,
               caseType: metadata.caseType,
             });
-
-            // Merge missing events
             if (reviewResult.missingEvents.length > 0) {
-              console.log(`[pipeline] Step 3: Reviewer found ${reviewResult.missingEvents.length} missing events for doc ${ocrResult.documentId}`);
               reviewedEvents = [...reviewedEvents, ...reviewResult.missingEvents];
             }
-
-            // Apply corrections (only whitelisted fields)
             if (reviewResult.corrections.length > 0) {
-              console.log(`[pipeline] Step 3: Reviewer suggested ${reviewResult.corrections.length} corrections for doc ${ocrResult.documentId}`);
               reviewedEvents = applyReviewCorrections(reviewedEvents, reviewResult.corrections);
             }
           } catch (reviewError) {
@@ -337,8 +311,6 @@ export const processCaseDocuments = inngest.createFunction(
             console.error(`[pipeline] Step 3: LLM review failed (non-fatal) for doc ${ocrResult.documentId}: ${msg}`);
           }
 
-          // Re-attach extractionPass from dual-pass results using content matching
-          // (index-based matching would break if validation filters/reorders events)
           const passMap = new Map<string, string>();
           for (const dpEvent of dualPassResult.events) {
             const key = `${dpEvent.eventDate}|${dpEvent.eventType}|${dpEvent.title}`;
@@ -354,30 +326,28 @@ export const processCaseDocuments = inngest.createFunction(
             };
           });
 
-          results.push({
+          console.log(`[pipeline] Step 3: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%)`);
+
+          return {
             documentId: ocrResult.documentId,
             events: eventsWithMeta,
             coverageResult,
-          });
-
-          console.log(`[pipeline] Step 3: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%)`);
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Extraction failed';
           await supabase
             .from('documents')
-            .update({
-              processing_status: 'errore',
-              processing_error: message,
-              updated_at: new Date().toISOString(),
-            })
+            .update({ processing_status: 'errore', processing_error: message, updated_at: new Date().toISOString() })
             .eq('id', ocrResult.documentId);
-
           console.error(`[pipeline] Extraction failed for doc ${ocrResult.documentId}: ${message}`);
+          return null;
         }
-      }
+      });
 
-      return results;
-    });
+      if (extractionResult) {
+        extractionResults.push(extractionResult);
+      }
+    }
 
     // Step 4: Consolidate events — incremental: dedup new vs existing DB events
     const consolidationResult = await step.run('consolidate-events', async () => {
