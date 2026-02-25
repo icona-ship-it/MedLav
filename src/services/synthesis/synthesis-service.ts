@@ -38,7 +38,7 @@ export async function generateSynthesis(params: {
         },
       ],
       temperature: 0.3,
-      maxTokens: 4096,
+      maxTokens: 16384,
     }),
     'synthesis',
   );

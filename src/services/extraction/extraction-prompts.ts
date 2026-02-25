@@ -88,7 +88,7 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 ## REGOLE FONDAMENTALI
 
 1. **ZERO DISCARD**: Non scartare MAI nessun evento. Tutto ciò che è documentato DEVE essere estratto.
-2. **COPIA FEDELE**: La descrizione deve riportare FEDELMENTE il testo originale, non una rielaborazione o sintesi.
+2. **COPIA FEDELE E DETTAGLIATA**: La descrizione deve essere LUNGA e COMPLETA — riporta FEDELMENTE tutto il contenuto clinico rilevante dal testo originale. Includi tutti i valori numerici, dosaggi, parametri. NON sintetizzare, NON abbreviare. Questa descrizione verrà usata direttamente nella relazione peritale.
 3. **DATE**: Usa formato YYYY-MM-DD. Se la data è imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese").
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
