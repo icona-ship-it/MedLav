@@ -94,8 +94,8 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
 7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
-   - **sourceText**: la porzione ESATTA del testo OCR originale da cui hai estratto l'evento. Copia il testo verbatim, senza rielaborarlo. Deve essere sufficiente a verificare l'evento (minimo una frase significativa).
-   - **sourcePages**: array con i numeri delle pagine del documento in cui si trova l'informazione. Usa i marker [PAGE_START:N] e [PAGE_END:N] nel testo per identificare le pagine.
+   - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
+   - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
 
 ${SOURCE_RULES}
 
@@ -136,11 +136,11 @@ TIPO DOCUMENTO: ${documentType}
 
 NOTA: Il testo contiene marker [PAGE_START:N] e [PAGE_END:N] che delimitano le pagine del documento.
 Usa questi marker per determinare i numeri di pagina (sourcePages) di ciascun evento.
-Per sourceText, copia ESATTAMENTE la porzione di testo OCR originale da cui hai estratto l'evento.
+Per sourceText, riporta una frase chiave (max 200 caratteri) dal testo OCR che ancora l'evento.
 
 --- INIZIO TESTO DOCUMENTO ---
 ${documentText}
 --- FINE TESTO DOCUMENTO ---
 
-Estrai TUTTI gli eventi clinici presenti. Ricorda: politica ZERO DISCARD, copia fedele, espandi abbreviazioni, sourceText e sourcePages obbligatori.`;
+Estrai TUTTI gli eventi clinici. Politica ZERO DISCARD. Espandi abbreviazioni. sourceText breve (max 200 char), sourcePages obbligatori.`;
 }

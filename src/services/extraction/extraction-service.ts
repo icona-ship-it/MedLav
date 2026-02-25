@@ -58,7 +58,7 @@ async function extractFromSingleChunk(
   const startMs = Date.now();
   const response = await withMistralRetry(
     () => client.chat.complete({
-      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      model: MISTRAL_MODELS.MISTRAL_SMALL,
       messages: [
         {
           role: 'system',
@@ -71,10 +71,11 @@ async function extractFromSingleChunk(
       ],
       responseFormat: { type: 'json_object' },
       temperature,
+      maxTokens: 16384,
     }),
     'extraction',
   );
-  console.log(`[extraction] Mistral API call took ${Date.now() - startMs}ms`);
+  console.log(`[extraction] Mistral Small API call took ${Date.now() - startMs}ms for ${documentText.length} chars input`);
 
   const content = extractResponseContent(response);
   return parseExtractionResponse(content);

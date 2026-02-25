@@ -44,8 +44,10 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
 export const MISTRAL_MODELS = {
   /** Vision model for OCR and document analysis */
   PIXTRAL_LARGE: 'pixtral-large-latest',
-  /** Large model for text analysis, extraction, and synthesis */
+  /** Large model for complex reasoning (synthesis, review) */
   MISTRAL_LARGE: 'mistral-large-latest',
+  /** Small model for fast structured extraction (~3x faster output than Large) */
+  MISTRAL_SMALL: 'mistral-small-latest',
   /** Dedicated OCR model for document text extraction */
   OCR: 'mistral-ocr-latest',
 } as const;
