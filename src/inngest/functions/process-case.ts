@@ -1,6 +1,6 @@
 import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
+import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
 import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
@@ -133,7 +133,7 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2a: OCR each document — text extraction only (fast, no image upload)
+    // Step 2: OCR each document — text only, no base64 images (fast, light response)
     const ocrResults: Array<{
       documentId: string;
       fileName: string;
@@ -141,7 +141,6 @@ export const processCaseDocuments = inngest.createFunction(
       fullText: string;
       pageCount: number;
       averageConfidence: number;
-      hasImages: boolean;
     }> = [];
 
     for (const doc of documents) {
@@ -156,7 +155,7 @@ export const processCaseDocuments = inngest.createFunction(
         try {
           const signedUrl = await getSignedUrl(doc.storagePath);
 
-          console.log(`[pipeline] Step 2a: OCR processing doc ${doc.id}`);
+          console.log(`[pipeline] Step 2: OCR processing doc ${doc.id}`);
 
           const result = await ocrDocument({
             documentId: doc.id,
@@ -165,7 +164,7 @@ export const processCaseDocuments = inngest.createFunction(
             signedUrl,
           });
 
-          // Save OCR pages to database (text only, images handled in step 2b)
+          // Save OCR pages to database (text only)
           if (result.pages.length > 0) {
             const pageRows = result.pages.map((p) => ({
               document_id: doc.id,
@@ -184,7 +183,7 @@ export const processCaseDocuments = inngest.createFunction(
             .update({ page_count: result.pageCount, updated_at: new Date().toISOString() })
             .eq('id', doc.id);
 
-          console.log(`[pipeline] Step 2a: OCR completed for doc ${doc.id} - ${result.pageCount} pages, ${result.images.length} images`);
+          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${result.pageCount} pages`);
 
           return {
             documentId: doc.id,
@@ -193,7 +192,6 @@ export const processCaseDocuments = inngest.createFunction(
             fullText: result.fullText,
             pageCount: result.pageCount,
             averageConfidence: result.averageConfidence,
-            hasImages: result.images.length > 0,
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'OCR failed';
@@ -214,77 +212,6 @@ export const processCaseDocuments = inngest.createFunction(
       if (ocrResult) {
         ocrResults.push(ocrResult);
       }
-    }
-
-    // Step 2b: Upload images to storage (separate step per doc, keeps OCR step fast)
-    for (const ocrResult of ocrResults) {
-      if (!ocrResult.hasImages) continue;
-
-      await step.run(`upload-images-${ocrResult.documentId}`, async () => {
-        const supabase = createAdminClient();
-
-        console.log(`[pipeline] Step 2b: Uploading images for doc ${ocrResult.documentId}`);
-
-        // Re-fetch pages to get their IDs
-        const { data: pages } = await supabase
-          .from('pages')
-          .select('id, page_number')
-          .eq('document_id', ocrResult.documentId)
-          .order('page_number', { ascending: true });
-
-        if (!pages || pages.length === 0) return;
-
-        // Re-run OCR to get images (Inngest steps are stateless, can't pass large base64 data between steps)
-        const signedUrl = await getSignedUrl(
-          documents.find((d) => d.id === ocrResult.documentId)!.storagePath,
-        );
-
-        const result = await ocrDocument({
-          documentId: ocrResult.documentId,
-          fileName: ocrResult.fileName,
-          fileType: documents.find((d) => d.id === ocrResult.documentId)!.fileType,
-          signedUrl,
-        });
-
-        if (result.images.length === 0) return;
-
-        const pageIdMap = new Map(
-          pages.map((p) => [p.page_number as number, p.id as string]),
-        );
-
-        const imagesByPage = new Map<number, Array<{ figureIndex: number; base64: string }>>();
-        for (const img of result.images) {
-          const existing = imagesByPage.get(img.pageNumber) ?? [];
-          existing.push({ figureIndex: img.figureIndex, base64: img.imageBase64 });
-          imagesByPage.set(img.pageNumber, existing);
-        }
-
-        for (const [pageNum, images] of imagesByPage) {
-          const pageId = pageIdMap.get(pageNum);
-          if (!pageId) continue;
-
-          const uploadedPaths: string[] = [];
-          for (const img of images) {
-            const storagePath = `${metadata.userId}/${caseId}/images/${pageId}-${img.figureIndex}.png`;
-            try {
-              await uploadBase64Image({ base64Data: img.base64, storagePath });
-              uploadedPaths.push(storagePath);
-            } catch (imgError) {
-              const imgMsg = imgError instanceof Error ? imgError.message : 'Upload failed';
-              console.error(`[pipeline] Image upload failed for page ${pageId}: ${imgMsg}`);
-            }
-          }
-
-          if (uploadedPaths.length > 0) {
-            await supabase
-              .from('pages')
-              .update({ image_path: uploadedPaths.join(';') })
-              .eq('id', pageId);
-          }
-        }
-
-        console.log(`[pipeline] Step 2b: Images uploaded for doc ${ocrResult.documentId}`);
-      });
     }
 
     if (ocrResults.length === 0) {

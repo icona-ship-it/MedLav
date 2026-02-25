@@ -138,7 +138,7 @@ async function ocrPdf(params: {
         type: 'document_url',
         documentUrl: signedUrl,
       },
-      includeImageBase64: true,
+      includeImageBase64: false,
     }),
     'ocr-pdf',
   );
@@ -169,7 +169,7 @@ async function ocrImage(params: {
         type: 'image_url',
         imageUrl: signedUrl,
       },
-      includeImageBase64: true,
+      includeImageBase64: false,
     }),
     'ocr-image',
   );
@@ -199,7 +199,7 @@ async function ocrDocx(params: {
         type: 'document_url',
         documentUrl: signedUrl,
       },
-      includeImageBase64: true,
+      includeImageBase64: false,
     }),
     'ocr-docx',
   );
