@@ -1,5 +1,5 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
-import { extractionResponseSchema } from './extraction-schemas';
+import { extractionResponseSchema, extractedEventSchema } from './extraction-schemas';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
@@ -266,15 +266,41 @@ function extractResponseContent(response: unknown): string {
 
 /**
  * Parse and validate the extraction response JSON.
- * Falls back to empty result on parse errors.
+ * Lenient: handles LLM output variations, logs details on failure.
  */
 function parseExtractionResponse(content: string): ExtractionResponse {
   try {
     const parsed = JSON.parse(content) as unknown;
     const validated = extractionResponseSchema.parse(parsed);
+    console.log(`[extraction] Parsed ${validated.events.length} events successfully`);
     return validated;
-  } catch {
-    console.error('[extraction] Failed to parse Mistral response, returning empty events');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Log first 500 chars of response for debugging
+    const preview = content.slice(0, 500);
+    console.error(`[extraction] Parse error: ${message}`);
+    console.error(`[extraction] Response preview: ${preview}`);
+
+    // Attempt raw extraction: find any array of objects with eventDate
+    try {
+      const raw = JSON.parse(content) as Record<string, unknown>;
+      // Try to find an array in any top-level key
+      for (const key of Object.keys(raw)) {
+        const value = raw[key];
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null && 'eventDate' in value[0]) {
+          console.log(`[extraction] Recovered ${value.length} events from key "${key}"`);
+          const events = value.map((e: unknown) => {
+            try { return extractedEventSchema.parse(e); } catch { return null; }
+          }).filter((e): e is ExtractedEvent => e !== null);
+          if (events.length > 0) {
+            console.log(`[extraction] Recovered ${events.length} valid events after lenient parse`);
+            return { events };
+          }
+        }
+      }
+    } catch { /* JSON parse already failed above */ }
+
+    console.error('[extraction] Could not recover any events, returning empty');
     return { events: [] };
   }
 }
