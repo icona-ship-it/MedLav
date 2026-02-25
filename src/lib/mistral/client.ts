@@ -8,8 +8,8 @@ export function getMistralClient(): Mistral {
   return new Mistral({ apiKey });
 }
 
-const MAX_RETRIES = 4;
-const RETRY_BASE_DELAY_MS = 3000;
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1500;
 
 /**
  * Retry a Mistral API call with exponential backoff on transient errors

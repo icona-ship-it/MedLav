@@ -1,5 +1,5 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
-import { extractionResponseSchema, extractionJsonSchema } from './extraction-schemas';
+import { extractionResponseSchema } from './extraction-schemas';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
@@ -55,6 +55,7 @@ async function extractFromSingleChunk(
   const { documentText, fileName, documentType, caseType, temperature = 0.1 } = params;
   const client = getMistralClient();
 
+  const startMs = Date.now();
   const response = await withMistralRetry(
     () => client.chat.complete({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -68,17 +69,12 @@ async function extractFromSingleChunk(
           content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
         },
       ],
-      responseFormat: {
-        type: 'json_schema',
-        jsonSchema: {
-          name: 'extraction_response',
-          schemaDefinition: extractionJsonSchema,
-        },
-      },
+      responseFormat: { type: 'json_object' },
       temperature,
     }),
     'extraction',
   );
+  console.log(`[extraction] Mistral API call took ${Date.now() - startMs}ms`);
 
   const content = extractResponseContent(response);
   return parseExtractionResponse(content);

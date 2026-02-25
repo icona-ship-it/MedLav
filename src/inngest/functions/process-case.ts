@@ -155,6 +155,7 @@ export const processCaseDocuments = inngest.createFunction(
         try {
           const signedUrl = await getSignedUrl(doc.storagePath);
 
+          const ocrStartMs = Date.now();
           console.log(`[pipeline] Step 2: OCR processing doc ${doc.id}`);
 
           const result = await ocrDocument({
@@ -183,7 +184,7 @@ export const processCaseDocuments = inngest.createFunction(
             .update({ page_count: result.pageCount, updated_at: new Date().toISOString() })
             .eq('id', doc.id);
 
-          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${result.pageCount} pages`);
+          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${result.pageCount} pages in ${Date.now() - ocrStartMs}ms`);
 
           return {
             documentId: doc.id,
