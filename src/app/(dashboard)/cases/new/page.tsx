@@ -18,20 +18,20 @@ export default function NewCasePage() {
     setIsSubmitting(true);
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result = await createCase(formData);
 
-    // Step 1: Create the case
-    const result = await createCase(formData);
-
-    // If redirect happened (success), we won't reach here.
-    // If error, show it.
-    if (result?.error) {
-      setError(result.error);
+      // If redirect happened (success), we won't reach here.
+      // If error, show it.
+      if (result?.error) {
+        setError(result.error);
+        setIsSubmitting(false);
+      }
+    } catch {
+      setError('Errore di rete. Verifica la connessione e riprova.');
       setIsSubmitting(false);
     }
-
-    // Note: files are uploaded on the case detail page after creation
-    // This keeps the flow simple: create case → redirect → upload on detail page
   }
 
   return (

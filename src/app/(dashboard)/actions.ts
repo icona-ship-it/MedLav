@@ -49,6 +49,7 @@ export async function createCase(formData: FormData) {
     .single();
 
   if (error) {
+    console.error(`[createCase] Failed for user ${user.id}: ${error.message} (code: ${error.code})`);
     return { error: 'Errore nella creazione del caso. Riprova.' };
   }
 
