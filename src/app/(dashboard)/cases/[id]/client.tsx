@@ -7,6 +7,7 @@ import {
   Play, Loader2, AlertTriangle, ChevronDown, ChevronUp,
   FileWarning, Plus, Trash2, Save, X, Pencil,
   Download, XCircle, ArrowLeft, Archive, RotateCcw,
+  CheckCircle2, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -120,14 +121,19 @@ interface CaseDetailClientProps {
 
 // --- Constants ---
 
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 5000;
 
-// Short role labels for the edit case dialog
 const CASE_ROLES_SHORT = [
   { value: 'ctu', label: 'CTU' },
   { value: 'ctp', label: 'CTP' },
   { value: 'stragiudiziale', label: 'Stragiudiziale' },
 ];
+
+const WIZARD_STEPS = [
+  { number: 1, label: 'Documenti' },
+  { number: 2, label: 'Elaborazione' },
+  { number: 3, label: 'Risultati' },
+] as const;
 
 // --- Helpers ---
 
@@ -152,6 +158,12 @@ function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
+function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean): number {
+  if (hasResults) return 3;
+  if (hasProcessingDocs) return 2;
+  return 1;
+}
+
 // --- Main Component ---
 
 export function CaseDetailClient({
@@ -166,7 +178,7 @@ export function CaseDetailClient({
   eventImages,
 }: CaseDetailClientProps) {
   const router = useRouter();
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isStartingProcessing, setIsStartingProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   // Event interaction state
@@ -186,6 +198,7 @@ export function CaseDetailClient({
   const [isDeletingDoc, startDeleteDoc] = useTransition();
 
   // Search state
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -193,25 +206,30 @@ export function CaseDetailClient({
   // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Wizard step
   const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
-  const hasResults = events.length > 0 || anomalies.length > 0 || report;
+  const hasResults = events.length > 0 || anomalies.length > 0 || !!report;
+
+  const autoStep = computeAutoStep(hasResults, hasProcessingDocs);
+  const [activeStep, setActiveStep] = useState(autoStep);
+
+  // Update active step when server data changes (e.g. processing finishes)
+  useEffect(() => {
+    setActiveStep(computeAutoStep(hasResults, hasProcessingDocs));
+  }, [hasResults, hasProcessingDocs]);
 
   const isArchived = caseData.status === 'archiviato';
 
-  // Poll for processing updates
+  // Poll for processing updates — depends only on hasProcessingDocs
   useEffect(() => {
-    if (!hasProcessingDocs && !isProcessing) return;
+    if (!hasProcessingDocs) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [hasProcessingDocs, isProcessing, router]);
-
-  useEffect(() => {
-    if (isProcessing && !hasProcessingDocs) setIsProcessing(false);
-  }, [hasProcessingDocs, isProcessing]);
+  }, [hasProcessingDocs, router]);
 
   const handleStartProcessing = useCallback(async () => {
-    setIsProcessing(true);
+    setIsStartingProcessing(true);
     setProcessingError(null);
     try {
       const response = await fetch('/api/processing/start', {
@@ -222,15 +240,22 @@ export function CaseDetailClient({
       const result = await response.json() as { success: boolean; error?: string };
       if (!result.success) {
         setProcessingError(result.error ?? 'Errore sconosciuto');
-        setIsProcessing(false);
+        setIsStartingProcessing(false);
         return;
       }
       router.refresh();
     } catch {
       setProcessingError('Errore di rete. Verifica la connessione.');
-      setIsProcessing(false);
+      setIsStartingProcessing(false);
     }
   }, [caseId, router]);
+
+  // Reset isStartingProcessing once server data confirms processing
+  useEffect(() => {
+    if (isStartingProcessing && hasProcessingDocs) {
+      setIsStartingProcessing(false);
+    }
+  }, [isStartingProcessing, hasProcessingDocs]);
 
   const handleRegenerate = useCallback(async () => {
     setIsRegenerating(true);
@@ -272,14 +297,13 @@ export function CaseDetailClient({
     }
   }, [caseId, router]);
 
-  // Debounced search with AbortController to prevent race conditions
+  // Debounced search with AbortController
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q);
 
-    // Clear previous timer
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
     if (q.trim().length < 2) {
@@ -291,7 +315,6 @@ export function CaseDetailClient({
     setIsSearching(true);
 
     searchTimerRef.current = setTimeout(async () => {
-      // Abort previous request
       searchAbortRef.current?.abort();
       const controller = new AbortController();
       searchAbortRef.current = controller;
@@ -393,6 +416,18 @@ export function CaseDetailClient({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Search toggle */}
+          {hasResults && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(!searchOpen)}
+              title="Cerca nel caso"
+              aria-label="Cerca nel caso"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -441,73 +476,165 @@ export function CaseDetailClient({
         onSaved={() => { setEditCaseOpen(false); router.refresh(); }}
       />
 
-      {/* Upload + Documents Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Carica Documentazione</CardTitle>
-            <CardDescription>Aggiungi documenti clinici al caso</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
-          </CardContent>
-        </Card>
+      {/* Inline Search (expandable) */}
+      {searchOpen && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Cerca nel caso (documenti, eventi, diagnosi)..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              aria-label="Cerca nel caso"
+              autoFocus
+            />
+            {isSearching && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
+            <Button variant="ghost" size="icon" onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults(null); }} aria-label="Chiudi ricerca">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {searchResults && searchResults.length > 0 && (
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {searchResults.map((r) => (
+                <div key={`${r.type}-${r.id}`} className="rounded border p-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={r.type === 'event' ? 'outline' : 'secondary'} className="text-xs">
+                      {r.type === 'event' ? 'Evento' : 'Documento'}
+                    </Badge>
+                    <span className="font-medium">{r.title}</span>
+                    {r.date && <span className="text-xs text-muted-foreground">{formatDate(r.date)}</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{r.excerpt}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {searchResults && searchResults.length === 0 && searchQuery.length >= 2 && (
+            <p className="text-sm text-muted-foreground">Nessun risultato per &quot;{searchQuery}&quot;</p>
+          )}
+        </div>
+      )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documenti Caricati</CardTitle>
-            <CardDescription>
-              {initialDocuments.length} {initialDocuments.length === 1 ? 'documento' : 'documenti'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {initialDocuments.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Nessun documento caricato.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {initialDocuments.map((doc) => {
-                  const Icon = getFileIcon(doc.file_type);
-                  const canDelete = !isDocProcessing(doc.processing_status);
-                  return (
-                    <div key={doc.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{doc.file_name}</p>
-                          <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
+      {/* Wizard Step Bar */}
+      <nav aria-label="Passaggi caso" className="flex items-center gap-2">
+        {WIZARD_STEPS.map((step, index) => {
+          const isActive = activeStep === step.number;
+          const isCompleted = autoStep > step.number;
+
+          return (
+            <div key={step.number} className="flex flex-1 items-center">
+              <button
+                type="button"
+                onClick={() => setActiveStep(step.number)}
+                className={`flex w-full items-center gap-3 rounded-lg border-2 px-4 py-3 text-left transition-all ${
+                  isActive
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : isCompleted
+                      ? 'border-green-500/30 bg-green-50/50 dark:bg-green-950/10'
+                      : 'border-muted hover:border-muted-foreground/30'
+                }`}
+                aria-current={isActive ? 'step' : undefined}
+              >
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : isCompleted
+                      ? 'bg-green-500 text-white'
+                      : 'bg-muted text-muted-foreground'
+                }`}>
+                  {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : step.number}
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold ${
+                    isActive ? 'text-primary' : isCompleted ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                  }`}>
+                    {step.label}
+                  </p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">
+                    {step.number === 1 && `${initialDocuments.length} documenti`}
+                    {step.number === 2 && (hasProcessingDocs ? 'In corso...' : 'Pronto')}
+                    {step.number === 3 && (hasResults ? `${events.length} eventi` : 'In attesa')}
+                  </p>
+                </div>
+              </button>
+              {index < WIZARD_STEPS.length - 1 && (
+                <div className={`mx-2 h-0.5 w-4 shrink-0 rounded ${
+                  autoStep > step.number ? 'bg-green-500' : 'bg-muted'
+                }`} />
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* === STEP 1: Documenti === */}
+      {activeStep === 1 && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Carica Documentazione</CardTitle>
+              <CardDescription>Aggiungi documenti clinici al caso</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Documenti Caricati</CardTitle>
+              <CardDescription>
+                {initialDocuments.length} {initialDocuments.length === 1 ? 'documento' : 'documenti'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {initialDocuments.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Nessun documento caricato.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {initialDocuments.map((doc) => {
+                    const Icon = getFileIcon(doc.file_type);
+                    const canDelete = !isDocProcessing(doc.processing_status);
+                    return (
+                      <div key={doc.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{doc.file_name}</p>
+                            <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={processingVariant(doc.processing_status)}>
+                            {processingLabels[doc.processing_status] ?? doc.processing_status}
+                          </Badge>
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
+                              disabled={isDeletingDoc}
+                              title="Elimina documento"
+                              aria-label={`Elimina documento ${doc.file_name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={processingVariant(doc.processing_status)}>
-                          {processingLabels[doc.processing_status] ?? doc.processing_status}
-                        </Badge>
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
-                            disabled={isDeletingDoc}
-                            title="Elimina documento"
-                            aria-label={`Elimina documento ${doc.file_name}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* Processing Action */}
-      {(hasUploadedDocs || hasProcessingDocs) && (
+      {/* === STEP 2: Elaborazione === */}
+      {activeStep === 2 && (
         <Card>
           <CardContent className="pt-6">
             {hasProcessingDocs ? (
@@ -532,256 +659,240 @@ export function CaseDetailClient({
                     (d) => !['caricato'].includes(d.processing_status),
                   )}
                 />
-                <p className="text-xs text-muted-foreground">La pagina si aggiorna automaticamente.</p>
+                <p className="text-sm text-muted-foreground">
+                  L&apos;elaborazione continua in background. La pagina si aggiorna automaticamente.
+                </p>
+                <p className="text-xs text-muted-foreground italic">
+                  L&apos;analisi richiede in genere 2-5 minuti per documento.
+                </p>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {initialDocuments.filter((d) => d.processing_status === 'caricato').length} documenti pronti per l&apos;elaborazione.
-                  </p>
-                  {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    {hasUploadedDocs ? (
+                      <p className="text-sm text-muted-foreground">
+                        {initialDocuments.filter((d) => d.processing_status === 'caricato').length} documenti pronti per l&apos;elaborazione.
+                      </p>
+                    ) : initialDocuments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nessun documento caricato. Torna al passaggio 1 per caricare i documenti.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Tutti i documenti sono già stati elaborati.
+                      </p>
+                    )}
+                    {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
+                  </div>
+                  <Button onClick={handleStartProcessing} disabled={isStartingProcessing || !hasUploadedDocs}>
+                    {isStartingProcessing ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Avvio...</>
+                    ) : (
+                      <><Play className="mr-2 h-4 w-4" />Avvia Elaborazione</>
+                    )}
+                  </Button>
                 </div>
-                <Button onClick={handleStartProcessing} disabled={isProcessing || !hasUploadedDocs}>
-                  {isProcessing ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Avvio...</>
-                  ) : (
-                    <><Play className="mr-2 h-4 w-4" />Avvia Elaborazione</>
-                  )}
-                </Button>
+                <p className="text-xs text-muted-foreground italic">
+                  L&apos;analisi richiede in genere 2-5 minuti per documento.
+                </p>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Search */}
-      {hasResults && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Cerca nel caso (documenti, eventi, diagnosi)..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  aria-label="Cerca nel caso"
-                />
-                {isSearching && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
-              </div>
-              {searchResults && searchResults.length > 0 && (
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {searchResults.map((r) => (
-                    <div key={`${r.type}-${r.id}`} className="rounded border p-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={r.type === 'event' ? 'outline' : 'secondary'} className="text-xs">
-                          {r.type === 'event' ? 'Evento' : 'Documento'}
-                        </Badge>
-                        <span className="font-medium">{r.title}</span>
-                        {r.date && <span className="text-xs text-muted-foreground">{formatDate(r.date)}</span>}
+      {/* === STEP 3: Risultati === */}
+      {activeStep === 3 && (
+        <>
+          {hasResults ? (
+            <Tabs defaultValue="events" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
+                <TabsTrigger value="synthesis">Report</TabsTrigger>
+                <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
+                <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
+              </TabsList>
+
+              {/* === EVENTS TAB === */}
+              <TabsContent value="events">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Eventi Clinici</CardTitle>
+                        <CardDescription>
+                          {events.length} eventi estratti
+                        </CardDescription>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{r.excerpt}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {searchResults && searchResults.length === 0 && searchQuery.length >= 2 && (
-                <p className="text-sm text-muted-foreground">Nessun risultato per &quot;{searchQuery}&quot;</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Export Buttons */}
-      {hasResults && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Esporta Report</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
-                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />HTML
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
-                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />CSV
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
-                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
-                  </a>
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Results Tabs */}
-      {hasResults && (
-        <Tabs defaultValue="events" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
-            <TabsTrigger value="synthesis">Report</TabsTrigger>
-            <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
-            <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
-          </TabsList>
-
-          {/* === EVENTS TAB === */}
-          <TabsContent value="events">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Eventi Clinici</CardTitle>
-                    <CardDescription>
-                      {events.length} eventi estratti
-                    </CardDescription>
-                  </div>
-                  <AddEventDialog
-                    caseId={caseId}
-                    open={addEventOpen}
-                    onOpenChange={setAddEventOpen}
-                    onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {events.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      caseId={caseId}
-                      isExpanded={expandedEvents.has(event.id)}
-                      isEditing={editingEventId === event.id}
-                      onToggle={() => toggleEvent(event.id)}
-                      onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
-                      onCancelEdit={() => setEditingEventId(null)}
-                      onSaved={() => { setEditingEventId(null); router.refresh(); }}
-                      onDeleted={() => router.refresh()}
-                      eventImages={eventImages}
-                      onImageClick={setPreviewImage}
-                    />
-                  ))}
-                  {events.length === 0 && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* === SYNTHESIS TAB === */}
-          <TabsContent value="synthesis">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Report Medico-Legale</CardTitle>
-                  {report && (
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">v{report.version}</Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRegenerate}
-                        disabled={isRegenerating}
-                      >
-                        {isRegenerating
-                          ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Rigenerazione...</>
-                          : 'Rigenera Report'
-                        }
-                      </Button>
-                      <ReportStatusButtons
+                      <AddEventDialog
                         caseId={caseId}
-                        report={report}
-                        onChanged={() => router.refresh()}
+                        open={addEventOpen}
+                        onOpenChange={setAddEventOpen}
+                        onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
                       />
                     </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {report?.synthesis ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
-                    {report.synthesis}
-                  </div>
-                ) : (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    Nessuna sintesi generata. Avvia l&apos;elaborazione dei documenti.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {events.map((event) => (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          caseId={caseId}
+                          isExpanded={expandedEvents.has(event.id)}
+                          isEditing={editingEventId === event.id}
+                          onToggle={() => toggleEvent(event.id)}
+                          onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
+                          onCancelEdit={() => setEditingEventId(null)}
+                          onSaved={() => { setEditingEventId(null); router.refresh(); }}
+                          onDeleted={() => router.refresh()}
+                          eventImages={eventImages}
+                          onImageClick={setPreviewImage}
+                        />
+                      ))}
+                      {events.length === 0 && (
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                          Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-          {/* === ANOMALIES TAB === */}
-          <TabsContent value="anomalies">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                  Anomalie Rilevate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {anomalies.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Nessuna anomalia rilevata.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {anomalies.map((a) => (
-                      <div key={a.id} className="rounded-md border p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={severityVariant(a.severity)}>{a.severity.toUpperCase()}</Badge>
-                          <span className="text-sm font-medium">{anomalyTypeLabels[a.anomaly_type] ?? a.anomaly_type}</span>
-                        </div>
-                        <p className="text-sm">{a.description}</p>
-                        {a.suggestion && (
-                          <p className="mt-2 text-sm text-muted-foreground italic">{a.suggestion}</p>
+              {/* === SYNTHESIS TAB === */}
+              <TabsContent value="synthesis">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Report Medico-Legale</CardTitle>
+                      <div className="flex items-center gap-2">
+                        {report && (
+                          <>
+                            <Badge variant="secondary">v{report.version}</Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRegenerate}
+                              disabled={isRegenerating}
+                            >
+                              {isRegenerating
+                                ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Rigenerazione...</>
+                                : 'Rigenera Report'
+                              }
+                            </Button>
+                            <ReportStatusButtons
+                              caseId={caseId}
+                              report={report}
+                              onChanged={() => router.refresh()}
+                            />
+                          </>
                         )}
+                        {/* Export buttons inline */}
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
+                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />HTML
+                          </a>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
+                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />CSV
+                          </a>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
+                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
+                          </a>
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {report?.synthesis ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
+                        {report.synthesis}
+                      </div>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">
+                        Nessuna sintesi generata. Avvia l&apos;elaborazione dei documenti.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-          {/* === MISSING DOCS TAB === */}
-          <TabsContent value="missing">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileWarning className="h-5 w-5 text-destructive" />
-                  Documentazione Mancante
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {missingDocs.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Nessuna documentazione mancante.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {missingDocs.map((d) => (
-                      <div key={d.id} className="rounded-md border p-3">
-                        <p className="text-sm font-medium">{d.document_name}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">{d.reason}</p>
-                        {d.related_event && (
-                          <p className="mt-1 text-xs text-muted-foreground">Evento correlato: {d.related_event}</p>
-                        )}
+              {/* === ANOMALIES TAB === */}
+              <TabsContent value="anomalies">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                      Anomalie Rilevate
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {anomalies.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground">Nessuna anomalia rilevata.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {anomalies.map((a) => (
+                          <div key={a.id} className="rounded-md border p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant={severityVariant(a.severity)}>{a.severity.toUpperCase()}</Badge>
+                              <span className="text-sm font-medium">{anomalyTypeLabels[a.anomaly_type] ?? a.anomaly_type}</span>
+                            </div>
+                            <p className="text-sm">{a.description}</p>
+                            {a.suggestion && (
+                              <p className="mt-2 text-sm text-muted-foreground italic">{a.suggestion}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* === MISSING DOCS TAB === */}
+              <TabsContent value="missing">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileWarning className="h-5 w-5 text-destructive" />
+                      Documentazione Mancante
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {missingDocs.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground">Nessuna documentazione mancante.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {missingDocs.map((d) => (
+                          <div key={d.id} className="rounded-md border p-3">
+                            <p className="text-sm font-medium">{d.document_name}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{d.reason}</p>
+                            {d.related_event && (
+                              <p className="mt-1 text-xs text-muted-foreground">Evento correlato: {d.related_event}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Nessun risultato disponibile. Carica i documenti e avvia l&apos;elaborazione.
+                </p>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+          )}
+        </>
       )}
 
       {/* Image Preview Dialog */}
@@ -1008,7 +1119,6 @@ function EventCard({
     });
   };
 
-  // Get images linked to this event (by event ID)
   const images = eventImages[event.id] ?? [];
 
   return (
@@ -1056,11 +1166,9 @@ function EventCard({
               <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
             </div>
           )}
-          {/* Source text anchoring */}
           {event.source_text && (
             <SourceTextSection sourceText={event.source_text} sourcePages={event.source_pages} />
           )}
-          {/* Event images */}
           {images.length > 0 && (
             <div className="pt-2 border-t">
               <p className="text-xs font-medium text-muted-foreground mb-2">Immagini associate</p>

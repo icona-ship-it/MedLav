@@ -59,7 +59,7 @@ function getEarliestQueueTime(documents: ProcessingDocument[]): Date | null {
   );
   if (processing.length === 0) return null;
 
-  const dates = processing.map((d) => new Date(d.created_at).getTime());
+  const dates = processing.map((d) => new Date(d.updated_at ?? d.created_at).getTime());
   return new Date(Math.min(...dates));
 }
 

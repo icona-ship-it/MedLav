@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   FolderPlus,
+  FolderOpen,
   Archive,
   Settings,
   LogOut,
@@ -15,9 +16,10 @@ import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Nuovo Caso', href: '/cases/new', icon: FolderPlus },
-  { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
+  { name: 'I Miei Casi', href: '/cases', icon: FolderOpen, exact: true },
+  { name: 'Nuovo Caso', href: '/cases/new', icon: FolderPlus, exact: false },
+  { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive, exact: false },
 ];
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -34,7 +36,9 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       {/* Navigation */}
       <nav aria-label="Menu principale" className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href.split('?')[0]));
+          const isActive = item.exact
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href.split('?')[0]);
           return (
             <Link
               key={item.name}

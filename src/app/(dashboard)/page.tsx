@@ -37,28 +37,34 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Casi Attivi</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <FileText className="h-6 w-6 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{cases.length}</div>
+            <div className="text-3xl font-bold">{cases.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">In Revisione</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-500/10">
+              <AlertTriangle className="h-6 w-6 text-yellow-500" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{inRevisione}</div>
+            <div className="text-3xl font-bold">{inRevisione}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Bozze</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+              <Clock className="h-6 w-6 text-muted-foreground" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{bozze}</div>
+            <div className="text-3xl font-bold">{bozze}</div>
           </CardContent>
         </Card>
       </div>
@@ -94,7 +100,7 @@ export default async function DashboardPage() {
                   <Link
                     key={caseItem.id}
                     href={`/cases/${caseItem.id}`}
-                    className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
+                    className="flex items-center justify-between rounded-lg border bg-card p-5 shadow-sm transition-all hover:shadow-md"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -115,7 +121,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <div>{caseItem.document_count} documenti</div>
-                      <div>{new Date(caseItem.created_at).toLocaleDateString('it-IT')}</div>
+                      <div>Aggiornato: {new Date(caseItem.updated_at ?? caseItem.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </Link>
                 );
