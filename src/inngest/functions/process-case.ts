@@ -4,7 +4,6 @@ import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
 import { consolidateEvents } from '@/services/consolidation/event-consolidator';
-import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';

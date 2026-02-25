@@ -1,7 +1,6 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
-  AlignmentType, BorderStyle, TableRow, TableCell, Table,
-  WidthType, ShadingType,
+  AlignmentType, ShadingType,
 } from 'docx';
 
 interface DocxEvent {

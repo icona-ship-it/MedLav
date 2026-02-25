@@ -188,7 +188,6 @@ export function CaseDetailClient({
   processingLabels,
 }: CaseDetailClientProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
 
