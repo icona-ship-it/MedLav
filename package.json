@@ -42,7 +42,7 @@
     "drizzle-orm": "^0.45.1",
     "inngest": "^3.52.3",
     "lucide-react": "^0.575.0",
-    "next": "16.1.6",
+    "next": "15.5.12",
     "papaparse": "^5.5.3",
     "postgres": "^3.4.8",
     "react": "19.2.3",
