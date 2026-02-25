@@ -6,9 +6,14 @@ export interface ConsolidatedEvent extends ExtractedEvent {
   discrepancyNote: string | null;
 }
 
-interface DocumentEvents {
+export interface DocumentEvents {
   documentId: string;
   events: ExtractedEvent[];
+}
+
+export interface ConsolidationResult {
+  newEventsToInsert: ConsolidatedEvent[];
+  allEvents: ConsolidatedEvent[];
 }
 
 /**
@@ -120,7 +125,7 @@ function findDiscrepancy(
  * Heuristic check if two events refer to the same clinical event.
  * Uses title similarity and description overlap.
  */
-function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
+export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
   // Same type and date is already checked by caller
   const titleSimilarity = calculateSimilarity(
     a.title.toLowerCase(),
@@ -175,4 +180,66 @@ function extractMedicalKeywords(text: string): string[] {
     .split(/\s+/)
     .filter((w) => w.length > 3 && !stopWords.has(w))
     .slice(0, 30); // Cap at 30 keywords
+}
+
+/**
+ * Check if a new event is a duplicate of an existing event in the database.
+ * Same date + same type + similar title/keywords = duplicate.
+ */
+export function isDuplicateOfExisting(
+  newEvent: ExtractedEvent,
+  existingEvents: ConsolidatedEvent[],
+): boolean {
+  return existingEvents.some((existing) =>
+    existing.eventDate === newEvent.eventDate &&
+    existing.eventType === newEvent.eventType &&
+    isSimilarEvent(newEvent, existing),
+  );
+}
+
+/**
+ * Incremental consolidation: consolidate new document events among themselves,
+ * then deduplicate against existing events from the database.
+ *
+ * - When existingEvents is empty, behaves identically to consolidateEvents()
+ * - order_number for new events continues from max existing
+ * - Returns both new events to insert and the full combined timeline
+ */
+export function consolidateNewWithExisting(
+  newDocEvents: DocumentEvents[],
+  existingEvents: ConsolidatedEvent[],
+): ConsolidationResult {
+  // Consolidate new events among themselves (same logic as consolidateEvents)
+  const consolidatedNew = consolidateEvents(newDocEvents);
+
+  // If no existing events, this is first-time processing
+  if (existingEvents.length === 0) {
+    return {
+      newEventsToInsert: consolidatedNew,
+      allEvents: consolidatedNew,
+    };
+  }
+
+  // Filter out duplicates of existing events
+  const deduped = consolidatedNew.filter(
+    (newEvent) => !isDuplicateOfExisting(newEvent, existingEvents),
+  );
+
+  // Find max order_number from existing events
+  const maxOrderNumber = Math.max(...existingEvents.map((e) => e.orderNumber));
+
+  // Re-assign order_number starting from max + 1
+  const newEventsToInsert = deduped.map((event, index) => ({
+    ...event,
+    orderNumber: maxOrderNumber + index + 1,
+  }));
+
+  // Combine all events and sort chronologically for full-case analysis
+  const allEvents = [...existingEvents, ...newEventsToInsert].sort((a, b) => {
+    const dateCompare = a.eventDate.localeCompare(b.eventDate);
+    if (dateCompare !== 0) return dateCompare;
+    return a.eventType.localeCompare(b.eventType);
+  });
+
+  return { newEventsToInsert, allEvents };
 }

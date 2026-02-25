@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
-import { consolidateEvents } from '@/services/consolidation/event-consolidator';
+import { consolidateNewWithExisting } from '@/services/consolidation/event-consolidator';
+import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
@@ -292,16 +293,46 @@ export const processCaseDocuments = inngest.createFunction(
       return results;
     });
 
-    // Step 4: Consolidate events across all documents
-    const consolidatedEvents = await step.run('consolidate-events', async () => {
+    // Step 4: Consolidate events — incremental: dedup new vs existing DB events
+    const consolidationResult = await step.run('consolidate-events', async () => {
       const supabase = createAdminClient();
-      const consolidated = consolidateEvents(extractionResults);
 
-      console.log(`[pipeline] Step 4: Consolidated ${consolidated.length} events`);
+      // Fetch existing active events for this case
+      const { data: existingRaw } = await supabase
+        .from('events')
+        .select('*')
+        .eq('case_id', caseId)
+        .eq('is_deleted', false)
+        .order('order_number', { ascending: true });
 
-      // Save all events to database
-      if (consolidated.length > 0) {
-        const eventRows = consolidated.map((e) => ({
+      const existingEvents: ConsolidatedEvent[] = (existingRaw ?? []).map((e) => ({
+        orderNumber: e.order_number as number,
+        documentId: (e.document_id ?? '') as string,
+        eventDate: e.event_date as string,
+        datePrecision: e.date_precision as ConsolidatedEvent['datePrecision'],
+        eventType: e.event_type as ConsolidatedEvent['eventType'],
+        title: e.title as string,
+        description: e.description as string,
+        sourceType: e.source_type as ConsolidatedEvent['sourceType'],
+        diagnosis: (e.diagnosis ?? null) as string | null,
+        doctor: (e.doctor ?? null) as string | null,
+        facility: (e.facility ?? null) as string | null,
+        confidence: e.confidence as number,
+        requiresVerification: e.requires_verification as boolean,
+        reliabilityNotes: (e.reliability_notes ?? null) as string | null,
+        discrepancyNote: null,
+      }));
+
+      const { newEventsToInsert, allEvents } = consolidateNewWithExisting(
+        extractionResults,
+        existingEvents,
+      );
+
+      console.log(`[pipeline] Step 4: ${newEventsToInsert.length} new events (${existingEvents.length} existing, ${allEvents.length} total)`);
+
+      // Insert only new (non-duplicate) events
+      if (newEventsToInsert.length > 0) {
+        const eventRows = newEventsToInsert.map((e) => ({
           case_id: caseId,
           document_id: e.documentId,
           order_number: e.orderNumber,
@@ -333,17 +364,21 @@ export const processCaseDocuments = inngest.createFunction(
           .eq('id', docResult.documentId);
       }
 
-      return consolidated;
+      return { allEvents, newEventsCount: newEventsToInsert.length };
     });
 
-    // Step 5: Detect anomalies
+    // Step 5: Detect anomalies — delete old, re-detect on ALL events
     const anomalies = await step.run('detect-anomalies', async () => {
       const supabase = createAdminClient();
-      const detected = detectAnomalies(consolidatedEvents);
 
-      console.log(`[pipeline] Step 5: Detected ${detected.length} anomalies`);
+      // Delete previous anomalies for this case
+      await supabase.from('anomalies').delete().eq('case_id', caseId);
 
-      // Save anomalies to database
+      // Re-detect on the full event set
+      const detected = detectAnomalies(consolidationResult.allEvents);
+
+      console.log(`[pipeline] Step 5: Detected ${detected.length} anomalies (full case)`);
+
       if (detected.length > 0) {
         const anomalyRows = detected.map((a) => ({
           case_id: caseId,
@@ -360,19 +395,28 @@ export const processCaseDocuments = inngest.createFunction(
       return detected;
     });
 
-    // Step 6: Detect missing documents
+    // Step 6: Detect missing documents — delete old, check ALL doc types in case
     const missingDocs = await step.run('detect-missing-documents', async () => {
       const supabase = createAdminClient();
-      const uploadedDocTypes = documents.map((d) => d.documentType);
+
+      // Delete previous missing documents for this case
+      await supabase.from('missing_documents').delete().eq('case_id', caseId);
+
+      // Fetch ALL document types for this case (not just current batch)
+      const { data: allDocsRaw } = await supabase
+        .from('documents')
+        .select('document_type')
+        .eq('case_id', caseId);
+      const uploadedDocTypes = (allDocsRaw ?? []).map((d) => (d.document_type ?? 'altro') as string);
+
       const missing = detectMissingDocuments({
-        events: consolidatedEvents,
+        events: consolidationResult.allEvents,
         caseType: metadata.caseType,
         uploadedDocTypes,
       });
 
-      console.log(`[pipeline] Step 6: Detected ${missing.length} missing documents`);
+      console.log(`[pipeline] Step 6: Detected ${missing.length} missing documents (full case)`);
 
-      // Save missing documents to database
       if (missing.length > 0) {
         const missingRows = missing.map((m) => ({
           case_id: caseId,
@@ -387,34 +431,44 @@ export const processCaseDocuments = inngest.createFunction(
       return missing;
     });
 
-    // Step 7: Generate synthesis
+    // Step 7: Generate synthesis — version = max + 1, on ALL events
     const synthesisResult = await step.run('generate-synthesis', async () => {
       const supabase = createAdminClient();
 
-      console.log(`[pipeline] Step 7: Generating synthesis`);
+      console.log(`[pipeline] Step 7: Generating synthesis (full case, ${consolidationResult.allEvents.length} events)`);
 
       const result = await generateSynthesis({
         caseType: metadata.caseType,
         caseRole: metadata.caseRole,
         patientInitials: metadata.patientInitials,
-        events: consolidatedEvents,
+        events: consolidationResult.allEvents,
         anomalies,
         missingDocuments: missingDocs,
       });
 
-      // Save report to database
+      // Get current max version
+      const { data: latestReport } = await supabase
+        .from('reports')
+        .select('version')
+        .eq('case_id', caseId)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newVersion = ((latestReport?.version as number | null) ?? 0) + 1;
+
       const { data: report } = await supabase
         .from('reports')
         .insert({
           case_id: caseId,
-          version: 1,
+          version: newVersion,
           report_status: 'bozza',
           synthesis: result.synthesis,
         })
         .select('id')
         .single();
 
-      return { synthesis: result.synthesis, wordCount: result.wordCount, reportId: report?.id };
+      return { synthesis: result.synthesis, wordCount: result.wordCount, reportId: report?.id, reportVersion: newVersion };
     });
 
     // Step 8: Finalize - mark everything as completed
@@ -440,7 +494,7 @@ export const processCaseDocuments = inngest.createFunction(
         .update({ updated_at: new Date().toISOString() })
         .eq('id', caseId);
 
-      // Audit log (no sensitive data)
+      // Audit log (no sensitive data) — includes incremental info
       await supabase.from('audit_log').insert({
         user_id: userId,
         action: 'case.processing.completed',
@@ -448,9 +502,11 @@ export const processCaseDocuments = inngest.createFunction(
         entity_id: caseId,
         metadata: {
           documentsProcessed: extractionResults.length,
-          eventsExtracted: consolidatedEvents.length,
+          newEventsInserted: consolidationResult.newEventsCount,
+          totalEvents: consolidationResult.allEvents.length,
           anomaliesDetected: anomalies.length,
           missingDocuments: missingDocs.length,
+          reportVersion: synthesisResult.reportVersion,
           synthesisWordCount: synthesisResult.wordCount,
         },
       });
@@ -460,9 +516,11 @@ export const processCaseDocuments = inngest.createFunction(
       success: true,
       caseId,
       documentsProcessed: extractionResults.length,
-      eventsExtracted: consolidatedEvents.length,
+      newEventsInserted: consolidationResult.newEventsCount,
+      totalEvents: consolidationResult.allEvents.length,
       anomaliesDetected: anomalies.length,
       missingDocuments: missingDocs.length,
+      reportVersion: synthesisResult.reportVersion,
       synthesisWordCount: synthesisResult.wordCount,
     };
   },
