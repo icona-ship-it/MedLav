@@ -1,0 +1,4 @@
+approveBuildsPackages: esbuild protobufjs
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
