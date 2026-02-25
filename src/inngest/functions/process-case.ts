@@ -265,8 +265,21 @@ export const processCaseDocuments = inngest.createFunction(
       coverageResult: CoverageResult | null;
     }> = [];
 
+    // Step 3a: Primary extraction per document (one LLM call each)
+    interface PrimaryExtractionResult {
+      documentId: string;
+      events: ExtractedEventWithMeta[];
+      coverageResult: CoverageResult;
+      fullText: string;
+      fileName: string;
+      documentType: string;
+      needsSecondPass: boolean;
+    }
+
+    const primaryResults: Array<PrimaryExtractionResult | null> = [];
+
     for (const ocrResult of ocrResults) {
-      const extractionResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
+      const primaryResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
         const supabase = createAdminClient();
 
         await supabase
@@ -275,7 +288,6 @@ export const processCaseDocuments = inngest.createFunction(
           .eq('id', ocrResult.documentId);
 
         try {
-          // Primary extraction (1 LLM call with enhanced prompt)
           const extractionResult = await extractEventsFromDocument({
             documentText: ocrResult.fullText,
             fileName: ocrResult.fileName,
@@ -286,61 +298,30 @@ export const processCaseDocuments = inngest.createFunction(
 
           const { events: validatedEvents, issues } = validateExtractedEvents(extractionResult.events);
           if (issues.length > 0) {
-            console.log(`[pipeline] Step 3: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
+            console.log(`[pipeline] Step 3a: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
           }
 
           const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
-          let coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
-          let allEvents = verificationResult.events;
+          const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
 
-          // Conditional second pass: ONLY if coverage is poor (< 50%)
-          // This catches missed events in complex documents without wasting LLM calls on simple ones
-          if (coverageResult.coveragePercent < 50 && coverageResult.uncoveredWithMedicalTerms > 0) {
-            console.log(`[pipeline] Step 3: Low coverage (${coverageResult.coveragePercent}%) for doc ${ocrResult.documentId}, running targeted second pass`);
-
-            try {
-              const secondPass = await extractEventsFromDocument({
-                documentText: ocrResult.fullText,
-                fileName: ocrResult.fileName,
-                documentType: ocrResult.documentType,
-                caseType: metadata.caseType,
-                temperature: 0.3,
-              });
-
-              // Merge new events not already found in first pass
-              const existingKeys = new Set(
-                allEvents.map((e) => `${e.eventDate}|${e.eventType}|${e.title}`),
-              );
-              const newEvents = secondPass.events.filter((e) => {
-                const key = `${e.eventDate}|${e.eventType}|${e.title}`;
-                return !existingKeys.has(key);
-              });
-
-              if (newEvents.length > 0) {
-                console.log(`[pipeline] Step 3: Second pass found ${newEvents.length} additional events for doc ${ocrResult.documentId}`);
-                const { events: validatedNew } = validateExtractedEvents(newEvents);
-                const verifiedNew = verifySourceTexts(validatedNew, ocrResult.fullText);
-                allEvents = [...allEvents, ...verifiedNew.events];
-                coverageResult = analyzeCoverage(allEvents, ocrResult.fullText);
-              }
-            } catch (pass2Error) {
-              const msg = pass2Error instanceof Error ? pass2Error.message : 'Second pass failed';
-              console.error(`[pipeline] Step 3: Second pass failed (non-fatal) for doc ${ocrResult.documentId}: ${msg}`);
-            }
-          }
-
-          const eventsWithMeta: ExtractedEventWithMeta[] = allEvents.map((event) => ({
+          const eventsWithMeta: ExtractedEventWithMeta[] = verificationResult.events.map((event) => ({
             ...event,
             extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
             documentId: ocrResult.documentId,
           }));
 
-          console.log(`[pipeline] Step 3: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%)`);
+          const needsSecondPass = coverageResult.coveragePercent < 50 && coverageResult.uncoveredWithMedicalTerms > 0;
+
+          console.log(`[pipeline] Step 3a: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%${needsSecondPass ? ', will run second pass' : ''})`);
 
           return {
             documentId: ocrResult.documentId,
             events: eventsWithMeta,
             coverageResult,
+            fullText: ocrResult.fullText,
+            fileName: ocrResult.fileName,
+            documentType: ocrResult.documentType,
+            needsSecondPass,
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Extraction failed';
@@ -353,9 +334,68 @@ export const processCaseDocuments = inngest.createFunction(
         }
       });
 
-      if (extractionResult) {
-        extractionResults.push(extractionResult);
+      primaryResults.push(primaryResult);
+    }
+
+    // Step 3b: Conditional second pass (separate step, only for low-coverage docs)
+    for (const primary of primaryResults) {
+      if (!primary || !primary.needsSecondPass) continue;
+
+      const secondPassResult = await step.run(`extract-pass2-${primary.documentId}`, async () => {
+        console.log(`[pipeline] Step 3b: Second pass for doc ${primary.documentId} (coverage was ${primary.coverageResult.coveragePercent}%)`);
+
+        try {
+          const secondPass = await extractEventsFromDocument({
+            documentText: primary.fullText,
+            fileName: primary.fileName,
+            documentType: primary.documentType,
+            caseType: metadata.caseType,
+            temperature: 0.3,
+          });
+
+          const existingKeys = new Set(
+            primary.events.map((e) => `${e.eventDate}|${e.eventType}|${e.title}`),
+          );
+          const newEvents = secondPass.events.filter((e) => {
+            const key = `${e.eventDate}|${e.eventType}|${e.title}`;
+            return !existingKeys.has(key);
+          });
+
+          if (newEvents.length > 0) {
+            console.log(`[pipeline] Step 3b: Second pass found ${newEvents.length} additional events for doc ${primary.documentId}`);
+            const { events: validatedNew } = validateExtractedEvents(newEvents);
+            const verifiedNew = verifySourceTexts(validatedNew, primary.fullText);
+            const newEventsWithMeta: ExtractedEventWithMeta[] = verifiedNew.events.map((event) => ({
+              ...event,
+              extractionPass: 'pass2' as DualPassEvent['extractionPass'],
+              documentId: primary.documentId,
+            }));
+            return newEventsWithMeta;
+          }
+
+          return [] as ExtractedEventWithMeta[];
+        } catch (pass2Error) {
+          const msg = pass2Error instanceof Error ? pass2Error.message : 'Second pass failed';
+          console.error(`[pipeline] Step 3b: Second pass failed (non-fatal) for doc ${primary.documentId}: ${msg}`);
+          return [] as ExtractedEventWithMeta[];
+        }
+      });
+
+      // Merge second pass events into primary result
+      if (secondPassResult.length > 0) {
+        primary.events = [...primary.events, ...secondPassResult];
+        primary.coverageResult = analyzeCoverage(primary.events, primary.fullText);
       }
+    }
+
+    // Collect final extraction results
+    for (const primary of primaryResults) {
+      if (!primary) continue;
+      extractionResults.push({
+        documentId: primary.documentId,
+        events: primary.events,
+        coverageResult: primary.coverageResult,
+      });
     }
 
     // Step 4: Consolidate events — incremental: dedup new vs existing DB events
