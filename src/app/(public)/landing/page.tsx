@@ -1,38 +1,80 @@
 import Link from 'next/link';
-import { Scale, FileText, Clock, Shield, ArrowRight } from 'lucide-react';
+import {
+  Scale, FileText, Clock, Shield, ArrowRight,
+  Upload, Cpu, FileCheck, AlertTriangle, Download, Eye,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+const steps = [
+  {
+    number: 1,
+    icon: Upload,
+    title: 'Carica i documenti',
+    description: 'Trascina cartelle cliniche, referti, esami. PDF, immagini, scansioni: il sistema accetta tutto.',
+  },
+  {
+    number: 2,
+    icon: Cpu,
+    title: 'L\'AI analizza',
+    description: 'OCR avanzato estrae il testo, l\'intelligenza artificiale identifica eventi clinici, date e diagnosi.',
+  },
+  {
+    number: 3,
+    icon: FileCheck,
+    title: 'Report pronto',
+    description: 'Cronistoria strutturata, anomalie evidenziate, documenti mancanti segnalati. Esporta in DOCX, CSV o HTML.',
+  },
+];
 
 const features = [
   {
-    icon: FileText,
+    icon: Eye,
     title: 'OCR Intelligente',
-    description:
-      'Carica documentazione clinica in qualsiasi formato. Il sistema estrae automaticamente il testo con riconoscimento ottico avanzato.',
+    description: 'Riconoscimento ottico avanzato con supporto per manoscritti, timbri e documenti di bassa qualita.',
   },
   {
     icon: Clock,
     title: 'Cronistoria Automatica',
-    description:
-      'Genera una cronistoria medico-legale strutturata in ordine cronologico, pronta per le tue relazioni peritali.',
+    description: 'Eventi clinici ordinati cronologicamente con data, tipo, fonte e livello di affidabilita.',
+  },
+  {
+    icon: AlertTriangle,
+    title: 'Anomalie Rilevate',
+    description: 'Ritardi diagnostici, gap documentali, incongruenze: il sistema li identifica automaticamente.',
+  },
+  {
+    icon: FileText,
+    title: 'Documenti Mancanti',
+    description: 'Segnalazione automatica della documentazione assente o incompleta rispetto al quadro clinico.',
+  },
+  {
+    icon: Download,
+    title: 'Export Multi-formato',
+    description: 'Esporta in DOCX per le relazioni peritali, CSV per analisi dati, HTML per consultazione rapida.',
   },
   {
     icon: Shield,
-    title: 'Sicurezza GDPR',
-    description:
-      'Dati sanitari protetti con crittografia e infrastruttura interamente in Europa. Conforme al GDPR Art. 9.',
+    title: 'GDPR Compliant',
+    description: 'Infrastruttura interamente in Europa. Dati sanitari crittografati. Conforme GDPR Art. 9.',
   },
+];
+
+const stats = [
+  { value: 'Minuti', label: 'invece di ore per un caso' },
+  { value: '100%', label: 'dati in Europa (GDPR)' },
+  { value: 'Multi-formato', label: 'PDF, immagini, scansioni' },
 ];
 
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="border-b">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
-          <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold">MedLav</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
               <Link href="/login">Accedi</Link>
@@ -45,62 +87,208 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-        <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">
-          Cronistoria medico-legale
-          <span className="text-primary"> in pochi minuti</span>
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-          Carica la documentazione clinica del tuo caso. MedLav genera
-          automaticamente una cronistoria strutturata, pronta per le tue
-          relazioni peritali CTU, CTP e stragiudiziali.
-        </p>
-        <div className="mt-8 flex gap-4">
-          <Button size="lg" asChild>
-            <Link href="/register">
-              Inizia ora
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-          <Button size="lg" variant="outline" asChild>
-            <Link href="/login">Accedi</Link>
-          </Button>
+      <section className="relative overflow-hidden px-6 py-24 sm:py-32">
+        {/* Background grid pattern */}
+        <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-30" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-background via-background/80 to-background" />
+
+        <div className="mx-auto max-w-6xl">
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            {/* Left: copy */}
+            <div className="animate-fade-in">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Shield className="h-3 w-3" />
+                Dati sanitari protetti in Europa
+              </div>
+              <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                Cronistoria medico-legale{' '}
+                <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                  in pochi minuti
+                </span>
+              </h1>
+              <p className="mt-6 max-w-lg text-lg text-muted-foreground">
+                Carica la documentazione clinica del tuo caso. MedLav genera automaticamente
+                una cronistoria strutturata, pronta per le tue relazioni peritali CTU, CTP e stragiudiziali.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <Button size="lg" asChild>
+                  <Link href="/register">
+                    Inizia ora gratuitamente
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/login">Ho gia un account</Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Right: visual mockup */}
+            <div className="animate-fade-in-up hidden lg:block">
+              <div className="rounded-xl border bg-card p-6 shadow-lg">
+                <div className="mb-4 flex items-center gap-2">
+                  <div className="h-3 w-3 rounded-full bg-red-400" />
+                  <div className="h-3 w-3 rounded-full bg-yellow-400" />
+                  <div className="h-3 w-3 rounded-full bg-green-400" />
+                  <span className="ml-2 text-xs text-muted-foreground">MedLav - Caso #2024-0042</span>
+                </div>
+                {/* Mock document → cronistoria */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Input side */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documenti caricati</p>
+                    <div className="space-y-1.5">
+                      {['Cartella_clinica.pdf', 'RMN_referto.pdf', 'Esami_sangue.jpg'].map((name) => (
+                        <div key={name} className="flex items-center gap-2 rounded border bg-muted/50 px-2 py-1.5 text-xs">
+                          <FileText className="h-3 w-3 text-primary" />
+                          <span className="truncate">{name}</span>
+                          <span className="ml-auto text-green-500">&#10003;</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Output side */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cronistoria generata</p>
+                    <div className="space-y-1.5">
+                      {[
+                        { date: '15/03/2024', text: 'Ricovero ospedaliero' },
+                        { date: '16/03/2024', text: 'Intervento chirurgico' },
+                        { date: '22/03/2024', text: 'Dimissione + follow-up' },
+                      ].map((ev) => (
+                        <div key={ev.date} className="flex items-start gap-2 rounded border bg-muted/50 px-2 py-1.5 text-xs">
+                          <span className="shrink-0 font-mono text-primary">{ev.date}</span>
+                          <span>{ev.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2 rounded bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-700 dark:text-yellow-400">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span>1 anomalia rilevata: gap documentale post-operatorio</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="border-t bg-muted/30 px-6 py-20">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="mb-12 text-center text-2xl font-bold">
-            Come funziona
-          </h2>
+      {/* Come funziona */}
+      <section className="border-t bg-muted/30 px-6 py-20 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Come funziona</h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Tre semplici passaggi per trasformare documentazione clinica in una cronistoria strutturata.
+            </p>
+          </div>
           <div className="grid gap-8 md:grid-cols-3">
-            {features.map((feature) => (
+            {steps.map((step, index) => (
               <div
-                key={feature.title}
-                className="rounded-lg border bg-background p-6"
+                key={step.number}
+                className="animate-fade-in-up relative rounded-xl border bg-background p-8 text-center transition-shadow hover:shadow-md"
+                style={{ animationDelay: `${index * 150}ms` }}
               >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <feature.icon className="h-5 w-5 text-primary" />
+                <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                  <step.icon className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="mb-2 font-semibold">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {feature.description}
-                </p>
+                <div className="absolute -top-3 left-6 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  {step.number}
+                </div>
+                <h3 className="mb-3 text-lg font-semibold">{step.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* Features */}
+      <section className="px-6 py-20 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Tutto quello che ti serve
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Strumenti progettati specificamente per il medico legale.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature, index) => (
+              <div
+                key={feature.title}
+                className="animate-fade-in-up group rounded-xl border p-6 transition-all hover:border-primary/30 hover:shadow-sm"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary/20">
+                  <feature.icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="mb-2 font-semibold">{feature.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Social proof / Stats */}
+      <section className="border-t bg-muted/30 px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Risparmia tempo, riduci errori
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Un caso che richiede ore di lavoro manuale viene elaborato in pochi minuti.
+            </p>
+          </div>
+          <div className="grid gap-8 md:grid-cols-3">
+            {stats.map((stat) => (
+              <div key={stat.label} className="text-center">
+                <p className="text-4xl font-bold text-primary">{stat.value}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA finale */}
+      <section className="px-6 py-20 sm:py-24">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Pronto a velocizzare il tuo lavoro?
+          </h2>
+          <p className="mt-4 text-lg text-muted-foreground">
+            Registrati e carica il tuo primo caso. Nessuna carta di credito richiesta.
+          </p>
+          <div className="mt-8">
+            <Button size="lg" asChild className="px-8">
+              <Link href="/register">
+                Inizia ora
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="border-t px-6 py-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between text-sm text-muted-foreground">
+      <footer className="border-t bg-muted/20 px-6 py-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-muted-foreground sm:flex-row">
           <div className="flex items-center gap-2">
             <Scale className="h-4 w-4" />
-            <span>MedLav</span>
+            <span className="font-medium">MedLav</span>
           </div>
-          <span>Dati protetti in Europa</span>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              Conforme GDPR Art. 9
+            </span>
+            <span>Dati protetti in Europa (Francoforte)</span>
+          </div>
         </div>
       </footer>
     </div>

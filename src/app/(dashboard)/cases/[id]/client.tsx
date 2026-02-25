@@ -6,7 +6,7 @@ import {
   FileText, Image, FileSpreadsheet, File, Play,
   Loader2, AlertTriangle, ChevronDown, ChevronUp,
   FileWarning, Plus, Trash2, Save, X, Pencil, Filter,
-  Download,
+  Download, XCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { FileUpload } from '@/components/file-upload';
+import { ProcessingProgress } from '@/components/processing-progress';
 import { updateEvent, deleteEvent, addManualEvent, updateReportStatus } from '../../actions';
 
 // --- Types ---
@@ -197,6 +198,9 @@ export function CaseDetailClient({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
+  // Cancel state
+  const [isCancelling, setIsCancelling] = useState(false);
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> | null>(null);
@@ -270,6 +274,27 @@ export function CaseDetailClient({
       alert('Errore di rete.');
     } finally {
       setIsRegenerating(false);
+    }
+  }, [caseId, router]);
+
+  const handleCancel = useCallback(async () => {
+    if (!confirm('Annullare l\'elaborazione in corso? I documenti non ancora completati verranno segnati come errore.')) return;
+    setIsCancelling(true);
+    try {
+      const response = await fetch('/api/processing/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseId }),
+      });
+      const result = await response.json() as { success: boolean; error?: string };
+      if (!result.success) {
+        alert(result.error ?? 'Errore durante l\'annullamento');
+      }
+      router.refresh();
+    } catch {
+      alert('Errore di rete.');
+    } finally {
+      setIsCancelling(false);
     }
   }, [caseId, router]);
 
@@ -355,28 +380,47 @@ export function CaseDetailClient({
       {(hasUploadedDocs || hasProcessingDocs) && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                {hasProcessingDocs ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Elaborazione in corso... La pagina si aggiorna automaticamente.
-                  </div>
-                ) : (
+            {hasProcessingDocs ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Elaborazione in corso</p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleCancel}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling ? (
+                      <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Annullamento...</>
+                    ) : (
+                      <><XCircle className="mr-2 h-3 w-3" />Annulla elaborazione</>
+                    )}
+                  </Button>
+                </div>
+                <ProcessingProgress
+                  documents={initialDocuments.filter(
+                    (d) => !['caricato'].includes(d.processing_status),
+                  )}
+                />
+                <p className="text-xs text-muted-foreground">La pagina si aggiorna automaticamente.</p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
                   <p className="text-sm text-muted-foreground">
                     {initialDocuments.filter((d) => d.processing_status === 'caricato').length} documenti pronti per l&apos;elaborazione.
                   </p>
-                )}
-                {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
+                  {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
+                </div>
+                <Button onClick={handleStartProcessing} disabled={isProcessing || !hasUploadedDocs}>
+                  {isProcessing ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Avvio...</>
+                  ) : (
+                    <><Play className="mr-2 h-4 w-4" />Avvia Elaborazione</>
+                  )}
+                </Button>
               </div>
-              <Button onClick={handleStartProcessing} disabled={isProcessing || hasProcessingDocs || !hasUploadedDocs}>
-                {isProcessing || hasProcessingDocs ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Elaborazione...</>
-                ) : (
-                  <><Play className="mr-2 h-4 w-4" />Avvia Elaborazione</>
-                )}
-              </Button>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
