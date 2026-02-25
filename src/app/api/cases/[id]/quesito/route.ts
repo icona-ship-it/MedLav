@@ -4,6 +4,8 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
 import { z } from 'zod';
 
+export const maxDuration = 60;
+
 const requestSchema = z.object({
   quesito: z.string().min(10, 'Quesito troppo corto'),
 });

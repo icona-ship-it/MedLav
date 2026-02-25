@@ -4,6 +4,8 @@ import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
+export const maxDuration = 30;
+
 const requestSchema = z.object({
   caseId: z.string().uuid(),
 });

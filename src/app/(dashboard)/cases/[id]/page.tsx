@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
 import { FileText, AlertTriangle, Clock } from 'lucide-react';
+
+export const maxDuration = 30;
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';

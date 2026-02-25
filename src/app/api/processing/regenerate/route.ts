@@ -10,6 +10,8 @@ import type { CaseType } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
+export const maxDuration = 60;
+
 const requestSchema = z.object({
   caseId: z.string().uuid(),
 });
