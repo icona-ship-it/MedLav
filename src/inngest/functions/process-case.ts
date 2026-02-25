@@ -2,7 +2,7 @@ import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
-import { extractEventsWithDualPass } from '@/services/extraction/dual-pass-extraction';
+import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
 import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
 import { consolidateNewWithExisting } from '@/services/consolidation/event-consolidator';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
@@ -10,13 +10,10 @@ import { validateExtractedEvents } from '@/services/validation/event-validator';
 import { verifySourceTexts } from '@/services/validation/source-text-verifier';
 import { analyzeCoverage } from '@/services/validation/coverage-analyzer';
 import type { CoverageResult } from '@/services/validation/coverage-analyzer';
-import { reviewExtraction } from '@/services/extraction/extraction-reviewer';
-import type { ReviewCorrection } from '@/services/extraction/extraction-reviewer';
 import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
-import type { ExtractedEvent } from '@/services/extraction/extraction-schemas';
 import type { CaseType } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 
@@ -278,14 +275,16 @@ export const processCaseDocuments = inngest.createFunction(
           .eq('id', ocrResult.documentId);
 
         try {
-          const dualPassResult = await extractEventsWithDualPass({
+          // Single-pass extraction (cost-efficient: 1 LLM call instead of 3)
+          const extractionResult = await extractEventsFromDocument({
             documentText: ocrResult.fullText,
             fileName: ocrResult.fileName,
             documentType: ocrResult.documentType,
             caseType: metadata.caseType,
+            temperature: 0.1,
           });
 
-          const { events: validatedEvents, issues } = validateExtractedEvents(dualPassResult.events);
+          const { events: validatedEvents, issues } = validateExtractedEvents(extractionResult.events);
           if (issues.length > 0) {
             console.log(`[pipeline] Step 3: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
           }
@@ -293,38 +292,11 @@ export const processCaseDocuments = inngest.createFunction(
           const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
           const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
 
-          let reviewedEvents = verificationResult.events;
-          try {
-            const reviewResult = await reviewExtraction({
-              events: verificationResult.events,
-              fullText: ocrResult.fullText,
-              caseType: metadata.caseType,
-            });
-            if (reviewResult.missingEvents.length > 0) {
-              reviewedEvents = [...reviewedEvents, ...reviewResult.missingEvents];
-            }
-            if (reviewResult.corrections.length > 0) {
-              reviewedEvents = applyReviewCorrections(reviewedEvents, reviewResult.corrections);
-            }
-          } catch (reviewError) {
-            const msg = reviewError instanceof Error ? reviewError.message : 'Review failed';
-            console.error(`[pipeline] Step 3: LLM review failed (non-fatal) for doc ${ocrResult.documentId}: ${msg}`);
-          }
-
-          const passMap = new Map<string, string>();
-          for (const dpEvent of dualPassResult.events) {
-            const key = `${dpEvent.eventDate}|${dpEvent.eventType}|${dpEvent.title}`;
-            passMap.set(key, dpEvent.extractionPass);
-          }
-
-          const eventsWithMeta: ExtractedEventWithMeta[] = reviewedEvents.map((event) => {
-            const key = `${event.eventDate}|${event.eventType}|${event.title}`;
-            return {
-              ...event,
-              extractionPass: (passMap.get(key) ?? 'pass2_only') as DualPassEvent['extractionPass'],
-              documentId: ocrResult.documentId,
-            };
-          });
+          const eventsWithMeta: ExtractedEventWithMeta[] = verificationResult.events.map((event) => ({
+            ...event,
+            extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
+            documentId: ocrResult.documentId,
+          }));
 
           console.log(`[pipeline] Step 3: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%)`);
 
@@ -703,33 +675,3 @@ export const processCaseDocuments = inngest.createFunction(
   },
 );
 
-/**
- * Apply review corrections to events. Only modifies whitelisted fields.
- * Creates new event objects (immutable).
- */
-function applyReviewCorrections(
-  events: ExtractedEvent[],
-  corrections: ReviewCorrection[],
-): ExtractedEvent[] {
-  const correctionsByIndex = new Map<number, ReviewCorrection[]>();
-  for (const c of corrections) {
-    const existing = correctionsByIndex.get(c.eventIndex) ?? [];
-    existing.push(c);
-    correctionsByIndex.set(c.eventIndex, existing);
-  }
-
-  return events.map((event, i) => {
-    const eventCorrections = correctionsByIndex.get(i);
-    if (!eventCorrections) return event;
-
-    let corrected = { ...event };
-    for (const c of eventCorrections) {
-      // Verify old value matches before applying
-      const currentValue = corrected[c.field as keyof ExtractedEvent];
-      if (String(currentValue ?? '') === c.oldValue) {
-        corrected = { ...corrected, [c.field]: c.newValue };
-      }
-    }
-    return corrected;
-  });
-}

@@ -36,9 +36,9 @@ export function consolidateEvents(
 
   // Sort chronologically, then by event type for same-date events
   allEvents.sort((a, b) => {
-    const dateCompare = a.eventDate.localeCompare(b.eventDate);
+    const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
-    return a.eventType.localeCompare(b.eventType);
+    return (a.eventType ?? '').localeCompare(b.eventType ?? '');
   });
 
   // Detect duplicates/discrepancies across documents
@@ -236,9 +236,9 @@ export function consolidateNewWithExisting(
 
   // Combine all events and sort chronologically for full-case analysis
   const allEvents = [...existingEvents, ...newEventsToInsert].sort((a, b) => {
-    const dateCompare = a.eventDate.localeCompare(b.eventDate);
+    const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
-    return a.eventType.localeCompare(b.eventType);
+    return (a.eventType ?? '').localeCompare(b.eventType ?? '');
   });
 
   return { newEventsToInsert, allEvents };
