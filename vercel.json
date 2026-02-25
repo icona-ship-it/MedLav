@@ -1,3 +1,21 @@
 {
-  "regions": ["fra1"]
+  "regions": ["fra1"],
+  "functions": {
+    "app/**": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/inngest/**": {
+      "memory": 1024,
+      "maxDuration": 300
+    },
+    "app/api/processing/regenerate/**": {
+      "memory": 1024,
+      "maxDuration": 120
+    },
+    "app/api/cases/*/quesito/**": {
+      "memory": 1024,
+      "maxDuration": 120
+    }
+  }
 }
