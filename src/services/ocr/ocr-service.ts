@@ -1,4 +1,4 @@
-import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-types';
 
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
@@ -131,14 +131,17 @@ async function ocrPdf(params: {
   const { documentId, fileName, signedUrl } = params;
   const client = getMistralClient();
 
-  const response = await client.ocr.process({
-    model: MISTRAL_MODELS.OCR,
-    document: {
-      type: 'document_url',
-      documentUrl: signedUrl,
-    },
-    includeImageBase64: true,
-  });
+  const response = await withMistralRetry(
+    () => client.ocr.process({
+      model: MISTRAL_MODELS.OCR,
+      document: {
+        type: 'document_url',
+        documentUrl: signedUrl,
+      },
+      includeImageBase64: true,
+    }),
+    'ocr-pdf',
+  );
 
   return mapOcrResponseToResult({
     documentId,
@@ -159,14 +162,17 @@ async function ocrImage(params: {
   const { documentId, fileName, signedUrl } = params;
   const client = getMistralClient();
 
-  const response = await client.ocr.process({
-    model: MISTRAL_MODELS.OCR,
-    document: {
-      type: 'image_url',
-      imageUrl: signedUrl,
-    },
-    includeImageBase64: true,
-  });
+  const response = await withMistralRetry(
+    () => client.ocr.process({
+      model: MISTRAL_MODELS.OCR,
+      document: {
+        type: 'image_url',
+        imageUrl: signedUrl,
+      },
+      includeImageBase64: true,
+    }),
+    'ocr-image',
+  );
 
   return mapOcrResponseToResult({
     documentId,
@@ -186,14 +192,17 @@ async function ocrDocx(params: {
   const { documentId, fileName, signedUrl } = params;
   const client = getMistralClient();
 
-  const response = await client.ocr.process({
-    model: MISTRAL_MODELS.OCR,
-    document: {
-      type: 'document_url',
-      documentUrl: signedUrl,
-    },
-    includeImageBase64: true,
-  });
+  const response = await withMistralRetry(
+    () => client.ocr.process({
+      model: MISTRAL_MODELS.OCR,
+      document: {
+        type: 'document_url',
+        documentUrl: signedUrl,
+      },
+      includeImageBase64: true,
+    }),
+    'ocr-docx',
+  );
 
   return mapOcrResponseToResult({
     documentId,

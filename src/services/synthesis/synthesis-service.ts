@@ -1,4 +1,4 @@
-import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import { buildSynthesisSystemPrompt, buildSynthesisUserPrompt } from './synthesis-prompts';
 import type { CaseType } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -24,21 +24,24 @@ export async function generateSynthesis(params: {
 }): Promise<SynthesisResult> {
   const client = getMistralClient();
 
-  const response = await client.chat.complete({
-    model: MISTRAL_MODELS.MISTRAL_LARGE,
-    messages: [
-      {
-        role: 'system',
-        content: buildSynthesisSystemPrompt(),
-      },
-      {
-        role: 'user',
-        content: buildSynthesisUserPrompt(params),
-      },
-    ],
-    temperature: 0.3,
-    maxTokens: 4096,
-  });
+  const response = await withMistralRetry(
+    () => client.chat.complete({
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      messages: [
+        {
+          role: 'system',
+          content: buildSynthesisSystemPrompt(),
+        },
+        {
+          role: 'user',
+          content: buildSynthesisUserPrompt(params),
+        },
+      ],
+      temperature: 0.3,
+      maxTokens: 4096,
+    }),
+    'synthesis',
+  );
 
   const synthesis = extractResponseContent(response);
   const wordCount = synthesis.split(/\s+/).filter((w) => w.length > 0).length;

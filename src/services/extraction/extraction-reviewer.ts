@@ -6,7 +6,7 @@
  * Non-fatal: if it fails, the pipeline continues with existing events.
  */
 
-import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import { CASE_TYPE_GUIDANCE } from './extraction-prompts';
 import type { ExtractedEvent } from './extraction-schemas';
 import type { CaseType } from '@/types';
@@ -77,15 +77,18 @@ export async function reviewExtraction(params: {
     const systemPrompt = buildReviewSystemPrompt(caseType);
     const userPrompt = buildReviewUserPrompt(events, fullText);
 
-    const response = await client.chat.complete({
-      model: MISTRAL_MODELS.MISTRAL_LARGE,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      responseFormat: { type: 'json_object' },
-      temperature: 0.0,
-    });
+    const response = await withMistralRetry(
+      () => client.chat.complete({
+        model: MISTRAL_MODELS.MISTRAL_LARGE,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        responseFormat: { type: 'json_object' },
+        temperature: 0.0,
+      }),
+      'review',
+    );
 
     const content = extractResponseContent(response);
     return parseReviewResponse(content, events.length);

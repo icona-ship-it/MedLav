@@ -1,4 +1,4 @@
-import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import { extractionResponseSchema, extractionJsonSchema } from './extraction-schemas';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
@@ -55,27 +55,30 @@ async function extractFromSingleChunk(
   const { documentText, fileName, documentType, caseType, temperature = 0.1 } = params;
   const client = getMistralClient();
 
-  const response = await client.chat.complete({
-    model: MISTRAL_MODELS.MISTRAL_LARGE,
-    messages: [
-      {
-        role: 'system',
-        content: buildExtractionSystemPrompt(caseType),
+  const response = await withMistralRetry(
+    () => client.chat.complete({
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      messages: [
+        {
+          role: 'system',
+          content: buildExtractionSystemPrompt(caseType),
+        },
+        {
+          role: 'user',
+          content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
+        },
+      ],
+      responseFormat: {
+        type: 'json_schema',
+        jsonSchema: {
+          name: 'extraction_response',
+          schemaDefinition: extractionJsonSchema,
+        },
       },
-      {
-        role: 'user',
-        content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
-      },
-    ],
-    responseFormat: {
-      type: 'json_schema',
-      jsonSchema: {
-        name: 'extraction_response',
-        schemaDefinition: extractionJsonSchema,
-      },
-    },
-    temperature,
-  });
+      temperature,
+    }),
+    'extraction',
+  );
 
   const content = extractResponseContent(response);
   return parseExtractionResponse(content);
