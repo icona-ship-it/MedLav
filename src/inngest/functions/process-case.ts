@@ -29,6 +29,8 @@ interface DocumentInfo {
 /**
  * Main Inngest function that orchestrates the document processing pipeline.
  * Each step is independently retryable.
+ * IMPORTANT: createAdminClient() must be called inside each step because
+ * Inngest re-executes steps independently and closures are not preserved.
  *
  * Pipeline: fetch metadata → OCR docs → extract events → consolidate →
  *           detect anomalies → detect missing docs → generate synthesis → finalize
@@ -45,10 +47,13 @@ export const processCaseDocuments = inngest.createFunction(
   { event: 'case/process.requested' },
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
-    const supabase = createAdminClient();
 
     // Step 1: Fetch case metadata and documents list
     const caseData = await step.run('fetch-case-metadata', async () => {
+      const supabase = createAdminClient();
+
+      console.log(`[pipeline] Step 1: Fetching case metadata for case ${caseId}`);
+
       const { data: caseRow, error: caseError } = await supabase
         .from('cases')
         .select('id, case_type, case_role, patient_initials, user_id')
@@ -56,7 +61,7 @@ export const processCaseDocuments = inngest.createFunction(
         .single();
 
       if (caseError || !caseRow) {
-        throw new Error(`Case not found: ${caseId}`);
+        throw new Error(`Case not found: ${caseId} - error: ${caseError?.message ?? 'no data'}`);
       }
 
       // Verify ownership
@@ -74,13 +79,19 @@ export const processCaseDocuments = inngest.createFunction(
         throw new Error(`Failed to fetch documents: ${docsError.message}`);
       }
 
+      console.log(`[pipeline] Step 1: Found ${(docs ?? []).length} documents to process`);
+
       // Mark all documents as in_coda
       const docIds = (docs ?? []).map((d) => d.id);
       if (docIds.length > 0) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('documents')
           .update({ processing_status: 'in_coda', updated_at: new Date().toISOString() })
           .in('id', docIds);
+
+        if (updateError) {
+          console.error(`[pipeline] Step 1: Failed to update doc status: ${updateError.message}`);
+        }
       }
 
       return {
@@ -107,9 +118,12 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2: OCR each document (one step per document for independent retries)
+    // Step 2: OCR each document
     const ocrResults = await step.run('ocr-all-documents', async () => {
+      const supabase = createAdminClient();
       const results = [];
+
+      console.log(`[pipeline] Step 2: Starting OCR for ${documents.length} documents`);
 
       for (const doc of documents) {
         // Update status to ocr_in_corso
@@ -121,6 +135,8 @@ export const processCaseDocuments = inngest.createFunction(
         try {
           // Generate fresh signed URL for this document
           const signedUrl = await getSignedUrl(doc.storagePath);
+
+          console.log(`[pipeline] Step 2: OCR processing doc ${doc.id} (${doc.fileName})`);
 
           const ocrResult = await ocrDocument({
             documentId: doc.id,
@@ -160,6 +176,8 @@ export const processCaseDocuments = inngest.createFunction(
             pageCount: ocrResult.pageCount,
             averageConfidence: ocrResult.averageConfidence,
           });
+
+          console.log(`[pipeline] Step 2: OCR completed for doc ${doc.id} - ${ocrResult.pageCount} pages`);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'OCR failed';
           await supabase
@@ -185,7 +203,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 3: Extract events from each document
     const extractionResults = await step.run('extract-events-all', async () => {
+      const supabase = createAdminClient();
       const results: Array<{ documentId: string; events: ExtractedEvent[] }> = [];
+
+      console.log(`[pipeline] Step 3: Extracting events from ${ocrResults.length} documents`);
 
       for (const ocrResult of ocrResults) {
         // Update status
@@ -209,6 +230,8 @@ export const processCaseDocuments = inngest.createFunction(
             documentId: ocrResult.documentId,
             events: extraction.events,
           });
+
+          console.log(`[pipeline] Step 3: Extracted ${extraction.events.length} events from doc ${ocrResult.documentId}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Extraction failed';
           await supabase
@@ -229,7 +252,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 4: Consolidate events across all documents
     const consolidatedEvents = await step.run('consolidate-events', async () => {
+      const supabase = createAdminClient();
       const consolidated = consolidateEvents(extractionResults);
+
+      console.log(`[pipeline] Step 4: Consolidated ${consolidated.length} events`);
 
       // Save all events to database
       if (consolidated.length > 0) {
@@ -270,7 +296,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 5: Detect anomalies
     const anomalies = await step.run('detect-anomalies', async () => {
+      const supabase = createAdminClient();
       const detected = detectAnomalies(consolidatedEvents);
+
+      console.log(`[pipeline] Step 5: Detected ${detected.length} anomalies`);
 
       // Save anomalies to database
       if (detected.length > 0) {
@@ -291,12 +320,15 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 6: Detect missing documents
     const missingDocs = await step.run('detect-missing-documents', async () => {
+      const supabase = createAdminClient();
       const uploadedDocTypes = documents.map((d) => d.documentType);
       const missing = detectMissingDocuments({
         events: consolidatedEvents,
         caseType: metadata.caseType,
         uploadedDocTypes,
       });
+
+      console.log(`[pipeline] Step 6: Detected ${missing.length} missing documents`);
 
       // Save missing documents to database
       if (missing.length > 0) {
@@ -315,6 +347,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 7: Generate synthesis
     const synthesisResult = await step.run('generate-synthesis', async () => {
+      const supabase = createAdminClient();
+
+      console.log(`[pipeline] Step 7: Generating synthesis`);
+
       const result = await generateSynthesis({
         caseType: metadata.caseType,
         caseRole: metadata.caseRole,
@@ -341,6 +377,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Step 8: Finalize - mark everything as completed
     await step.run('finalize', async () => {
+      const supabase = createAdminClient();
+
+      console.log(`[pipeline] Step 8: Finalizing`);
+
       // Mark all processed documents as completed
       for (const docResult of extractionResults) {
         await supabase
