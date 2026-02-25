@@ -5,29 +5,6 @@ import {
   getRecentCompletions,
 } from './actions';
 
-function formatDuration(startIso: string, endIso: string): string {
-  const start = new Date(startIso).getTime();
-  const end = new Date(endIso).getTime();
-  const diffMs = end - start;
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
-function timeAgo(isoDate: string): string {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `${seconds}s fa`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m fa`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h fa`;
-  const days = Math.floor(hours / 24);
-  return `${days}g fa`;
-}
-
 const statusLabels: Record<string, string> = {
   in_coda: 'In coda',
   ocr_in_corso: 'OCR in corso',
@@ -45,8 +22,6 @@ export default async function AdminDashboardPage() {
     getRecentErrors(),
     getRecentCompletions(),
   ]);
-
-  const now = Date.now();
 
   return (
     <div className="space-y-8">
@@ -80,31 +55,27 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {processing.map((doc) => {
-                  const elapsedMs = now - new Date(doc.updated_at).getTime();
-                  const isStuck = elapsedMs > 5 * 60 * 1000;
-                  return (
-                    <tr key={doc.id} className={isStuck ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
-                      <td className="px-4 py-2 font-mono text-xs">{doc.caseCode}</td>
-                      <td className="max-w-48 truncate px-4 py-2">{doc.file_name}</td>
-                      <td className="px-4 py-2">
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                          {statusLabels[doc.processing_status] ?? doc.processing_status}
+                {processing.map((doc) => (
+                  <tr key={doc.id} className={doc.isStuck ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
+                    <td className="px-4 py-2 font-mono text-xs">{doc.caseCode}</td>
+                    <td className="max-w-48 truncate px-4 py-2">{doc.file_name}</td>
+                    <td className="px-4 py-2">
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                        {statusLabels[doc.processing_status] ?? doc.processing_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">{doc.lastUpdateAgo}</td>
+                    <td className="px-4 py-2">
+                      {doc.isStuck ? (
+                        <span className="font-medium text-orange-600 dark:text-orange-400">
+                          {doc.elapsedLabel}
                         </span>
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">{timeAgo(doc.updated_at)}</td>
-                      <td className="px-4 py-2">
-                        {isStuck ? (
-                          <span className="font-medium text-orange-600 dark:text-orange-400">
-                            {formatDuration(doc.updated_at, new Date().toISOString())} - Potenzialmente bloccato
-                          </span>
-                        ) : (
-                          formatDuration(doc.created_at, new Date().toISOString())
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                      ) : (
+                        doc.elapsedLabel
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -137,7 +108,7 @@ export default async function AdminDashboardPage() {
                     <td className="max-w-72 truncate px-4 py-2 text-red-600 dark:text-red-400">
                       {doc.processing_error ?? 'Errore sconosciuto'}
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground">{timeAgo(doc.updated_at)}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{doc.updatedAgo}</td>
                   </tr>
                 ))}
               </tbody>
@@ -167,8 +138,8 @@ export default async function AdminDashboardPage() {
                   <tr key={doc.id}>
                     <td className="px-4 py-2 font-mono text-xs">{doc.caseCode}</td>
                     <td className="max-w-48 truncate px-4 py-2">{doc.file_name}</td>
-                    <td className="px-4 py-2">{formatDuration(doc.created_at, doc.updated_at)}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{timeAgo(doc.updated_at)}</td>
+                    <td className="px-4 py-2">{doc.durationLabel}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{doc.completedAgo}</td>
                   </tr>
                 ))}
               </tbody>
