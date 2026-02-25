@@ -100,10 +100,10 @@ export async function reviewExtraction(params: {
  * Build the system prompt for the review step.
  */
 function buildReviewSystemPrompt(caseType: CaseType): string {
-  return `Sei un revisore medico-legale esperto. Il tuo compito e VERIFICARE l'estrazione di eventi clinici gia effettuata.
+  return `Sei un revisore medico-legale esperto. Il tuo compito è VERIFICARE l'estrazione di eventi clinici già effettuata.
 
 ## IL TUO RUOLO
-Ricevi una lista di eventi gia estratti da un documento medico e il testo originale del documento.
+Ricevi una lista di eventi già estratti da un documento medico e il testo originale del documento.
 Devi trovare:
 1. **Eventi MANCANTI**: informazioni cliniche presenti nel testo ma non estratte
 2. **Errori nei dati estratti**: date errate, diagnosi incomplete, nomi sbagliati, strutture errate
@@ -112,7 +112,7 @@ Devi trovare:
 - Cerca SOLO eventi clinici significativi mancanti, non dettagli minori
 - Per ogni evento mancante, fornisci sourceText (porzione esatta dal testo OCR) e sourcePages
 - Per le correzioni, modifica SOLO questi campi: diagnosis, doctor, facility, eventDate, datePrecision
-- NON duplicare eventi gia presenti — se un evento e gia estratto, non aggiungerlo come mancante
+- NON duplicare eventi già presenti — se un evento è già estratto, non aggiungerlo come mancante
 - Se non trovi nulla da aggiungere o correggere, restituisci arrays vuoti
 
 ## GUIDA SPECIFICA

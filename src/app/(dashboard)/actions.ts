@@ -94,6 +94,9 @@ export async function getCase(caseId: string) {
 export async function getCaseDocuments(caseId: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data } = await supabase
     .from('documents')
     .select('*')
@@ -159,6 +162,9 @@ export async function saveDocumentMetadata(params: {
 export async function updateCaseDocumentCount(caseId: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
   const { count } = await supabase
     .from('documents')
     .select('*', { count: 'exact', head: true })
@@ -176,6 +182,9 @@ export async function updateCaseDocumentCount(caseId: string) {
 export async function getCaseEvents(caseId: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data } = await supabase
     .from('events')
     .select('*')
@@ -192,6 +201,9 @@ export async function getCaseEvents(caseId: string) {
 export async function getCaseAnomalies(caseId: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data } = await supabase
     .from('anomalies')
     .select('*')
@@ -207,6 +219,9 @@ export async function getCaseAnomalies(caseId: string) {
 export async function getCaseMissingDocs(caseId: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data } = await supabase
     .from('missing_documents')
     .select('*')
@@ -221,6 +236,9 @@ export async function getCaseMissingDocs(caseId: string) {
  */
 export async function getCaseReport(caseId: string) {
   const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
 
   const { data } = await supabase
     .from('reports')

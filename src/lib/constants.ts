@@ -6,13 +6,13 @@
 // --- Case Types ---
 
 export const CASE_TYPES = [
-  { value: 'ortopedica', label: 'Malasanita Ortopedica' },
+  { value: 'ortopedica', label: 'Malasanità Ortopedica' },
   { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
   { value: 'ostetrica', label: 'Errore Ostetrico' },
   { value: 'anestesiologica', label: 'Errore Anestesiologico' },
   { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
   { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
-  { value: 'generica', label: 'Responsabilita Professionale Generica' },
+  { value: 'generica', label: 'Responsabilità Professionale Generica' },
 ] as const;
 
 export const caseTypeLabels: Record<string, string> = Object.fromEntries(
@@ -97,7 +97,7 @@ export const processingLabels: Record<string, string> = {
   in_coda: 'In attesa',
   ocr_in_corso: 'Lettura documenti',
   estrazione_in_corso: 'Analisi contenuto',
-  validazione_in_corso: 'Controllo qualita',
+  validazione_in_corso: 'Controllo qualità',
   completato: 'Completato',
   errore: 'Errore',
 };

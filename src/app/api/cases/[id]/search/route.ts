@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 interface SearchResult {
   type: 'event' | 'page';
@@ -12,6 +14,16 @@ interface SearchResult {
 
 const CONTEXT_CHARS = 100;
 
+const uuidSchema = z.string().uuid();
+
+/**
+ * Sanitize search query to prevent PostgREST filter injection.
+ * Strips characters that have special meaning in PostgREST filter syntax.
+ */
+function sanitizeSearchQuery(query: string): string {
+  return query.replace(/[,.()\[\]{}\\%_]/g, ' ').trim();
+}
+
 /**
  * GET /api/cases/[id]/search?q=termine
  * Full-text search across OCR pages and extracted events.
@@ -21,9 +33,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: caseId } = await params;
-  const query = request.nextUrl.searchParams.get('q')?.trim();
 
-  if (!query || query.length < 2) {
+  // Validate caseId is a valid UUID
+  const caseIdResult = uuidSchema.safeParse(caseId);
+  if (!caseIdResult.success) {
+    return NextResponse.json({ success: false, error: 'ID caso non valido' }, { status: 400 });
+  }
+
+  const rawQuery = request.nextUrl.searchParams.get('q')?.trim();
+
+  if (!rawQuery || rawQuery.length < 2) {
     return NextResponse.json({ success: false, error: 'Query troppo corta (min 2 caratteri)' }, { status: 400 });
   }
 
@@ -32,6 +51,18 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  // Rate limiting per user
+  const rateLimitResult = checkRateLimit({
+    key: `search:${user.id}`,
+    ...RATE_LIMITS.API,
+  });
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { success: false, error: 'Troppe richieste. Riprova tra poco.' },
+      { status: 429 },
+    );
   }
 
   // Verify case ownership
@@ -44,6 +75,13 @@ export async function GET(
 
   if (!caseData) {
     return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
+  }
+
+  // Sanitize query to prevent PostgREST filter injection
+  const query = sanitizeSearchQuery(rawQuery);
+
+  if (!query || query.length < 2) {
+    return NextResponse.json({ success: false, error: 'Query troppo corta (min 2 caratteri)' }, { status: 400 });
   }
 
   const results: SearchResult[] = [];

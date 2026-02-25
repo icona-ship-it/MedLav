@@ -21,10 +21,10 @@ export const extractedEventSchema = z.object({
   diagnosis: z.string().nullable().optional().describe('Diagnosi associata se presente'),
   doctor: z.string().nullable().optional().describe('Nome del medico/specialista'),
   facility: z.string().nullable().optional().describe('Struttura sanitaria'),
-  confidence: z.number().min(0).max(100).describe('Affidabilita estrazione 0-100'),
+  confidence: z.number().min(0).max(100).describe('Affidabilità estrazione 0-100'),
   requiresVerification: z.boolean().describe('True se necessita revisione manuale'),
-  reliabilityNotes: z.string().nullable().optional().describe('Spiegazione se affidabilita bassa'),
-  sourceText: z.string().min(5).describe('Porzione esatta del testo OCR originale da cui questo evento e stato estratto'),
+  reliabilityNotes: z.string().nullable().optional().describe('Spiegazione se affidabilità bassa'),
+  sourceText: z.string().min(5).describe('Porzione esatta del testo OCR originale da cui questo evento è stato estratto'),
   sourcePages: z.array(z.number().int().positive()).min(1).describe('Numeri delle pagine sorgente del documento da cui proviene questo evento'),
 });
 

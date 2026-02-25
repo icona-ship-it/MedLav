@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getMistralClient, MISTRAL_MODELS } from '@/lib/mistral/client';
 import { z } from 'zod';
 
@@ -63,6 +64,11 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    const rateCheck = checkRateLimit({ key: `quesito:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
     }
 
     const body = await request.json() as unknown;

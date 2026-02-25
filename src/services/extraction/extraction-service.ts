@@ -29,12 +29,12 @@ interface PageBlock {
 export async function extractEventsFromDocument(
   params: ExtractionParams,
 ): Promise<ExtractionResponse> {
-  const { documentText, fileName } = params;
+  const { documentText } = params;
 
   // Pre-process: annotate tables before chunking
   const { annotatedText, tableCount } = annotateTablesInText(documentText);
   if (tableCount > 0) {
-    console.log(`[extraction] Annotated ${tableCount} tables in ${fileName}`);
+    console.log(`[extraction] Annotated ${tableCount} tables in document`);
   }
 
   const processedParams = { ...params, documentText: annotatedText };

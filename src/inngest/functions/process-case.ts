@@ -154,7 +154,7 @@ export const processCaseDocuments = inngest.createFunction(
           // Generate fresh signed URL for this document
           const signedUrl = await getSignedUrl(doc.storagePath);
 
-          console.log(`[pipeline] Step 2: OCR processing doc ${doc.id} (${doc.fileName})`);
+          console.log(`[pipeline] Step 2: OCR processing doc ${doc.id}`);
 
           const ocrResult = await ocrDocument({
             documentId: doc.id,

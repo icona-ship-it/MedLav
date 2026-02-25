@@ -110,7 +110,7 @@ export default function SettingsPage() {
                 className="bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                L&apos;email non puo essere modificata
+                L&apos;email non può essere modificata
               </p>
             </div>
             <div className="space-y-2">

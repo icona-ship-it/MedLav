@@ -28,12 +28,12 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
   reason: string;
 }>> = {
   ortopedica: [
-    { name: 'Consenso informato chirurgico', check: 'hasConsenso', reason: 'Obbligatorio per ogni intervento chirurgico ortopedico ai fini della validita del consenso prestato' },
+    { name: 'Consenso informato chirurgico', check: 'hasConsenso', reason: 'Obbligatorio per ogni intervento chirurgico ortopedico ai fini della validità del consenso prestato' },
     { name: 'Descrizione operatoria', check: 'hasDescrizioneOperatoria', reason: 'Essenziale per la valutazione della tecnica chirurgica e della correttezza dell\'atto operatorio' },
     { name: 'Cartella anestesiologica', check: 'hasCartellaAnestesiologica', reason: 'Necessaria per valutare la gestione anestesiologica e i parametri vitali intraoperatori' },
     { name: 'Lettera di dimissione', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per la diagnosi finale e le indicazioni terapeutiche alla dimissione' },
     { name: 'Follow-up post-operatorio', check: 'hasFollowUpPostOp', reason: 'Controlli post-chirurgici essenziali per documentare il decorso e gli esiti' },
-    { name: 'Esami pre-operatori', check: 'hasEsamiPreOp', reason: 'Necessari per valutare l\'idoneita all\'intervento e le condizioni cliniche basali' },
+    { name: 'Esami pre-operatori', check: 'hasEsamiPreOp', reason: 'Necessari per valutare l\'idoneità all\'intervento e le condizioni cliniche basali' },
     { name: 'Imaging pre e post operatorio (RX/TC/RM)', check: 'hasFollowUpPostOp', reason: 'Fondamentale per confrontare le condizioni anatomiche prima e dopo l\'intervento' },
   ],
   oncologica: [
@@ -56,7 +56,7 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
     { name: 'Consenso informato per anestesia', check: 'hasConsenso', reason: 'Obbligatorio per informare il paziente sui rischi specifici dell\'anestesia' },
   ],
   infezione_nosocomiale: [
-    { name: 'Esami colturali e antibiogrammi', check: 'hasEsamiPreOp', reason: 'Essenziali per identificare il patogeno e la sensibilita antibiotica' },
+    { name: 'Esami colturali e antibiogrammi', check: 'hasEsamiPreOp', reason: 'Essenziali per identificare il patogeno e la sensibilità antibiotica' },
     { name: 'Diario clinico del ricovero', check: 'hasDiarioClinico', reason: 'Necessario per documentare l\'insorgenza e l\'evoluzione dell\'infezione' },
     { name: 'Terapia antibiotica documentata', check: 'hasFollowUpPostOp', reason: 'Fondamentale per valutare l\'adeguatezza del trattamento' },
     { name: 'Lettera di dimissione', check: 'hasLetteraDimissione', reason: 'Necessaria per la diagnosi finale comprensiva dell\'infezione' },

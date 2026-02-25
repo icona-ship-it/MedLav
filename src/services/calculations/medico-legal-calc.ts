@@ -159,7 +159,7 @@ function calculateITT(events: CalcEvent[]): MedicoLegalCalculation {
   }
 
   return {
-    label: 'Invalidita Temporanea Totale (ITT) stimata',
+    label: 'Invalidità Temporanea Totale (ITT) stimata',
     value: totalDays > 0 ? `${totalDays} giorni` : 'Non calcolabile',
     days: totalDays || null,
     startDate,
@@ -181,7 +181,7 @@ function calculateITP(events: CalcEvent[]): MedicoLegalCalculation {
   if (lastDischarge && lastFollowUp && lastFollowUp.event_date > lastDischarge.event_date) {
     const days = daysDiff(lastDischarge.event_date, lastFollowUp.event_date);
     return {
-      label: 'Invalidita Temporanea Parziale (ITP) stimata',
+      label: 'Invalidità Temporanea Parziale (ITP) stimata',
       value: `${days} giorni`,
       days,
       startDate: lastDischarge.event_date,
@@ -191,7 +191,7 @@ function calculateITP(events: CalcEvent[]): MedicoLegalCalculation {
   }
 
   return {
-    label: 'Invalidita Temporanea Parziale (ITP) stimata',
+    label: 'Invalidità Temporanea Parziale (ITP) stimata',
     value: 'Non calcolabile',
     days: null,
     startDate: null,

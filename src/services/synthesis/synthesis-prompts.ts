@@ -5,20 +5,20 @@ import type { MissingDocument } from '../validation/missing-doc-detector';
 import { formatDate } from '@/lib/format';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
-  ortopedica: 'Malasanita Ortopedica',
+  ortopedica: 'Malasanità Ortopedica',
   oncologica: 'Ritardo Diagnostico Oncologico',
   ostetrica: 'Errore Ostetrico',
   anestesiologica: 'Errore Anestesiologico',
   infezione_nosocomiale: 'Infezione Nosocomiale',
   errore_diagnostico: 'Errore Diagnostico',
-  generica: 'Responsabilita Professionale Generica',
+  generica: 'Responsabilità Professionale Generica',
 };
 
 /**
  * Build the system prompt for synthesis generation.
  */
 export function buildSynthesisSystemPrompt(): string {
-  return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilita sanitaria.
+  return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
 
 ## IL TUO COMPITO
 Genera una SINTESI MEDICO-LEGALE strutturata, approfondita e completa basata sugli eventi clinici estratti, le anomalie rilevate e la documentazione mancante.

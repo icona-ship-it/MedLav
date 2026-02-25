@@ -371,7 +371,7 @@ export function CaseDetailClient({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild aria-label="Torna alla dashboard">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -381,7 +381,7 @@ export function CaseDetailClient({
               <h1 className="text-3xl font-bold tracking-tight">
                 {caseData.code}
               </h1>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditCaseOpen(true)} title="Modifica caso">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditCaseOpen(true)} title="Modifica caso" aria-label="Modifica caso">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -418,7 +418,7 @@ export function CaseDetailClient({
               <DialogHeader>
                 <DialogTitle>Eliminare il caso {caseData.code}?</DialogTitle>
                 <DialogDescription>
-                  Tutti i documenti, eventi e report verranno eliminati definitivamente. Questa azione non e reversibile.
+                  Tutti i documenti, eventi e report verranno eliminati definitivamente. Questa azione non è reversibile.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -491,6 +491,7 @@ export function CaseDetailClient({
                             onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
                             disabled={isDeletingDoc}
                             title="Elimina documento"
+                            aria-label={`Elimina documento ${doc.file_name}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -564,6 +565,7 @@ export function CaseDetailClient({
                   placeholder="Cerca nel caso (documenti, eventi, diagnosi)..."
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
+                  aria-label="Cerca nel caso"
                 />
                 {isSearching && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
               </div>
@@ -599,18 +601,18 @@ export function CaseDetailClient({
               <p className="text-sm font-medium">Esporta Report</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/html`} download>
-                    <Download className="mr-1 h-3 w-3" />HTML
+                  <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
+                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />HTML
                   </a>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/csv`} download>
-                    <Download className="mr-1 h-3 w-3" />CSV
+                  <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
+                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />CSV
                   </a>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/cases/${caseId}/export/docx`} download>
-                    <Download className="mr-1 h-3 w-3" />DOCX
+                  <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
+                    <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
                   </a>
                 </Button>
               </div>
@@ -988,7 +990,7 @@ function EventCard({
 
   const handleDelete = () => {
     toast('Eliminare questo evento?', {
-      description: 'L\'evento potra essere recuperato.',
+      description: 'L\'evento potrà essere recuperato.',
       action: {
         label: 'Elimina',
         onClick: () => {
@@ -1019,7 +1021,7 @@ function EventCard({
               <span className="text-sm font-medium">
                 {formatDate(event.event_date)}
               </span>
-              <Badge variant="outline" className="text-xs">{event.event_type}</Badge>
+              <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
               {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
@@ -1031,7 +1033,7 @@ function EventCard({
               <Pencil className="h-3 w-3" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'} aria-expanded={isExpanded}>
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>

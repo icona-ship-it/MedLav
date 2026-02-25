@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Check, Clock, Loader2, AlertTriangle, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -22,10 +22,10 @@ interface ProcessingProgressProps {
 // --- Constants ---
 
 const PROCESSING_STEPS = [
-  { key: 'in_coda', label: 'In coda' },
-  { key: 'ocr_in_corso', label: 'OCR' },
-  { key: 'estrazione_in_corso', label: 'Estrazione' },
-  { key: 'validazione_in_corso', label: 'Validazione' },
+  { key: 'in_coda', label: 'In attesa' },
+  { key: 'ocr_in_corso', label: 'Lettura documenti' },
+  { key: 'estrazione_in_corso', label: 'Analisi contenuto' },
+  { key: 'validazione_in_corso', label: 'Controllo qualità' },
   { key: 'completato', label: 'Completato' },
 ] as const;
 
@@ -126,22 +126,27 @@ function hasErrorDocuments(documents: ProcessingDocument[]): boolean {
 
 export function ProcessingProgress({ documents }: ProcessingProgressProps) {
   const [elapsed, setElapsed] = useState(0);
-  const startTime = getEarliestQueueTime(documents);
   const stale = isStale(documents);
   const overallStep = getOverallStepIndex(documents);
   const hasErrors = hasErrorDocuments(documents);
 
+  // Memoize startTime as a timestamp number to avoid re-creating Date on every render
+  const startTimeMs = useMemo(() => {
+    const d = getEarliestQueueTime(documents);
+    return d ? d.getTime() : null;
+  }, [documents]);
+
   // Elapsed timer
   useEffect(() => {
-    if (!startTime) return;
-    const update = () => setElapsed(Date.now() - startTime.getTime());
+    if (startTimeMs === null) return;
+    const update = () => setElapsed(Date.now() - startTimeMs);
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [startTime]);
+  }, [startTimeMs]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" aria-live="polite">
       {/* Global stepper */}
       <div className="flex items-center justify-between">
         {PROCESSING_STEPS.map((step, index) => {
@@ -185,7 +190,7 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
 
       {/* Status bar: elapsed + stale warning */}
       <div className="flex items-center justify-between text-sm">
-        {startTime && (
+        {startTimeMs !== null && (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
             <span>Tempo trascorso: {formatElapsed(elapsed)}</span>

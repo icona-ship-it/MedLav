@@ -133,10 +133,19 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
     <div className="space-y-4">
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Trascina o seleziona documenti da caricare"
         onDrop={handleDrop}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onClick={() => !isUploading && fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !isUploading) {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
         className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition-colors ${
           isDragOver
             ? 'border-primary bg-primary/5'

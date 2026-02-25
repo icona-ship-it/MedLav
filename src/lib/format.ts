@@ -37,9 +37,9 @@ export function getFileIcon(type: string) {
  * Format confidence percentage to human-readable label.
  */
 export function confidenceLabel(confidence: number): string {
-  if (confidence >= 80) return 'Alta affidabilita';
+  if (confidence >= 80) return 'Alta affidabilità';
   if (confidence >= 50) return 'Da verificare';
-  return 'Bassa affidabilita';
+  return 'Bassa affidabilità';
 }
 
 /**

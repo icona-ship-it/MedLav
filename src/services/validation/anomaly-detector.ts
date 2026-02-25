@@ -177,7 +177,7 @@ function detectComplicanzaNonGestita(events: ConsolidatedEvent[]): DetectedAnoma
         severity: 'alta',
         description: `Complicanza "${complication.title}" del ${formatDate(complication.eventDate)} senza trattamento documentato entro 7 giorni.`,
         involvedEvents: [makeEventRef(complication)],
-        suggestion: 'Verificare se la complicanza e stata trattata ma non documentata, o se rappresenta una omissione terapeutica rilevante ai fini peritali.',
+        suggestion: 'Verificare se la complicanza è stata trattata ma non documentata, o se rappresenta una omissione terapeutica rilevante ai fini peritali.',
       });
     }
   }
@@ -207,7 +207,7 @@ function detectConsensoNonDocumentato(events: ConsolidatedEvent[]): DetectedAnom
         severity: 'alta',
         description: `Consenso informato non documentato per l'intervento del ${formatDate(procedure.eventDate)}: "${procedure.title}".`,
         involvedEvents: [makeEventRef(procedure)],
-        suggestion: 'Il consenso informato e obbligatorio per legge per ogni procedura invasiva. Verificare se e stato acquisito ma non incluso nella documentazione fornita.',
+        suggestion: 'Il consenso informato è obbligatorio per legge per ogni procedura invasiva. Verificare se è stato acquisito ma non incluso nella documentazione fornita.',
       });
     }
   }

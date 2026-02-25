@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
@@ -11,6 +12,11 @@ export async function signUp(formData: FormData) {
 
   if (!email || !password || !fullName) {
     return { error: 'Tutti i campi sono obbligatori' };
+  }
+
+  const rateCheck = checkRateLimit({ key: `signup:${email}`, ...RATE_LIMITS.AUTH });
+  if (!rateCheck.success) {
+    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
   }
 
   if (password.length < 8) {
@@ -31,7 +37,7 @@ export async function signUp(formData: FormData) {
 
   if (error) {
     if (error.message.includes('already registered')) {
-      return { error: 'Questa email e gia registrata' };
+      return { error: 'Questa email è già registrata' };
     }
     return { error: 'Errore durante la registrazione. Riprova.' };
   }
@@ -57,6 +63,11 @@ export async function signIn(formData: FormData) {
 
   if (!email || !password) {
     return { error: 'Inserisci email e password' };
+  }
+
+  const rateCheck = checkRateLimit({ key: `auth:${email}`, ...RATE_LIMITS.AUTH });
+  if (!rateCheck.success) {
+    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
   }
 
   const supabase = await createClient();

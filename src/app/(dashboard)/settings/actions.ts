@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
 const profileSchema = z.object({
-  fullName: z.string().min(1, 'Il nome e obbligatorio'),
+  fullName: z.string().min(1, 'Il nome è obbligatorio'),
   studio: z.string().optional(),
 });
 
@@ -104,7 +104,7 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
   });
 
   if (signInError) {
-    return { error: 'La password attuale non e corretta' };
+    return { error: 'La password attuale non è corretta' };
   }
 
   const { error } = await supabase.auth.updateUser({

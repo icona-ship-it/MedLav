@@ -6,7 +6,7 @@ const SOURCE_RULES = `
 ### FONTE A - CARTELLA CLINICA
 Estrarre e riportare:
 - A.1 Dati di Ingresso: diagnosi di ingresso completa, peso, altezza, parametri vitali (PA, FC, SpO2, temperatura), data e ora ricovero
-- A.2 Esami Ematochimici: TUTTI gli esami del sangue, valori numerici con unita di misura, valori fuori range evidenziati, data prelievo
+- A.2 Esami Ematochimici: TUTTI gli esami del sangue, valori numerici con unità di misura, valori fuori range evidenziati, data prelievo
 - A.3 Anamnesi e Terapie: anamnesi patologica, tutte le terapie farmacologiche (farmaco, dosaggio, via, frequenza), modifiche terapeutiche, trasfusioni
 - A.4 Descrizione Operatoria: testo INTEGRALE della descrizione chirurgica, tipo intervento, operatori, tecnica, tempi operatori (durata, orario), reperti, complicanze, tipo anestesia
 - A.5 Cartella Anestesiologica: valutazione preop (ASA score), tipo anestesia, farmaci, parametri vitali intraop, complicanze
@@ -23,7 +23,7 @@ Per ogni esame: data, tipo esame, distretto esaminato, descrizione completa, con
 
 ### FONTE D - ESAMI EMATOCHIMICI
 Riportare TUTTI gli esami laboratorio: emocromo, biochimica, coagulazione, markers, colturali, urine, gas analisi.
-Per ogni esame: data, TUTTI i valori numerici con unita di misura, valori fuori range evidenziati.
+Per ogni esame: data, TUTTI i valori numerici con unità di misura, valori fuori range evidenziati.
 `;
 
 export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
@@ -46,7 +46,7 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 - Tracciato cardiotocografico (CTG) e sue interpretazioni
 - Partogramma e tempi del travaglio
 - APGAR score neonatale
-- Decisioni su modalita del parto (naturale vs cesareo, tempi decisione)
+- Decisioni su modalità del parto (naturale vs cesareo, tempi decisione)
 - Complicanze del parto (emorragia, sofferenza fetale)
 - Cartella neonatale`,
 
@@ -87,9 +87,9 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 
 ## REGOLE FONDAMENTALI
 
-1. **ZERO DISCARD**: Non scartare MAI nessun evento. Tutto cio che e documentato DEVE essere estratto.
+1. **ZERO DISCARD**: Non scartare MAI nessun evento. Tutto ciò che è documentato DEVE essere estratto.
 2. **COPIA FEDELE**: La descrizione deve riportare FEDELMENTE il testo originale, non una rielaborazione o sintesi.
-3. **DATE**: Usa formato YYYY-MM-DD. Se la data e imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese").
+3. **DATE**: Usa formato YYYY-MM-DD. Se la data è imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese").
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
@@ -104,8 +104,8 @@ ${CASE_TYPE_GUIDANCE[caseType]}
 
 ## REGOLA TABELLE
 Per blocchi delimitati da [TABLE_START] e [TABLE_END]: ogni RIGA della tabella rappresenta un dato clinico separato.
-Riporta nome parametro, valore numerico esatto, unita di misura per ciascuna riga.
-Non aggregare piu righe in un unico evento. Evidenzia valori fuori range nel campo reliabilityNotes.
+Riporta nome parametro, valore numerico esatto, unità di misura per ciascuna riga.
+Non aggregare più righe in un unico evento. Evidenzia valori fuori range nel campo reliabilityNotes.
 
 ## FORMATO OUTPUT
 Rispondi con un JSON valido contenente un array "events" e opzionalmente un array "abbreviations" con le abbreviazioni mediche trovate.`;

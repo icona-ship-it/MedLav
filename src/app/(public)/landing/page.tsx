@@ -21,7 +21,7 @@ const steps = [
   {
     number: 3,
     icon: FileCheck,
-    title: 'Il report e pronto',
+    title: 'Il report è pronto',
     description: 'Cronistoria strutturata, anomalie evidenziate, documenti mancanti segnalati. Esporta in DOCX, CSV o HTML.',
   },
 ];
@@ -30,12 +30,12 @@ const features = [
   {
     icon: Clock,
     title: 'Cronistoria Automatica',
-    description: 'Tutti gli eventi clinici ordinati per data, con fonte e livello di affidabilita. Pronta per la perizia.',
+    description: 'Tutti gli eventi clinici ordinati per data, con fonte e livello di affidabilità. Pronta per la perizia.',
   },
   {
     icon: FileText,
     title: 'Lettura Intelligente',
-    description: 'Legge anche documenti scritti a mano, timbri e scansioni di bassa qualita. Nessun dato viene perso.',
+    description: 'Legge anche documenti scritti a mano, timbri e scansioni di bassa qualità. Nessun dato viene perso.',
   },
   {
     icon: AlertTriangle,
@@ -108,7 +108,7 @@ export default function LandingPage() {
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild className="text-base px-8 py-6">
-                  <Link href="/login">Ho gia un account</Link>
+                  <Link href="/login">Ho già un account</Link>
                 </Button>
               </div>
             </div>

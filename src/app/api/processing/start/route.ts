@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     if (runningCount && runningCount > 0) {
       return NextResponse.json(
-        { success: false, error: 'Elaborazione gia in corso per questo caso.' },
+        { success: false, error: 'Elaborazione già in corso per questo caso.' },
         { status: 409 },
       );
     }

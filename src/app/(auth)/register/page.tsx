@@ -51,7 +51,7 @@ export default function RegisterPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -111,7 +111,7 @@ export default function RegisterPage() {
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-muted-foreground">
-            Hai gia un account?{' '}
+            Hai già un account?{' '}
             <Link href="/login" className="text-primary hover:underline">
               Accedi
             </Link>
