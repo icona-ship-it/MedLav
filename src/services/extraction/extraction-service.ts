@@ -4,8 +4,8 @@ import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extrac
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 
-// Mistral Large has 128k context; leave room for system prompt + response
-const MAX_CHUNK_CHARS = 80_000;
+// Keep chunks small enough for fast LLM processing (~30-60s each)
+const MAX_CHUNK_CHARS = 40_000;
 
 export interface ExtractionParams {
   documentText: string;
@@ -15,21 +15,16 @@ export interface ExtractionParams {
   temperature?: number;
 }
 
-interface PageBlock {
-  pageNumber: number;
-  text: string;
-}
-
 /**
- * Extract clinical events from a document's OCR text.
- * Uses Mistral Large with json_schema for fast + reliable structured output.
+ * Pre-process text and split into chunks for extraction.
+ * Returns chunks ready to be processed (potentially in parallel).
  */
-export async function extractEventsFromDocument(
-  params: ExtractionParams,
-): Promise<ExtractionResponse> {
+export function prepareExtractionChunks(params: ExtractionParams): {
+  chunks: string[];
+  params: ExtractionParams;
+} {
   const { documentText } = params;
 
-  // Pre-process: annotate tables before chunking
   const { annotatedText, tableCount } = annotateTablesInText(documentText);
   if (tableCount > 0) {
     console.log(`[extraction] Annotated ${tableCount} tables in document`);
@@ -38,23 +33,30 @@ export async function extractEventsFromDocument(
   const processedParams = { ...params, documentText: annotatedText };
 
   if (annotatedText.length <= MAX_CHUNK_CHARS) {
-    return extractFromSingleChunk(processedParams);
+    return { chunks: [annotatedText], params: processedParams };
   }
 
-  return extractFromChunks(processedParams);
+  const chunks = splitTextIntoChunks(annotatedText, MAX_CHUNK_CHARS);
+  console.log(`[extraction] Split ${annotatedText.length} chars into ${chunks.length} chunks`);
+  return { chunks, params: processedParams };
 }
 
 /**
- * Extract events from a single text chunk using Mistral Large + json_schema.
+ * Extract events from a single text chunk. Designed to be called
+ * as a separate Inngest step for parallelism on large documents.
  */
-async function extractFromSingleChunk(
-  params: ExtractionParams,
-): Promise<ExtractionResponse> {
-  const { documentText, fileName, documentType, caseType, temperature = 0.1 } = params;
+export async function extractEventsFromChunk(params: {
+  chunkText: string;
+  chunkLabel: string;
+  documentType: string;
+  caseType: CaseType;
+  temperature?: number;
+}): Promise<ExtractionResponse> {
+  const { chunkText, chunkLabel, documentType, caseType, temperature = 0.1 } = params;
   const client = getMistralClient();
 
   const startMs = Date.now();
-  console.log(`[extraction] Starting Mistral Large call for "${fileName}" (${documentText.length} chars)`);
+  console.log(`[extraction] Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
 
   const response = await withMistralRetry(
     () => client.chat.complete({
@@ -66,7 +68,7 @@ async function extractFromSingleChunk(
         },
         {
           role: 'user',
-          content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
+          content: buildExtractionUserPrompt({ documentText: chunkText, fileName: chunkLabel, documentType }),
         },
       ],
       responseFormat: { type: 'json_object' },
@@ -78,30 +80,43 @@ async function extractFromSingleChunk(
 
   const elapsedMs = Date.now() - startMs;
   const content = extractResponseContent(response);
-  console.log(`[extraction] Mistral Large responded in ${elapsedMs}ms (${content.length} chars response)`);
+  console.log(`[extraction] Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
 
   return parseExtractionResponse(content);
 }
 
 /**
- * Extract events from a long document by splitting into overlapping chunks.
+ * Extract events from a full document (single chunk or auto-chunked).
+ * For small documents. Large documents should use prepareExtractionChunks +
+ * extractEventsFromChunk in parallel Inngest steps.
  */
-async function extractFromChunks(
+export async function extractEventsFromDocument(
   params: ExtractionParams,
 ): Promise<ExtractionResponse> {
-  const { documentText, fileName, documentType, caseType } = params;
-  const chunks = splitTextIntoChunks(documentText, MAX_CHUNK_CHARS);
+  const { chunks, params: processedParams } = prepareExtractionChunks(params);
 
-  const allEvents: ExtractionResponse['events'] = [];
+  if (chunks.length === 1) {
+    return extractEventsFromChunk({
+      chunkText: chunks[0],
+      chunkLabel: processedParams.fileName,
+      documentType: processedParams.documentType,
+      caseType: processedParams.caseType,
+      temperature: processedParams.temperature,
+    });
+  }
+
+  // Sequential fallback (for non-Inngest callers)
+  const allEvents: ExtractedEvent[] = [];
   const allAbbreviations: Array<{ abbreviation: string; expansion: string }> = [];
 
   for (let i = 0; i < chunks.length; i++) {
-    const chunkLabel = `${fileName} [parte ${i + 1}/${chunks.length}]`;
-    const result = await extractFromSingleChunk({
-      documentText: chunks[i],
-      fileName: chunkLabel,
-      documentType,
-      caseType,
+    const chunkLabel = `${processedParams.fileName} [parte ${i + 1}/${chunks.length}]`;
+    const result = await extractEventsFromChunk({
+      chunkText: chunks[i],
+      chunkLabel,
+      documentType: processedParams.documentType,
+      caseType: processedParams.caseType,
+      temperature: processedParams.temperature,
     });
 
     allEvents.push(...result.events);
@@ -110,21 +125,20 @@ async function extractFromChunks(
     }
   }
 
-  const uniqueAbbreviations = deduplicateAbbreviations(allAbbreviations);
-
   return {
     events: allEvents,
-    abbreviations: uniqueAbbreviations,
+    abbreviations: deduplicateAbbreviations(allAbbreviations),
   };
 }
 
-/**
- * Smart chunking: split on page boundaries when page markers are present.
- */
-function splitTextIntoChunks(
-  text: string,
-  maxChunkSize: number,
-): string[] {
+// --- Internal helpers ---
+
+interface PageBlock {
+  pageNumber: number;
+  text: string;
+}
+
+function splitTextIntoChunks(text: string, maxChunkSize: number): string[] {
   const pageBlocks = extractPageBlocks(text);
 
   if (pageBlocks.length === 0) {
@@ -149,10 +163,7 @@ function extractPageBlocks(text: string): PageBlock[] {
   return blocks;
 }
 
-function splitPageBlocksIntoChunks(
-  blocks: PageBlock[],
-  maxChunkSize: number,
-): string[] {
+function splitPageBlocksIntoChunks(blocks: PageBlock[], maxChunkSize: number): string[] {
   const chunks: string[] = [];
   let currentPages: string[] = [];
   let currentSize = 0;
@@ -168,7 +179,6 @@ function splitPageBlocksIntoChunks(
         currentPages = [];
         currentSize = 0;
       }
-
       const subChunks = splitByCharacterBoundaries(block.text, maxChunkSize);
       chunks.push(...subChunks);
       lastPageOfPrevChunk = null;
@@ -178,7 +188,6 @@ function splitPageBlocksIntoChunks(
     if (currentSize + block.text.length > maxChunkSize && currentPages.length > 0) {
       chunks.push(currentPages.join('\n'));
       lastPageOfPrevChunk = currentPages[currentPages.length - 1];
-
       currentPages = lastPageOfPrevChunk ? [lastPageOfPrevChunk] : [];
       currentSize = lastPageOfPrevChunk ? lastPageOfPrevChunk.length : 0;
     }
@@ -194,10 +203,7 @@ function splitPageBlocksIntoChunks(
   return chunks;
 }
 
-function splitByCharacterBoundaries(
-  text: string,
-  maxChunkSize: number,
-): string[] {
+function splitByCharacterBoundaries(text: string, maxChunkSize: number): string[] {
   const overlapSize = 2_000;
   const chunks: string[] = [];
   let start = 0;
@@ -208,7 +214,6 @@ function splitByCharacterBoundaries(
     if (end < text.length) {
       const searchStart = Math.max(end - 1000, start);
       const searchText = text.slice(searchStart, end);
-
       const lastDoubleNewline = searchText.lastIndexOf('\n\n');
       if (lastDoubleNewline !== -1) {
         end = searchStart + lastDoubleNewline + 2;
@@ -221,9 +226,7 @@ function splitByCharacterBoundaries(
     }
 
     chunks.push(text.slice(start, end));
-
     start = Math.max(end - overlapSize, start + 1);
-
     if (end >= text.length) break;
   }
 
@@ -232,19 +235,15 @@ function splitByCharacterBoundaries(
 
 function extractResponseContent(response: unknown): string {
   const res = response as {
-    choices?: Array<{
-      message?: { content?: string | null };
-    }>;
+    choices?: Array<{ message?: { content?: string | null } }>;
   };
   return res.choices?.[0]?.message?.content ?? '{}';
 }
 
 /**
- * Parse the extraction response JSON with maximum resilience.
- * Handles any key name, validates each event individually.
+ * Parse extraction response with maximum resilience.
  */
 function parseExtractionResponse(content: string): ExtractionResponse {
-  // Step 1: Parse JSON
   let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(content) as Record<string, unknown>;
@@ -254,25 +253,23 @@ function parseExtractionResponse(content: string): ExtractionResponse {
     return { events: [] };
   }
 
-  // Step 2: Find the events array — try multiple key names
+  // Find events array — try multiple key names
   let rawEvents: unknown[] | null = null;
-  const keysToTry = ['events', 'Events', 'eventi', 'EVENTS', 'event_list'];
-  for (const key of keysToTry) {
+  for (const key of ['events', 'Events', 'eventi', 'EVENTS']) {
     if (Array.isArray(raw[key])) {
       rawEvents = raw[key] as unknown[];
-      console.log(`[extraction] Found ${rawEvents.length} events under key "${key}"`);
       break;
     }
   }
 
-  // If no known key, search all top-level keys for an array of objects
+  // Search all keys for array with event-like objects
   if (!rawEvents) {
     for (const [key, value] of Object.entries(raw)) {
       if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
         const first = value[0] as Record<string, unknown>;
         if ('eventDate' in first || 'title' in first || 'description' in first) {
           rawEvents = value as unknown[];
-          console.log(`[extraction] Found ${rawEvents.length} events under unexpected key "${key}"`);
+          console.log(`[extraction] Found events under key "${key}"`);
           break;
         }
       }
@@ -280,46 +277,38 @@ function parseExtractionResponse(content: string): ExtractionResponse {
   }
 
   if (!rawEvents || rawEvents.length === 0) {
-    console.error(`[extraction] No events array found in response. Keys: ${Object.keys(raw).join(', ')}`);
-    console.error(`[extraction] Response preview: ${content.slice(0, 500)}`);
+    console.error(`[extraction] No events found. Keys: ${Object.keys(raw).join(', ')}`);
+    console.error(`[extraction] Preview: ${content.slice(0, 500)}`);
     return { events: [] };
   }
 
-  // Step 3: Parse each event individually — safe cast with defaults
+  // Parse each event with safe defaults
   const validEvents: ExtractedEvent[] = [];
-  for (let i = 0; i < rawEvents.length; i++) {
-    const rawEvent = rawEvents[i] as Record<string, unknown>;
-    if (!rawEvent || typeof rawEvent !== 'object') continue;
+  for (const rawEvent of rawEvents) {
+    const e = rawEvent as Record<string, unknown>;
+    if (!e || typeof e !== 'object') continue;
+    if (!('title' in e) && !('description' in e)) continue;
 
-    // Must have at least a title or description to be valid
-    if (!('title' in rawEvent) && !('description' in rawEvent)) continue;
-
-    const event: ExtractedEvent = {
-      eventDate: String(rawEvent.eventDate ?? rawEvent.event_date ?? '1900-01-01'),
-      datePrecision: String(rawEvent.datePrecision ?? rawEvent.date_precision ?? 'sconosciuta'),
-      eventType: String(rawEvent.eventType ?? rawEvent.event_type ?? 'altro'),
-      title: String(rawEvent.title ?? 'Evento clinico'),
-      description: String(rawEvent.description ?? ''),
-      sourceType: String(rawEvent.sourceType ?? rawEvent.source_type ?? 'altro'),
-      diagnosis: rawEvent.diagnosis != null ? String(rawEvent.diagnosis) : null,
-      doctor: rawEvent.doctor != null ? String(rawEvent.doctor) : null,
-      facility: rawEvent.facility != null ? String(rawEvent.facility) : null,
-      confidence: typeof rawEvent.confidence === 'number' ? Math.min(100, Math.max(0, rawEvent.confidence)) : 70,
-      requiresVerification: Boolean(rawEvent.requiresVerification ?? rawEvent.requires_verification ?? false),
-      reliabilityNotes: rawEvent.reliabilityNotes != null ? String(rawEvent.reliabilityNotes) : null,
-      sourceText: String(rawEvent.sourceText ?? rawEvent.source_text ?? ''),
-      sourcePages: Array.isArray(rawEvent.sourcePages ?? rawEvent.source_pages)
-        ? ((rawEvent.sourcePages ?? rawEvent.source_pages) as number[])
-        : [1],
-    };
-
-    validEvents.push(event);
+    validEvents.push({
+      eventDate: String(e.eventDate ?? e.event_date ?? '1900-01-01'),
+      datePrecision: String(e.datePrecision ?? e.date_precision ?? 'sconosciuta'),
+      eventType: String(e.eventType ?? e.event_type ?? 'altro'),
+      title: String(e.title ?? 'Evento clinico'),
+      description: String(e.description ?? ''),
+      sourceType: String(e.sourceType ?? e.source_type ?? 'altro'),
+      diagnosis: e.diagnosis != null ? String(e.diagnosis) : null,
+      doctor: e.doctor != null ? String(e.doctor) : null,
+      facility: e.facility != null ? String(e.facility) : null,
+      confidence: typeof e.confidence === 'number' ? Math.min(100, Math.max(0, e.confidence)) : 70,
+      requiresVerification: Boolean(e.requiresVerification ?? e.requires_verification ?? false),
+      reliabilityNotes: e.reliabilityNotes != null ? String(e.reliabilityNotes) : null,
+      sourceText: String(e.sourceText ?? e.source_text ?? ''),
+      sourcePages: Array.isArray(e.sourcePages ?? e.source_pages) ? ((e.sourcePages ?? e.source_pages) as number[]) : [1],
+    });
   }
 
-  // Extract abbreviations
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
-
-  console.log(`[extraction] Final result: ${validEvents.length}/${rawEvents.length} events valid`);
+  console.log(`[extraction] Parsed ${validEvents.length}/${rawEvents.length} events`);
   return { events: validEvents, abbreviations };
 }
 

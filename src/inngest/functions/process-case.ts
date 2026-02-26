@@ -2,7 +2,7 @@ import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
-import { extractEventsFromDocument } from '@/services/extraction/extraction-service';
+import { prepareExtractionChunks, extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
 import { consolidateNewWithExisting } from '@/services/consolidation/event-consolidator';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
@@ -226,138 +226,94 @@ export const processCaseDocuments = inngest.createFunction(
       coverageResult: CoverageResult | null;
     }> = [];
 
-    // Step 3a: Primary extraction per document (one LLM call each)
-    interface PrimaryExtractionResult {
-      documentId: string;
-      events: ExtractedEventWithMeta[];
-      coverageResult: CoverageResult;
-      fullText: string;
-      fileName: string;
-      documentType: string;
-      needsSecondPass: boolean;
-    }
-
-    const primaryResults: Array<PrimaryExtractionResult | null> = [];
-
+    // Step 3: Extract events — each chunk is a PARALLEL Inngest step
+    // Large documents get split into ~40K char chunks, each processed separately
     for (const ocrResult of ocrResults) {
-      const primaryResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
+      // Step 3a: Prepare chunks (fast, CPU only)
+      const chunkData = await step.run(`prepare-chunks-${ocrResult.documentId}`, async () => {
         const supabase = createAdminClient();
-
         await supabase
           .from('documents')
           .update({ processing_status: 'estrazione_in_corso', updated_at: new Date().toISOString() })
           .eq('id', ocrResult.documentId);
 
-        try {
-          const extractionResult = await extractEventsFromDocument({
-            documentText: ocrResult.fullText,
-            fileName: ocrResult.fileName,
-            documentType: ocrResult.documentType,
-            caseType: metadata.caseType,
-            temperature: 0.1,
-          });
+        const { chunks } = prepareExtractionChunks({
+          documentText: ocrResult.fullText,
+          fileName: ocrResult.fileName,
+          documentType: ocrResult.documentType,
+          caseType: metadata.caseType,
+        });
 
-          const { events: validatedEvents, issues } = validateExtractedEvents(extractionResult.events);
-          if (issues.length > 0) {
-            console.log(`[pipeline] Step 3a: Validation found ${issues.length} issues for doc ${ocrResult.documentId}`);
+        console.log(`[pipeline] Doc ${ocrResult.documentId}: ${chunks.length} chunk(s) to extract`);
+        return { chunks, chunkCount: chunks.length };
+      });
+
+      // Step 3b: Extract each chunk IN PARALLEL (each chunk = separate Inngest step)
+      const chunkPromises = chunkData.chunks.map((chunkText, i) =>
+        step.run(`extract-chunk-${ocrResult.documentId}-${i}`, async () => {
+          try {
+            const chunkLabel = chunkData.chunkCount > 1
+              ? `${ocrResult.fileName} [parte ${i + 1}/${chunkData.chunkCount}]`
+              : ocrResult.fileName;
+
+            const result = await extractEventsFromChunk({
+              chunkText,
+              chunkLabel,
+              documentType: ocrResult.documentType,
+              caseType: metadata.caseType,
+              temperature: 0.1,
+            });
+
+            return result.events.map((event) => ({
+              ...event,
+              extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
+              documentId: ocrResult.documentId,
+            }));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Extraction failed';
+            console.error(`[pipeline] Extraction chunk ${i} failed for doc ${ocrResult.documentId}: ${message}`);
+            return [] as ExtractedEventWithMeta[];
           }
+        }),
+      );
 
-          const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
-          const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
+      // Wait for ALL chunks to complete in parallel
+      const chunkResults = await Promise.all(chunkPromises);
+      const allDocEvents: ExtractedEventWithMeta[] = chunkResults.flat();
 
-          const eventsWithMeta: ExtractedEventWithMeta[] = verificationResult.events.map((event) => ({
-            ...event,
-            extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
-            documentId: ocrResult.documentId,
-          }));
-
-          // Only run second pass if we got SOME events but coverage is poor
-          // If 0 events, second pass won't help (prompt issue, not coverage)
-          const needsSecondPass = eventsWithMeta.length > 0 && coverageResult.coveragePercent < 50 && coverageResult.uncoveredWithMedicalTerms > 0;
-
-          console.log(`[pipeline] Step 3a: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%${needsSecondPass ? ', will run second pass' : ''})`);
-
-          return {
-            documentId: ocrResult.documentId,
-            events: eventsWithMeta,
-            coverageResult,
-            fullText: ocrResult.fullText,
-            fileName: ocrResult.fileName,
-            documentType: ocrResult.documentType,
-            needsSecondPass,
-          };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Extraction failed';
+      if (allDocEvents.length === 0) {
+        // Mark as error if no events extracted
+        await step.run(`mark-error-${ocrResult.documentId}`, async () => {
+          const supabase = createAdminClient();
           await supabase
             .from('documents')
-            .update({ processing_status: 'errore', processing_error: message, updated_at: new Date().toISOString() })
+            .update({
+              processing_status: 'errore',
+              processing_error: 'Nessun evento estratto dal documento',
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', ocrResult.documentId);
-          console.error(`[pipeline] Extraction failed for doc ${ocrResult.documentId}: ${message}`);
-          return null;
-        }
-      });
-
-      primaryResults.push(primaryResult);
-    }
-
-    // Step 3b: Conditional second pass (separate step, only for low-coverage docs)
-    for (const primary of primaryResults) {
-      if (!primary || !primary.needsSecondPass) continue;
-
-      const secondPassResult = await step.run(`extract-pass2-${primary.documentId}`, async () => {
-        console.log(`[pipeline] Step 3b: Second pass for doc ${primary.documentId} (coverage was ${primary.coverageResult.coveragePercent}%)`);
-
-        try {
-          const secondPass = await extractEventsFromDocument({
-            documentText: primary.fullText,
-            fileName: primary.fileName,
-            documentType: primary.documentType,
-            caseType: metadata.caseType,
-            temperature: 0.3,
-          });
-
-          const existingKeys = new Set(
-            primary.events.map((e) => `${e.eventDate}|${e.eventType}|${e.title}`),
-          );
-          const newEvents = secondPass.events.filter((e) => {
-            const key = `${e.eventDate}|${e.eventType}|${e.title}`;
-            return !existingKeys.has(key);
-          });
-
-          if (newEvents.length > 0) {
-            console.log(`[pipeline] Step 3b: Second pass found ${newEvents.length} additional events for doc ${primary.documentId}`);
-            const { events: validatedNew } = validateExtractedEvents(newEvents);
-            const verifiedNew = verifySourceTexts(validatedNew, primary.fullText);
-            const newEventsWithMeta: ExtractedEventWithMeta[] = verifiedNew.events.map((event) => ({
-              ...event,
-              extractionPass: 'pass2' as DualPassEvent['extractionPass'],
-              documentId: primary.documentId,
-            }));
-            return newEventsWithMeta;
-          }
-
-          return [] as ExtractedEventWithMeta[];
-        } catch (pass2Error) {
-          const msg = pass2Error instanceof Error ? pass2Error.message : 'Second pass failed';
-          console.error(`[pipeline] Step 3b: Second pass failed (non-fatal) for doc ${primary.documentId}: ${msg}`);
-          return [] as ExtractedEventWithMeta[];
-        }
-      });
-
-      // Merge second pass events into primary result
-      if (secondPassResult.length > 0) {
-        primary.events = [...primary.events, ...secondPassResult];
-        primary.coverageResult = analyzeCoverage(primary.events, primary.fullText);
+        });
+        continue;
       }
-    }
 
-    // Collect final extraction results
-    for (const primary of primaryResults) {
-      if (!primary) continue;
+      // Validate and verify
+      const { events: validatedEvents } = validateExtractedEvents(allDocEvents);
+      const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
+      const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
+
+      const eventsWithMeta: ExtractedEventWithMeta[] = verificationResult.events.map((event) => ({
+        ...event,
+        extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
+        documentId: ocrResult.documentId,
+      }));
+
+      console.log(`[pipeline] Doc ${ocrResult.documentId}: ${eventsWithMeta.length} events extracted (coverage: ${coverageResult.coveragePercent}%)`);
+
       extractionResults.push({
-        documentId: primary.documentId,
-        events: primary.events,
-        coverageResult: primary.coverageResult,
+        documentId: ocrResult.documentId,
+        events: eventsWithMeta,
+        coverageResult,
       });
     }
 
