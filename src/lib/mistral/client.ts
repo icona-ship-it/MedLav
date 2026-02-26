@@ -27,9 +27,10 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
       return await fn();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const isTransient = message.includes('500') || message.includes('503') ||
+      const isTransient = message.includes('500') || message.includes('502') ||
+        message.includes('503') || message.includes('429') ||
         message.includes('Service unavailable') || message.includes('internal_server_error') ||
-        message.includes('overloaded') ||
+        message.includes('overloaded') || message.includes('Bad gateway') ||
         message.includes('fetch failed') || message.includes('ECONNRESET') ||
         message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') ||
         message.includes('socket hang up') || message.includes('network') ||

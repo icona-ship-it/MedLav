@@ -2,13 +2,8 @@ import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
-import { prepareExtractionChunks, extractEventsFromChunk } from '@/services/extraction/extraction-service';
-import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
+import { extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
-import { validateExtractedEvents } from '@/services/validation/event-validator';
-import { verifySourceTexts } from '@/services/validation/source-text-verifier';
-import { analyzeCoverage } from '@/services/validation/coverage-analyzer';
-import type { CoverageResult } from '@/services/validation/coverage-analyzer';
 import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
@@ -30,13 +25,6 @@ interface DocumentInfo {
   fileType: string;
   storagePath: string;
   documentType: string;
-}
-
-/**
- * Extended event type with dual-pass metadata for DB insertion.
- */
-interface ExtractedEventWithMeta extends DualPassEvent {
-  documentId: string;
 }
 
 /**
@@ -221,126 +209,119 @@ export const processCaseDocuments = inngest.createFunction(
     // Step 3: Extract events per document (one step per doc for independent retry)
     const extractionResults: Array<{
       documentId: string;
-      events: ExtractedEventWithMeta[];
-      coverageResult: CoverageResult | null;
     }> = [];
 
-    // Step 3: Extract events per document
-    // Each document is ONE step that calls Mistral, saves events to DB directly,
-    // and returns only a tiny summary. No large data passes through Inngest.
+    // Step 3: Extract events — chunks read from DB, process in PARALLEL
+    // Pages are already in DB from OCR. Each chunk step reads its pages,
+    // calls Mistral, saves events to DB. Only tiny counts pass through Inngest.
+    const PAGES_PER_CHUNK = 10;
+
     for (const ocrResult of ocrResults) {
-      const extractResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
+      // Step 3a: Calculate chunk ranges (instant, no data)
+      const chunkRanges = await step.run(`plan-chunks-${ocrResult.documentId}`, async () => {
         const supabase = createAdminClient();
+        await supabase.from('documents').update({
+          processing_status: 'estrazione_in_corso',
+          updated_at: new Date().toISOString(),
+        }).eq('id', ocrResult.documentId);
 
-        await supabase
-          .from('documents')
-          .update({ processing_status: 'estrazione_in_corso', updated_at: new Date().toISOString() })
-          .eq('id', ocrResult.documentId);
+        const totalPages = ocrResult.pageCount;
+        const ranges: Array<{ start: number; end: number }> = [];
+        for (let i = 1; i <= totalPages; i += PAGES_PER_CHUNK) {
+          ranges.push({ start: i, end: Math.min(i + PAGES_PER_CHUNK - 1, totalPages) });
+        }
+        console.log(`[pipeline] Doc ${ocrResult.documentId}: ${ranges.length} chunk(s) for ${totalPages} pages`);
+        return ranges;
+      });
 
-        try {
-          // Prepare chunks
-          const { chunks } = prepareExtractionChunks({
-            documentText: ocrResult.fullText,
-            fileName: ocrResult.fileName,
-            documentType: ocrResult.documentType,
-            caseType: metadata.caseType,
-          });
+      // Step 3b: Extract each chunk IN PARALLEL — each reads from DB, saves to DB
+      const chunkPromises = chunkRanges.map((range, i) =>
+        step.run(`extract-${ocrResult.documentId}-p${range.start}-${range.end}`, async () => {
+          const supabase = createAdminClient();
 
-          console.log(`[pipeline] Doc ${ocrResult.documentId}: extracting from ${chunks.length} chunk(s)`);
+          try {
+            // Read pages from DB (no large data from Inngest)
+            const { data: pages } = await supabase
+              .from('pages')
+              .select('page_number, ocr_text')
+              .eq('document_id', ocrResult.documentId)
+              .gte('page_number', range.start)
+              .lte('page_number', range.end)
+              .order('page_number', { ascending: true });
 
-          // Extract from each chunk SEQUENTIALLY (within single step, simple & reliable)
-          const allEvents: ExtractedEventWithMeta[] = [];
+            if (!pages || pages.length === 0) return { count: 0 };
 
-          for (let i = 0; i < chunks.length; i++) {
-            const chunkLabel = chunks.length > 1
-              ? `${ocrResult.fileName} [parte ${i + 1}/${chunks.length}]`
+            const chunkText = pages.map((p) =>
+              `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
+            ).join('\n\n');
+
+            const chunkLabel = chunkRanges.length > 1
+              ? `${ocrResult.fileName} [pag ${range.start}-${range.end}]`
               : ocrResult.fileName;
 
             const result = await extractEventsFromChunk({
-              chunkText: chunks[i],
+              chunkText,
               chunkLabel,
               documentType: ocrResult.documentType,
               caseType: metadata.caseType,
               temperature: 0.1,
             });
 
-            const eventsWithMeta = result.events.map((event) => ({
-              ...event,
-              extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
-              documentId: ocrResult.documentId,
+            if (result.events.length === 0) return { count: 0 };
+
+            // Save events directly to DB
+            const eventRows = result.events.map((e, idx) => ({
+              case_id: caseId,
+              document_id: ocrResult.documentId,
+              order_number: (range.start - 1) * 100 + idx + 1,
+              event_date: e.eventDate,
+              date_precision: e.datePrecision,
+              event_type: e.eventType,
+              title: e.title,
+              description: e.description,
+              source_type: e.sourceType,
+              diagnosis: e.diagnosis ?? null,
+              doctor: e.doctor ?? null,
+              facility: e.facility ?? null,
+              confidence: e.confidence,
+              requires_verification: e.requiresVerification,
+              reliability_notes: e.reliabilityNotes ?? null,
+              source_text: e.sourceText ?? null,
+              source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
+              extraction_pass: 'pass1_only',
             }));
 
-            allEvents.push(...eventsWithMeta);
-            console.log(`[pipeline] Chunk ${i + 1}/${chunks.length}: ${result.events.length} events`);
-          }
-
-          if (allEvents.length === 0) {
-            await supabase.from('documents').update({
-              processing_status: 'errore',
-              processing_error: 'Nessun evento estratto dal documento',
-              updated_at: new Date().toISOString(),
-            }).eq('id', ocrResult.documentId);
-            return { documentId: ocrResult.documentId, eventCount: 0, success: false };
-          }
-
-          // Validate
-          const { events: validatedEvents } = validateExtractedEvents(allEvents);
-          const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
-          const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
-
-          console.log(`[pipeline] Doc ${ocrResult.documentId}: ${verificationResult.events.length} events validated (coverage: ${coverageResult.coveragePercent}%)`);
-
-          // Save events DIRECTLY to DB (no large data through Inngest)
-          const eventRows = verificationResult.events.map((e, idx) => ({
-            case_id: caseId,
-            document_id: ocrResult.documentId,
-            order_number: idx + 1,
-            event_date: e.eventDate,
-            date_precision: e.datePrecision,
-            event_type: e.eventType,
-            title: e.title,
-            description: e.description,
-            source_type: e.sourceType,
-            diagnosis: e.diagnosis ?? null,
-            doctor: e.doctor ?? null,
-            facility: e.facility ?? null,
-            confidence: e.confidence,
-            requires_verification: e.requiresVerification,
-            reliability_notes: e.reliabilityNotes ?? null,
-            source_text: e.sourceText ?? null,
-            source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
-            extraction_pass: 'pass1_only',
-          }));
-
-          if (eventRows.length > 0) {
             await supabase.from('events').insert(eventRows);
+            console.log(`[pipeline] Chunk ${i + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved`);
+            return { count: eventRows.length };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Extraction failed';
+            console.error(`[pipeline] Chunk ${i + 1} failed: ${message}`);
+            return { count: 0 };
           }
+        }),
+      );
 
-          return {
-            documentId: ocrResult.documentId,
-            eventCount: eventRows.length,
-            coveragePercent: coverageResult.coveragePercent,
-            success: true,
-          };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Extraction failed';
+      // All chunks run in parallel
+      const chunkResults = await Promise.all(chunkPromises);
+      const totalEvents = chunkResults.reduce((sum, r) => sum + r.count, 0);
+
+      if (totalEvents === 0) {
+        await step.run(`mark-error-${ocrResult.documentId}`, async () => {
+          const supabase = createAdminClient();
           await supabase.from('documents').update({
             processing_status: 'errore',
-            processing_error: message,
+            processing_error: 'Nessun evento estratto',
             updated_at: new Date().toISOString(),
           }).eq('id', ocrResult.documentId);
-          console.error(`[pipeline] Extraction failed for doc ${ocrResult.documentId}: ${message}`);
-          return { documentId: ocrResult.documentId, eventCount: 0, success: false };
-        }
-      });
-
-      if (extractResult.success) {
+        });
+      } else {
         extractionResults.push({
-          documentId: extractResult.documentId,
-          events: [],
-          coverageResult: null,
+          documentId: ocrResult.documentId,
         });
       }
+
+      console.log(`[pipeline] Doc ${ocrResult.documentId}: ${totalEvents} total events from ${chunkRanges.length} chunks`);
     }
 
     // Step 4: Read all events from DB (already inserted by extraction steps)
@@ -593,17 +574,7 @@ export const processCaseDocuments = inngest.createFunction(
         .update({ updated_at: new Date().toISOString() })
         .eq('id', caseId);
 
-      // Build coverage summary (only numeric metrics, no sensitive data)
-      const coverageMetrics = extractionResults
-        .filter((r) => r.coverageResult !== null)
-        .map((r) => ({
-          documentId: r.documentId,
-          coveragePercent: r.coverageResult!.coveragePercent,
-          uncoveredBlocks: r.coverageResult!.uncoveredBlocks.length,
-          uncoveredWithMedicalTerms: r.coverageResult!.uncoveredWithMedicalTerms,
-        }));
-
-      // Audit log (no sensitive data) — includes incremental info + coverage metrics
+      // Audit log (no sensitive data)
       await supabase.from('audit_log').insert({
         user_id: userId,
         action: 'case.processing.completed',
@@ -617,7 +588,6 @@ export const processCaseDocuments = inngest.createFunction(
           missingDocuments: missingDocs.length,
           reportVersion: synthesisResult.reportVersion,
           synthesisWordCount: synthesisResult.wordCount,
-          coverageMetrics,
         },
       });
     });
