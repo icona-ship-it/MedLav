@@ -4,7 +4,7 @@ import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extrac
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 
-// Mistral Small has 128k context; leave room for system prompt + response
+// Mistral Large has 128k context; leave room for system prompt + response
 const MAX_CHUNK_CHARS = 80_000;
 
 export interface ExtractionParams {
@@ -22,7 +22,7 @@ interface PageBlock {
 
 /**
  * Extract clinical events from a document's OCR text.
- * Uses Mistral Small with json_schema for fast + reliable structured output.
+ * Uses Mistral Large with json_schema for fast + reliable structured output.
  */
 export async function extractEventsFromDocument(
   params: ExtractionParams,
@@ -45,7 +45,7 @@ export async function extractEventsFromDocument(
 }
 
 /**
- * Extract events from a single text chunk using Mistral Small + json_schema.
+ * Extract events from a single text chunk using Mistral Large + json_schema.
  */
 async function extractFromSingleChunk(
   params: ExtractionParams,
@@ -54,11 +54,11 @@ async function extractFromSingleChunk(
   const client = getMistralClient();
 
   const startMs = Date.now();
-  console.log(`[extraction] Starting Mistral Small call for "${fileName}" (${documentText.length} chars)`);
+  console.log(`[extraction] Starting Mistral Large call for "${fileName}" (${documentText.length} chars)`);
 
   const response = await withMistralRetry(
     () => client.chat.complete({
-      model: MISTRAL_MODELS.MISTRAL_SMALL,
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         {
           role: 'system',
@@ -78,7 +78,7 @@ async function extractFromSingleChunk(
 
   const elapsedMs = Date.now() - startMs;
   const content = extractResponseContent(response);
-  console.log(`[extraction] Mistral Small responded in ${elapsedMs}ms (${content.length} chars response)`);
+  console.log(`[extraction] Mistral Large responded in ${elapsedMs}ms (${content.length} chars response)`);
 
   return parseExtractionResponse(content);
 }

@@ -54,7 +54,14 @@ export function detectAnomalies(events: ConsolidatedEvent[]): DetectedAnomaly[] 
     anomalies.push(...detectTerapiaSenzaFollowup(events));
   }
 
-  return anomalies;
+  // Deduplicate anomalies by type + description
+  const seen = new Set<string>();
+  return anomalies.filter((a) => {
+    const key = `${a.anomalyType}:${a.description.slice(0, 100)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

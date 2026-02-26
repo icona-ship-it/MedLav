@@ -271,7 +271,9 @@ export const processCaseDocuments = inngest.createFunction(
             documentId: ocrResult.documentId,
           }));
 
-          const needsSecondPass = coverageResult.coveragePercent < 50 && coverageResult.uncoveredWithMedicalTerms > 0;
+          // Only run second pass if we got SOME events but coverage is poor
+          // If 0 events, second pass won't help (prompt issue, not coverage)
+          const needsSecondPass = eventsWithMeta.length > 0 && coverageResult.coveragePercent < 50 && coverageResult.uncoveredWithMedicalTerms > 0;
 
           console.log(`[pipeline] Step 3a: Extracted ${eventsWithMeta.length} events from doc ${ocrResult.documentId} (coverage: ${coverageResult.coveragePercent}%${needsSecondPass ? ', will run second pass' : ''})`);
 
