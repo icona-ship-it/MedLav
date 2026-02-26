@@ -116,7 +116,36 @@ Cerca con particolare cura:
 - Informazioni negli HEADER/FOOTER: intestazioni con struttura/reparto, date documento
 
 ## FORMATO OUTPUT
-Rispondi con un JSON valido contenente un array "events" e opzionalmente un array "abbreviations" con le abbreviazioni mediche trovate.`;
+Rispondi con un JSON valido. La struttura ESATTA deve essere:
+
+\`\`\`json
+{
+  "events": [
+    {
+      "eventDate": "2024-01-15",
+      "datePrecision": "giorno",
+      "eventType": "ricovero",
+      "title": "Ricovero per intervento chirurgico",
+      "description": "Paziente ricoverato presso reparto di ortopedia per intervento di protesi d'anca destra. Diagnosi di ingresso: coxartrosi destra. PA 130/80, FC 72, peso 78 kg, altezza 172 cm.",
+      "sourceType": "cartella_clinica",
+      "diagnosis": "Coxartrosi destra",
+      "doctor": "Dr. Rossi",
+      "facility": "Ospedale San Giovanni",
+      "confidence": 90,
+      "requiresVerification": false,
+      "reliabilityNotes": null,
+      "sourceText": "Ricovero presso reparto ortopedia per coxartrosi dx",
+      "sourcePages": [1]
+    }
+  ],
+  "abbreviations": [
+    {"abbreviation": "PA", "expansion": "Pressione Arteriosa"},
+    {"abbreviation": "FC", "expansion": "Frequenza Cardiaca"}
+  ]
+}
+\`\`\`
+
+IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere tutti i campi mostrati sopra.`;
 }
 
 /**

@@ -1,6 +1,5 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
-import { extractionResponseSchema, extractionJsonSchema } from './extraction-schemas';
-import type { ExtractionResponse } from './extraction-schemas';
+import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
@@ -70,13 +69,7 @@ async function extractFromSingleChunk(
           content: buildExtractionUserPrompt({ documentText, fileName, documentType }),
         },
       ],
-      responseFormat: {
-        type: 'json_schema',
-        jsonSchema: {
-          name: 'extraction_response',
-          schemaDefinition: extractionJsonSchema,
-        },
-      },
+      responseFormat: { type: 'json_object' },
       temperature,
       maxTokens: 16384,
     }),
@@ -247,31 +240,87 @@ function extractResponseContent(response: unknown): string {
 }
 
 /**
- * Parse and validate the extraction response JSON.
- * With json_schema mode, structure is guaranteed. Zod is a safety net.
+ * Parse the extraction response JSON with maximum resilience.
+ * Handles any key name, validates each event individually.
  */
 function parseExtractionResponse(content: string): ExtractionResponse {
+  // Step 1: Parse JSON
+  let raw: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(content) as unknown;
-    const validated = extractionResponseSchema.parse(parsed);
-    console.log(`[extraction] Parsed ${validated.events.length} events`);
-    return validated;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[extraction] Zod validation failed: ${message}`);
-    console.error(`[extraction] Raw response (first 1000 chars): ${content.slice(0, 1000)}`);
-
-    // Fallback: try raw JSON parse without Zod
-    try {
-      const raw = JSON.parse(content) as { events?: unknown[] };
-      if (Array.isArray(raw.events)) {
-        console.log(`[extraction] Fallback: found ${raw.events.length} raw events, returning without Zod validation`);
-        return { events: raw.events as ExtractionResponse['events'] };
-      }
-    } catch { /* ignore */ }
-
+    raw = JSON.parse(content) as Record<string, unknown>;
+  } catch (jsonErr) {
+    console.error(`[extraction] JSON parse failed: ${jsonErr instanceof Error ? jsonErr.message : 'unknown'}`);
+    console.error(`[extraction] Raw content (first 500 chars): ${content.slice(0, 500)}`);
     return { events: [] };
   }
+
+  // Step 2: Find the events array — try multiple key names
+  let rawEvents: unknown[] | null = null;
+  const keysToTry = ['events', 'Events', 'eventi', 'EVENTS', 'event_list'];
+  for (const key of keysToTry) {
+    if (Array.isArray(raw[key])) {
+      rawEvents = raw[key] as unknown[];
+      console.log(`[extraction] Found ${rawEvents.length} events under key "${key}"`);
+      break;
+    }
+  }
+
+  // If no known key, search all top-level keys for an array of objects
+  if (!rawEvents) {
+    for (const [key, value] of Object.entries(raw)) {
+      if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
+        const first = value[0] as Record<string, unknown>;
+        if ('eventDate' in first || 'title' in first || 'description' in first) {
+          rawEvents = value as unknown[];
+          console.log(`[extraction] Found ${rawEvents.length} events under unexpected key "${key}"`);
+          break;
+        }
+      }
+    }
+  }
+
+  if (!rawEvents || rawEvents.length === 0) {
+    console.error(`[extraction] No events array found in response. Keys: ${Object.keys(raw).join(', ')}`);
+    console.error(`[extraction] Response preview: ${content.slice(0, 500)}`);
+    return { events: [] };
+  }
+
+  // Step 3: Parse each event individually — safe cast with defaults
+  const validEvents: ExtractedEvent[] = [];
+  for (let i = 0; i < rawEvents.length; i++) {
+    const rawEvent = rawEvents[i] as Record<string, unknown>;
+    if (!rawEvent || typeof rawEvent !== 'object') continue;
+
+    // Must have at least a title or description to be valid
+    if (!('title' in rawEvent) && !('description' in rawEvent)) continue;
+
+    const event: ExtractedEvent = {
+      eventDate: String(rawEvent.eventDate ?? rawEvent.event_date ?? '1900-01-01'),
+      datePrecision: String(rawEvent.datePrecision ?? rawEvent.date_precision ?? 'sconosciuta'),
+      eventType: String(rawEvent.eventType ?? rawEvent.event_type ?? 'altro'),
+      title: String(rawEvent.title ?? 'Evento clinico'),
+      description: String(rawEvent.description ?? ''),
+      sourceType: String(rawEvent.sourceType ?? rawEvent.source_type ?? 'altro'),
+      diagnosis: rawEvent.diagnosis != null ? String(rawEvent.diagnosis) : null,
+      doctor: rawEvent.doctor != null ? String(rawEvent.doctor) : null,
+      facility: rawEvent.facility != null ? String(rawEvent.facility) : null,
+      confidence: typeof rawEvent.confidence === 'number' ? Math.min(100, Math.max(0, rawEvent.confidence)) : 70,
+      requiresVerification: Boolean(rawEvent.requiresVerification ?? rawEvent.requires_verification ?? false),
+      reliabilityNotes: rawEvent.reliabilityNotes != null ? String(rawEvent.reliabilityNotes) : null,
+      sourceText: String(rawEvent.sourceText ?? rawEvent.source_text ?? ''),
+      sourcePages: Array.isArray(rawEvent.sourcePages ?? rawEvent.source_pages)
+        ? ((rawEvent.sourcePages ?? rawEvent.source_pages) as number[])
+        : [1],
+    };
+
+    validEvents.push(event);
+  }
+
+  // Extract abbreviations
+  const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
+
+  console.log(`[extraction] Final result: ${validEvents.length}/${rawEvents.length} events valid`);
+  return { events: validEvents, abbreviations };
 }
 
 function deduplicateAbbreviations(
