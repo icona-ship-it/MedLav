@@ -4,8 +4,8 @@ import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extrac
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 
-// Keep chunks small enough for fast LLM processing (~30-60s each)
-const MAX_CHUNK_CHARS = 40_000;
+// Small chunks = fast per-chunk extraction (~30-60s each at 56 t/s)
+const MAX_CHUNK_CHARS = 20_000;
 
 export interface ExtractionParams {
   documentText: string;
@@ -73,7 +73,7 @@ export async function extractEventsFromChunk(params: {
       ],
       responseFormat: { type: 'json_object' },
       temperature,
-      maxTokens: 16384,
+      maxTokens: 8192,
     }),
     'extraction',
   );

@@ -37,7 +37,7 @@ const STATUS_TO_STEP: Record<string, number> = {
   completato: 4,
 };
 
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
 // --- Helpers ---
 

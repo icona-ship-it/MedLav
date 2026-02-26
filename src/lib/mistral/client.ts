@@ -1,19 +1,25 @@
 import { Mistral } from '@mistralai/mistralai';
 
+// Timeout for individual Mistral API calls (2 minutes)
+const API_TIMEOUT_MS = 120_000;
+
 export function getMistralClient(): Mistral {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) {
     throw new Error('MISTRAL_API_KEY environment variable is not set');
   }
-  return new Mistral({ apiKey });
+  return new Mistral({
+    apiKey,
+    timeoutMs: API_TIMEOUT_MS,
+  });
 }
 
 const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 1500;
+const RETRY_BASE_DELAY_MS = 2000;
 
 /**
- * Retry a Mistral API call with exponential backoff on transient errors
- * (server errors + network failures like fetch failed, ECONNRESET, etc).
+ * Retry a Mistral API call with exponential backoff.
+ * Retries on: server errors, network failures, timeouts.
  */
 export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -26,14 +32,18 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
         message.includes('overloaded') ||
         message.includes('fetch failed') || message.includes('ECONNRESET') ||
         message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') ||
-        message.includes('socket hang up') || message.includes('network');
+        message.includes('socket hang up') || message.includes('network') ||
+        message.includes('timeout') || message.includes('aborted') ||
+        message.includes('Unexpected ending');
 
       if (isTransient && attempt < MAX_RETRIES - 1) {
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-        console.log(`[mistral:${label}] Transient error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        console.log(`[mistral:${label}] Error: "${message.slice(0, 100)}", retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
+
+      console.error(`[mistral:${label}] Final error after ${attempt + 1} attempts: ${message.slice(0, 200)}`);
       throw err;
     }
   }
@@ -46,7 +56,7 @@ export const MISTRAL_MODELS = {
   PIXTRAL_LARGE: 'pixtral-large-latest',
   /** Large model for complex reasoning (synthesis, review) */
   MISTRAL_LARGE: 'mistral-large-latest',
-  /** Small model for fast structured extraction (~3x faster output than Large) */
+  /** Small model for fast structured extraction */
   MISTRAL_SMALL: 'mistral-small-latest',
   /** Dedicated OCR model for document text extraction */
   OCR: 'mistral-ocr-latest',
