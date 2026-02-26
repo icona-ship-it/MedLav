@@ -4,7 +4,6 @@ import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { prepareExtractionChunks, extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import type { DualPassEvent } from '@/services/extraction/dual-pass-extraction';
-import { consolidateNewWithExisting } from '@/services/consolidation/event-consolidator';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import { validateExtractedEvents } from '@/services/validation/event-validator';
 import { verifySourceTexts } from '@/services/validation/source-text-verifier';
@@ -226,111 +225,139 @@ export const processCaseDocuments = inngest.createFunction(
       coverageResult: CoverageResult | null;
     }> = [];
 
-    // Step 3: Extract events — each chunk is a PARALLEL Inngest step
-    // Large documents get split into ~40K char chunks, each processed separately
+    // Step 3: Extract events per document
+    // Each document is ONE step that calls Mistral, saves events to DB directly,
+    // and returns only a tiny summary. No large data passes through Inngest.
     for (const ocrResult of ocrResults) {
-      // Step 3a: Prepare chunks (fast, CPU only)
-      const chunkData = await step.run(`prepare-chunks-${ocrResult.documentId}`, async () => {
+      const extractResult = await step.run(`extract-doc-${ocrResult.documentId}`, async () => {
         const supabase = createAdminClient();
+
         await supabase
           .from('documents')
           .update({ processing_status: 'estrazione_in_corso', updated_at: new Date().toISOString() })
           .eq('id', ocrResult.documentId);
 
-        const { chunks } = prepareExtractionChunks({
-          documentText: ocrResult.fullText,
-          fileName: ocrResult.fileName,
-          documentType: ocrResult.documentType,
-          caseType: metadata.caseType,
-        });
+        try {
+          // Prepare chunks
+          const { chunks } = prepareExtractionChunks({
+            documentText: ocrResult.fullText,
+            fileName: ocrResult.fileName,
+            documentType: ocrResult.documentType,
+            caseType: metadata.caseType,
+          });
 
-        console.log(`[pipeline] Doc ${ocrResult.documentId}: ${chunks.length} chunk(s) to extract`);
-        return { chunks, chunkCount: chunks.length };
-      });
+          console.log(`[pipeline] Doc ${ocrResult.documentId}: extracting from ${chunks.length} chunk(s)`);
 
-      // Step 3b: Extract each chunk IN PARALLEL (each chunk = separate Inngest step)
-      const chunkPromises = chunkData.chunks.map((chunkText, i) =>
-        step.run(`extract-chunk-${ocrResult.documentId}-${i}`, async () => {
-          try {
-            const chunkLabel = chunkData.chunkCount > 1
-              ? `${ocrResult.fileName} [parte ${i + 1}/${chunkData.chunkCount}]`
+          // Extract from each chunk SEQUENTIALLY (within single step, simple & reliable)
+          const allEvents: ExtractedEventWithMeta[] = [];
+
+          for (let i = 0; i < chunks.length; i++) {
+            const chunkLabel = chunks.length > 1
+              ? `${ocrResult.fileName} [parte ${i + 1}/${chunks.length}]`
               : ocrResult.fileName;
 
             const result = await extractEventsFromChunk({
-              chunkText,
+              chunkText: chunks[i],
               chunkLabel,
               documentType: ocrResult.documentType,
               caseType: metadata.caseType,
               temperature: 0.1,
             });
 
-            return result.events.map((event) => ({
+            const eventsWithMeta = result.events.map((event) => ({
               ...event,
               extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
               documentId: ocrResult.documentId,
             }));
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Extraction failed';
-            console.error(`[pipeline] Extraction chunk ${i} failed for doc ${ocrResult.documentId}: ${message}`);
-            return [] as ExtractedEventWithMeta[];
+
+            allEvents.push(...eventsWithMeta);
+            console.log(`[pipeline] Chunk ${i + 1}/${chunks.length}: ${result.events.length} events`);
           }
-        }),
-      );
 
-      // Wait for ALL chunks to complete in parallel
-      const chunkResults = await Promise.all(chunkPromises);
-      const allDocEvents: ExtractedEventWithMeta[] = chunkResults.flat();
-
-      if (allDocEvents.length === 0) {
-        // Mark as error if no events extracted
-        await step.run(`mark-error-${ocrResult.documentId}`, async () => {
-          const supabase = createAdminClient();
-          await supabase
-            .from('documents')
-            .update({
+          if (allEvents.length === 0) {
+            await supabase.from('documents').update({
               processing_status: 'errore',
               processing_error: 'Nessun evento estratto dal documento',
               updated_at: new Date().toISOString(),
-            })
-            .eq('id', ocrResult.documentId);
-        });
-        continue;
-      }
+            }).eq('id', ocrResult.documentId);
+            return { documentId: ocrResult.documentId, eventCount: 0, success: false };
+          }
 
-      // Validate and verify
-      const { events: validatedEvents } = validateExtractedEvents(allDocEvents);
-      const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
-      const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
+          // Validate
+          const { events: validatedEvents } = validateExtractedEvents(allEvents);
+          const verificationResult = verifySourceTexts(validatedEvents, ocrResult.fullText);
+          const coverageResult = analyzeCoverage(verificationResult.events, ocrResult.fullText);
 
-      const eventsWithMeta: ExtractedEventWithMeta[] = verificationResult.events.map((event) => ({
-        ...event,
-        extractionPass: 'pass1_only' as DualPassEvent['extractionPass'],
-        documentId: ocrResult.documentId,
-      }));
+          console.log(`[pipeline] Doc ${ocrResult.documentId}: ${verificationResult.events.length} events validated (coverage: ${coverageResult.coveragePercent}%)`);
 
-      console.log(`[pipeline] Doc ${ocrResult.documentId}: ${eventsWithMeta.length} events extracted (coverage: ${coverageResult.coveragePercent}%)`);
+          // Save events DIRECTLY to DB (no large data through Inngest)
+          const eventRows = verificationResult.events.map((e, idx) => ({
+            case_id: caseId,
+            document_id: ocrResult.documentId,
+            order_number: idx + 1,
+            event_date: e.eventDate,
+            date_precision: e.datePrecision,
+            event_type: e.eventType,
+            title: e.title,
+            description: e.description,
+            source_type: e.sourceType,
+            diagnosis: e.diagnosis ?? null,
+            doctor: e.doctor ?? null,
+            facility: e.facility ?? null,
+            confidence: e.confidence,
+            requires_verification: e.requiresVerification,
+            reliability_notes: e.reliabilityNotes ?? null,
+            source_text: e.sourceText ?? null,
+            source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
+            extraction_pass: 'pass1_only',
+          }));
 
-      extractionResults.push({
-        documentId: ocrResult.documentId,
-        events: eventsWithMeta,
-        coverageResult,
+          if (eventRows.length > 0) {
+            await supabase.from('events').insert(eventRows);
+          }
+
+          return {
+            documentId: ocrResult.documentId,
+            eventCount: eventRows.length,
+            coveragePercent: coverageResult.coveragePercent,
+            success: true,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Extraction failed';
+          await supabase.from('documents').update({
+            processing_status: 'errore',
+            processing_error: message,
+            updated_at: new Date().toISOString(),
+          }).eq('id', ocrResult.documentId);
+          console.error(`[pipeline] Extraction failed for doc ${ocrResult.documentId}: ${message}`);
+          return { documentId: ocrResult.documentId, eventCount: 0, success: false };
+        }
       });
+
+      if (extractResult.success) {
+        extractionResults.push({
+          documentId: extractResult.documentId,
+          events: [],
+          coverageResult: null,
+        });
+      }
     }
 
-    // Step 4: Consolidate events — incremental: dedup new vs existing DB events
+    // Step 4: Read all events from DB (already inserted by extraction steps)
+    // Renumber order and prepare for analysis
     const consolidationResult = await step.run('consolidate-events', async () => {
       const supabase = createAdminClient();
 
-      // Fetch existing active events for this case
+      // Events are already in DB — just fetch and organize
       const { data: existingRaw } = await supabase
         .from('events')
         .select('*')
         .eq('case_id', caseId)
         .eq('is_deleted', false)
-        .order('order_number', { ascending: true });
+        .order('event_date', { ascending: true });
 
-      const existingEvents: ConsolidatedEvent[] = (existingRaw ?? []).map((e) => ({
-        orderNumber: e.order_number as number,
+      const allEvents: ConsolidatedEvent[] = (existingRaw ?? []).map((e, idx) => ({
+        orderNumber: idx + 1,
         documentId: (e.document_id ?? '') as string,
         eventDate: e.event_date as string,
         datePrecision: e.date_precision as ConsolidatedEvent['datePrecision'],
@@ -349,86 +376,24 @@ export const processCaseDocuments = inngest.createFunction(
         sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
       }));
 
-      // Build DocumentEvents for consolidation (strip dual-pass metadata)
-      const docEventsForConsolidation = extractionResults.map((r) => ({
-        documentId: r.documentId,
-        events: r.events.map((e) => ({
-          eventDate: e.eventDate,
-          datePrecision: e.datePrecision,
-          eventType: e.eventType,
-          title: e.title,
-          description: e.description,
-          sourceType: e.sourceType,
-          diagnosis: e.diagnosis,
-          doctor: e.doctor,
-          facility: e.facility,
-          confidence: e.confidence,
-          requiresVerification: e.requiresVerification,
-          reliabilityNotes: e.reliabilityNotes,
-          sourceText: e.sourceText,
-          sourcePages: e.sourcePages,
-        })),
-      }));
-
-      const { newEventsToInsert, allEvents } = consolidateNewWithExisting(
-        docEventsForConsolidation,
-        existingEvents,
-      );
-
-      console.log(`[pipeline] Step 4: ${newEventsToInsert.length} new events (${existingEvents.length} existing, ${allEvents.length} total)`);
-
-      // Build a lookup for extraction pass by matching events
-      const extractionPassMap = new Map<string, string>();
-      for (const docResult of extractionResults) {
-        for (const e of docResult.events) {
-          const key = `${e.eventDate}|${e.eventType}|${e.title}`;
-          extractionPassMap.set(key, e.extractionPass);
+      // Update order numbers in DB
+      for (const event of allEvents) {
+        const dbId = (existingRaw ?? [])[event.orderNumber - 1]?.id;
+        if (dbId) {
+          await supabase.from('events').update({ order_number: event.orderNumber }).eq('id', dbId);
         }
-      }
-
-      // Insert only new (non-duplicate) events
-      if (newEventsToInsert.length > 0) {
-        const eventRows = newEventsToInsert.map((e) => {
-          const passKey = `${e.eventDate}|${e.eventType}|${e.title}`;
-          const extractionPass = extractionPassMap.get(passKey) ?? 'pass1_only';
-
-          return {
-            case_id: caseId,
-            document_id: e.documentId,
-            order_number: e.orderNumber,
-            event_date: e.eventDate,
-            date_precision: e.datePrecision,
-            event_type: e.eventType,
-            title: e.title,
-            description: e.description,
-            source_type: e.sourceType,
-            diagnosis: e.diagnosis ?? null,
-            doctor: e.doctor ?? null,
-            facility: e.facility ?? null,
-            confidence: e.confidence,
-            requires_verification: e.requiresVerification,
-            reliability_notes: e.reliabilityNotes ?? e.discrepancyNote ?? null,
-            source_text: e.sourceText ?? null,
-            source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
-            extraction_pass: extractionPass,
-          };
-        });
-
-        await supabase.from('events').insert(eventRows);
       }
 
       // Update document statuses
       for (const docResult of extractionResults) {
         await supabase
           .from('documents')
-          .update({
-            processing_status: 'validazione_in_corso',
-            updated_at: new Date().toISOString(),
-          })
+          .update({ processing_status: 'validazione_in_corso', updated_at: new Date().toISOString() })
           .eq('id', docResult.documentId);
       }
 
-      return { allEvents, newEventsCount: newEventsToInsert.length };
+      console.log(`[pipeline] Step 4: ${allEvents.length} total events in DB`);
+      return { allEvents, newEventsCount: allEvents.length };
     });
 
     // Step 4.5: Link images to events based on sourcePages
