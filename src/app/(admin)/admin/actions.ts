@@ -160,6 +160,52 @@ export async function getRecentCompletions() {
   }));
 }
 
+/**
+ * Reset all data EXCEPT user accounts.
+ * Deletes: events, anomalies, missing_documents, reports, pages,
+ * event_images, documents, cases, audit_log.
+ * Also clears Supabase Storage (uploaded files).
+ */
+export async function resetAllData() {
+  const user = await verifyAdmin();
+  const admin = createAdminClient();
+
+  console.log(`[admin] Reset all data requested by user ${user.id}`);
+
+  // Delete in correct order (foreign key dependencies)
+  await admin.from('event_images').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('anomalies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('missing_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('reports').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('events').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('pages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('cases').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await admin.from('audit_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+  // Clear storage bucket
+  try {
+    const { data: files } = await admin.storage.from('documents').list('', { limit: 1000 });
+    if (files && files.length > 0) {
+      // List all folders (user IDs)
+      for (const folder of files) {
+        if (folder.name) {
+          const { data: userFiles } = await admin.storage.from('documents').list(folder.name, { limit: 10000 });
+          if (userFiles && userFiles.length > 0) {
+            const paths = userFiles.map((f) => `${folder.name}/${f.name}`);
+            await admin.storage.from('documents').remove(paths);
+          }
+        }
+      }
+    }
+  } catch (storageErr) {
+    console.error(`[admin] Storage cleanup error: ${storageErr instanceof Error ? storageErr.message : 'unknown'}`);
+  }
+
+  console.log('[admin] All data reset successfully');
+  return { success: true };
+}
+
 export async function getAuditLogs(page: number = 1) {
   await verifyAdmin();
   const admin = createAdminClient();
