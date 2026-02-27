@@ -59,14 +59,14 @@ describe('verifySourceTexts', () => {
 
   it('should verify LCS match for slightly modified sourceText', () => {
     const events = [makeEvent({
-      sourceText: 'Paziente presenta dolore al ginocchio sinistro con tumefazione e limitazione funzionale',
+      sourceText: 'Paziente si presenta dolore ginocchio sinistro, esame obiettivo ginocchio tumefatto limitazione funzionale',
     })];
 
     const result = verifySourceTexts(events, FULL_TEXT);
 
     expect(result.verifications[0].verified).toBe(true);
     expect(result.verifications[0].matchLevel).toBe('lcs');
-    expect(result.verifications[0].lcsRatio).toBeGreaterThanOrEqual(0.70);
+    expect(result.verifications[0].lcsRatio).toBeGreaterThanOrEqual(0.80);
   });
 
   it('should mark fabricated sourceText as unverified', () => {

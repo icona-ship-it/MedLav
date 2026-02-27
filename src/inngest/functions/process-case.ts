@@ -143,7 +143,7 @@ export const processCaseDocuments = inngest.createFunction(
           const signedUrl = await getSignedUrl(doc.storagePath);
 
           const ocrStartMs = Date.now();
-          console.log(`[pipeline] Step 2: OCR processing doc ${doc.id}`);
+          console.log(`[pipeline] Step 2: Starting OCR for doc ${doc.id} (${doc.fileName})`);
 
           const result = await ocrDocument({
             documentId: doc.id,
@@ -240,6 +240,9 @@ export const processCaseDocuments = inngest.createFunction(
           const supabase = createAdminClient();
 
           try {
+            const extractionStartMs = Date.now();
+            console.log(`[pipeline] Starting extraction for pages ${range.start}-${range.end} of doc ${ocrResult.documentId}`);
+
             // Read pages from DB (no large data from Inngest)
             const { data: pages } = await supabase
               .from('pages')
@@ -264,7 +267,11 @@ export const processCaseDocuments = inngest.createFunction(
               chunkLabel,
               documentType: ocrResult.documentType,
               caseType: metadata.caseType,
-              temperature: 0.1,
+              temperature: 0.2,
+              chunkIndex: i,
+              totalChunks: chunkRanges.length,
+              documentName: ocrResult.fileName,
+              pageRange: `pag ${range.start}-${range.end}`,
             });
 
             if (result.events.length === 0) return { count: 0 };
@@ -292,7 +299,7 @@ export const processCaseDocuments = inngest.createFunction(
             }));
 
             await supabase.from('events').insert(eventRows);
-            console.log(`[pipeline] Chunk ${i + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved`);
+            console.log(`[pipeline] Chunk ${i + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
             return { count: eventRows.length };
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Extraction failed';
@@ -515,7 +522,8 @@ export const processCaseDocuments = inngest.createFunction(
     const synthesisResult = await step.run('generate-synthesis', async () => {
       const supabase = createAdminClient();
 
-      console.log(`[pipeline] Step 7: Generating synthesis (full case, ${consolidationResult.allEvents.length} events)`);
+      const synthesisStartMs = Date.now();
+      console.log(`[pipeline] Step 7: Starting synthesis (full case, ${consolidationResult.allEvents.length} events)`);
 
       const result = await generateSynthesis({
         caseType: metadata.caseType,
@@ -524,7 +532,11 @@ export const processCaseDocuments = inngest.createFunction(
         events: consolidationResult.allEvents,
         anomalies,
         missingDocuments: missingDocs,
+        caseTypeLabel: metadata.caseType,
+        expertRole: metadata.caseRole,
       });
+
+      console.log(`[pipeline] Step 7: Synthesis completed in ${Date.now() - synthesisStartMs}ms (${result.wordCount} words)`);
 
       // Get current max version
       const { data: latestReport } = await supabase

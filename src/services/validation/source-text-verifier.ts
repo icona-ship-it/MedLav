@@ -29,7 +29,7 @@ export interface SourceTextVerificationResult {
 
 // Skip LCS for very short sourceText to avoid false positives
 const MIN_SOURCE_TEXT_FOR_LCS = 20;
-const LCS_THRESHOLD = 0.70;
+const LCS_THRESHOLD = 0.80;
 // Sliding window size in words for LCS comparison
 const LCS_WINDOW_MULTIPLIER = 3;
 

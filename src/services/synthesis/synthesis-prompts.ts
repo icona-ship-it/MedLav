@@ -155,3 +155,135 @@ Genera il report completo con le 3 parti obbligatorie:
 
 IMPORTANTE: La cronologia deve riportare OGNI evento fornito sopra, fedelmente, senza omissioni. Non citare numeri di pagina.`;
 }
+
+// ── Split-mode prompts (for large cases >40K chars) ──
+
+/**
+ * System prompt for chronology-only generation (split mode).
+ */
+export function buildChronologySystemPrompt(): string {
+  return `Sei un medico legale esperto incaricato di redigere la sezione "CRONOLOGIA MEDICO-LEGALE" di un report peritale.
+
+COMPITO: Genera ESCLUSIVAMENTE la cronologia. NON generare riassunti, analisi, o elementi di rilievo.
+
+FORMATO OBBLIGATORIO PER OGNI VOCE:
+- Data in formato DD/MM/YYYY
+- Categoria della fonte tra parentesi:
+  (A) CARTELLA CLINICA — fogli di ingresso, esami obiettivi, anamnesi, descrizioni operatorie, schede anestesiologiche, diari clinici, lettere di dimissione
+  (B) REFERTI CONTROLLI MEDICI — visite ambulatoriali, follow-up, certificati, consulenze
+  (C) REFERTI RADIOLOGICI ED ESAMI STRUMENTALI — RX, TAC, RM, ECG, ecografie, endoscopie
+  (D) ESAMI EMATOCHIMICI — referti di laboratorio, esami del sangue, esami urine
+
+REGOLE:
+- Ordine rigorosamente cronologico
+- Il contenuto di ogni voce deve essere COPIATO FEDELMENTE dalla documentazione, non parafrasato
+- Includi TUTTI gli eventi forniti, nessuno deve essere escluso
+- Descrizioni DETTAGLIATE e COMPLETE: riporta valori, misure, dosaggi, nomi farmaci
+- Se la data è incerta, indica la migliore approssimazione disponibile
+
+STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
+
+<!-- SECTION:CRONOLOGIA -->
+## CRONOLOGIA MEDICO-LEGALE
+
+DD/MM/YYYY — (X) Titolo evento
+Descrizione completa e fedele copiata dalla documentazione...
+
+DD/MM/YYYY — (X) Titolo evento
+Descrizione completa e fedele copiata dalla documentazione...
+<!-- END:CRONOLOGIA -->`;
+}
+
+/**
+ * User prompt for chronology-only generation (split mode).
+ */
+export function buildChronologyUserPrompt(
+  eventsFormatted: string,
+  caseTypeLabel: string,
+  expertRole: string,
+  patientInitials?: string,
+): string {
+  let prompt = `TIPO CASO: ${caseTypeLabel}\n`;
+  prompt += `RUOLO PERITO: ${expertRole}\n`;
+  if (patientInitials) prompt += `PAZIENTE: ${patientInitials}\n`;
+  prompt += '\nEVENTI ESTRATTI DA INCLUDERE NELLA CRONOLOGIA:\n\n';
+  prompt += eventsFormatted;
+  prompt += '\n\nGenera la CRONOLOGIA MEDICO-LEGALE completa, includendo TUTTI gli eventi elencati sopra, nel formato specificato nelle istruzioni di sistema. Ricorda di includere i marker <!-- SECTION:CRONOLOGIA --> e <!-- END:CRONOLOGIA -->.';
+  return prompt;
+}
+
+/**
+ * System prompt for summary + analysis generation (split mode).
+ */
+export function buildSummarySystemPrompt(): string {
+  return `Sei un medico legale esperto incaricato di redigere due sezioni di un report peritale:
+1. RIASSUNTO DEL CASO
+2. ELEMENTI DI RILIEVO MEDICO-LEGALE
+
+Ti verrà fornita la cronologia già compilata come riferimento. NON rigenerare la cronologia.
+
+SEZIONE 1 — RIASSUNTO DEL CASO (300-500 parole):
+Deve contenere:
+- Presentazione del paziente e motivo del ricovero/consulenza
+- Decorso clinico con i passaggi critici
+- Interventi effettuati e loro esiti
+- Complicanze eventualmente insorte
+- Stato attuale e prognosi (se disponibile)
+- Elementi critici per la valutazione medico-legale
+- Nesso causale tra gestione clinica e danno (se rilevabile)
+
+SEZIONE 2 — ELEMENTI DI RILIEVO MEDICO-LEGALE (200-400 parole):
+Deve contenere:
+- Punti critici per la valutazione peritale
+- Eventuali omissioni o ritardi nella gestione clinica
+- Anomalie nella gestione diagnostico-terapeutica
+- Documentazione mancante o carente
+- Discrepanze tra quanto documentato e quanto atteso secondo le linee guida
+- Aspetti rilevanti per la quantificazione del danno
+
+STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
+
+<!-- SECTION:RIASSUNTO -->
+## RIASSUNTO DEL CASO
+[testo 300-500 parole]
+<!-- END:RIASSUNTO -->
+
+<!-- SECTION:ELEMENTI -->
+## ELEMENTI DI RILIEVO MEDICO-LEGALE
+[testo 200-400 parole]
+<!-- END:ELEMENTI -->`;
+}
+
+/**
+ * User prompt for summary + analysis generation (split mode).
+ */
+export function buildSummaryUserPrompt(params: {
+  chronology: string;
+  caseTypeLabel: string;
+  expertRole: string;
+  patientInitials?: string;
+  anomalies?: string;
+  missingDocs?: string;
+}): string {
+  const { chronology, caseTypeLabel, expertRole, patientInitials, anomalies, missingDocs } = params;
+
+  let prompt = `TIPO CASO: ${caseTypeLabel}\n`;
+  prompt += `RUOLO PERITO: ${expertRole}\n`;
+  if (patientInitials) prompt += `PAZIENTE: ${patientInitials}\n`;
+
+  prompt += `\n## CRONOLOGIA DI RIFERIMENTO (già compilata):\n${chronology}\n`;
+
+  if (anomalies && anomalies.trim().length > 0) {
+    prompt += `\n## ANOMALIE RILEVATE DAL SISTEMA:\n${anomalies}\n`;
+  }
+
+  if (missingDocs && missingDocs.trim().length > 0) {
+    prompt += `\n## DOCUMENTAZIONE MANCANTE:\n${missingDocs}\n`;
+  }
+
+  prompt += '\nBasandoti sulla cronologia e sulle anomalie sopra indicate, genera le due sezioni richieste (RIASSUNTO DEL CASO e ELEMENTI DI RILIEVO MEDICO-LEGALE) nel formato specificato. Ricorda di includere i marker <!-- SECTION:RIASSUNTO -->, <!-- END:RIASSUNTO -->, <!-- SECTION:ELEMENTI --> e <!-- END:ELEMENTI -->.';
+
+  return prompt;
+}
+
+export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

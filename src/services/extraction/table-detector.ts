@@ -23,9 +23,25 @@ export interface TableAnnotationResult {
  * Detects markdown tables, aligned numeric tables, and repeated-structure blocks.
  */
 export function annotateTablesInText(text: string): TableAnnotationResult {
-  // Skip if already annotated or text is too short
-  if (text.includes(TABLE_START) || text.length < 30) {
+  // Convert OCR 3 HTML table markers to standard markers
+  let hasOcr3Tables = false;
+  if (text.includes('[TABLE_HTML_START]')) {
+    text = text
+      .replace(/\[TABLE_HTML_START\]/g, TABLE_START)
+      .replace(/\[TABLE_HTML_END\]/g, TABLE_END);
+    hasOcr3Tables = true;
+  }
+
+  // Skip if text is too short
+  if (text.length < 30) {
     return { annotatedText: text, tableCount: 0 };
+  }
+
+  // If OCR 3 already provided tables, count them but skip heuristic detection
+  // (OCR 3 tables are already structured, heuristics would be redundant)
+  if (hasOcr3Tables || text.includes(TABLE_START)) {
+    const existingCount = (text.match(/\[TABLE_START\]/g) ?? []).length;
+    return { annotatedText: text, tableCount: existingCount };
   }
 
   const blocks = splitIntoBlocks(text);

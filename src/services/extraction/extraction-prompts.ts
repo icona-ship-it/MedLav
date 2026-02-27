@@ -150,15 +150,33 @@ IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere t
 
 /**
  * Build the user prompt for a specific document text.
+ * Supports chunk context for multi-chunk documents.
  */
 export function buildExtractionUserPrompt(params: {
   documentText: string;
   fileName: string;
   documentType: string;
+  chunkIndex?: number;
+  totalChunks?: number;
+  documentName?: string;
+  pageRange?: string;
 }): string {
-  const { documentText, fileName, documentType } = params;
+  const { documentText, fileName, documentType, chunkIndex, totalChunks, documentName, pageRange } = params;
 
-  return `Analizza il seguente documento medico ed estrai TUTTI gli eventi clinici.
+  let chunkContext = '';
+  if (chunkIndex !== undefined && totalChunks !== undefined && totalChunks > 1) {
+    chunkContext = '[CONTESTO SEGMENTO]\n';
+    if (documentName) chunkContext += `Documento: "${documentName}"\n`;
+    chunkContext += `Segmento: ${chunkIndex + 1} di ${totalChunks}`;
+    if (pageRange) chunkContext += ` (${pageRange})`;
+    chunkContext += '\n';
+    if (chunkIndex > 0) {
+      chunkContext += 'Questo è un segmento intermedio del documento. Alcuni eventi del confine con il segmento precedente potrebbero essere già stati estratti — NON duplicarli se il contesto è identico.\n';
+    }
+    chunkContext += '[FINE CONTESTO]\n\n';
+  }
+
+  return `${chunkContext}Analizza il seguente documento medico ed estrai TUTTI gli eventi clinici.
 
 DOCUMENTO: ${fileName}
 TIPO DOCUMENTO: ${documentType}

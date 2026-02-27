@@ -66,7 +66,7 @@ Decorso regolare.`;
     const text = '[TABLE_START]\n| A | B |\n[TABLE_END]';
     const result = annotateTablesInText(text);
 
-    expect(result.tableCount).toBe(0);
+    expect(result.tableCount).toBe(1);
     expect(result.annotatedText).toBe(text);
   });
 

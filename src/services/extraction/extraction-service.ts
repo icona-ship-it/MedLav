@@ -1,11 +1,12 @@
-import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION } from '@/lib/mistral/client';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
+import { jsonrepair } from 'jsonrepair';
 
-// Small chunks = fast per-chunk extraction (~30-60s each at 56 t/s)
-const MAX_CHUNK_CHARS = 20_000;
+// Smaller chunks = faster per-chunk extraction + less risk of truncation
+const MAX_CHUNK_CHARS = 15_000;
 
 export interface ExtractionParams {
   documentText: string;
@@ -42,8 +43,8 @@ export function prepareExtractionChunks(params: ExtractionParams): {
 }
 
 /**
- * Extract events from a single text chunk. Designed to be called
- * as a separate Inngest step for parallelism on large documents.
+ * Extract events from a single text chunk using streaming.
+ * Designed to be called as a separate Inngest step for parallelism.
  */
 export async function extractEventsFromChunk(params: {
   chunkText: string;
@@ -51,38 +52,50 @@ export async function extractEventsFromChunk(params: {
   documentType: string;
   caseType: CaseType;
   temperature?: number;
+  chunkIndex?: number;
+  totalChunks?: number;
+  documentName?: string;
+  pageRange?: string;
 }): Promise<ExtractionResponse> {
-  const { chunkText, chunkLabel, documentType, caseType, temperature = 0.1 } = params;
-  const client = getMistralClient();
+  const {
+    chunkText, chunkLabel, documentType, caseType,
+    temperature = 0.2, chunkIndex, totalChunks, documentName, pageRange,
+  } = params;
 
   const startMs = Date.now();
   console.log(`[extraction] Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
 
-  const response = await withMistralRetry(
-    () => client.chat.complete({
-      model: MISTRAL_MODELS.MISTRAL_LARGE,
-      messages: [
-        {
-          role: 'system',
-          content: buildExtractionSystemPrompt(caseType),
-        },
-        {
-          role: 'user',
-          content: buildExtractionUserPrompt({ documentText: chunkText, fileName: chunkLabel, documentType }),
-        },
-      ],
-      responseFormat: { type: 'json_object' },
-      temperature,
-      maxTokens: 8192,
-    }),
-    'extraction',
-  );
+  const content = await streamMistralChat({
+    model: MISTRAL_MODELS.MISTRAL_LARGE,
+    messages: [
+      {
+        role: 'system',
+        content: buildExtractionSystemPrompt(caseType),
+      },
+      {
+        role: 'user',
+        content: buildExtractionUserPrompt({
+          documentText: chunkText,
+          fileName: chunkLabel,
+          documentType,
+          chunkIndex,
+          totalChunks,
+          documentName,
+          pageRange,
+        }),
+      },
+    ],
+    responseFormat: { type: 'json_object' },
+    temperature,
+    maxTokens: 8192,
+    timeoutMs: TIMEOUT_EXTRACTION,
+    label: `extraction:${chunkLabel.slice(0, 30)}`,
+  });
 
   const elapsedMs = Date.now() - startMs;
-  const content = extractResponseContent(response);
   console.log(`[extraction] Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
 
-  return parseExtractionResponse(content);
+  return parseExtractionResponse(content, chunkLabel);
 }
 
 /**
@@ -102,6 +115,9 @@ export async function extractEventsFromDocument(
       documentType: processedParams.documentType,
       caseType: processedParams.caseType,
       temperature: processedParams.temperature,
+      chunkIndex: 0,
+      totalChunks: 1,
+      documentName: processedParams.fileName,
     });
   }
 
@@ -117,6 +133,9 @@ export async function extractEventsFromDocument(
       documentType: processedParams.documentType,
       caseType: processedParams.caseType,
       temperature: processedParams.temperature,
+      chunkIndex: i,
+      totalChunks: chunks.length,
+      documentName: processedParams.fileName,
     });
 
     allEvents.push(...result.events);
@@ -125,8 +144,15 @@ export async function extractEventsFromDocument(
     }
   }
 
+  // Deduplicate within document
+  const dedupedEvents = deduplicateWithinDocument(allEvents);
+
+  // Self-verify critical events
+  const fullText = chunks.join('\n');
+  const verifiedEvents = flagUnverifiedCriticalEvents(dedupedEvents, fullText);
+
   return {
-    events: allEvents,
+    events: verifiedEvents,
     abbreviations: deduplicateAbbreviations(allAbbreviations),
   };
 }
@@ -167,7 +193,9 @@ function splitPageBlocksIntoChunks(blocks: PageBlock[], maxChunkSize: number): s
   const chunks: string[] = [];
   let currentPages: string[] = [];
   let currentSize = 0;
-  let lastPageOfPrevChunk: string | null = null;
+  // Overlap: keep last 2 pages from previous chunk
+  const OVERLAP_PAGES = 2;
+  let lastPagesOfPrevChunk: string[] = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -175,21 +203,21 @@ function splitPageBlocksIntoChunks(blocks: PageBlock[], maxChunkSize: number): s
     if (block.text.length > maxChunkSize) {
       if (currentPages.length > 0) {
         chunks.push(currentPages.join('\n'));
-        lastPageOfPrevChunk = currentPages[currentPages.length - 1];
+        lastPagesOfPrevChunk = currentPages.slice(-OVERLAP_PAGES);
         currentPages = [];
         currentSize = 0;
       }
       const subChunks = splitByCharacterBoundaries(block.text, maxChunkSize);
       chunks.push(...subChunks);
-      lastPageOfPrevChunk = null;
+      lastPagesOfPrevChunk = [];
       continue;
     }
 
     if (currentSize + block.text.length > maxChunkSize && currentPages.length > 0) {
       chunks.push(currentPages.join('\n'));
-      lastPageOfPrevChunk = currentPages[currentPages.length - 1];
-      currentPages = lastPageOfPrevChunk ? [lastPageOfPrevChunk] : [];
-      currentSize = lastPageOfPrevChunk ? lastPageOfPrevChunk.length : 0;
+      lastPagesOfPrevChunk = currentPages.slice(-OVERLAP_PAGES);
+      currentPages = [...lastPagesOfPrevChunk];
+      currentSize = currentPages.reduce((s, p) => s + p.length, 0);
     }
 
     currentPages.push(block.text);
@@ -233,25 +261,55 @@ function splitByCharacterBoundaries(text: string, maxChunkSize: number): string[
   return chunks;
 }
 
-function extractResponseContent(response: unknown): string {
-  const res = response as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-  return res.choices?.[0]?.message?.content ?? '{}';
+/**
+ * 3-level JSON parse with repair and recovery.
+ */
+function safeJsonParse(raw: string, label: string): unknown {
+  // Level 1: Direct parse
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // continue
+  }
+
+  // Level 2: Automatic repair (close brackets, fix quotes, etc.)
+  try {
+    const repaired = jsonrepair(raw);
+    console.warn(`[${label}] JSON repaired (${raw.length} -> ${repaired.length} chars)`);
+    return JSON.parse(repaired);
+  } catch {
+    // continue
+  }
+
+  // Level 3: Manual recovery of events from truncated JSON
+  const eventsMatch = raw.match(/"events"\s*:\s*\[/);
+  if (eventsMatch && eventsMatch.index !== undefined) {
+    const fromEvents = raw.substring(eventsMatch.index);
+    const lastCloseBrace = fromEvents.lastIndexOf('}');
+    if (lastCloseBrace > 0) {
+      try {
+        const partial = '{' + fromEvents.substring(0, lastCloseBrace + 1) + ']}';
+        const result = JSON.parse(partial) as Record<string, unknown>;
+        const count = Array.isArray(result.events) ? result.events.length : 0;
+        console.warn(`[${label}] Recovered ${count} events from truncated JSON (${raw.length} chars total)`);
+        return result;
+      } catch { /* give up */ }
+    }
+  }
+
+  // All levels failed
+  console.error(
+    `[${label}] JSON irrecoverable (${raw.length} chars). First 500: ${raw.slice(0, 500)}`,
+  );
+  return { events: [] };
 }
 
 /**
  * Parse extraction response with maximum resilience.
  */
-function parseExtractionResponse(content: string): ExtractionResponse {
-  let raw: Record<string, unknown>;
-  try {
-    raw = JSON.parse(content) as Record<string, unknown>;
-  } catch (jsonErr) {
-    console.error(`[extraction] JSON parse failed: ${jsonErr instanceof Error ? jsonErr.message : 'unknown'}`);
-    console.error(`[extraction] Raw content (first 500 chars): ${content.slice(0, 500)}`);
-    return { events: [] };
-  }
+function parseExtractionResponse(content: string, chunkLabel?: string): ExtractionResponse {
+  const label = `parse:${chunkLabel ?? 'unknown'}`;
+  const raw = safeJsonParse(content, label) as Record<string, unknown>;
 
   // Find events array — try multiple key names
   let rawEvents: unknown[] | null = null;
@@ -310,6 +368,107 @@ function parseExtractionResponse(content: string): ExtractionResponse {
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
   console.log(`[extraction] Parsed ${validEvents.length}/${rawEvents.length} events`);
   return { events: validEvents, abbreviations };
+}
+
+// ── Intra-document deduplication ──
+
+function jaccardSimilarity(a: string, b: string): number {
+  const wordsA = new Set(
+    a.toLowerCase().replace(/[^\w\sàèéìòù]/g, '').split(/\s+/).filter((w) => w.length > 3),
+  );
+  const wordsB = new Set(
+    b.toLowerCase().replace(/[^\w\sàèéìòù]/g, '').split(/\s+/).filter((w) => w.length > 3),
+  );
+
+  if (wordsA.size === 0 && wordsB.size === 0) return 1;
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const word of wordsA) {
+    if (wordsB.has(word)) intersection++;
+  }
+
+  const union = wordsA.size + wordsB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function deduplicateWithinDocument(allChunkEvents: ExtractedEvent[]): ExtractedEvent[] {
+  const result: ExtractedEvent[] = [];
+
+  for (const event of allChunkEvents) {
+    const eventText = `${event.title || ''} ${event.description || ''}`;
+    const eventDate = event.eventDate || '';
+
+    const duplicateIndex = result.findIndex((existing) => {
+      const existingDate = existing.eventDate || '';
+      if (eventDate !== existingDate) return false;
+
+      const existingText = `${existing.title || ''} ${existing.description || ''}`;
+      return jaccardSimilarity(eventText, existingText) > 0.6;
+    });
+
+    if (duplicateIndex >= 0) {
+      const existing = result[duplicateIndex];
+      const existingScore = (existing.confidence ?? 0) * 10 + (existing.description?.length ?? 0);
+      const newScore = (event.confidence ?? 0) * 10 + (event.description?.length ?? 0);
+      if (newScore > existingScore) {
+        result[duplicateIndex] = event;
+      }
+    } else {
+      result.push(event);
+    }
+  }
+
+  const removed = allChunkEvents.length - result.length;
+  if (removed > 0) {
+    console.log(
+      `[extraction] Deduplicated within document: ${allChunkEvents.length} -> ${result.length} events ` +
+      `(${removed} duplicates removed via Jaccard similarity)`,
+    );
+  }
+  return result;
+}
+
+// ── Self-verification for critical events ──
+
+const CRITICAL_EVENT_TYPES = [
+  'intervento', 'diagnosi', 'complicanza', 'ricovero', 'dimissione',
+  'decesso', 'consenso', 'trasfusione',
+];
+
+function flagUnverifiedCriticalEvents(
+  events: ExtractedEvent[],
+  fullText: string,
+): ExtractedEvent[] {
+  const normalizedFull = fullText.toLowerCase().replace(/\s+/g, ' ');
+
+  return events.map((event) => {
+    const isCritical = CRITICAL_EVENT_TYPES.includes(event.eventType || '');
+    if (!isCritical) return event;
+
+    const sourceText = event.sourceText || '';
+    if (sourceText.length < 10) {
+      return {
+        ...event,
+        requiresVerification: true,
+        reliabilityNotes: ((event.reliabilityNotes || '') +
+          ' [AUTO] Evento critico senza testo sorgente — richiede revisione manuale.').trim(),
+      };
+    }
+
+    const normalizedSource = sourceText.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    if (!normalizedFull.includes(normalizedSource)) {
+      return {
+        ...event,
+        requiresVerification: true,
+        reliabilityNotes: ((event.reliabilityNotes || '') +
+          ' [AUTO] Evento critico: testo sorgente non trovato nel documento — possibile imprecisione, richiede revisione.').trim(),
+      };
+    }
+
+    return event;
+  });
 }
 
 function deduplicateAbbreviations(

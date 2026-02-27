@@ -56,22 +56,60 @@ export async function ocrDocument(params: {
   return ocrPdf({ documentId, fileName, signedUrl });
 }
 
+// ── OCR response types (extended for OCR 3) ──
+
+interface OcrRawPage {
+  markdown?: string;
+  images?: Array<{ id?: string; imageBase64?: string }>;
+  tables?: string[];
+  header?: string;
+  footer?: string;
+}
+
+interface OcrRawResponse {
+  pages?: OcrRawPage[];
+}
+
 /**
  * Map a Mistral OCR API response to OcrDocumentResult.
- * Shared by ocrPdf, ocrImage, and ocrDocx.
+ * Handles OCR 3 features: HTML tables, headers, footers.
  */
 function mapOcrResponseToResult(params: {
   documentId: string;
   fileName: string;
-  response: { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> };
+  response: OcrRawResponse;
 }): OcrDocumentResult {
   const { documentId, fileName, response } = params;
   const allImages: OcrImageResult[] = [];
 
-  const pages: OcrPageResult[] = (response.pages ?? []).map((page, index) => {
-    const text = page.markdown ?? '';
+  // Pre-process pages to include header/footer info for filtering
+  const rawPages = (response.pages ?? []).map((page, index) => ({
+    ...page,
+    pageNumber: index + 1,
+    headerText: (page.header ?? '').trim(),
+    footerText: (page.footer ?? '').trim(),
+  }));
+
+  // Filter repetitive headers/footers
+  filterRepetitiveHeadersFooters(rawPages);
+
+  const pages: OcrPageResult[] = rawPages.map((page) => {
+    let text = page.markdown ?? '';
+
+    // If there are HTML tables from OCR 3, insert them with markers
+    if (page.tables && page.tables.length > 0) {
+      for (const table of page.tables) {
+        text += `\n[TABLE_HTML_START]\n${table}\n[TABLE_HTML_END]\n`;
+      }
+    }
+
+    // Append non-repetitive header/footer as context
+    if (page.headerText.length > 0) {
+      console.log(`[ocr] Page ${page.pageNumber}: header detected (${page.headerText.length} chars)`);
+    }
+
     const handwritingInfo = detectHandwriting(text);
-    const pageNumber = index + 1;
+    const pageNumber = page.pageNumber;
 
     // Extract images from page
     const pageImages: OcrImageResult[] = [];
@@ -102,7 +140,7 @@ function mapOcrResponseToResult(params: {
 
   // Full text with page markers for source anchoring
   const fullText = pages.map((p) =>
-    `[PAGE_START:${p.pageNumber}]\n${p.text}\n[PAGE_END:${p.pageNumber}]`
+    `[PAGE_START:${p.pageNumber}]\n${p.text}\n[PAGE_END:${p.pageNumber}]`,
   ).join('\n\n');
 
   const averageConfidence = pages.length > 0
@@ -118,6 +156,59 @@ function mapOcrResponseToResult(params: {
     fullText,
     images: allImages,
   };
+}
+
+/**
+ * Filter repetitive headers/footers that appear in >50% of pages.
+ * Mutates the array in place by clearing repetitive header/footer text.
+ */
+function filterRepetitiveHeadersFooters(
+  pages: Array<{ headerText: string; footerText: string }>,
+): void {
+  if (pages.length < 3) return;
+
+  const threshold = pages.length * 0.5;
+
+  // Count header occurrences
+  const headerCounts = new Map<string, number>();
+  for (const page of pages) {
+    const h = page.headerText.toLowerCase();
+    if (h.length > 5) {
+      headerCounts.set(h, (headerCounts.get(h) ?? 0) + 1);
+    }
+  }
+
+  // Remove headers appearing in >50% of pages
+  for (const [header, count] of headerCounts) {
+    if (count >= threshold) {
+      console.log(`[ocr] Filtering repetitive header (${count}/${pages.length} pages): "${header.slice(0, 50)}..."`);
+      for (const page of pages) {
+        if (page.headerText.toLowerCase() === header) {
+          page.headerText = '';
+        }
+      }
+    }
+  }
+
+  // Same logic for footers
+  const footerCounts = new Map<string, number>();
+  for (const page of pages) {
+    const f = page.footerText.toLowerCase();
+    if (f.length > 5) {
+      footerCounts.set(f, (footerCounts.get(f) ?? 0) + 1);
+    }
+  }
+
+  for (const [footer, count] of footerCounts) {
+    if (count >= threshold) {
+      console.log(`[ocr] Filtering repetitive footer (${count}/${pages.length} pages): "${footer.slice(0, 50)}..."`);
+      for (const page of pages) {
+        if (page.footerText.toLowerCase() === footer) {
+          page.footerText = '';
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -139,6 +230,8 @@ async function ocrPdf(params: {
         documentUrl: signedUrl,
       },
       includeImageBase64: false,
+      // OCR 3 features (cast for SDK compatibility)
+      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
     }),
     'ocr-pdf',
   );
@@ -146,7 +239,7 @@ async function ocrPdf(params: {
   return mapOcrResponseToResult({
     documentId,
     fileName,
-    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+    response: response as unknown as OcrRawResponse,
   });
 }
 
@@ -170,6 +263,7 @@ async function ocrImage(params: {
         imageUrl: signedUrl,
       },
       includeImageBase64: false,
+      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
     }),
     'ocr-image',
   );
@@ -177,7 +271,7 @@ async function ocrImage(params: {
   return mapOcrResponseToResult({
     documentId,
     fileName,
-    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+    response: response as unknown as OcrRawResponse,
   });
 }
 
@@ -200,6 +294,7 @@ async function ocrDocx(params: {
         documentUrl: signedUrl,
       },
       includeImageBase64: false,
+      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
     }),
     'ocr-docx',
   );
@@ -207,7 +302,7 @@ async function ocrDocx(params: {
   return mapOcrResponseToResult({
     documentId,
     fileName,
-    response: response as { pages?: Array<{ markdown?: string; images?: Array<{ id?: string; imageBase64?: string }> }> },
+    response: response as unknown as OcrRawResponse,
   });
 }
 
