@@ -4,6 +4,13 @@ import {
 } from 'docx';
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
+
+const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
+  ctu: 'CTU - Consulente Tecnico d\'Ufficio (prospettiva neutrale)',
+  ctp: 'CTP - Consulente Tecnico di Parte (prospettiva del paziente)',
+  stragiudiziale: 'Perito Stragiudiziale (valutazione di merito)',
+};
 
 interface DocxEvent {
   order_number: number;
@@ -42,6 +49,7 @@ interface DocxExportParams {
   events: DocxEvent[];
   anomalies: DocxAnomaly[];
   missingDocs: DocxMissingDoc[];
+  calculations?: MedicoLegalCalculation[];
 }
 
 /**
@@ -49,7 +57,7 @@ interface DocxExportParams {
  * Returns a Buffer ready for download.
  */
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -69,7 +77,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   children.push(
     new Paragraph({ children: [new TextRun({ text: `Caso: ${caseCode}`, bold: true })] }),
     new Paragraph({ children: [new TextRun({ text: `Paziente: ${patientInitials ?? 'N/D'}` })] }),
-    new Paragraph({ children: [new TextRun({ text: `Tipo: ${caseType} | Ruolo: ${caseRole.toUpperCase()}` })] }),
+    new Paragraph({ children: [new TextRun({ text: `Tipo: ${caseType} | Ruolo: ${DOCX_ROLE_DESCRIPTIONS[caseRole] ?? caseRole.toUpperCase()}` })] }),
     new Paragraph({ children: [new TextRun({ text: `Data report: ${now}` })] }),
     new Paragraph({
       children: [new TextRun({ text: `Eventi: ${events.length} | Anomalie: ${anomalies.length} | Doc. Mancanti: ${missingDocs.length}` })],
@@ -164,10 +172,43 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   children.push(new Paragraph({ text: '' }));
 
-  // Section 3: Anomalies
+  // Section 3: Calculations (if available)
+  if (calculations && calculations.length > 0) {
+    children.push(
+      new Paragraph({
+        text: '3. PERIODI MEDICO-LEGALI CALCOLATI',
+        heading: HeadingLevel.HEADING_2,
+      }),
+      new Paragraph({ text: '' }),
+    );
+
+    for (const calc of calculations) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${calc.label}: `, bold: true }),
+            new TextRun({ text: calc.value, bold: true, color: '1E40AF' }),
+          ],
+          spacing: { before: 150 },
+        }),
+      );
+      if (calc.startDate && calc.endDate) {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `${formatDate(calc.startDate)} — ${formatDate(calc.endDate)}`, color: '64748B', size: 22 })],
+        }));
+      }
+      children.push(new Paragraph({
+        children: [new TextRun({ text: calc.notes, italics: true, color: '64748B', size: 22 })],
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
+  }
+
+  // Section: Anomalies
+  const anomalySectionNum = calculations && calculations.length > 0 ? '4' : '3';
   children.push(
     new Paragraph({
-      text: '3. ANOMALIE RILEVATE',
+      text: `${anomalySectionNum}. ANOMALIE RILEVATE`,
       heading: HeadingLevel.HEADING_1,
     }),
     new Paragraph({ text: '' }),
@@ -200,7 +241,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Section 4: Missing Docs
   children.push(
     new Paragraph({
-      text: '4. DOCUMENTAZIONE MANCANTE',
+      text: `${calculations && calculations.length > 0 ? '5' : '4'}. DOCUMENTAZIONE MANCANTE`,
       heading: HeadingLevel.HEADING_1,
     }),
     new Paragraph({ text: '' }),

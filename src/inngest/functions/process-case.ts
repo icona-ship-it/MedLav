@@ -8,13 +8,14 @@ import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
-import type { CaseType } from '@/types';
+import type { CaseType, CaseRole } from '@/types';
 import { safeJsonParse } from '@/lib/format';
+import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 
 interface CaseMetadata {
   caseId: string;
   caseType: CaseType;
-  caseRole: string;
+  caseRole: CaseRole;
   patientInitials: string | null;
   userId: string;
 }
@@ -100,7 +101,7 @@ export const processCaseDocuments = inngest.createFunction(
         metadata: {
           caseId: caseRow.id as string,
           caseType: caseRow.case_type as CaseType,
-          caseRole: caseRow.case_role as string,
+          caseRole: caseRow.case_role as CaseRole,
           patientInitials: caseRow.patient_initials as string | null,
           userId: caseRow.user_id as string,
         } satisfies CaseMetadata,
@@ -523,7 +524,16 @@ export const processCaseDocuments = inngest.createFunction(
       const supabase = createAdminClient();
 
       const synthesisStartMs = Date.now();
-      console.log(`[pipeline] Step 7: Starting synthesis (full case, ${consolidationResult.allEvents.length} events)`);
+      console.log(`[pipeline] Step 7: Starting synthesis (full case, ${consolidationResult.allEvents.length} events, role: ${metadata.caseRole})`);
+
+      // Calculate medico-legal periods for report integration
+      const calcEvents = consolidationResult.allEvents.map((e) => ({
+        event_date: e.eventDate,
+        event_type: e.eventType,
+        title: e.title,
+        description: e.description,
+      }));
+      const calculations = calculateMedicoLegalPeriods(calcEvents);
 
       const result = await generateSynthesis({
         caseType: metadata.caseType,
@@ -532,8 +542,7 @@ export const processCaseDocuments = inngest.createFunction(
         events: consolidationResult.allEvents,
         anomalies,
         missingDocuments: missingDocs,
-        caseTypeLabel: metadata.caseType,
-        expertRole: metadata.caseRole,
+        calculations,
       });
 
       console.log(`[pipeline] Step 7: Synthesis completed in ${Date.now() - synthesisStartMs}ms (${result.wordCount} words)`);

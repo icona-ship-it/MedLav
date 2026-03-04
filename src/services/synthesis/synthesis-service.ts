@@ -13,11 +13,13 @@ import {
   buildSummaryUserPrompt,
   CASE_TYPE_LABELS,
 } from './synthesis-prompts';
-import type { CaseType } from '@/types';
+import type { CaseType, CaseRole } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
+import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatDate } from '@/lib/format';
+import { buildGuidelineContext } from '../rag/retrieval-service';
 
 interface SynthesisResult {
   synthesis: string;
@@ -29,22 +31,23 @@ const MAX_SYNTHESIS_ATTEMPTS = 2;
 
 /**
  * Generate the medico-legal synthesis using Mistral Large with streaming.
+ * Now role-adaptive, case-type-specific, with calculations integration.
  * Splits into chronology + summary for large cases (>40K chars).
- * Validates output and auto-retries once if sections are missing.
  */
 export async function generateSynthesis(params: {
   caseType: CaseType;
-  caseRole: string;
+  caseRole: CaseRole;
   patientInitials: string | null;
   events: ConsolidatedEvent[];
   anomalies: DetectedAnomaly[];
   missingDocuments: MissingDocument[];
+  calculations?: MedicoLegalCalculation[];
   caseTypeLabel?: string;
   expertRole?: string;
 }): Promise<SynthesisResult> {
   const {
     caseType, caseRole, events, anomalies, missingDocuments,
-    patientInitials,
+    patientInitials, calculations,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -52,6 +55,7 @@ export async function generateSynthesis(params: {
   const eventsFormatted = formatEventsForPrompt(events);
   const anomaliesFormatted = formatAnomalies(anomalies);
   const missingDocsFormatted = formatMissingDocs(missingDocuments);
+  const calculationsFormatted = formatCalculations(calculations);
 
   const totalPromptChars = eventsFormatted.length +
     (anomaliesFormatted?.length ?? 0) +
@@ -59,20 +63,38 @@ export async function generateSynthesis(params: {
 
   const shouldSplit = totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
 
+  // RAG: retrieve relevant clinical guidelines
+  let guidelineContext = '';
+  try {
+    guidelineContext = await buildGuidelineContext({
+      events: events.map((e) => ({ title: e.title, description: e.description, eventType: e.eventType })),
+      caseType,
+    });
+    if (guidelineContext) {
+      console.log(`[synthesis] RAG: retrieved guideline context (${guidelineContext.length} chars)`);
+    }
+  } catch (ragError) {
+    // RAG is optional — don't block synthesis if it fails
+    console.warn(`[synthesis] RAG retrieval failed (non-blocking): ${ragError instanceof Error ? ragError.message : 'unknown'}`);
+  }
+
   console.log(
     `[synthesis] Total prompt: ${totalPromptChars} chars, split: ${shouldSplit}, ` +
-    `events: ${events.length}`,
+    `events: ${events.length}, role: ${caseRole}, type: ${caseType}`,
   );
 
   for (let attempt = 0; attempt < MAX_SYNTHESIS_ATTEMPTS; attempt++) {
     let report: string;
 
     if (!shouldSplit) {
-      // Single-call mode: full report
+      // Single-call mode: full report with role-adaptive prompt
       report = await streamMistralChat({
         model: MISTRAL_MODELS.MISTRAL_LARGE,
         messages: [
-          { role: 'system', content: buildSynthesisSystemPrompt() },
+          {
+            role: 'system',
+            content: buildSynthesisSystemPrompt({ caseType, caseRole }),
+          },
           {
             role: 'user',
             content: buildSynthesisUserPrompt({
@@ -82,7 +104,8 @@ export async function generateSynthesis(params: {
               events,
               anomalies,
               missingDocuments,
-            }),
+              calculations,
+            }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
           },
         ],
         temperature: 0.3,
@@ -119,7 +142,10 @@ export async function generateSynthesis(params: {
       const summaryAndAnalysis = await streamMistralChat({
         model: MISTRAL_MODELS.MISTRAL_LARGE,
         messages: [
-          { role: 'system', content: buildSummarySystemPrompt() },
+          {
+            role: 'system',
+            content: buildSummarySystemPrompt({ caseType, caseRole }),
+          },
           {
             role: 'user',
             content: buildSummaryUserPrompt({
@@ -129,7 +155,8 @@ export async function generateSynthesis(params: {
               patientInitials: patientInitials ?? undefined,
               anomalies: anomaliesFormatted,
               missingDocs: missingDocsFormatted,
-            }),
+              calculations: calculationsFormatted,
+            }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
           },
         ],
         temperature: 0.3,
@@ -143,7 +170,7 @@ export async function generateSynthesis(params: {
       report = assembleSplitReport(summaryAndAnalysis, chronology);
     }
 
-    // Validate required sections
+    // Validate required sections (base 3 — always required)
     const validation = validateReportSections(report);
     if (validation.valid) {
       report = stripSectionMarkers(report);
@@ -166,11 +193,10 @@ export async function generateSynthesis(params: {
     }
   }
 
-  // Unreachable but TypeScript needs it
   throw new Error('[synthesis] Unreachable');
 }
 
-// ── Formatting helpers ──
+// ── Formatting helpers (for split mode events formatting) ──
 
 function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events
@@ -207,6 +233,14 @@ function formatMissingDocs(missingDocuments: MissingDocument[]): string {
   return missingDocuments
     .map((d) => `- ${d.documentName}: ${d.reason}`)
     .join('\n');
+}
+
+function formatCalculations(calculations?: MedicoLegalCalculation[]): string {
+  if (!calculations || calculations.length === 0) return '';
+  const lines = calculations.map((c) =>
+    `- ${c.label}: ${c.value}${c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : ''}`,
+  );
+  return `## PERIODI MEDICO-LEGALI CALCOLATI\n${lines.join('\n')}`;
 }
 
 // ── Assembly for split mode ──
@@ -269,7 +303,7 @@ function validateReportSections(report: string): { valid: boolean; missing: stri
     { name: 'Cronologia medico-legale', pattern: /cronologia\s+medico/i },
     {
       name: 'Elementi di rilievo',
-      pattern: /elementi\s+di\s+rilievo|aspetti\s+(critici|rilevanti)|osservazioni\s+medico/i,
+      pattern: /elementi\s+di\s+rilievo|aspetti\s+(critici|rilevanti)|osservazioni\s+medico|profili\s+di\s+responsabilit|valutazione\s+di\s+merito/i,
     },
   ];
 

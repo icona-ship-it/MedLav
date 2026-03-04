@@ -1,8 +1,12 @@
-import type { CaseType } from '@/types';
+import type { CaseType, CaseRole } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
+import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatDate } from '@/lib/format';
+import { formatRoleDirectiveForPrompt } from './role-prompts';
+import { buildCaseTypeDirective } from './case-type-templates';
+import { formatCausalNexusForPrompt, getCaseTypeKnowledge } from '@/lib/domain-knowledge';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -22,63 +26,13 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   altro: 'ALTRO',
 };
 
-/**
- * Build the system prompt for synthesis generation.
- * Produces a complete medico-legal report with summary + chronology.
- */
-export function buildSynthesisSystemPrompt(): string {
-  return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
+const CHRONOLOGY_SOURCES_GUIDE = `Le categorie delle fonti sono:
+**(A) CARTELLA CLINICA** — diagnosi, parametri vitali, esami, anamnesi, terapie, descrizioni operatorie, diari clinici, lettere di dimissione
+**(B) REFERTI CONTROLLI MEDICI** — visite specialistiche, follow-up, certificati
+**(C) REFERTI RADIOLOGICI ED ESAMI STRUMENTALI** — RX, TAC, RM, ECG, ecografie
+**(D) ESAMI EMATOCHIMICI** — emocromo, biochimica, coagulazione, markers`;
 
-## IL TUO COMPITO
-Genera un REPORT MEDICO-LEGALE completo e dettagliato basato sugli eventi clinici estratti dalla documentazione.
-
-## STRUTTURA OBBLIGATORIA DEL REPORT
-
-### PARTE 1 — RIASSUNTO DEL CASO (300-500 parole)
-Sintesi narrativa completa del caso che include:
-- Presentazione del paziente e motivo del ricovero/prima visita
-- Decorso clinico essenziale con i passaggi critici
-- Interventi effettuati e loro esiti
-- Complicanze eventualmente insorte
-- Stato attuale del paziente e prognosi
-- Elementi critici per la valutazione medico-legale
-- Nesso causale tra gestione clinica e danni
-
-### PARTE 2 — CRONOLOGIA MEDICO-LEGALE (senza limiti di parole)
-Elenco cronologico COMPLETO di TUTTI i fatti medici documentati.
-Questa sezione è la parte più importante: deve riportare FEDELMENTE le evidenze cliniche come un copia/incolla organizzato della documentazione.
-
-Per ogni voce cronologica riporta:
-- **Data** (formato DD/MM/YYYY)
-- **Categoria fonte** tra parentesi: (A), (B), (C) o (D)
-- **Contenuto** copiato fedelmente dal documento originale
-
-Le categorie delle fonti sono:
-**(A) CARTELLA CLINICA** — riportare:
-- Diagnosi di ingresso, peso, altezza, parametri vitali (PA, FC, SpO2, temperatura)
-- Esami ematochimici con TUTTI i valori numerici e unità di misura
-- Anamnesi patologica e terapie effettuate (farmaco, dosaggio, via, frequenza)
-- Descrizione operatoria INTEGRALE: tipo intervento, operatori, tecnica, tempi operatori, reperti, complicanze, tipo anestesia
-- Cartella anestesiologica: valutazione preoperatoria, ASA score, farmaci, parametri
-- Diario medico/infermieristico: SOLO eventi avversi, complicanze, peggioramenti, interventi urgenti
-- Lettera di dimissione: diagnosi dimissione, condizioni, terapia domiciliare, follow-up
-
-**(B) REFERTI CONTROLLI MEDICI** — riportare INTEGRALMENTE:
-Visite specialistiche, follow-up, visite ambulatoriali, certificati medici con: data, specialista, contenuto completo, conclusioni
-
-**(C) REFERTI RADIOLOGICI ED ESAMI STRUMENTALI** — riportare INTEGRALMENTE:
-RX, TAC/TC, RM, ecografie, ECG con: data, tipo esame, distretto, descrizione, conclusioni
-
-**(D) ESAMI EMATOCHIMICI** — riportare TUTTI i valori:
-Emocromo, biochimica, coagulazione, markers con: data, tutti i valori numerici con unità di misura
-
-### PARTE 3 — ELEMENTI DI RILIEVO MEDICO-LEGALE (200-400 parole)
-- Punti critici per la valutazione peritale
-- Eventuali omissioni o ritardi
-- Anomalie nella gestione clinica
-- Documentazione mancante rilevante
-
-## REGOLE ASSOLUTE
+const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - NON omettere NESSUN evento dalla cronologia
 - Riportare i dati FEDELMENTE come dal documento, non sintetizzare
 - NON citare numeri di pagina
@@ -87,6 +41,45 @@ Emocromo, biochimica, coagulazione, markers con: data, tutti i valori numerici c
 - Scrivi in italiano
 - Usa intestazioni markdown (## per parti, ### per sotto-sezioni)
 - La cronologia deve essere COMPLETA — ogni evento fornito deve comparire`;
+
+// ── Full-report mode (single call) ──
+
+/**
+ * Build the system prompt for synthesis generation.
+ * Now role-adaptive and case-type-specific.
+ */
+export function buildSynthesisSystemPrompt(params: {
+  caseType: CaseType;
+  caseRole: CaseRole;
+}): string {
+  const { caseType, caseRole } = params;
+  const roleDirective = formatRoleDirectiveForPrompt(caseRole);
+  const caseTypeDirective = buildCaseTypeDirective(caseType);
+  const causalNexus = formatCausalNexusForPrompt();
+
+  return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
+
+## IL TUO COMPITO
+Genera un REPORT MEDICO-LEGALE completo e dettagliato basato sugli eventi clinici estratti dalla documentazione.
+
+${roleDirective}
+
+${caseTypeDirective}
+
+## CRITERI PER LA VALUTAZIONE DEL NESSO CAUSALE
+
+${causalNexus}
+
+## FORMATO CRONOLOGIA
+
+Per ogni voce cronologica riporta:
+- **Data** (formato DD/MM/YYYY)
+- **Categoria fonte** tra parentesi: (A), (B), (C) o (D)
+- **Contenuto** copiato fedelmente dal documento originale
+
+${CHRONOLOGY_SOURCES_GUIDE}
+
+${ABSOLUTE_RULES}`;
 }
 
 /**
@@ -95,41 +88,27 @@ Emocromo, biochimica, coagulazione, markers con: data, tutti i valori numerici c
 export function buildSynthesisUserPrompt(params: {
   caseType: CaseType;
   patientInitials: string | null;
-  caseRole: string;
+  caseRole: CaseRole;
   events: ConsolidatedEvent[];
   anomalies: DetectedAnomaly[];
   missingDocuments: MissingDocument[];
+  calculations?: MedicoLegalCalculation[];
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations } = params;
 
-  // Group events by source type for better context
-  const eventsText = events.map((e) => {
-    const date = formatDate(e.eventDate);
-    const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
-    const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
-    const diagnosis = e.diagnosis ? `\n   Diagnosi: ${e.diagnosis}` : '';
-    const doctor = e.doctor ? `\n   Medico: ${e.doctor}` : '';
-    const facility = e.facility ? `\n   Struttura: ${e.facility}` : '';
-    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} | TIPO: ${e.eventType.toUpperCase()}
-   TITOLO: ${e.title}
-   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}`;
-  }).join('\n\n');
+  const eventsText = formatEventsForPrompt(events);
+  const anomaliesText = formatAnomaliesForPrompt(anomalies);
+  const missingDocsText = formatMissingDocsForPrompt(missingDocuments);
+  const calculationsText = formatCalculationsForPrompt(calculations);
 
-  const anomaliesText = anomalies.length > 0
-    ? anomalies.map((a) => {
-      const involvedDates = a.involvedEvents.map((e) => `${formatDate(e.date)} - ${e.title}`).join(', ');
-      return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})`;
-    }).join('\n')
-    : 'Nessuna anomalia rilevata.';
-
-  const missingDocsText = missingDocuments.length > 0
-    ? missingDocuments.map((d) => `- ${d.documentName}: ${d.reason}`).join('\n')
-    : 'Nessuna documentazione mancante rilevata.';
+  const roleLabel = caseRole === 'ctu' ? 'CTU - Consulente Tecnico d\'Ufficio'
+    : caseRole === 'ctp' ? 'CTP - Consulente Tecnico di Parte'
+    : 'Perito Stragiudiziale';
 
   return `Genera il report medico-legale completo per il seguente caso.
 
 TIPO CASO: ${CASE_TYPE_LABELS[caseType]}
-RUOLO PERITO: ${caseRole.toUpperCase()}
+RUOLO PERITO: ${roleLabel}
 PAZIENTE: ${patientInitials || 'N/D'}
 NUMERO EVENTI DOCUMENTATI: ${events.length}
 PERIODO DOCUMENTATO: ${events.length > 0 ? `${formatDate(events[0].eventDate)} — ${formatDate(events[events.length - 1].eventDate)}` : 'N/D'}
@@ -145,15 +124,12 @@ ${anomaliesText}
 ## DOCUMENTAZIONE MANCANTE
 
 ${missingDocsText}
-
+${calculationsText}
 ---
 
-Genera il report completo con le 3 parti obbligatorie:
-1. RIASSUNTO DEL CASO (sintesi narrativa)
-2. CRONOLOGIA MEDICO-LEGALE (tutti gli eventi, categorizzati A/B/C/D, copiati fedelmente)
-3. ELEMENTI DI RILIEVO MEDICO-LEGALE (criticità, anomalie, nesso causale)
-
-IMPORTANTE: La cronologia deve riportare OGNI evento fornito sopra, fedelmente, senza omissioni. Non citare numeri di pagina.`;
+Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
+IMPORTANTE: La cronologia deve riportare OGNI evento fornito sopra, fedelmente, senza omissioni. Non citare numeri di pagina.
+Adatta tono e prospettiva al RUOLO indicato (${roleLabel}).`;
 }
 
 // ── Split-mode prompts (for large cases >40K chars) ──
@@ -168,11 +144,9 @@ COMPITO: Genera ESCLUSIVAMENTE la cronologia. NON generare riassunti, analisi, o
 
 FORMATO OBBLIGATORIO PER OGNI VOCE:
 - Data in formato DD/MM/YYYY
-- Categoria della fonte tra parentesi:
-  (A) CARTELLA CLINICA — fogli di ingresso, esami obiettivi, anamnesi, descrizioni operatorie, schede anestesiologiche, diari clinici, lettere di dimissione
-  (B) REFERTI CONTROLLI MEDICI — visite ambulatoriali, follow-up, certificati, consulenze
-  (C) REFERTI RADIOLOGICI ED ESAMI STRUMENTALI — RX, TAC, RM, ECG, ecografie, endoscopie
-  (D) ESAMI EMATOCHIMICI — referti di laboratorio, esami del sangue, esami urine
+- Categoria della fonte tra parentesi: (A), (B), (C) o (D)
+
+${CHRONOLOGY_SOURCES_GUIDE}
 
 REGOLE:
 - Ordine rigorosamente cronologico
@@ -185,9 +159,6 @@ STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
 <!-- SECTION:CRONOLOGIA -->
 ## CRONOLOGIA MEDICO-LEGALE
-
-DD/MM/YYYY — (X) Titolo evento
-Descrizione completa e fedele copiata dalla documentazione...
 
 DD/MM/YYYY — (X) Titolo evento
 Descrizione completa e fedele copiata dalla documentazione...
@@ -214,43 +185,49 @@ export function buildChronologyUserPrompt(
 
 /**
  * System prompt for summary + analysis generation (split mode).
+ * Now role-adaptive and case-type-aware.
  */
-export function buildSummarySystemPrompt(): string {
-  return `Sei un medico legale esperto incaricato di redigere due sezioni di un report peritale:
-1. RIASSUNTO DEL CASO
-2. ELEMENTI DI RILIEVO MEDICO-LEGALE
+export function buildSummarySystemPrompt(params: {
+  caseType: CaseType;
+  caseRole: CaseRole;
+}): string {
+  const { caseType, caseRole } = params;
+  const roleDirective = formatRoleDirectiveForPrompt(caseRole);
+  const causalNexus = formatCausalNexusForPrompt();
 
+  // Get non-chronology sections for split mode
+  const knowledge = getCaseTypeKnowledge(caseType);
+  const nonChronoSections = knowledge.reportSections
+    .filter((s) => s.id !== 'cronologia')
+    .map((s) => {
+      const wordInfo = s.wordRange.max > 0 ? ` (${s.wordRange.min}-${s.wordRange.max} parole)` : '';
+      return `- ${s.title.toUpperCase()}${wordInfo}: ${s.description}`;
+    })
+    .join('\n');
+
+  return `Sei un medico legale esperto incaricato di redigere le sezioni NON cronologiche di un report peritale.
 Ti verrà fornita la cronologia già compilata come riferimento. NON rigenerare la cronologia.
 
-SEZIONE 1 — RIASSUNTO DEL CASO (300-500 parole):
-Deve contenere:
-- Presentazione del paziente e motivo del ricovero/consulenza
-- Decorso clinico con i passaggi critici
-- Interventi effettuati e loro esiti
-- Complicanze eventualmente insorte
-- Stato attuale e prognosi (se disponibile)
-- Elementi critici per la valutazione medico-legale
-- Nesso causale tra gestione clinica e danno (se rilevabile)
+${roleDirective}
 
-SEZIONE 2 — ELEMENTI DI RILIEVO MEDICO-LEGALE (200-400 parole):
-Deve contenere:
-- Punti critici per la valutazione peritale
-- Eventuali omissioni o ritardi nella gestione clinica
-- Anomalie nella gestione diagnostico-terapeutica
-- Documentazione mancante o carente
-- Discrepanze tra quanto documentato e quanto atteso secondo le linee guida
-- Aspetti rilevanti per la quantificazione del danno
+## SEZIONI DA GENERARE
+
+${nonChronoSections}
+
+## CRITERI PER LA VALUTAZIONE DEL NESSO CAUSALE
+
+${causalNexus}
 
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
 <!-- SECTION:RIASSUNTO -->
 ## RIASSUNTO DEL CASO
-[testo 300-500 parole]
+[testo]
 <!-- END:RIASSUNTO -->
 
 <!-- SECTION:ELEMENTI -->
 ## ELEMENTI DI RILIEVO MEDICO-LEGALE
-[testo 200-400 parole]
+[testo]
 <!-- END:ELEMENTI -->`;
 }
 
@@ -264,8 +241,9 @@ export function buildSummaryUserPrompt(params: {
   patientInitials?: string;
   anomalies?: string;
   missingDocs?: string;
+  calculations?: string;
 }): string {
-  const { chronology, caseTypeLabel, expertRole, patientInitials, anomalies, missingDocs } = params;
+  const { chronology, caseTypeLabel, expertRole, patientInitials, anomalies, missingDocs, calculations } = params;
 
   let prompt = `TIPO CASO: ${caseTypeLabel}\n`;
   prompt += `RUOLO PERITO: ${expertRole}\n`;
@@ -281,9 +259,51 @@ export function buildSummaryUserPrompt(params: {
     prompt += `\n## DOCUMENTAZIONE MANCANTE:\n${missingDocs}\n`;
   }
 
-  prompt += '\nBasandoti sulla cronologia e sulle anomalie sopra indicate, genera le due sezioni richieste (RIASSUNTO DEL CASO e ELEMENTI DI RILIEVO MEDICO-LEGALE) nel formato specificato. Ricorda di includere i marker <!-- SECTION:RIASSUNTO -->, <!-- END:RIASSUNTO -->, <!-- SECTION:ELEMENTI --> e <!-- END:ELEMENTI -->.';
+  if (calculations && calculations.trim().length > 0) {
+    prompt += `\n${calculations}\n`;
+  }
+
+  prompt += '\nBasandoti sulla cronologia e sulle anomalie sopra indicate, genera TUTTE le sezioni richieste nel formato specificato. Ricorda di includere i marker <!-- SECTION:xxx --> e <!-- END:xxx -->.';
+  prompt += `\nAdatta tono e prospettiva al ruolo: ${expertRole}.`;
 
   return prompt;
+}
+
+// ── Formatting helpers ──
+
+function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
+  return events.map((e) => {
+    const date = formatDate(e.eventDate);
+    const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
+    const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
+    const diagnosis = e.diagnosis ? `\n   Diagnosi: ${e.diagnosis}` : '';
+    const doctor = e.doctor ? `\n   Medico: ${e.doctor}` : '';
+    const facility = e.facility ? `\n   Struttura: ${e.facility}` : '';
+    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} | TIPO: ${e.eventType.toUpperCase()}
+   TITOLO: ${e.title}
+   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}`;
+  }).join('\n\n');
+}
+
+function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
+  if (anomalies.length === 0) return 'Nessuna anomalia rilevata.';
+  return anomalies.map((a) => {
+    const involvedDates = a.involvedEvents.map((e) => `${formatDate(e.date)} - ${e.title}`).join(', ');
+    return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})`;
+  }).join('\n');
+}
+
+function formatMissingDocsForPrompt(missingDocuments: MissingDocument[]): string {
+  if (missingDocuments.length === 0) return 'Nessuna documentazione mancante rilevata.';
+  return missingDocuments.map((d) => `- ${d.documentName}: ${d.reason}`).join('\n');
+}
+
+function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): string {
+  if (!calculations || calculations.length === 0) return '';
+  const lines = calculations.map((c) =>
+    `- ${c.label}: ${c.value}${c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : ''}\n  ${c.notes}`,
+  );
+  return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)\n\n${lines.join('\n')}\n\nNOTA: Integra questi periodi nella valutazione del danno biologico. Sono stime automatiche da confermare.`;
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

@@ -35,6 +35,7 @@ export async function GET(
     events: data.events,
     anomalies: data.anomalies,
     missingDocs: data.missingDocs,
+    calculations: data.calculations,
   });
 
   return new NextResponse(html, {

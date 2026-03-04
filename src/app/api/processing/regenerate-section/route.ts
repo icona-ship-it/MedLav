@@ -2,25 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
-import { detectAnomalies } from '@/services/validation/anomaly-detector';
-import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
-import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { CaseType, CaseRole } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { detectAnomalies } from '@/services/validation/anomaly-detector';
+import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import { regenerateSection } from '@/services/synthesis/section-regenerator';
 
 export const maxDuration = 60;
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
+  sectionId: z.string().min(1).max(50),
+  instruction: z.string().max(500).optional(),
 });
 
 /**
- * POST /api/processing/regenerate
- * Regenerate anomalies, missing docs, and synthesis from current events.
- * Used after the expert edits/adds/deletes events.
+ * POST /api/processing/regenerate-section
+ * Regenerate a single section of the report.
+ * Preserves all other sections, creates a new version.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -32,9 +34,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
-    // Rate limit: prevent repeated expensive LLM calls
     const rateCheck = checkRateLimit({
-      key: `regenerate:${user.id}`,
+      key: `regen-section:${user.id}`,
       ...RATE_LIMITS.PROCESSING,
     });
     if (!rateCheck.success) {
@@ -47,12 +48,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as unknown;
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ success: false, error: 'ID caso non valido' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Parametri non validi' }, { status: 400 });
     }
 
-    const { caseId } = parsed.data;
+    const { caseId, sectionId, instruction } = parsed.data;
 
-    // Verify case ownership
+    // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
       .from('cases')
       .select('id, case_type, case_role, patient_initials')
@@ -64,7 +65,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
     }
 
-    // Fetch current active events
+    // Get current report
+    const { data: currentReport } = await admin
+      .from('reports')
+      .select('id, version, synthesis')
+      .eq('case_id', caseId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!currentReport?.synthesis) {
+      return NextResponse.json({ success: false, error: 'Nessun report esistente' }, { status: 400 });
+    }
+
+    // Fetch events
     const { data: eventsRaw } = await admin
       .from('events')
       .select('*')
@@ -92,42 +106,12 @@ export async function POST(request: NextRequest) {
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
     }));
 
-    // Delete old anomalies and missing docs
-    await admin.from('anomalies').delete().eq('case_id', caseId);
-    await admin.from('missing_documents').delete().eq('case_id', caseId);
-
-    // Re-detect anomalies
+    // Compute context data
     const anomalies = detectAnomalies(events);
-    if (anomalies.length > 0) {
-      await admin.from('anomalies').insert(
-        anomalies.map((a) => ({
-          case_id: caseId,
-          anomaly_type: a.anomalyType,
-          severity: a.severity,
-          description: a.description,
-          involved_events: JSON.stringify(a.involvedEvents),
-          suggestion: a.suggestion,
-        })),
-      );
-    }
-
-    // Re-detect missing docs
     const missingDocs = detectMissingDocuments({
       events,
       caseType: caseRow.case_type as CaseType,
     });
-    if (missingDocs.length > 0) {
-      await admin.from('missing_documents').insert(
-        missingDocs.map((m) => ({
-          case_id: caseId,
-          document_name: m.documentName,
-          reason: m.reason,
-          related_event: m.relatedEvent,
-        })),
-      );
-    }
-
-    // Calculate medico-legal periods for report integration
     const calcEvents = events.map((e) => ({
       event_date: e.eventDate,
       event_type: e.eventType,
@@ -136,61 +120,50 @@ export async function POST(request: NextRequest) {
     }));
     const calculations = calculateMedicoLegalPeriods(calcEvents);
 
-    // Regenerate synthesis with role-adaptive prompts + calculations
-    const result = await generateSynthesis({
+    // Regenerate the section
+    const updatedSynthesis = await regenerateSection({
+      sectionId,
+      currentSynthesis: currentReport.synthesis as string,
       caseType: caseRow.case_type as CaseType,
       caseRole: caseRow.case_role as CaseRole,
-      patientInitials: caseRow.patient_initials as string | null,
       events,
       anomalies,
       missingDocuments: missingDocs,
       calculations,
+      userInstruction: instruction,
     });
 
-    // Get current max version
-    const { data: latestReport } = await admin
-      .from('reports')
-      .select('version')
-      .eq('case_id', caseId)
-      .order('version', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const newVersion = (latestReport?.version ?? 0) + 1;
+    // Save as new version
+    const newVersion = ((currentReport.version as number) ?? 0) + 1;
 
     await admin.from('reports').insert({
       case_id: caseId,
       version: newVersion,
       report_status: 'bozza',
-      synthesis: result.synthesis,
+      synthesis: updatedSynthesis,
     });
 
     // Audit log
     await admin.from('audit_log').insert({
       user_id: user.id,
-      action: 'report.regenerated',
+      action: 'report.section_regenerated',
       entity_type: 'report',
       entity_id: caseId,
       metadata: {
+        sectionId,
+        instruction: instruction ?? null,
         version: newVersion,
-        eventsCount: events.length,
-        anomaliesCount: anomalies.length,
-        missingDocsCount: missingDocs.length,
-        wordCount: result.wordCount,
       },
     });
 
+    const wordCount = updatedSynthesis.split(/\s+/).filter((w) => w.length > 0).length;
+
     return NextResponse.json({
       success: true,
-      data: {
-        version: newVersion,
-        eventsCount: events.length,
-        anomaliesCount: anomalies.length,
-        missingDocsCount: missingDocs.length,
-      },
+      data: { version: newVersion, wordCount, sectionId },
     });
   } catch (error) {
-    console.error('[processing/regenerate] Error:', error instanceof Error ? error.message : 'unknown');
-    return NextResponse.json({ success: false, error: 'Errore rigenerazione report.' }, { status: 500 });
+    console.error('[processing/regenerate-section] Error:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json({ success: false, error: 'Errore rigenerazione sezione.' }, { status: 500 });
   }
 }

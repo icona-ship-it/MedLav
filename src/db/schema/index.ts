@@ -6,3 +6,4 @@ export * from './event-images';
 export * from './anomalies';
 export * from './reports';
 export * from './audit';
+export * from './guidelines';

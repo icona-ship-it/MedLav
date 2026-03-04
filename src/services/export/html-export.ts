@@ -1,5 +1,6 @@
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 
 interface ExportEvent {
   order_number: number;
@@ -40,7 +41,14 @@ interface HtmlExportParams {
   events: ExportEvent[];
   anomalies: ExportAnomaly[];
   missingDocs: ExportMissingDoc[];
+  calculations?: MedicoLegalCalculation[];
 }
+
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  ctu: 'CTU - Consulente Tecnico d\'Ufficio (prospettiva neutrale)',
+  ctp: 'CTP - Consulente Tecnico di Parte (prospettiva del paziente)',
+  stragiudiziale: 'Perito Stragiudiziale (valutazione di merito)',
+};
 
 function escapeHtml(text: string): string {
   return text
@@ -60,7 +68,7 @@ function confidenceClass(confidence: number): string {
  * Generate a complete HTML report document.
  */
 export function generateHtmlReport(params: HtmlExportParams): string {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -121,7 +129,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
 <div class="header-info">
   <p><strong>Caso:</strong> ${escapeHtml(caseCode)}</p>
   <p><strong>Paziente:</strong> ${escapeHtml(patientInitials ?? 'N/D')}</p>
-  <p><strong>Tipo:</strong> ${escapeHtml(caseType)} | <strong>Ruolo:</strong> ${escapeHtml(caseRole.toUpperCase())}</p>
+  <p><strong>Tipo:</strong> ${escapeHtml(caseType)} | <strong>Ruolo:</strong> ${escapeHtml(ROLE_DESCRIPTIONS[caseRole] ?? caseRole.toUpperCase())}</p>
   <p><strong>Data report:</strong> ${now}</p>
 </div>
 
@@ -135,8 +143,9 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   <h3>Indice</h3>
   <a href="#synthesis">1. Sintesi Medico-Legale</a>
   <a href="#timeline">2. Cronologia Eventi Clinici</a>
-  <a href="#anomalies">3. Anomalie Rilevate</a>
-  <a href="#missing">4. Documentazione Mancante</a>
+  ${calculations && calculations.length > 0 ? '<a href="#calculations">3. Periodi Medico-Legali Calcolati</a>' : ''}
+  <a href="#anomalies">${calculations && calculations.length > 0 ? '4' : '3'}. Anomalie Rilevate</a>
+  <a href="#missing">${calculations && calculations.length > 0 ? '5' : '4'}. Documentazione Mancante</a>
 </div>
 
 <h2 id="synthesis">1. Sintesi Medico-Legale</h2>
@@ -160,7 +169,17 @@ ${events.map((e) => `<div class="event">
   ${e.expert_notes ? `<div class="expert-note"><strong>Note perito:</strong> ${escapeHtml(e.expert_notes)}</div>` : ''}
 </div>`).join('\n')}
 
-<h2 id="anomalies">3. Anomalie Rilevate</h2>
+${calculations && calculations.length > 0 ? `<h2 id="calculations">${calculations.length > 0 ? '3' : ''}. Periodi Medico-Legali Calcolati</h2>
+<div style="display:grid;gap:8px">
+${calculations.map((c) => `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+  <div style="font-weight:600">${escapeHtml(c.label)}</div>
+  <div style="font-size:24px;font-weight:bold;color:#1e40af">${escapeHtml(c.value)}</div>
+  ${c.startDate && c.endDate ? `<div style="font-size:13px;color:#64748b">${formatDate(c.startDate)} — ${formatDate(c.endDate)}</div>` : ''}
+  <div style="font-size:13px;color:#64748b;margin-top:4px">${escapeHtml(c.notes)}</div>
+</div>`).join('\n')}
+</div>` : ''}
+
+<h2 id="anomalies">${calculations && calculations.length > 0 ? '4' : '3'}. Anomalie Rilevate</h2>
 ${anomalies.length === 0 ? '<p>Nessuna anomalia rilevata.</p>' : anomalies.map((a) => `<div class="anomaly ${a.severity}">
   <div class="anomaly-header">
     <span class="severity ${a.severity}">${a.severity.toUpperCase()}</span>
@@ -170,7 +189,7 @@ ${anomalies.length === 0 ? '<p>Nessuna anomalia rilevata.</p>' : anomalies.map((
   ${a.suggestion ? `<p style="margin-top:6px;color:#64748b;font-style:italic">${escapeHtml(a.suggestion)}</p>` : ''}
 </div>`).join('\n')}
 
-<h2 id="missing">4. Documentazione Mancante</h2>
+<h2 id="missing">${calculations && calculations.length > 0 ? '5' : '4'}. Documentazione Mancante</h2>
 ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' : missingDocs.map((d) => `<div class="missing-doc">
   <p><strong>${escapeHtml(d.document_name)}</strong></p>
   <p style="font-size:14px">${escapeHtml(d.reason)}</p>

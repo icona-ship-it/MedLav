@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
+import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 
 /**
  * Load all case data needed for export.
  * Verifies auth and ownership.
- * Returns null if unauthorized or not found.
+ * Includes medico-legal calculations.
  */
 export async function loadCaseDataForExport(caseId: string) {
   const supabase = await createClient();
@@ -46,11 +47,23 @@ export async function loadCaseDataForExport(caseId: string) {
       .maybeSingle(),
   ]);
 
+  // Calculate medico-legal periods from events
+  const eventsList = eventsRes.data ?? [];
+  const calculations = calculateMedicoLegalPeriods(
+    eventsList.map((e) => ({
+      event_date: e.event_date as string,
+      event_type: e.event_type as string,
+      title: e.title as string,
+      description: e.description as string,
+    })),
+  );
+
   return {
     caseData: caseRow,
-    events: eventsRes.data ?? [],
+    events: eventsList,
     anomalies: anomaliesRes.data ?? [],
     missingDocs: missingRes.data ?? [],
     report: reportRes.data,
+    calculations,
   };
 }
