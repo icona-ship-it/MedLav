@@ -32,6 +32,7 @@ export async function signUp(formData: FormData) {
       data: {
         full_name: fullName,
       },
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/callback`,
     },
   });
 
@@ -52,6 +53,62 @@ export async function signUp(formData: FormData) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
+  }
+
+  // If email confirmation is enabled, show verification message instead of redirecting
+  if (data.user && !data.session) {
+    return { success: true, emailSent: true };
+  }
+
+  redirect('/');
+}
+
+/**
+ * Request password reset email.
+ */
+export async function requestPasswordReset(formData: FormData) {
+  const email = formData.get('email') as string;
+
+  if (!email) {
+    return { error: 'Inserisci la tua email' };
+  }
+
+  const rateCheck = checkRateLimit({ key: `reset:${email}`, ...RATE_LIMITS.AUTH });
+  if (!rateCheck.success) {
+    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/update-password`,
+  });
+
+  if (error) {
+    // Don't reveal if email exists or not (security)
+    console.error('[auth] Password reset error:', error.message);
+  }
+
+  // Always show success message (prevents email enumeration)
+  return { success: true };
+}
+
+/**
+ * Update password after reset.
+ */
+export async function updatePassword(formData: FormData) {
+  const password = formData.get('password') as string;
+
+  if (!password || password.length < 8) {
+    return { error: 'La password deve avere almeno 8 caratteri' };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return { error: 'Errore nell\'aggiornamento della password. Riprova.' };
   }
 
   redirect('/');

@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getProfile, updateProfile, changePassword } from './actions';
+import { getProfile, updateProfile, changePassword, exportMyData, deleteMyAccount } from './actions';
 import type { ProfileData } from './actions';
+import { AlertTriangle, Download } from 'lucide-react';
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -16,6 +17,10 @@ export default function SettingsPage() {
 
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     getProfile()
@@ -208,6 +213,96 @@ export default function SettingsPage() {
               {passwordSaving ? 'Aggiornamento...' : 'Cambia password'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* GDPR Data Rights */}
+      <Card>
+        <CardHeader>
+          <CardTitle>I tuoi dati (GDPR)</CardTitle>
+          <CardDescription>
+            Diritto di accesso, portabilità e cancellazione dei tuoi dati (Art. 15, 17, 20 GDPR)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div>
+              <p className="text-sm font-medium">Esporta tutti i tuoi dati</p>
+              <p className="text-xs text-muted-foreground">
+                Scarica una copia completa di tutti i tuoi dati in formato JSON
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                const result = await exportMyData();
+                if (result.data) {
+                  const blob = new Blob([result.data], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `medlav-export-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }
+                setExporting(false);
+              }}
+            >
+              <Download className="mr-1 h-4 w-4" />
+              {exporting ? 'Esportazione...' : 'Esporta dati'}
+            </Button>
+          </div>
+
+          <div className="rounded-md border border-destructive/30 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">Elimina account e tutti i dati</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Questa azione è irreversibile. Tutti i tuoi casi, documenti, report e dati personali verranno eliminati permanentemente.
+                </p>
+                {!showDeleteConfirm ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    Elimina il mio account
+                  </Button>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-semibold text-destructive">
+                      Sei sicuro? Tutti i dati verranno eliminati permanentemente.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleting}
+                        onClick={async () => {
+                          setDeleting(true);
+                          await deleteMyAccount();
+                        }}
+                      >
+                        {deleting ? 'Eliminazione...' : 'Conferma eliminazione'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowDeleteConfirm(false)}
+                      >
+                        Annulla
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

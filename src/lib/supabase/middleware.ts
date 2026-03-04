@@ -33,7 +33,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const publicPaths = ['/landing', '/login', '/register', '/auth'];
+  const publicPaths = ['/landing', '/login', '/register', '/forgot-password', '/auth'];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
@@ -50,6 +50,7 @@ export async function updateSession(request: NextRequest) {
     user &&
     (request.nextUrl.pathname.startsWith('/login') ||
       request.nextUrl.pathname.startsWith('/register') ||
+      request.nextUrl.pathname.startsWith('/forgot-password') ||
       request.nextUrl.pathname.startsWith('/landing'))
   ) {
     const url = request.nextUrl.clone();

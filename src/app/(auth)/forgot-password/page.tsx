@@ -6,12 +6,12 @@ import { Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { signUp } from '../actions';
+import { requestPasswordReset } from '../actions';
 
-export default function RegisterPage() {
+export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -19,31 +19,17 @@ export default function RegisterPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const password = formData.get('password') as string;
-    const confirmPassword = formData.get('confirmPassword') as string;
+    const result = await requestPasswordReset(formData);
 
-    if (password !== confirmPassword) {
-      setError('Le password non coincidono');
-      setIsLoading(false);
-      return;
-    }
-
-    const result = await signUp(formData);
-
-    if (result?.emailSent) {
-      setEmailSent(true);
-      setIsLoading(false);
-      return;
-    }
-
-    // If we get here, redirect didn't happen — there's an error
     if (result?.error) {
       setError(result.error);
+    } else if (result?.success) {
+      setSuccess(true);
     }
     setIsLoading(false);
   }
 
-  if (emailSent) {
+  if (success) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/50 px-4">
         <Card className="w-full max-w-md">
@@ -51,14 +37,14 @@ export default function RegisterPage() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
               <Scale className="h-6 w-6 text-green-600" />
             </div>
-            <CardTitle className="text-2xl">Controlla la tua email</CardTitle>
+            <CardTitle className="text-2xl">Email inviata</CardTitle>
             <CardDescription>
-              Ti abbiamo inviato un link di conferma. Clicca sul link nella email per attivare il tuo account.
+              Se l&apos;indirizzo email è associato a un account, riceverai un link per reimpostare la password.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-muted-foreground mb-4">
-              Non hai ricevuto l&apos;email? Controlla la cartella spam.
+              Controlla anche la cartella spam.
             </p>
             <Link href="/login" className="text-primary hover:underline text-sm">
               Torna al login
@@ -76,9 +62,9 @@ export default function RegisterPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
             <Scale className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">Registrazione</CardTitle>
+          <CardTitle className="text-2xl">Password dimenticata</CardTitle>
           <CardDescription>
-            Crea il tuo account MedLav
+            Inserisci la tua email per ricevere il link di reset
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -88,18 +74,6 @@ export default function RegisterPage() {
                 {error}
               </div>
             )}
-            <div className="space-y-2">
-              <label htmlFor="fullName" className="text-sm font-medium">
-                Nome Completo
-              </label>
-              <Input
-                id="fullName"
-                name="fullName"
-                placeholder="Dr. Mario Rossi"
-                required
-                autoComplete="name"
-              />
-            </div>
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
                 Email
@@ -113,38 +87,12 @@ export default function RegisterPage() {
                 autoComplete="email"
               />
             </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password (minimo 8 caratteri)
-              </label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-sm font-medium">
-                Conferma Password
-              </label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Registrazione in corso...' : 'Registrati'}
+              {isLoading ? 'Invio in corso...' : 'Invia link di reset'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-muted-foreground">
-            Hai già un account?{' '}
+            Ricordi la password?{' '}
             <Link href="/login" className="text-primary hover:underline">
               Accedi
             </Link>

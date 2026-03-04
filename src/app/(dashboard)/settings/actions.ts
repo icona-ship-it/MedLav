@@ -1,6 +1,8 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 
 const profileSchema = z.object({
@@ -116,4 +118,93 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
   }
 
   return { success: true };
+}
+
+/**
+ * GDPR Art. 15/20 — Export all user data as JSON.
+ */
+export async function exportMyData(): Promise<{ data?: string; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'Non autenticato' };
+  }
+
+  const admin = createAdminClient();
+
+  // Get user's case IDs first
+  const { data: cases } = await admin.from('cases')
+    .select('id, code, case_type, case_role, patient_initials, practice_reference, notes, status, created_at')
+    .eq('user_id', user.id);
+
+  const caseIds = (cases ?? []).map((c) => c.id as string);
+
+  const [profileRes, eventsRes, reportsRes, auditRes] = await Promise.all([
+    admin.from('profiles').select('*').eq('id', user.id).single(),
+    caseIds.length > 0
+      ? admin.from('events').select('id, case_id, event_date, event_type, title, description, source_type, confidence, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
+    caseIds.length > 0
+      ? admin.from('reports').select('id, case_id, version, report_status, synthesis, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
+    admin.from('audit_log').select('action, entity_type, entity_id, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500),
+  ]);
+
+  const exportData = {
+    exportDate: new Date().toISOString(),
+    gdprArticle: 'Art. 15/20 GDPR — Diritto di accesso e portabilità',
+    profile: profileRes.data,
+    cases: cases ?? [],
+    events: eventsRes.data ?? [],
+    reports: reportsRes.data ?? [],
+    auditLog: auditRes.data ?? [],
+  };
+
+  return { data: JSON.stringify(exportData, null, 2) };
+}
+
+/**
+ * GDPR Art. 17 — Delete all user data and account.
+ * This is irreversible.
+ */
+export async function deleteMyAccount(): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'Non autenticato' };
+  }
+
+  const admin = createAdminClient();
+
+  // Get all case IDs for this user
+  const { data: cases } = await admin.from('cases').select('id').eq('user_id', user.id);
+  const caseIds = (cases ?? []).map((c) => c.id as string);
+
+  if (caseIds.length > 0) {
+    // Delete in dependency order
+    const { data: eventIds } = await admin.from('events').select('id').in('case_id', caseIds);
+    if (eventIds && eventIds.length > 0) {
+      await admin.from('event_images').delete().in('event_id', eventIds.map((e) => e.id));
+    }
+    await admin.from('events').delete().in('case_id', caseIds);
+    await admin.from('anomalies').delete().in('case_id', caseIds);
+    await admin.from('missing_documents').delete().in('case_id', caseIds);
+    await admin.from('reports').delete().in('case_id', caseIds);
+
+    const { data: docs } = await admin.from('documents').select('id').in('case_id', caseIds);
+    if (docs && docs.length > 0) {
+      await admin.from('pages').delete().in('document_id', docs.map((d) => d.id));
+    }
+    await admin.from('documents').delete().in('case_id', caseIds);
+    await admin.from('cases').delete().in('id', caseIds);
+  }
+
+  await admin.from('audit_log').delete().eq('user_id', user.id);
+  await admin.from('profiles').delete().eq('id', user.id);
+  await admin.auth.admin.deleteUser(user.id);
+
+  await supabase.auth.signOut();
+  redirect('/landing');
 }

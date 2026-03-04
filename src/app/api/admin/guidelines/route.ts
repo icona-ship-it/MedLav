@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import { ingestGuideline, deleteGuideline } from '@/services/rag/ingestion-service';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const maxDuration = 120; // ingestion can take time
 
@@ -51,6 +52,11 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  const rateCheck = checkRateLimit({ key: `guidelines:${user.id}`, ...RATE_LIMITS.PROCESSING });
+  if (!rateCheck.success) {
+    return NextResponse.json({ success: false, error: 'Troppi tentativi.' }, { status: 429 });
   }
 
   const body = await request.json() as unknown;

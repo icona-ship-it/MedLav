@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { CaseType, CaseRole } from '@/types';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function createCase(formData: FormData) {
   const supabase = await createClient();
@@ -11,6 +12,11 @@ export async function createCase(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return { error: 'Non autenticato' };
+  }
+
+  const rateCheck = checkRateLimit({ key: `create-case:${user.id}`, ...RATE_LIMITS.API });
+  if (!rateCheck.success) {
+    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
   }
 
   const caseType = formData.get('caseType') as CaseType;

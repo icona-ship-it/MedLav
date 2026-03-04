@@ -1,14 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { signIn } from '../actions';
+import { updatePassword } from '@/app/(auth)/actions';
 
-export default function LoginPage() {
+export default function UpdatePasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,9 +17,17 @@ export default function LoginPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const result = await signIn(formData);
+    const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
 
-    // If we get here, redirect didn't happen — there's an error
+    if (password !== confirmPassword) {
+      setError('Le password non coincidono');
+      setIsLoading(false);
+      return;
+    }
+
+    const result = await updatePassword(formData);
+
     if (result?.error) {
       setError(result.error);
     }
@@ -34,9 +41,9 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
             <Scale className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">MedLav</CardTitle>
+          <CardTitle className="text-2xl">Nuova password</CardTitle>
           <CardDescription>
-            Accedi alla piattaforma di cronistoria medico-legale
+            Scegli una nuova password per il tuo account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -47,45 +54,35 @@ export default function LoginPage() {
               </div>
             )}
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="medico@studio.it"
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
               <label htmlFor="password" className="text-sm font-medium">
-                Password
+                Nuova password (minimo 8 caratteri)
               </label>
               <Input
                 id="password"
                 name="password"
                 type="password"
                 required
-                autoComplete="current-password"
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="confirmPassword" className="text-sm font-medium">
+                Conferma nuova password
+              </label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Accesso in corso...' : 'Accedi'}
+              {isLoading ? 'Aggiornamento...' : 'Aggiorna password'}
             </Button>
           </form>
-          <div className="mt-3 text-center">
-            <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline">
-              Password dimenticata?
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-sm text-muted-foreground">
-            Non hai un account?{' '}
-            <Link href="/register" className="text-primary hover:underline">
-              Registrati
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>
