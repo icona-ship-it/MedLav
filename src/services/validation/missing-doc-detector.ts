@@ -66,6 +66,23 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
     { name: 'Referti imaging', check: 'hasEsamiPreOp', reason: 'Essenziali per valutare se le immagini diagnostiche erano indicative della patologia' },
     { name: 'Referti visite specialistiche', check: 'hasFollowUpPostOp', reason: 'Necessari per valutare l\'iter diagnostico-specialistico' },
   ],
+  rc_auto: [
+    { name: 'Verbale di pronto soccorso', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per attestare le lesioni riportate immediatamente dopo il sinistro e la tempestivita del primo accesso sanitario' },
+    { name: 'Imaging post-trauma (RX/TC/RM)', check: 'hasEsamiPreOp', reason: 'Essenziale per documentare oggettivamente le lesioni e la loro compatibilita con la dinamica del sinistro' },
+    { name: 'Referti visite specialistiche e follow-up', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare l\'evoluzione clinica delle lesioni e determinare i periodi di inabilita temporanea' },
+    { name: 'Diario clinico o documentazione del decorso', check: 'hasDiarioClinico', reason: 'Necessario per ricostruire l\'evoluzione clinica e i periodi di inabilita temporanea' },
+  ],
+  previdenziale: [
+    { name: 'Documentazione specialistica delle patologie dichiarate', check: 'hasFollowUpPostOp', reason: 'Essenziale per documentare le patologie alla base della richiesta di invalidita con referti specialistici recenti' },
+    { name: 'Esami strumentali e diagnostici', check: 'hasEsamiPreOp', reason: 'Necessari per oggettivare le limitazioni funzionali e supportare la valutazione percentuale di invalidita' },
+    { name: 'Documentazione delle terapie in corso', check: 'hasDiarioClinico', reason: 'Fondamentale per dimostrare la cronicita delle patologie e l\'adeguatezza del trattamento in atto' },
+  ],
+  infortuni: [
+    { name: 'Certificato medico iniziale INAIL', check: 'hasEsamiPreOp', reason: 'Documento obbligatorio per l\'apertura della pratica INAIL con diagnosi iniziale e prognosi' },
+    { name: 'Denuncia di infortunio o malattia professionale', check: 'hasDiarioClinico', reason: 'Documento obbligatorio che attesta la dinamica dell\'evento e le circostanze lavorative' },
+    { name: 'Referti dei controlli e certificati di continuazione', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare il decorso clinico e determinare la durata dell\'inabilita temporanea' },
+    { name: 'Lettera di dimissione (se ricovero)', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per la diagnosi finale e le indicazioni terapeutiche alla dimissione post-infortunio' },
+  ],
   generica: [
     { name: 'Consenso informato', check: 'hasConsenso', reason: 'Obbligatorio per procedure invasive' },
     { name: 'Lettera di dimissione', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per ogni ricovero' },

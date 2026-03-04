@@ -6,7 +6,7 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatDate } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
-import { formatCausalNexusForPrompt, getCaseTypeKnowledge } from '@/lib/domain-knowledge';
+import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -15,6 +15,9 @@ const CASE_TYPE_LABELS: Record<CaseType, string> = {
   anestesiologica: 'Errore Anestesiologico',
   infezione_nosocomiale: 'Infezione Nosocomiale',
   errore_diagnostico: 'Errore Diagnostico',
+  rc_auto: 'RC Auto — Lesioni da Sinistro Stradale',
+  previdenziale: 'Invalidità Previdenziale',
+  infortuni: 'Infortunio sul Lavoro / Malattia Professionale',
   generica: 'Responsabilità Professionale Generica',
 };
 
@@ -57,6 +60,11 @@ export function buildSynthesisSystemPrompt(params: {
   const caseTypeDirective = buildCaseTypeDirective(caseType);
   const causalNexus = formatCausalNexusForPrompt();
 
+  const goldenExample = getGoldenPerizia(caseType, caseRole);
+  const fewShotSection = goldenExample
+    ? `\n\n## ESEMPIO DI RIFERIMENTO\n\nIl seguente è un estratto di una perizia di riferimento per questo tipo di caso e ruolo. Usa tono, struttura e livello di dettaglio simili.\n\n---\n${goldenExample}\n---\n\nIMPORTANTE: L'esempio sopra è solo un RIFERIMENTO per tono e struttura. NON copiare il contenuto — genera il report basandoti ESCLUSIVAMENTE sugli eventi forniti.`
+    : '';
+
   return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
 
 ## IL TUO COMPITO
@@ -79,7 +87,7 @@ Per ogni voce cronologica riporta:
 
 ${CHRONOLOGY_SOURCES_GUIDE}
 
-${ABSOLUTE_RULES}`;
+${ABSOLUTE_RULES}${fewShotSection}`;
 }
 
 /**
@@ -205,6 +213,11 @@ export function buildSummarySystemPrompt(params: {
     })
     .join('\n');
 
+  const goldenExample = getGoldenPerizia(caseType, caseRole);
+  const fewShotSection = goldenExample
+    ? `\n\n## ESEMPIO DI RIFERIMENTO\n\nIl seguente è un estratto di una perizia di riferimento per questo tipo di caso e ruolo. Usa tono, struttura e livello di dettaglio simili (esclusa la cronologia, che è già stata generata).\n\n---\n${goldenExample}\n---\n\nIMPORTANTE: L'esempio sopra è solo un RIFERIMENTO per tono e struttura. NON copiare il contenuto — genera le sezioni basandoti ESCLUSIVAMENTE sulla cronologia e sugli eventi forniti.`
+    : '';
+
   return `Sei un medico legale esperto incaricato di redigere le sezioni NON cronologiche di un report peritale.
 Ti verrà fornita la cronologia già compilata come riferimento. NON rigenerare la cronologia.
 
@@ -228,7 +241,7 @@ STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 <!-- SECTION:ELEMENTI -->
 ## ELEMENTI DI RILIEVO MEDICO-LEGALE
 [testo]
-<!-- END:ELEMENTI -->`;
+<!-- END:ELEMENTI -->${fewShotSection}`;
 }
 
 /**

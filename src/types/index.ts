@@ -6,6 +6,9 @@ export type CaseType =
   | 'anestesiologica'
   | 'infezione_nosocomiale'
   | 'errore_diagnostico'
+  | 'rc_auto'
+  | 'previdenziale'
+  | 'infortuni'
   | 'generica';
 
 export type CaseRole = 'ctu' | 'ctp' | 'stragiudiziale';

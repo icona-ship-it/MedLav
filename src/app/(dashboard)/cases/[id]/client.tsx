@@ -960,7 +960,7 @@ function EditCaseDialogInner({
     startTransition(async () => {
       const result = await updateCase({
         caseId: caseData.id,
-        caseType: form.caseType as 'ortopedica' | 'oncologica' | 'ostetrica' | 'anestesiologica' | 'infezione_nosocomiale' | 'errore_diagnostico' | 'generica',
+        caseType: form.caseType as 'ortopedica' | 'oncologica' | 'ostetrica' | 'anestesiologica' | 'infezione_nosocomiale' | 'errore_diagnostico' | 'rc_auto' | 'previdenziale' | 'infortuni' | 'generica',
         caseRole: form.caseRole as 'ctu' | 'ctp' | 'stragiudiziale',
         patientInitials: form.patientInitials || null,
         practiceReference: form.practiceReference || null,

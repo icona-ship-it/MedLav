@@ -8,6 +8,9 @@ export const caseTypeEnum = pgEnum('case_type', [
   'anestesiologica',
   'infezione_nosocomiale',
   'errore_diagnostico',
+  'rc_auto',
+  'previdenziale',
+  'infortuni',
   'generica',
 ]);
 

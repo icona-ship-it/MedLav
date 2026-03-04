@@ -12,6 +12,9 @@ export const CASE_TYPES = [
   { value: 'anestesiologica', label: 'Errore Anestesiologico' },
   { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
   { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
+  { value: 'rc_auto', label: 'RC Auto — Responsabilità Civile Automobilistica' },
+  { value: 'previdenziale', label: 'Previdenziale — Invalidità Civile / Pensionistica' },
+  { value: 'infortuni', label: 'Infortuni — Infortuni sul Lavoro e Malattia Professionale' },
   { value: 'generica', label: 'Responsabilità Professionale Generica' },
 ] as const;
 

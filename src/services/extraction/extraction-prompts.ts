@@ -73,6 +73,36 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 - Tempi tra esami e comunicazione risultati
 - Eventuali esami non prescritti che sarebbero stati indicati`,
 
+  rc_auto: `FOCUS RC AUTO — SINISTRO STRADALE: Presta particolare attenzione a:
+- Dinamica del sinistro e modalita dell'impatto
+- Lesioni da trauma stradale e loro compatibilita con la dinamica
+- Tempistiche del primo soccorso e del primo accesso al pronto soccorso
+- Imaging post-trauma (RX, TC, RM) e relativi referti
+- Evoluzione clinica delle lesioni nel tempo
+- Periodi di inabilita temporanea (ITT, ITP) documentati
+- Postumi permanenti e loro quantificazione
+- Congruita tra dinamica del sinistro e lesioni documentate`,
+
+  previdenziale: `FOCUS PREVIDENZIALE — INVALIDITA CIVILE / PENSIONISTICA: Presta particolare attenzione a:
+- Documentazione dell'invalidita e delle patologie croniche
+- Capacita lavorativa residua e limitazioni funzionali oggettivabili
+- Limitazioni funzionali nelle attivita della vita quotidiana
+- Patologie croniche e loro evoluzione nel tempo
+- Terapie farmacologiche in corso e risposta terapeutica
+- Ausili, protesi e presidi utilizzati
+- Impatto delle patologie sulla vita quotidiana e sull'autonomia
+- Riferimenti alle tabelle INPS/INAIL per le percentuali di invalidita`,
+
+  infortuni: `FOCUS INFORTUNI SUL LAVORO / MALATTIA PROFESSIONALE: Presta particolare attenzione a:
+- Dinamica dell'infortunio o caratteristiche dell'esposizione professionale
+- Nesso causale tra l'attivita lavorativa e le lesioni/patologie
+- Documentazione INAIL (certificato iniziale, certificati di continuazione, denuncia)
+- Certificati medici iniziali e di continuazione con date precise
+- Decorso clinico dall'evento alla stabilizzazione
+- Postumi permanenti e loro quantificazione
+- Capacita lavorativa specifica e generica residua
+- Riferimenti alle tabelle INAIL per l'indennizzo del danno biologico`,
+
   generica: `ANALISI GENERICA: Estrai tutti gli eventi clinici senza filtri prioritari specifici. Presta attenzione a qualsiasi anomalia nella gestione clinica.`,
 };
 
