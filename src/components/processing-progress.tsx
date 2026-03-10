@@ -39,6 +39,12 @@ const STATUS_TO_STEP: Record<string, number> = {
 
 const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
+// "No events found" errors are warnings, not hard errors
+const WARNING_ERROR_PATTERNS = [
+  'Nessun evento clinico',
+  'non contenere dati clinici',
+];
+
 // --- Helpers ---
 
 function getStepIndex(status: string): number {
@@ -53,20 +59,32 @@ function formatElapsed(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function getEarliestQueueTime(documents: ProcessingDocument[]): Date | null {
-  const processing = documents.filter(
-    (d) => d.processing_status !== 'caricato' && d.processing_status !== 'completato' && d.processing_status !== 'errore',
-  );
-  if (processing.length === 0) return null;
+function isWarningError(doc: ProcessingDocument): boolean {
+  if (doc.processing_status !== 'errore' || !doc.processing_error) return false;
+  return WARNING_ERROR_PATTERNS.some((p) => doc.processing_error!.includes(p));
+}
 
-  const dates = processing.map((d) => new Date(d.updated_at ?? d.created_at).getTime());
+function isHardError(doc: ProcessingDocument): boolean {
+  return doc.processing_status === 'errore' && !isWarningError(doc);
+}
+
+function isStillProcessing(status: string): boolean {
+  return !['caricato', 'completato', 'errore'].includes(status);
+}
+
+/**
+ * Get the earliest timestamp from ALL docs that entered processing
+ * (anything except 'caricato'). This gives a stable start time.
+ */
+function getProcessingStartTime(documents: ProcessingDocument[]): Date | null {
+  const processed = documents.filter((d) => d.processing_status !== 'caricato');
+  if (processed.length === 0) return null;
+  const dates = processed.map((d) => new Date(d.created_at).getTime());
   return new Date(Math.min(...dates));
 }
 
 function isStale(documents: ProcessingDocument[]): boolean {
-  const processing = documents.filter(
-    (d) => !['caricato', 'completato', 'errore'].includes(d.processing_status),
-  );
+  const processing = documents.filter((d) => isStillProcessing(d.processing_status));
   if (processing.length === 0) return false;
 
   const now = Date.now();
@@ -78,7 +96,7 @@ function isStale(documents: ProcessingDocument[]): boolean {
 
 // --- Components ---
 
-function StepIcon({ state }: { state: 'completed' | 'active' | 'pending' | 'error' }) {
+function StepIcon({ state }: { state: 'completed' | 'active' | 'pending' | 'error' | 'warning' }) {
   switch (state) {
     case 'completed':
       return (
@@ -89,6 +107,12 @@ function StepIcon({ state }: { state: 'completed' | 'active' | 'pending' | 'erro
     case 'active':
       return (
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      );
+    case 'warning':
+      return (
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-white">
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
       );
@@ -108,45 +132,50 @@ function StepIcon({ state }: { state: 'completed' | 'active' | 'pending' | 'erro
 }
 
 function getOverallStepIndex(documents: ProcessingDocument[]): number {
-  const processing = documents.filter(
-    (d) => !['caricato', 'completato', 'errore'].includes(d.processing_status),
-  );
+  const processing = documents.filter((d) => isStillProcessing(d.processing_status));
 
   if (processing.length === 0) {
-    // Consider it complete if at least one doc completed (even if some errored)
     const hasCompleted = documents.some((d) => d.processing_status === 'completato');
-    const allErrored = documents.every((d) => d.processing_status === 'errore');
-    if (allErrored) return -1;
+    const allHardError = documents.every((d) => isHardError(d));
+    if (allHardError) return -1;
     return hasCompleted ? 4 : -1;
   }
 
   return Math.min(...processing.map((d) => getStepIndex(d.processing_status)));
 }
 
-function hasErrorDocuments(documents: ProcessingDocument[]): boolean {
-  return documents.some((d) => d.processing_status === 'errore');
-}
-
 export function ProcessingProgress({ documents }: ProcessingProgressProps) {
   const [elapsed, setElapsed] = useState(0);
   const stale = isStale(documents);
   const overallStep = getOverallStepIndex(documents);
-  const hasErrors = hasErrorDocuments(documents);
 
-  // Memoize startTime as a timestamp number to avoid re-creating Date on every render
+  const someStillProcessing = documents.some((d) => isStillProcessing(d.processing_status));
+  const hasHardErrors = documents.some((d) => isHardError(d));
+  const hasWarningErrors = documents.some((d) => isWarningError(d));
+  const allDone = !someStillProcessing;
+  const allCompletedOk = allDone && documents.every(
+    (d) => d.processing_status === 'completato' || isWarningError(d),
+  );
+
+  // Stable start time: earliest created_at of any doc that entered processing
   const startTimeMs = useMemo(() => {
-    const d = getEarliestQueueTime(documents);
+    const d = getProcessingStartTime(documents);
     return d ? d.getTime() : null;
   }, [documents]);
 
-  // Elapsed timer
+  // Timer: runs while processing, stops when all done
   useEffect(() => {
     if (startTimeMs === null) return;
+    if (allDone) {
+      // Set final elapsed and stop
+      setElapsed(Date.now() - startTimeMs);
+      return;
+    }
     const update = () => setElapsed(Date.now() - startTimeMs);
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [startTimeMs]);
+  }, [startTimeMs, allDone]);
 
   return (
     <div className="space-y-5" aria-live="polite">
@@ -154,17 +183,21 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
       <div className="flex items-center justify-between">
         {PROCESSING_STEPS.map((step, index) => {
           const stepIdx = index;
-          let state: 'completed' | 'active' | 'pending' | 'error' = 'pending';
+          let state: 'completed' | 'active' | 'pending' | 'error' | 'warning' = 'pending';
 
-          if (overallStep > stepIdx) {
+          if (overallStep === 4 && stepIdx <= 4) {
+            // All done successfully
+            state = 'completed';
+          } else if (overallStep > stepIdx) {
             state = 'completed';
           } else if (overallStep === stepIdx) {
-            state = hasErrors && stepIdx === overallStep ? 'error' : 'active';
-          }
-
-          // If all completed
-          if (overallStep === 4 && stepIdx <= 4) {
-            state = 'completed';
+            if (someStillProcessing) {
+              // Still processing — show warning (amber+loader) if some errors, else active
+              state = hasHardErrors || hasWarningErrors ? 'warning' : 'active';
+            } else {
+              // All done but not all completed — real error
+              state = allCompletedOk ? 'completed' : 'error';
+            }
           }
 
           return (
@@ -174,8 +207,9 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
                 <span className={`text-xs font-medium ${
                   state === 'completed' ? 'text-green-600 dark:text-green-400'
                     : state === 'active' ? 'text-primary'
-                      : state === 'error' ? 'text-destructive'
-                        : 'text-muted-foreground/50'
+                      : state === 'warning' ? 'text-amber-600 dark:text-amber-400'
+                        : state === 'error' ? 'text-destructive'
+                          : 'text-muted-foreground/50'
                 }`}>
                   {step.label}
                 </span>
@@ -211,20 +245,28 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
       <div className="space-y-1.5">
         {documents.map((doc) => {
           const docStep = getStepIndex(doc.processing_status);
-          const isError = doc.processing_status === 'errore';
+          const isDocHardError = isHardError(doc);
+          const isDocWarning = isWarningError(doc);
           const isComplete = doc.processing_status === 'completato';
 
           return (
             <div
               key={doc.id}
-              className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+              className={`flex items-center justify-between rounded border px-3 py-2 text-sm ${
+                isDocWarning ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20' : ''
+              }`}
             >
               <span className="truncate font-medium">{doc.file_name}</span>
-              <div className="ml-2 flex items-center gap-2">
-                {isError ? (
+              <div className="ml-2 flex items-center gap-2 shrink-0">
+                {isDocHardError ? (
                   <Badge variant="destructive" className="flex items-center gap-1">
                     <XCircle className="h-3 w-3" />
                     {doc.processing_error ?? 'Errore'}
+                  </Badge>
+                ) : isDocWarning ? (
+                  <Badge variant="warning" className="flex items-center gap-1 max-w-[500px]">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{doc.processing_error}</span>
                   </Badge>
                 ) : isComplete ? (
                   <Badge variant="success" className="flex items-center gap-1">
