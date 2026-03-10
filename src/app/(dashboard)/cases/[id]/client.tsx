@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Play, Loader2, AlertTriangle, ChevronDown, ChevronUp,
+  Play, Loader2, AlertTriangle,
   FileWarning, Trash2, Pencil,
-  Download, XCircle, ArrowLeft, Archive, RotateCcw,
+  XCircle, ArrowLeft, Archive, RotateCcw,
   CheckCircle2, Search, FileText, X,
 } from 'lucide-react';
 import { toast } from 'sonner';

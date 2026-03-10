@@ -166,11 +166,7 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
   // Timer: runs while processing, stops when all done
   useEffect(() => {
     if (startTimeMs === null) return;
-    if (allDone) {
-      // Set final elapsed and stop
-      setElapsed(Date.now() - startTimeMs);
-      return;
-    }
+    if (allDone) return;
     const update = () => setElapsed(Date.now() - startTimeMs);
     update();
     const interval = setInterval(update, 1000);

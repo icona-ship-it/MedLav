@@ -2,10 +2,9 @@
 
 import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2, Tags } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -170,7 +169,7 @@ export function EventsTab({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
-  const [isReordering, startReorder] = useTransition();
+  const [, startReorder] = useTransition();
 
   const toggleEvent = useCallback((eventId: string) => {
     setExpandedEvents((prev) => {
