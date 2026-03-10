@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { createCase } from '../../actions';
 import { CASE_TYPES as caseTypes, CASE_ROLES as caseRoles } from '@/lib/constants';
+import { InfoTooltip } from '@/components/info-tooltip';
 
 export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,8 +72,14 @@ export default function NewCasePage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <label htmlFor="caseRole" className="text-sm font-medium">
+                <label htmlFor="caseRole" className="text-sm font-medium inline-flex items-center">
                   Tipo Incarico *
+                  <InfoTooltip title="Tipo Incarico">
+                    <p>Determina il <strong>tono e la prospettiva</strong> del report generato:</p>
+                    <p><strong>CTU</strong> — Consulente del Giudice. Tono neutrale e imparziale: analizza sia gli elementi a favore che contro la responsabilità sanitaria.</p>
+                    <p><strong>CTP</strong> — Consulente di Parte. Tono assertivo a favore del paziente: enfatizza criticità, omissioni e ritardi nella gestione clinica.</p>
+                    <p><strong>Stragiudiziale</strong> — Valutazione di merito. Tono pragmatico: valuta onestamente la fondatezza del caso e i rischi processuali.</p>
+                  </InfoTooltip>
                 </label>
                 <select
                   id="caseRole"
@@ -88,8 +95,21 @@ export default function NewCasePage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label htmlFor="caseType" className="text-sm font-medium">
+                <label htmlFor="caseType" className="text-sm font-medium inline-flex items-center">
                   Tipologia Caso *
+                  <InfoTooltip title="Tipologia Caso">
+                    <p>Determina <strong>cosa l&apos;AI cerca</strong> nei documenti e la <strong>struttura del report</strong>:</p>
+                    <p><strong>Ortopedica</strong> — Analisi intervento chirurgico, complicanze, danno biologico</p>
+                    <p><strong>Oncologica</strong> — Timeline diagnostica, analisi ritardo, perdita di chance</p>
+                    <p><strong>Ostetrica</strong> — Analisi travaglio/CTG, esiti neonatali</p>
+                    <p><strong>Anestesiologica</strong> — Valutazione preoperatoria, gestione anestesiologica</p>
+                    <p><strong>Infezione Nosocomiale</strong> — Analisi infettiva, antibioticoterapia</p>
+                    <p><strong>Errore Diagnostico</strong> — Percorso diagnostico, analisi errore</p>
+                    <p><strong>RC Auto</strong> — Dinamica sinistro, congruità lesioni</p>
+                    <p><strong>Previdenziale</strong> — Quadro clinico, capacità lavorativa</p>
+                    <p><strong>Infortuni</strong> — Dinamica infortunio, nesso lavorativo</p>
+                    <p><strong>Generica</strong> — Analisi senza focus specifico</p>
+                  </InfoTooltip>
                 </label>
                 <select
                   id="caseType"

@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { createClient } from '@/lib/supabase/server';
 import { isAdminUser } from '@/lib/admin';
+import { OnboardingDialog } from '@/components/onboarding-dialog';
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
           {children}
         </div>
       </main>
+      <OnboardingDialog />
     </div>
   );
 }
