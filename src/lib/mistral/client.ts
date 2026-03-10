@@ -1,8 +1,11 @@
 import { Mistral, HTTPClient } from '@mistralai/mistralai';
 
 // ── Timeout per tipo di operazione ──
+// Vercel Pro maxDuration = 800s per Inngest step.
+// Each Mistral call runs in its own step, so it gets the full budget.
+// Leave ~100s margin for DB ops, RAG retrieval, retries.
 export const TIMEOUT_EXTRACTION = 300_000;  // 5 minuti
-export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti
+export const TIMEOUT_SYNTHESIS  = 660_000;  // 11 minuti (max per singola chiamata in step dedicato)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (OCR e altro)
 
 // ── Retry ──

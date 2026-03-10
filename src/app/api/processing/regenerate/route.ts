@@ -11,7 +11,7 @@ import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 
-export const maxDuration = 60;
+export const maxDuration = 300; // synthesis can take several minutes
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),

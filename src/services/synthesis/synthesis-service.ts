@@ -2,7 +2,6 @@ import {
   MISTRAL_MODELS,
   streamMistralChat,
   TIMEOUT_SYNTHESIS,
-  TIMEOUT_EXTRACTION,
 } from '@/lib/mistral/client';
 import {
   buildSynthesisSystemPrompt,
@@ -21,20 +20,12 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 
-interface SynthesisResult {
+export interface SynthesisResult {
   synthesis: string;
   wordCount: number;
 }
 
-const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
-const MAX_SYNTHESIS_ATTEMPTS = 2;
-
-/**
- * Generate the medico-legal synthesis using Mistral Large with streaming.
- * Now role-adaptive, case-type-specific, with calculations integration.
- * Splits into chronology + summary for large cases (>40K chars).
- */
-export async function generateSynthesis(params: {
+export interface SynthesisParams {
   caseType: CaseType;
   caseTypes?: CaseType[];
   caseRole: CaseRole;
@@ -46,7 +37,31 @@ export async function generateSynthesis(params: {
   caseTypeLabel?: string;
   expertRole?: string;
   periziaMetadata?: PeriziaMetadata;
-}): Promise<SynthesisResult> {
+}
+
+const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
+
+/**
+ * Check if synthesis needs to be split into multiple Mistral calls.
+ * Used by the Inngest pipeline to decide whether to use 1 or 2 steps.
+ */
+export function shouldSplitSynthesis(params: SynthesisParams): boolean {
+  const eventsFormatted = formatEventsForPrompt(params.events);
+  const anomaliesFormatted = formatAnomalies(params.anomalies);
+  const missingDocsFormatted = formatMissingDocs(params.missingDocuments);
+  const totalPromptChars = eventsFormatted.length +
+    (anomaliesFormatted?.length ?? 0) +
+    (missingDocsFormatted?.length ?? 0);
+  return totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
+}
+
+/**
+ * Generate the full synthesis — auto-detects single vs split mode.
+ * Used by non-Inngest callers (e.g. /api/processing/regenerate).
+ * For the Inngest pipeline, use the explicit split functions instead
+ * so each Mistral call runs in its own step with full Vercel budget.
+ */
+export async function generateSynthesis(params: SynthesisParams): Promise<SynthesisResult> {
   const {
     caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
     patientInitials, calculations, periziaMetadata,
@@ -63,146 +78,228 @@ export async function generateSynthesis(params: {
     (anomaliesFormatted?.length ?? 0) +
     (missingDocsFormatted?.length ?? 0);
 
-  const shouldSplit = totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
+  const needsSplit = totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
 
-  // RAG: retrieve relevant clinical guidelines
-  let guidelineContext = '';
+  const guidelineContext = await fetchGuidelineContext(events, caseType, caseTypes);
+
+  console.log(
+    `[synthesis] Total prompt: ${totalPromptChars} chars, split: ${needsSplit}, ` +
+    `events: ${events.length}, role: ${caseRole}, type: ${caseType}`,
+  );
+
+  let report: string;
+
+  if (!needsSplit) {
+    report = await streamMistralChat({
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      messages: [
+        {
+          role: 'system',
+          content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
+        },
+        {
+          role: 'user',
+          content: buildSynthesisUserPrompt({
+            caseType,
+            patientInitials,
+            caseRole,
+            events,
+            anomalies,
+            missingDocuments,
+            calculations,
+            caseTypes,
+            periziaMetadata,
+          }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
+        },
+      ],
+      temperature: 0.3,
+      maxTokens: 16384,
+      timeoutMs: TIMEOUT_SYNTHESIS,
+      label: 'synthesis:full',
+    });
+  } else {
+    console.log('[synthesis] Split mode: generating chronology...');
+
+    const chronology = await streamMistralChat({
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      messages: [
+        { role: 'system', content: buildChronologySystemPrompt() },
+        {
+          role: 'user',
+          content: buildChronologyUserPrompt(
+            eventsFormatted,
+            caseTypeLabel,
+            expertRole,
+            patientInitials ?? undefined,
+          ),
+        },
+      ],
+      temperature: 0.3,
+      maxTokens: 16384,
+      timeoutMs: TIMEOUT_SYNTHESIS,
+      label: 'synthesis:chronology',
+    });
+
+    console.log(`[synthesis] Chronology: ${chronology.length} chars. Generating summary...`);
+
+    const summaryAndAnalysis = await streamMistralChat({
+      model: MISTRAL_MODELS.MISTRAL_LARGE,
+      messages: [
+        {
+          role: 'system',
+          content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
+        },
+        {
+          role: 'user',
+          content: buildSummaryUserPrompt({
+            chronology,
+            caseTypeLabel,
+            expertRole,
+            patientInitials: patientInitials ?? undefined,
+            anomalies: anomaliesFormatted,
+            missingDocs: missingDocsFormatted,
+            calculations: calculationsFormatted,
+            periziaMetadata,
+          }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
+        },
+      ],
+      temperature: 0.3,
+      maxTokens: 4096,
+      timeoutMs: TIMEOUT_SYNTHESIS,
+      label: 'synthesis:summary',
+    });
+
+    console.log(`[synthesis] Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
+    report = assembleSplitReport(summaryAndAnalysis, chronology);
+  }
+
+  return finalizeReport(report);
+}
+
+/**
+ * Split mode step 1: Generate chronology section only.
+ * Runs in its own Inngest step with full 800s Vercel budget.
+ */
+export async function generateSynthesisChronology(params: SynthesisParams): Promise<string> {
+  const { events, caseType, caseRole, patientInitials } = params;
+  const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
+  const expertRole = params.expertRole ?? caseRole;
+  const eventsFormatted = formatEventsForPrompt(events);
+
+  console.log(`[synthesis] Split step 1: generating chronology (${events.length} events)...`);
+
+  const chronology = await streamMistralChat({
+    model: MISTRAL_MODELS.MISTRAL_LARGE,
+    messages: [
+      { role: 'system', content: buildChronologySystemPrompt() },
+      {
+        role: 'user',
+        content: buildChronologyUserPrompt(
+          eventsFormatted,
+          caseTypeLabel,
+          expertRole,
+          patientInitials ?? undefined,
+        ),
+      },
+    ],
+    temperature: 0.3,
+    maxTokens: 16384,
+    timeoutMs: TIMEOUT_SYNTHESIS,
+    label: 'synthesis:chronology',
+  });
+
+  console.log(`[synthesis] Chronology done: ${chronology.length} chars`);
+  return chronology;
+}
+
+/**
+ * Split mode step 2: Generate summary + analysis from chronology.
+ * Runs in its own Inngest step with full 800s Vercel budget.
+ */
+export async function generateSynthesisSummary(params: SynthesisParams & {
+  chronology: string;
+}): Promise<SynthesisResult> {
+  const {
+    caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
+    patientInitials, calculations, chronology, periziaMetadata,
+  } = params;
+  const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
+  const expertRole = params.expertRole ?? caseRole;
+  const anomaliesFormatted = formatAnomalies(anomalies);
+  const missingDocsFormatted = formatMissingDocs(missingDocuments);
+  const calculationsFormatted = formatCalculations(calculations);
+
+  const guidelineContext = await fetchGuidelineContext(events, caseType, caseTypes);
+
+  console.log(`[synthesis] Split step 2: generating summary from ${chronology.length} char chronology...`);
+
+  const summaryAndAnalysis = await streamMistralChat({
+    model: MISTRAL_MODELS.MISTRAL_LARGE,
+    messages: [
+      {
+        role: 'system',
+        content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
+      },
+      {
+        role: 'user',
+        content: buildSummaryUserPrompt({
+          chronology,
+          caseTypeLabel,
+          expertRole,
+          patientInitials: patientInitials ?? undefined,
+          anomalies: anomaliesFormatted,
+          missingDocs: missingDocsFormatted,
+          calculations: calculationsFormatted,
+          periziaMetadata,
+        }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
+      },
+    ],
+    temperature: 0.3,
+    maxTokens: 4096,
+    timeoutMs: TIMEOUT_SYNTHESIS,
+    label: 'synthesis:summary',
+  });
+
+  console.log(`[synthesis] Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
+  const report = assembleSplitReport(summaryAndAnalysis, chronology);
+  return finalizeReport(report);
+}
+
+// ── Shared helpers ──
+
+async function fetchGuidelineContext(
+  events: ConsolidatedEvent[],
+  caseType: CaseType,
+  caseTypes?: CaseType[],
+): Promise<string> {
   try {
-    guidelineContext = await buildGuidelineContext({
+    const ctx = await buildGuidelineContext({
       events: events.map((e) => ({ title: e.title, description: e.description, eventType: e.eventType })),
       caseType,
       caseTypes,
     });
-    if (guidelineContext) {
-      console.log(`[synthesis] RAG: retrieved guideline context (${guidelineContext.length} chars)`);
+    if (ctx) {
+      console.log(`[synthesis] RAG: retrieved guideline context (${ctx.length} chars)`);
     }
+    return ctx;
   } catch (ragError) {
-    // RAG is optional — don't block synthesis if it fails
     console.warn(`[synthesis] RAG retrieval failed (non-blocking): ${ragError instanceof Error ? ragError.message : 'unknown'}`);
+    return '';
   }
-
-  console.log(
-    `[synthesis] Total prompt: ${totalPromptChars} chars, split: ${shouldSplit}, ` +
-    `events: ${events.length}, role: ${caseRole}, type: ${caseType}`,
-  );
-
-  for (let attempt = 0; attempt < MAX_SYNTHESIS_ATTEMPTS; attempt++) {
-    let report: string;
-
-    if (!shouldSplit) {
-      // Single-call mode: full report with role-adaptive prompt
-      report = await streamMistralChat({
-        model: MISTRAL_MODELS.MISTRAL_LARGE,
-        messages: [
-          {
-            role: 'system',
-            content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
-          },
-          {
-            role: 'user',
-            content: buildSynthesisUserPrompt({
-              caseType,
-              patientInitials,
-              caseRole,
-              events,
-              anomalies,
-              missingDocuments,
-              calculations,
-              caseTypes,
-              periziaMetadata,
-            }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
-          },
-        ],
-        temperature: 0.3,
-        maxTokens: 16384,
-        timeoutMs: TIMEOUT_SYNTHESIS,
-        label: 'synthesis:full',
-      });
-    } else {
-      // Split mode: chronology first, then summary + analysis
-      console.log('[synthesis] Split mode: generating chronology...');
-
-      const chronology = await streamMistralChat({
-        model: MISTRAL_MODELS.MISTRAL_LARGE,
-        messages: [
-          { role: 'system', content: buildChronologySystemPrompt() },
-          {
-            role: 'user',
-            content: buildChronologyUserPrompt(
-              eventsFormatted,
-              caseTypeLabel,
-              expertRole,
-              patientInitials ?? undefined,
-            ),
-          },
-        ],
-        temperature: 0.3,
-        maxTokens: 16384,
-        timeoutMs: TIMEOUT_SYNTHESIS,
-        label: 'synthesis:chronology',
-      });
-
-      console.log(`[synthesis] Chronology: ${chronology.length} chars. Generating summary...`);
-
-      const summaryAndAnalysis = await streamMistralChat({
-        model: MISTRAL_MODELS.MISTRAL_LARGE,
-        messages: [
-          {
-            role: 'system',
-            content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
-          },
-          {
-            role: 'user',
-            content: buildSummaryUserPrompt({
-              chronology,
-              caseTypeLabel,
-              expertRole,
-              patientInitials: patientInitials ?? undefined,
-              anomalies: anomaliesFormatted,
-              missingDocs: missingDocsFormatted,
-              calculations: calculationsFormatted,
-              periziaMetadata,
-            }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
-          },
-        ],
-        temperature: 0.3,
-        maxTokens: 4096,
-        timeoutMs: TIMEOUT_EXTRACTION,
-        label: 'synthesis:summary',
-      });
-
-      console.log(`[synthesis] Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
-
-      report = assembleSplitReport(summaryAndAnalysis, chronology);
-    }
-
-    // Validate required sections (base 3 — always required)
-    const validation = validateReportSections(report);
-    if (validation.valid) {
-      report = stripSectionMarkers(report);
-      const wordCount = report.split(/\s+/).filter((w) => w.length > 0).length;
-      console.log(`[synthesis] Report valid: ${wordCount} words (attempt ${attempt + 1})`);
-      return { synthesis: report, wordCount };
-    }
-
-    if (attempt < MAX_SYNTHESIS_ATTEMPTS - 1) {
-      console.warn(
-        `[synthesis] Missing sections: ${validation.missing.join(', ')}. Retrying (attempt ${attempt + 2})...`,
-      );
-    } else {
-      console.error(
-        `[synthesis] Report still missing sections after ${MAX_SYNTHESIS_ATTEMPTS} attempts: ${validation.missing.join(', ')}. Using as-is.`,
-      );
-      report = stripSectionMarkers(report);
-      const wordCount = report.split(/\s+/).filter((w) => w.length > 0).length;
-      return { synthesis: report, wordCount };
-    }
-  }
-
-  throw new Error('[synthesis] Unreachable');
 }
 
-// ── Formatting helpers (for split mode events formatting) ──
+function finalizeReport(report: string): SynthesisResult {
+  const validation = validateReportSections(report);
+  if (!validation.valid) {
+    console.warn(`[synthesis] Missing sections: ${validation.missing.join(', ')}. Using as-is.`);
+  }
+  const cleaned = stripSectionMarkers(report);
+  const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
+  console.log(`[synthesis] Report: ${wordCount} words, valid: ${validation.valid}`);
+  return { synthesis: cleaned, wordCount };
+}
+
+// ── Formatting helpers ──
 
 function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events
@@ -252,7 +349,6 @@ function formatCalculations(calculations?: MedicoLegalCalculation[]): string {
 // ── Assembly for split mode ──
 
 function assembleSplitReport(summaryAndAnalysis: string, chronology: string): string {
-  // Level 1: Deterministic marker-based assembly
   const riassuntoMatch = summaryAndAnalysis.match(
     /<!-- SECTION:RIASSUNTO -->([\s\S]*?)<!-- END:RIASSUNTO -->/,
   );
@@ -274,7 +370,6 @@ function assembleSplitReport(summaryAndAnalysis: string, chronology: string): st
     }
   }
 
-  // Level 2: Heading regex fallback
   const elementiPatterns = [
     /^#{1,3}\s*(?:\d+[.)]\s*)?(?:SEZIONE\s*\d*\s*[—–\-]\s*)?ELEMENTI\s+DI\s+RILIEVO/im,
     /^#{1,3}\s*ASPETTI\s+(?:CRITICI|RILEVANTI)\s+MEDICO/im,
@@ -296,7 +391,6 @@ function assembleSplitReport(summaryAndAnalysis: string, chronology: string): st
     }
   }
 
-  // Level 3: Sequential fallback
   console.log('[synthesis] Assembly: sequential fallback (level 3)');
   return [summaryAndAnalysis.trim(), chronology.trim()].join('\n\n');
 }

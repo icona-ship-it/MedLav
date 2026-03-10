@@ -11,7 +11,7 @@ import { detectMissingDocuments } from '@/services/validation/missing-doc-detect
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import { regenerateSection } from '@/services/synthesis/section-regenerator';
 
-export const maxDuration = 60;
+export const maxDuration = 300; // section regeneration can take several minutes
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),

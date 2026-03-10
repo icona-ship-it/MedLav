@@ -7,7 +7,13 @@ import type { ConsolidatedEvent } from '@/services/consolidation/event-consolida
 import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
-import { generateSynthesis } from '@/services/synthesis/synthesis-service';
+import {
+  generateSynthesis,
+  generateSynthesisChronology,
+  generateSynthesisSummary,
+  shouldSplitSynthesis,
+} from '@/services/synthesis/synthesis-service';
+import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
@@ -599,37 +605,77 @@ export const processCaseDocuments = inngest.createFunction(
       return missing;
     });
 
-    // Step 7: Generate synthesis — version = max + 1, on ALL events
-    const synthesisResult = await step.run('generate-synthesis', async () => {
-      const supabase = createAdminClient();
+    // Step 7: Generate synthesis — version = max + 1, on ALL events.
+    // Each Mistral call runs in its own Inngest step → full 800s Vercel budget.
 
-      const synthesisStartMs = Date.now();
-      console.log(`[pipeline] Step 7: Starting synthesis (full case, ${consolidationResult.allEvents.length} events, role: ${metadata.caseRole})`);
-
-      // Calculate medico-legal periods for report integration
+    // Step 7a: Calculate medico-legal periods (instant, no API call)
+    const calculations = await step.run('calculate-periods', async () => {
       const calcEvents = consolidationResult.allEvents.map((e) => ({
         event_date: e.eventDate,
         event_type: e.eventType,
         title: e.title,
         description: e.description,
       }));
-      const calculations = calculateMedicoLegalPeriods(calcEvents);
+      return calculateMedicoLegalPeriods(calcEvents);
+    });
 
-      const result = await generateSynthesis({
-        caseType: metadata.caseType,
-        caseTypes: metadata.caseTypes.length > 1 ? metadata.caseTypes : undefined,
-        caseRole: metadata.caseRole,
-        patientInitials: metadata.patientInitials,
-        events: consolidationResult.allEvents,
-        anomalies,
-        missingDocuments: missingDocs,
-        calculations,
-        periziaMetadata: metadata.periziaMetadata,
+    // Build shared synthesis params
+    const synthesisParams: SynthesisParams = {
+      caseType: metadata.caseType,
+      caseTypes: metadata.caseTypes.length > 1 ? metadata.caseTypes : undefined,
+      caseRole: metadata.caseRole,
+      patientInitials: metadata.patientInitials,
+      events: consolidationResult.allEvents,
+      anomalies,
+      missingDocuments: missingDocs,
+      calculations,
+      periziaMetadata: metadata.periziaMetadata,
+    };
+
+    // Step 7b: Check if split mode is needed (instant)
+    const needsSplit = await step.run('check-synthesis-split', async () => {
+      const split = shouldSplitSynthesis(synthesisParams);
+      console.log(`[pipeline] Step 7: ${consolidationResult.allEvents.length} events, split: ${split}`);
+      return split;
+    });
+
+    // Step 7c/d/e: Generate synthesis — 1 step (small case) or 2 steps (large case)
+    let synthesisText: string;
+    let synthesisWordCount: number;
+
+    if (!needsSplit) {
+      // Single step: one Mistral call with full 800s budget
+      const result = await step.run('generate-synthesis', async () => {
+        const startMs = Date.now();
+        const r = await generateSynthesis(synthesisParams);
+        console.log(`[pipeline] Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
+        return r;
+      });
+      synthesisText = result.synthesis;
+      synthesisWordCount = result.wordCount;
+    } else {
+      // Split: 2 separate steps, each with full 800s budget
+      const chronology = await step.run('generate-synthesis-chronology', async () => {
+        const startMs = Date.now();
+        const c = await generateSynthesisChronology(synthesisParams);
+        console.log(`[pipeline] Chronology done in ${Date.now() - startMs}ms (${c.length} chars)`);
+        return c;
       });
 
-      console.log(`[pipeline] Step 7: Synthesis completed in ${Date.now() - synthesisStartMs}ms (${result.wordCount} words)`);
+      const result = await step.run('generate-synthesis-summary', async () => {
+        const startMs = Date.now();
+        const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
+        console.log(`[pipeline] Summary done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
+        return r;
+      });
+      synthesisText = result.synthesis;
+      synthesisWordCount = result.wordCount;
+    }
 
-      // Get current max version
+    // Step 7f: Save report to DB (fast, no API call)
+    const synthesisResult = await step.run('save-report', async () => {
+      const supabase = createAdminClient();
+
       const { data: latestReport } = await supabase
         .from('reports')
         .select('version')
@@ -646,12 +692,12 @@ export const processCaseDocuments = inngest.createFunction(
           case_id: caseId,
           version: newVersion,
           report_status: 'bozza',
-          synthesis: result.synthesis,
+          synthesis: synthesisText,
         })
         .select('id')
         .single();
 
-      return { synthesis: result.synthesis, wordCount: result.wordCount, reportId: report?.id, reportVersion: newVersion };
+      return { reportId: report?.id, reportVersion: newVersion, wordCount: synthesisWordCount };
     });
 
     // Step 8: Finalize - mark everything as completed
@@ -690,7 +736,7 @@ export const processCaseDocuments = inngest.createFunction(
           anomaliesDetected: anomalies.length,
           missingDocuments: missingDocs.length,
           reportVersion: synthesisResult.reportVersion,
-          synthesisWordCount: synthesisResult.wordCount,
+          synthesisWordCount: synthesisResult.wordCount ?? synthesisWordCount,
         },
       });
     });
@@ -704,7 +750,7 @@ export const processCaseDocuments = inngest.createFunction(
       anomaliesDetected: anomalies.length,
       missingDocuments: missingDocs.length,
       reportVersion: synthesisResult.reportVersion,
-      synthesisWordCount: synthesisResult.wordCount,
+      synthesisWordCount: synthesisResult.wordCount ?? synthesisWordCount,
     };
   },
 );
