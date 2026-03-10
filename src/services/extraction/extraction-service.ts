@@ -50,7 +50,7 @@ export async function extractEventsFromChunk(params: {
   chunkText: string;
   chunkLabel: string;
   documentType: string;
-  caseType: CaseType;
+  caseType: CaseType | CaseType[];
   temperature?: number;
   chunkIndex?: number;
   totalChunks?: number;

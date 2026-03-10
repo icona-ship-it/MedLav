@@ -92,17 +92,34 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
 /**
  * Detect missing documents by comparing expected docs for the case type
  * against what was actually found in the extracted events.
+ * Supports caseTypes array for multi-type cases: combines expected docs from all types.
  */
 export function detectMissingDocuments(params: {
   events: ConsolidatedEvent[];
   caseType: CaseType;
+  caseTypes?: CaseType[];
 }): MissingDocument[] {
-  const { events, caseType } = params;
+  const { events, caseType, caseTypes } = params;
   const presence = analyzeDocumentPresence(events);
-  const expected = EXPECTED_DOCS_BY_CASE_TYPE[caseType];
+
+  // Combine expected docs from all types, deduplicating by name
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
+  const seenNames = new Set<string>();
+  const allExpected: Array<{ name: string; check: keyof DocumentPresence; reason: string }> = [];
+
+  for (const ct of effectiveTypes) {
+    const expected = EXPECTED_DOCS_BY_CASE_TYPE[ct];
+    for (const doc of expected) {
+      if (!seenNames.has(doc.name)) {
+        seenNames.add(doc.name);
+        allExpected.push(doc);
+      }
+    }
+  }
+
   const missing: MissingDocument[] = [];
 
-  for (const doc of expected) {
+  for (const doc of allExpected) {
     if (!presence[doc.check]) {
       // Find a related event for context
       const relatedEvent = findRelatedEvent(doc.check, events);

@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_role, patient_initials')
+      .select('id, case_type, case_types, case_role, patient_initials')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -111,10 +111,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Build caseTypes: use case_types if available, fallback to [case_type]
+    const rawCaseTypes = caseRow.case_types as string[] | null;
+    const caseTypes: CaseType[] = rawCaseTypes && rawCaseTypes.length > 0
+      ? rawCaseTypes as CaseType[]
+      : [caseRow.case_type as CaseType];
+
     // Re-detect missing docs
     const missingDocs = detectMissingDocuments({
       events,
       caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
     });
     if (missingDocs.length > 0) {
       await admin.from('missing_documents').insert(
@@ -139,6 +146,7 @@ export async function POST(request: NextRequest) {
     // Regenerate synthesis with role-adaptive prompts + calculations
     const result = await generateSynthesis({
       caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
       caseRole: caseRow.case_role as CaseRole,
       patientInitials: caseRow.patient_initials as string | null,
       events,

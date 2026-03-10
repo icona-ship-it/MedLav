@@ -6,7 +6,7 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatDate } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
-import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
+import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -50,14 +50,17 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 /**
  * Build the system prompt for synthesis generation.
  * Now role-adaptive and case-type-specific.
+ * Supports caseTypes array for multi-type cases.
  */
 export function buildSynthesisSystemPrompt(params: {
   caseType: CaseType;
   caseRole: CaseRole;
+  caseTypes?: CaseType[];
 }): string {
-  const { caseType, caseRole } = params;
+  const { caseType, caseRole, caseTypes } = params;
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
-  const caseTypeDirective = buildCaseTypeDirective(caseType);
+  const caseTypeDirective = buildCaseTypeDirective(effectiveTypes);
   const causalNexus = formatCausalNexusForPrompt();
 
   const goldenExample = getGoldenPerizia(caseType, caseRole);
@@ -101,8 +104,9 @@ export function buildSynthesisUserPrompt(params: {
   anomalies: DetectedAnomaly[];
   missingDocuments: MissingDocument[];
   calculations?: MedicoLegalCalculation[];
+  caseTypes?: CaseType[];
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes } = params;
 
   const eventsText = formatEventsForPrompt(events);
   const anomaliesText = formatAnomaliesForPrompt(anomalies);
@@ -113,9 +117,12 @@ export function buildSynthesisUserPrompt(params: {
     : caseRole === 'ctp' ? 'CTP - Consulente Tecnico di Parte'
     : 'Perito Stragiudiziale';
 
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
+  const caseTypeLabelsText = effectiveTypes.map(t => CASE_TYPE_LABELS[t]).join(' + ');
+
   return `Genera il report medico-legale completo per il seguente caso.
 
-TIPO CASO: ${CASE_TYPE_LABELS[caseType]}
+TIPO CASO: ${caseTypeLabelsText}
 RUOLO PERITO: ${roleLabel}
 PAZIENTE: ${patientInitials || 'N/D'}
 NUMERO EVENTI DOCUMENTATI: ${events.length}
@@ -198,13 +205,17 @@ export function buildChronologyUserPrompt(
 export function buildSummarySystemPrompt(params: {
   caseType: CaseType;
   caseRole: CaseRole;
+  caseTypes?: CaseType[];
 }): string {
-  const { caseType, caseRole } = params;
+  const { caseType, caseRole, caseTypes } = params;
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
   const causalNexus = formatCausalNexusForPrompt();
 
-  // Get non-chronology sections for split mode
-  const knowledge = getCaseTypeKnowledge(caseType);
+  // Get non-chronology sections for split mode (multi-type aware)
+  const knowledge = effectiveTypes.length > 1
+    ? getCombinedCaseTypeKnowledge(effectiveTypes)
+    : getCaseTypeKnowledge(caseType);
   const nonChronoSections = knowledge.reportSections
     .filter((s) => s.id !== 'cronologia')
     .map((s) => {

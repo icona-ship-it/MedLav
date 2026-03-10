@@ -13,6 +13,19 @@ import { InfoTooltip } from '@/components/info-tooltip';
 export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(['generica']);
+
+  function toggleType(value: string) {
+    setSelectedTypes(prev => {
+      if (prev.includes(value)) {
+        // Don't allow deselecting the last one
+        if (prev.length === 1) return prev;
+        return prev.filter(v => v !== value);
+      }
+      if (prev.length >= 3) return prev; // Max 3
+      return [...prev, value];
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -95,34 +108,41 @@ export default function NewCasePage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label htmlFor="caseType" className="text-sm font-medium inline-flex items-center">
-                  Tipologia Caso *
+                <label className="text-sm font-medium inline-flex items-center">
+                  Tipologia Caso * <span className="ml-2 text-xs text-muted-foreground">({selectedTypes.length}/3 selezionati)</span>
                   <InfoTooltip title="Tipologia Caso">
-                    <p>Determina <strong>cosa l&apos;AI cerca</strong> nei documenti e la <strong>struttura del report</strong>:</p>
-                    <p><strong>Ortopedica</strong> — Analisi intervento chirurgico, complicanze, danno biologico</p>
-                    <p><strong>Oncologica</strong> — Timeline diagnostica, analisi ritardo, perdita di chance</p>
-                    <p><strong>Ostetrica</strong> — Analisi travaglio/CTG, esiti neonatali</p>
-                    <p><strong>Anestesiologica</strong> — Valutazione preoperatoria, gestione anestesiologica</p>
-                    <p><strong>Infezione Nosocomiale</strong> — Analisi infettiva, antibioticoterapia</p>
-                    <p><strong>Errore Diagnostico</strong> — Percorso diagnostico, analisi errore</p>
-                    <p><strong>RC Auto</strong> — Dinamica sinistro, congruità lesioni</p>
-                    <p><strong>Previdenziale</strong> — Quadro clinico, capacità lavorativa</p>
-                    <p><strong>Infortuni</strong> — Dinamica infortunio, nesso lavorativo</p>
-                    <p><strong>Generica</strong> — Analisi senza focus specifico</p>
+                    <p>Determina <strong>cosa l&apos;AI cerca</strong> nei documenti e la <strong>struttura del report</strong>.</p>
+                    <p>Puoi selezionare da <strong>1 a 3 tipologie</strong>. La prima selezionata diventa la tipologia principale.</p>
                   </InfoTooltip>
                 </label>
-                <select
-                  id="caseType"
-                  name="caseType"
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {caseTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="grid gap-2 rounded-md border border-input p-3 sm:grid-cols-2">
+                  {caseTypes.map((type) => {
+                    const isChecked = selectedTypes.includes(type.value);
+                    const isDisabled = !isChecked && selectedTypes.length >= 3;
+                    return (
+                      <label
+                        key={type.value}
+                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors ${
+                          isChecked ? 'bg-primary/10 font-medium' : ''
+                        } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          onChange={() => toggleType(type.value)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span>{type.label}</span>
+                        {selectedTypes[0] === type.value && selectedTypes.length > 1 && (
+                          <span className="ml-auto text-xs text-primary">(principale)</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                <input type="hidden" name="caseType" value={selectedTypes[0]} />
+                <input type="hidden" name="caseTypes" value={JSON.stringify(selectedTypes)} />
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">

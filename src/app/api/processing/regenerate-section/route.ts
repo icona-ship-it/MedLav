@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_role, patient_initials')
+      .select('id, case_type, case_types, case_role, patient_initials')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -106,11 +106,18 @@ export async function POST(request: NextRequest) {
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
     }));
 
+    // Build caseTypes: use case_types if available, fallback to [case_type]
+    const rawCaseTypes = caseRow.case_types as string[] | null;
+    const caseTypes: CaseType[] = rawCaseTypes && rawCaseTypes.length > 0
+      ? rawCaseTypes as CaseType[]
+      : [caseRow.case_type as CaseType];
+
     // Compute context data
     const anomalies = detectAnomalies(events);
     const missingDocs = detectMissingDocuments({
       events,
       caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
     });
     const calcEvents = events.map((e) => ({
       event_date: e.eventDate,
@@ -125,6 +132,7 @@ export async function POST(request: NextRequest) {
       sectionId,
       currentSynthesis: currentReport.synthesis as string,
       caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
       caseRole: caseRow.case_role as CaseRole,
       events,
       anomalies,

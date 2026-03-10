@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, pgEnum, jsonb } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
 
 export const caseTypeEnum = pgEnum('case_type', [
@@ -34,6 +34,7 @@ export const cases = pgTable('cases', {
   patientInitials: text('patient_initials'), // solo iniziali per GDPR
   practiceReference: text('practice_reference'), // riferimento pratica
   caseType: caseTypeEnum('case_type').notNull().default('generica'),
+  caseTypes: jsonb('case_types').$type<string[]>(),
   caseRole: caseRoleEnum('case_role').notNull().default('ctu'),
   status: caseStatusEnum('status').notNull().default('bozza'),
   notes: text('notes'),

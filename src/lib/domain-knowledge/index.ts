@@ -1,5 +1,5 @@
 import type { CaseType } from '@/types';
-import type { CaseTypeKnowledge } from './types';
+import type { CaseTypeKnowledge, ReportSection, TermDefinition } from './types';
 
 export type { CaseTypeKnowledge, ReportSection, StandardTimeline, CausalNexusCriteria, EvaluationFramework, TermDefinition } from './types';
 export { CAUSAL_NEXUS_CRITERIA, formatCausalNexusForPrompt } from './causal-nexus';
@@ -76,4 +76,83 @@ export function formatTerminologyForPrompt(caseType: CaseType): string {
 
   const lines = knowledge.keyTerminology.map((t) => `- **${t.term}**: ${t.definition}`);
   return `## TERMINOLOGIA CHIAVE\n${lines.join('\n')}`;
+}
+
+/**
+ * Combine domain knowledge from multiple case types.
+ * Uses primary type's structure, merges sections/timelines/anomalies from secondaries.
+ * Deduplicates sections by id (primary wins).
+ */
+export function getCombinedCaseTypeKnowledge(caseTypes: CaseType[]): CaseTypeKnowledge {
+  if (caseTypes.length === 0) return getCaseTypeKnowledge('generica');
+  if (caseTypes.length === 1) return getCaseTypeKnowledge(caseTypes[0]);
+
+  const knowledges = caseTypes.map(getCaseTypeKnowledge);
+  const primary = knowledges[0];
+
+  // Combine: use primary's structure, merge in sections from secondaries
+  // Deduplicate sections by id (primary wins)
+  const allSections: ReportSection[] = [...primary.reportSections];
+  for (const k of knowledges.slice(1)) {
+    for (const section of k.reportSections) {
+      if (!allSections.some(s => s.id === section.id)) {
+        // Insert specialty sections before 'elementi_rilievo' (last analytical section)
+        const elementiIdx = allSections.findIndex(s => s.id === 'elementi_rilievo');
+        if (elementiIdx >= 0) {
+          allSections.splice(elementiIdx, 0, section);
+        } else {
+          allSections.push(section);
+        }
+      }
+    }
+  }
+
+  return {
+    caseType: primary.caseType,
+    reportSections: allSections,
+    standardTimelines: knowledges.flatMap(k => [...k.standardTimelines]),
+    commonAnomalyPatterns: [...new Set(knowledges.flatMap(k => [...k.commonAnomalyPatterns]))],
+    evaluationFrameworks: [...new Set(knowledges.flatMap(k => [...k.evaluationFrameworks]))],
+    keyTerminology: deduplicateByTerm(knowledges.flatMap(k => [...k.keyTerminology])),
+    synthesisGuidance: knowledges.map(k => k.synthesisGuidance).join('\n\n'),
+  };
+}
+
+/**
+ * Format report sections for combined multi-type knowledge.
+ */
+export function formatCombinedReportSectionsForPrompt(caseTypes: CaseType[]): string {
+  const knowledge = getCombinedCaseTypeKnowledge(caseTypes);
+  return knowledge.reportSections
+    .map((s, i) => {
+      const wordInfo = s.wordRange.max > 0
+        ? ` (${s.wordRange.min}-${s.wordRange.max} parole)`
+        : ' (senza limiti di parole)';
+      return `### PARTE ${i + 1} — ${s.title.toUpperCase()}${wordInfo}\n${s.description}`;
+    })
+    .join('\n\n');
+}
+
+/**
+ * Format standard timelines for combined multi-type knowledge.
+ */
+export function formatCombinedTimelinesForPrompt(caseTypes: CaseType[]): string {
+  const knowledge = getCombinedCaseTypeKnowledge(caseTypes);
+  if (knowledge.standardTimelines.length === 0) return '';
+
+  const lines = knowledge.standardTimelines.map((t) =>
+    `- ${t.procedure}: follow-up atteso entro ${t.expectedFollowUpDays}gg, ` +
+    `recupero atteso ${t.expectedRecoveryDays}gg, ` +
+    `ritardo critico oltre ${t.criticalDelayThresholdDays}gg (${t.source})`,
+  );
+  return `## TEMPISTICHE DI RIFERIMENTO\n${lines.join('\n')}`;
+}
+
+function deduplicateByTerm(terms: TermDefinition[]): TermDefinition[] {
+  const seen = new Set<string>();
+  return terms.filter(t => {
+    if (seen.has(t.term)) return false;
+    seen.add(t.term);
+    return true;
+  });
 }

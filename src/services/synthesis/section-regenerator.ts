@@ -5,7 +5,7 @@ import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
-import { formatCausalNexusForPrompt, getCaseTypeKnowledge } from '@/lib/domain-knowledge';
+import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge } from '@/lib/domain-knowledge';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { formatDate } from '@/lib/format';
 
@@ -13,6 +13,7 @@ interface RegenerateSectionParams {
   sectionId: string;
   currentSynthesis: string;
   caseType: CaseType;
+  caseTypes?: CaseType[];
   caseRole: CaseRole;
   events: ConsolidatedEvent[];
   anomalies: DetectedAnomaly[];
@@ -27,14 +28,17 @@ interface RegenerateSectionParams {
  */
 export async function regenerateSection(params: RegenerateSectionParams): Promise<string> {
   const {
-    sectionId, currentSynthesis, caseType, caseRole,
+    sectionId, currentSynthesis, caseType, caseTypes, caseRole,
     events, anomalies, missingDocuments, calculations, userInstruction,
   } = params;
 
   const sections = parseSynthesisSections(currentSynthesis);
   const targetSection = sections.find((s) => s.id === sectionId);
   const sectionTitle = targetSection?.title ?? sectionId;
-  const knowledge = getCaseTypeKnowledge(caseType);
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
+  const knowledge = effectiveTypes.length > 1
+    ? getCombinedCaseTypeKnowledge(effectiveTypes)
+    : getCaseTypeKnowledge(caseType);
 
   // Find the section spec from domain knowledge
   const sectionSpec = knowledge.reportSections.find((s) => s.id === sectionId);

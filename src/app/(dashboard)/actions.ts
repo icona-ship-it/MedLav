@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { CaseType, CaseRole } from '@/types';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { CASE_TYPES } from '@/lib/constants';
 
 export async function createCase(formData: FormData) {
   const supabase = await createClient();
@@ -21,12 +22,30 @@ export async function createCase(formData: FormData) {
 
   const caseType = formData.get('caseType') as CaseType;
   const caseRole = formData.get('caseRole') as CaseRole;
+  const caseTypesRaw = formData.get('caseTypes') as string;
   const patientInitials = formData.get('patientInitials') as string;
   const practiceReference = formData.get('practiceReference') as string;
   const notes = formData.get('notes') as string;
 
   if (!caseType || !caseRole) {
     return { error: 'Tipo caso e tipo incarico sono obbligatori' };
+  }
+
+  // Parse and validate caseTypes (multi-select, 1-3 valid types)
+  const validCaseTypeValues: Set<string> = new Set(CASE_TYPES.map((t) => t.value));
+  let caseTypes: string[] = [caseType];
+  if (caseTypesRaw) {
+    try {
+      const parsed = JSON.parse(caseTypesRaw) as unknown;
+      if (Array.isArray(parsed) && parsed.length >= 1 && parsed.length <= 3) {
+        const allValid = parsed.every((v): v is string => typeof v === 'string' && validCaseTypeValues.has(v));
+        if (allValid) {
+          caseTypes = parsed;
+        }
+      }
+    } catch {
+      // Fallback to single caseType
+    }
   }
 
   // Generate unique case code with retry on collision
@@ -60,7 +79,8 @@ export async function createCase(formData: FormData) {
       .insert({
         user_id: user.id,
         code,
-        case_type: caseType,
+        case_type: caseTypes[0],
+        case_types: caseTypes,
         case_role: caseRole,
         patient_initials: patientInitials || null,
         practice_reference: practiceReference || null,
@@ -683,6 +703,7 @@ export async function deleteCase(caseId: string) {
 export async function updateCase(params: {
   caseId: string;
   caseType?: CaseType;
+  caseTypes?: CaseType[];
   caseRole?: CaseRole;
   patientInitials?: string | null;
   practiceReference?: string | null;
@@ -708,6 +729,7 @@ export async function updateCase(params: {
   };
 
   if (params.caseType !== undefined) updateFields.case_type = params.caseType;
+  if (params.caseTypes !== undefined) updateFields.case_types = params.caseTypes;
   if (params.caseRole !== undefined) updateFields.case_role = params.caseRole;
   if (params.patientInitials !== undefined) updateFields.patient_initials = params.patientInitials;
   if (params.practiceReference !== undefined) updateFields.practice_reference = params.practiceReference;

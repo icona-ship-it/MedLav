@@ -108,8 +108,10 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 
 /**
  * Build the system prompt for event extraction.
+ * Supports single CaseType or CaseType[] for multi-type cases.
  */
-export function buildExtractionSystemPrompt(caseType: CaseType): string {
+export function buildExtractionSystemPrompt(caseType: CaseType | CaseType[]): string {
+  const types = Array.isArray(caseType) ? caseType : [caseType];
   return `Sei un assistente medico-legale specializzato nell'estrazione di eventi clinici dalla documentazione medica.
 
 ## IL TUO COMPITO
@@ -130,7 +132,7 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 ${SOURCE_RULES}
 
 ## GUIDA SPECIFICA PER TIPO CASO
-${CASE_TYPE_GUIDANCE[caseType]}
+${types.map(t => CASE_TYPE_GUIDANCE[t]).join('\n\n')}
 
 ## REGOLA TABELLE
 Per blocchi delimitati da [TABLE_START] e [TABLE_END]: ogni RIGA della tabella rappresenta un dato clinico separato.

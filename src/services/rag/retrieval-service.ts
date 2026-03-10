@@ -66,13 +66,15 @@ export async function retrieveRelevantGuidelines(params: {
 /**
  * Build a context string from retrieved chunks for prompt injection.
  * Returns empty string if no relevant chunks found.
+ * Supports caseTypes array: searches guidelines for all selected types.
  */
 export async function buildGuidelineContext(params: {
   events: Array<{ title: string; description: string; eventType: string }>;
   caseType: CaseType;
+  caseTypes?: CaseType[];
   maxChunks?: number;
 }): Promise<string> {
-  const { events, caseType, maxChunks = 5 } = params;
+  const { events, caseType, caseTypes, maxChunks = 5 } = params;
 
   // Build a query from the key clinical events
   const keyEvents = events
@@ -85,15 +87,36 @@ export async function buildGuidelineContext(params: {
     .map((e) => `${e.title}: ${e.description.slice(0, 150)}`)
     .join('\n');
 
-  const chunks = await retrieveRelevantGuidelines({
-    query,
-    caseType,
-    topK: maxChunks,
-  });
+  // For multi-type: search across all types, deduplicate results
+  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
+  const allChunks: RetrievedChunk[] = [];
+  const seenContent = new Set<string>();
 
-  if (chunks.length === 0) return '';
+  for (const ct of effectiveTypes) {
+    const chunks = await retrieveRelevantGuidelines({
+      query,
+      caseType: ct,
+      topK: maxChunks,
+    });
 
-  const contextLines = chunks.map((c) =>
+    for (const chunk of chunks) {
+      // Deduplicate by content hash (first 100 chars)
+      const contentKey = chunk.content.slice(0, 100);
+      if (!seenContent.has(contentKey)) {
+        seenContent.add(contentKey);
+        allChunks.push(chunk);
+      }
+    }
+  }
+
+  // Sort by similarity and take top N
+  const topChunks = allChunks
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, maxChunks);
+
+  if (topChunks.length === 0) return '';
+
+  const contextLines = topChunks.map((c) =>
     `### ${c.guidelineTitle} (${c.guidelineSource})${c.sectionTitle ? ` — ${c.sectionTitle}` : ''}\n${c.content}`,
   );
 

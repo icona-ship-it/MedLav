@@ -15,6 +15,7 @@ import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-lega
 interface CaseMetadata {
   caseId: string;
   caseType: CaseType;
+  caseTypes: CaseType[];
   caseRole: CaseRole;
   patientInitials: string | null;
   userId: string;
@@ -59,7 +60,7 @@ export const processCaseDocuments = inngest.createFunction(
 
       const { data: caseRow, error: caseError } = await supabase
         .from('cases')
-        .select('id, case_type, case_role, patient_initials, user_id')
+        .select('id, case_type, case_types, case_role, patient_initials, user_id')
         .eq('id', caseId)
         .single();
 
@@ -97,10 +98,17 @@ export const processCaseDocuments = inngest.createFunction(
         }
       }
 
+      // Build caseTypes: use case_types if available, fallback to [case_type]
+      const rawCaseTypes = caseRow.case_types as string[] | null;
+      const caseTypes: CaseType[] = rawCaseTypes && rawCaseTypes.length > 0
+        ? rawCaseTypes as CaseType[]
+        : [caseRow.case_type as CaseType];
+
       return {
         metadata: {
           caseId: caseRow.id as string,
           caseType: caseRow.case_type as CaseType,
+          caseTypes,
           caseRole: caseRow.case_role as CaseRole,
           patientInitials: caseRow.patient_initials as string | null,
           userId: caseRow.user_id as string,
@@ -267,7 +275,7 @@ export const processCaseDocuments = inngest.createFunction(
               chunkText,
               chunkLabel,
               documentType: ocrResult.documentType,
-              caseType: metadata.caseType,
+              caseType: metadata.caseTypes.length > 1 ? metadata.caseTypes : metadata.caseType,
               temperature: 0.2,
               chunkIndex: i,
               totalChunks: chunkRanges.length,
@@ -520,6 +528,7 @@ export const processCaseDocuments = inngest.createFunction(
       const missing = detectMissingDocuments({
         events: consolidationResult.allEvents,
         caseType: metadata.caseType,
+        caseTypes: metadata.caseTypes.length > 1 ? metadata.caseTypes : undefined,
       });
 
       console.log(`[pipeline] Step 6: Detected ${missing.length} missing documents (full case)`);
@@ -556,6 +565,7 @@ export const processCaseDocuments = inngest.createFunction(
 
       const result = await generateSynthesis({
         caseType: metadata.caseType,
+        caseTypes: metadata.caseTypes.length > 1 ? metadata.caseTypes : undefined,
         caseRole: metadata.caseRole,
         patientInitials: metadata.patientInitials,
         events: consolidationResult.allEvents,

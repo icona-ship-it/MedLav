@@ -36,6 +36,7 @@ const MAX_SYNTHESIS_ATTEMPTS = 2;
  */
 export async function generateSynthesis(params: {
   caseType: CaseType;
+  caseTypes?: CaseType[];
   caseRole: CaseRole;
   patientInitials: string | null;
   events: ConsolidatedEvent[];
@@ -46,7 +47,7 @@ export async function generateSynthesis(params: {
   expertRole?: string;
 }): Promise<SynthesisResult> {
   const {
-    caseType, caseRole, events, anomalies, missingDocuments,
+    caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
     patientInitials, calculations,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
@@ -69,6 +70,7 @@ export async function generateSynthesis(params: {
     guidelineContext = await buildGuidelineContext({
       events: events.map((e) => ({ title: e.title, description: e.description, eventType: e.eventType })),
       caseType,
+      caseTypes,
     });
     if (guidelineContext) {
       console.log(`[synthesis] RAG: retrieved guideline context (${guidelineContext.length} chars)`);
@@ -93,7 +95,7 @@ export async function generateSynthesis(params: {
         messages: [
           {
             role: 'system',
-            content: buildSynthesisSystemPrompt({ caseType, caseRole }),
+            content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes }),
           },
           {
             role: 'user',
@@ -105,6 +107,7 @@ export async function generateSynthesis(params: {
               anomalies,
               missingDocuments,
               calculations,
+              caseTypes,
             }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
           },
         ],
@@ -144,7 +147,7 @@ export async function generateSynthesis(params: {
         messages: [
           {
             role: 'system',
-            content: buildSummarySystemPrompt({ caseType, caseRole }),
+            content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
           },
           {
             role: 'user',
