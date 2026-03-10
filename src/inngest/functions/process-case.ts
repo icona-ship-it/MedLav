@@ -277,17 +277,27 @@ export const processCaseDocuments = inngest.createFunction(
 
             if (result.events.length === 0) return { count: 0 };
 
-            // Save events directly to DB
+            // Enum validation — LLM can produce values outside the enum
+            const VALID_EVENT_TYPES = new Set([
+              'visita', 'esame', 'diagnosi', 'intervento', 'terapia', 'ricovero',
+              'follow-up', 'referto', 'prescrizione', 'consenso', 'complicanza', 'altro',
+            ]);
+            const VALID_SOURCE_TYPES = new Set([
+              'cartella_clinica', 'referto_controllo', 'esame_strumentale', 'esame_ematochimico', 'altro',
+            ]);
+            const VALID_DATE_PRECISIONS = new Set(['giorno', 'mese', 'anno', 'sconosciuta']);
+
+            // Save events directly to DB with enum normalization
             const eventRows = result.events.map((e, idx) => ({
               case_id: caseId,
               document_id: ocrResult.documentId,
               order_number: (range.start - 1) * 100 + idx + 1,
               event_date: e.eventDate,
-              date_precision: e.datePrecision,
-              event_type: e.eventType,
+              date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
+              event_type: VALID_EVENT_TYPES.has(e.eventType) ? e.eventType : 'altro',
               title: e.title,
               description: e.description,
-              source_type: e.sourceType,
+              source_type: VALID_SOURCE_TYPES.has(e.sourceType) ? e.sourceType : 'altro',
               diagnosis: e.diagnosis ?? null,
               doctor: e.doctor ?? null,
               facility: e.facility ?? null,
@@ -299,7 +309,11 @@ export const processCaseDocuments = inngest.createFunction(
               extraction_pass: 'pass1_only',
             }));
 
-            await supabase.from('events').insert(eventRows);
+            const { error: insertError } = await supabase.from('events').insert(eventRows);
+            if (insertError) {
+              console.error(`[pipeline] Chunk ${i + 1} INSERT FAILED: ${insertError.message}`);
+              throw new Error(`Event insert failed: ${insertError.message}`);
+            }
             console.log(`[pipeline] Chunk ${i + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
             return { count: eventRows.length };
           } catch (error) {
@@ -338,6 +352,8 @@ export const processCaseDocuments = inngest.createFunction(
       const supabase = createAdminClient();
 
       // Events are already in DB — just fetch and organize
+      // Sanity check: extraction steps reported saving events
+      const expectedEvents = extractionResults.length > 0;
       const { data: existingRaw } = await supabase
         .from('events')
         .select('*')
@@ -381,6 +397,9 @@ export const processCaseDocuments = inngest.createFunction(
           .eq('id', docResult.documentId);
       }
 
+      if (expectedEvents && allEvents.length === 0) {
+        console.error(`[pipeline] Step 4: CRITICAL — extraction reported events but DB has 0! Insert likely failed silently.`);
+      }
       console.log(`[pipeline] Step 4: ${allEvents.length} total events in DB`);
       return { allEvents, newEventsCount: allEvents.length };
     });
