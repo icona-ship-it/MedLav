@@ -828,6 +828,170 @@ export async function updateCaseStatus(params: { caseId: string; newStatus: stri
  * Fetch page images for all documents in a case.
  * Returns a map of documentId → image storage paths.
  */
+/**
+ * Update report synthesis text in-place (no new version).
+ */
+export async function updateReportSynthesis(params: {
+  caseId: string;
+  reportId: string;
+  synthesis: string;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { error } = await supabase
+    .from('reports')
+    .update({
+      synthesis: params.synthesis,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore aggiornamento report' };
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'report.synthesis_edited',
+    entity_type: 'report',
+    entity_id: params.reportId,
+    metadata: { caseId: params.caseId },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Fetch all report versions for a case, ordered by version DESC.
+ */
+export async function getCaseReportVersions(caseId: string) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from('reports')
+    .select('id, version, report_status, synthesis')
+    .eq('case_id', caseId)
+    .order('version', { ascending: false });
+
+  return data ?? [];
+}
+
+/**
+ * Batch update event types (re-tag "altro" events).
+ */
+export async function batchUpdateEventTypes(params: {
+  caseId: string;
+  updates: Array<{ eventId: string; newType: string }>;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const results = await Promise.all(
+    params.updates.map((u) =>
+      supabase
+        .from('events')
+        .update({ event_type: u.newType, updated_at: new Date().toISOString() })
+        .eq('id', u.eventId)
+        .eq('case_id', params.caseId),
+    ),
+  );
+
+  const hasError = results.some((r) => r.error);
+  if (hasError) return { error: 'Errore aggiornamento eventi' };
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'events.batch_retagged',
+    entity_type: 'case',
+    entity_id: params.caseId,
+    metadata: { count: params.updates.length },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Reorder an event by swapping order_number with its neighbor.
+ */
+export async function reorderEvent(params: {
+  caseId: string;
+  eventId: string;
+  direction: 'up' | 'down';
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Fetch all events ordered
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, order_number')
+    .eq('case_id', params.caseId)
+    .eq('is_deleted', false)
+    .order('order_number', { ascending: true });
+
+  if (!events || events.length < 2) return { error: 'Non ci sono abbastanza eventi' };
+
+  const currentIndex = events.findIndex((e) => e.id === params.eventId);
+  if (currentIndex === -1) return { error: 'Evento non trovato' };
+
+  const swapIndex = params.direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (swapIndex < 0 || swapIndex >= events.length) return { error: 'Impossibile spostare' };
+
+  const currentEvent = events[currentIndex];
+  const swapEvent = events[swapIndex];
+
+  // Swap order_numbers
+  const { error: err1 } = await supabase
+    .from('events')
+    .update({ order_number: swapEvent.order_number, updated_at: new Date().toISOString() })
+    .eq('id', currentEvent.id);
+
+  const { error: err2 } = await supabase
+    .from('events')
+    .update({ order_number: currentEvent.order_number, updated_at: new Date().toISOString() })
+    .eq('id', swapEvent.id);
+
+  if (err1 || err2) return { error: 'Errore riordino eventi' };
+
+  return { success: true };
+}
+
 export async function getCasePageImages(caseId: string): Promise<Record<string, string[]>> {
   const supabase = await createClient();
 

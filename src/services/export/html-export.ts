@@ -184,10 +184,18 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   .synthesis { background: #f8fafc; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.8; }
   .expert-note { background: #eff6ff; border-left: 3px solid #2563eb; padding: 8px 12px; margin-top: 6px; font-size: 13px; }
   @media print {
-    body { padding: 0; font-size: 11pt; }
-    .no-print { display: none; }
+    @page { margin: 2cm; }
+    body { padding: 0; font-size: 11pt; max-width: 100%; color: #000; }
+    .no-print { display: none !important; }
     .event, .anomaly, .missing-doc { page-break-inside: avoid; }
-    h2 { page-break-after: avoid; }
+    h1 { page-break-after: avoid; font-size: 18pt; }
+    h2 { page-break-after: avoid; font-size: 14pt; }
+    h3 { page-break-after: avoid; }
+    .header-info, .stats, #toc { page-break-inside: avoid; }
+    .stat { background: none !important; border: 1px solid #ccc; }
+    .event-type, .event-source, .severity { background: none !important; border: 1px solid #999; color: #000 !important; }
+    a { color: #000; text-decoration: none; }
+    .synthesis { background: none !important; border: 1px solid #ddd; }
   }
 </style>
 </head>

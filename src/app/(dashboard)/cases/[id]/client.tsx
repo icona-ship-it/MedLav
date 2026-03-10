@@ -5,128 +5,39 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Play, Loader2, AlertTriangle, ChevronDown, ChevronUp,
-  FileWarning, Plus, Trash2, Save, X, Pencil,
+  FileWarning, Trash2, Pencil,
   Download, XCircle, ArrowLeft, Archive, RotateCcw,
-  CheckCircle2, Search, FileText, Info,
+  CheckCircle2, Search, FileText, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { FileUpload } from '@/components/file-upload';
 import { ProcessingProgress } from '@/components/processing-progress';
+import { CompletenessIndicator } from '@/components/completeness-indicator';
 import {
-  updateEvent, deleteEvent, addManualEvent, updateReportStatus,
-  deleteDocument, deleteCase, updateCase, updateCaseStatus,
+  deleteDocument, deleteCase, updateCaseStatus,
 } from '../../actions';
 import {
-  CASE_TYPES, EVENT_TYPES, SOURCE_TYPES,
-  caseTypeLabels, sourceLabels, anomalyTypeLabels,
+  caseTypeLabels, anomalyTypeLabels,
 } from '@/lib/constants';
-import {
-  formatDate, formatFileSize, getFileIcon,
-  confidenceColor, confidenceLabel,
-} from '@/lib/format';
+import { formatDate, formatFileSize, getFileIcon } from '@/lib/format';
+import { EditCaseDialog } from './edit-case-dialog';
+import { EventsTab } from './events-tab';
+import { ReportTab } from './report-tab';
+import { PeriziaMetadataForm } from './perizia-form';
+import type {
+  CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
+} from './types';
 
 // --- Types ---
-
-interface PeriziaMetadataUI {
-  tribunale?: string;
-  sezione?: string;
-  rgNumber?: string;
-  judgeName?: string;
-  ctuName?: string;
-  ctuTitle?: string;
-  ctpRicorrente?: string;
-  ctpResistente?: string;
-  parteRicorrente?: string;
-  parteResistente?: string;
-  dataIncarico?: string;
-  dataOperazioni?: string;
-  dataDeposito?: string;
-  quesiti?: string[];
-  speseMediche?: string;
-  esameObiettivo?: string;
-  fondoSpese?: string;
-}
-
-interface CaseData {
-  id: string;
-  code: string;
-  case_type: string;
-  case_role: string;
-  patient_initials: string | null;
-  practice_reference: string | null;
-  notes: string | null;
-  status: string;
-  perizia_metadata?: PeriziaMetadataUI | null;
-}
-
-interface Document {
-  id: string;
-  file_name: string;
-  file_type: string;
-  file_size: number;
-  processing_status: string;
-  processing_error: string | null;
-  created_at: string;
-}
-
-interface EventRow {
-  id: string;
-  order_number: number;
-  event_date: string;
-  date_precision: string;
-  event_type: string;
-  title: string;
-  description: string;
-  source_type: string;
-  document_id: string | null;
-  diagnosis: string | null;
-  doctor: string | null;
-  facility: string | null;
-  confidence: number;
-  requires_verification: boolean;
-  reliability_notes: string | null;
-  expert_notes: string | null;
-  source_text: string | null;
-  source_pages: string | null;
-  extraction_pass: string | null;
-}
-
-interface AnomalyRow {
-  id: string;
-  anomaly_type: string;
-  severity: string;
-  description: string;
-  involved_events: string | null;
-  suggestion: string | null;
-}
-
-interface MissingDocRow {
-  id: string;
-  document_name: string;
-  reason: string;
-  related_event: string | null;
-}
-
-interface ReportRow {
-  id: string;
-  version: number;
-  report_status: string;
-  synthesis: string | null;
-}
 
 interface CaseDetailClientProps {
   caseId: string;
@@ -143,12 +54,6 @@ interface CaseDetailClientProps {
 // --- Constants ---
 
 const POLL_INTERVAL_MS = 5000;
-
-const CASE_ROLES_SHORT = [
-  { value: 'ctu', label: 'CTU' },
-  { value: 'ctp', label: 'CTP' },
-  { value: 'stragiudiziale', label: 'Stragiudiziale' },
-];
 
 const WIZARD_STEPS = [
   { number: 1, label: 'Documenti' },
@@ -180,7 +85,6 @@ function isDocProcessing(status: string): boolean {
 }
 
 function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean): number {
-  // Only auto-navigate to Step 3 when ALL processing is done
   if (hasResults && !hasProcessingDocs) return 3;
   if (hasProcessingDocs) return 2;
   return 1;
@@ -202,35 +106,18 @@ export function CaseDetailClient({
   const router = useRouter();
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
-
-  // Event interaction state
-  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [addEventOpen, setAddEventOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-
-  // Cancel state
   const [isCancelling, setIsCancelling] = useState(false);
-
-  // Case action state
   const [editCaseOpen, setEditCaseOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [isDeletingCase, startDeleteCase] = useTransition();
   const [isArchiving, startArchiving] = useTransition();
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
-
-  // Search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ type: string; id: string; title: string; excerpt: string; date: string | null }> | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-
-  // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  // Event filters
-  const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
-  const [showOnlyVerification, setShowOnlyVerification] = useState(false);
 
   // Wizard step
   const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
@@ -240,14 +127,12 @@ export function CaseDetailClient({
   const autoStep = computeAutoStep(hasResults, hasProcessingDocs);
   const [activeStep, setActiveStep] = useState(autoStep);
 
-  // Update active step when server data changes (e.g. processing finishes)
   useEffect(() => {
     setActiveStep(computeAutoStep(hasResults, hasProcessingDocs));
   }, [hasResults, hasProcessingDocs]);
 
   const isArchived = caseData.status === 'archiviato';
 
-  // Poll for processing updates — depends only on hasProcessingDocs
   useEffect(() => {
     if (!hasProcessingDocs) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
@@ -276,7 +161,6 @@ export function CaseDetailClient({
     }
   }, [caseId, router]);
 
-  // Reset isStartingProcessing once server data confirms processing
   useEffect(() => {
     if (isStartingProcessing && hasProcessingDocs) {
       setIsStartingProcessing(false);
@@ -323,28 +207,23 @@ export function CaseDetailClient({
     }
   }, [caseId, router]);
 
-  // Debounced search with AbortController
+  // Debounced search
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q);
-
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-
     if (q.trim().length < 2) {
       setSearchResults(null);
       setIsSearching(false);
       return;
     }
-
     setIsSearching(true);
-
     searchTimerRef.current = setTimeout(async () => {
       searchAbortRef.current?.abort();
       const controller = new AbortController();
       searchAbortRef.current = controller;
-
       try {
         const response = await fetch(
           `/api/cases/${caseId}/search?q=${encodeURIComponent(q.trim())}`,
@@ -361,15 +240,6 @@ export function CaseDetailClient({
       }
     }, 300);
   }, [caseId]);
-
-  const toggleEvent = useCallback((eventId: string) => {
-    setExpandedEvents((prev) => {
-      const next = new Set(prev);
-      if (next.has(eventId)) next.delete(eventId);
-      else next.add(eventId);
-      return next;
-    });
-  }, []);
 
   const handleDeleteDocument = useCallback((docId: string, fileName: string) => {
     toast(`Eliminare "${fileName}"?`, {
@@ -422,6 +292,13 @@ export function CaseDetailClient({
     });
   }, [caseId, isArchived, router]);
 
+  // Completeness data
+  const pm = caseData.perizia_metadata;
+  const hasTribunale = !!(pm?.tribunale || pm?.rgNumber);
+  const hasQuesiti = !!(pm?.quesiti && pm.quesiti.some((q) => q.trim().length > 0));
+  const hasEsameObiettivo = !!(pm?.esameObiettivo && pm.esameObiettivo.trim().length > 0);
+  const hasParti = !!(pm?.parteRicorrente || pm?.parteResistente);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -449,7 +326,6 @@ export function CaseDetailClient({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Search toggle */}
           {hasResults && (
             <Button
               variant="ghost"
@@ -501,6 +377,18 @@ export function CaseDetailClient({
         </div>
       </div>
 
+      {/* Completeness indicator - visible when results exist */}
+      {hasResults && (
+        <CompletenessIndicator
+          eventCount={events.length}
+          hasReport={!!report?.synthesis}
+          hasTribunale={hasTribunale}
+          hasQuesiti={hasQuesiti}
+          hasEsameObiettivo={hasEsameObiettivo}
+          hasParti={hasParti}
+        />
+      )}
+
       {/* Edit Case Dialog */}
       <EditCaseDialog
         caseData={caseData}
@@ -509,7 +397,7 @@ export function CaseDetailClient({
         onSaved={() => { setEditCaseOpen(false); router.refresh(); }}
       />
 
-      {/* Inline Search (expandable) */}
+      {/* Inline Search */}
       {searchOpen && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -552,7 +440,6 @@ export function CaseDetailClient({
         {WIZARD_STEPS.map((step, index) => {
           const isActive = activeStep === step.number;
           const isCompleted = autoStep > step.number;
-
           return (
             <div key={step.number} className="flex flex-1 items-center">
               <button
@@ -669,14 +556,9 @@ export function CaseDetailClient({
             </CardContent>
           </Card>
 
-          {/* Nudge to proceed to step 2 */}
           {hasUploadedDocs && (
             <div className="lg:col-span-2">
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => setActiveStep(2)}
-              >
+              <Button className="w-full" size="lg" onClick={() => setActiveStep(2)}>
                 <Play className="mr-2 h-4 w-4" />
                 Procedi all&apos;elaborazione (Passaggio 2)
               </Button>
@@ -693,12 +575,7 @@ export function CaseDetailClient({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium">Elaborazione in corso</p>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleCancel}
-                    disabled={isCancelling}
-                  >
+                  <Button variant="destructive" size="sm" onClick={handleCancel} disabled={isCancelling}>
                     {isCancelling ? (
                       <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Annullamento...</>
                     ) : (
@@ -707,9 +584,7 @@ export function CaseDetailClient({
                   </Button>
                 </div>
                 <ProcessingProgress
-                  documents={initialDocuments.filter(
-                    (d) => !['caricato'].includes(d.processing_status),
-                  )}
+                  documents={initialDocuments.filter((d) => !['caricato'].includes(d.processing_status))}
                 />
                 <p className="text-sm text-muted-foreground">
                   L&apos;elaborazione continua in background. La pagina si aggiorna automaticamente.
@@ -781,164 +656,24 @@ export function CaseDetailClient({
                 </TabsTrigger>
               </TabsList>
 
-              {/* === EVENTS TAB === */}
               <TabsContent value="events">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Eventi Clinici</CardTitle>
-                        <CardDescription>
-                          {events.length} eventi estratti
-                        </CardDescription>
-                      </div>
-                      <AddEventDialog
-                        caseId={caseId}
-                        open={addEventOpen}
-                        onOpenChange={setAddEventOpen}
-                        onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {/* Filters */}
-                    {events.length > 0 && (
-                      <div className="mb-4 space-y-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => { setEventTypeFilter(null); setShowOnlyVerification(false); }}
-                            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                              !eventTypeFilter && !showOnlyVerification ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
-                            }`}
-                          >
-                            Tutti ({events.length})
-                          </button>
-                          {EVENT_TYPES.map((t) => {
-                            const count = events.filter((e) => e.event_type === t.value).length;
-                            if (count === 0) return null;
-                            return (
-                              <button
-                                key={t.value}
-                                type="button"
-                                onClick={() => { setEventTypeFilter(eventTypeFilter === t.value ? null : t.value); setShowOnlyVerification(false); }}
-                                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                                  eventTypeFilter === t.value ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
-                                }`}
-                              >
-                                {t.label} ({count})
-                              </button>
-                            );
-                          })}
-                          {events.some((e) => e.requires_verification) && (
-                            <button
-                              type="button"
-                              onClick={() => { setShowOnlyVerification(!showOnlyVerification); setEventTypeFilter(null); }}
-                              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                                showOnlyVerification ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                              }`}
-                            >
-                              Da verificare ({events.filter((e) => e.requires_verification).length})
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      {events
-                        .filter((event) => {
-                          if (showOnlyVerification) return event.requires_verification;
-                          if (eventTypeFilter) return event.event_type === eventTypeFilter;
-                          return true;
-                        })
-                        .map((event) => (
-                        <EventCard
-                          key={event.id}
-                          event={event}
-                          caseId={caseId}
-                          isExpanded={expandedEvents.has(event.id)}
-                          isEditing={editingEventId === event.id}
-                          onToggle={() => toggleEvent(event.id)}
-                          onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
-                          onCancelEdit={() => setEditingEventId(null)}
-                          onSaved={() => { setEditingEventId(null); router.refresh(); }}
-                          onDeleted={() => router.refresh()}
-                          eventImages={eventImages}
-                          onImageClick={setPreviewImage}
-                        />
-                      ))}
-                      {events.length === 0 && (
-                        <p className="py-8 text-center text-sm text-muted-foreground">
-                          Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <EventsTab
+                  caseId={caseId}
+                  events={events}
+                  eventImages={eventImages}
+                  onImageClick={setPreviewImage}
+                />
               </TabsContent>
 
-              {/* === SYNTHESIS TAB === */}
               <TabsContent value="synthesis">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Report Medico-Legale</CardTitle>
-                      <div className="flex items-center gap-2">
-                        {report && (
-                          <>
-                            <Badge variant="secondary">v{report.version}</Badge>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleRegenerate}
-                              disabled={isRegenerating}
-                            >
-                              {isRegenerating
-                                ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Rigenerazione...</>
-                                : 'Rigenera Report'
-                              }
-                            </Button>
-                            <ReportStatusButtons
-                              caseId={caseId}
-                              report={report}
-                              onChanged={() => router.refresh()}
-                            />
-                          </>
-                        )}
-                        {/* Export buttons inline */}
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
-                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />HTML
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
-                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />CSV
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
-                            <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
-                          </a>
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {report?.synthesis ? (
-                      <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
-                        {report.synthesis}
-                      </div>
-                    ) : (
-                      <p className="py-8 text-center text-sm text-muted-foreground">
-                        Nessuna sintesi generata. Avvia l&apos;elaborazione dei documenti.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                <ReportTab
+                  caseId={caseId}
+                  report={report}
+                  isRegenerating={isRegenerating}
+                  onRegenerate={handleRegenerate}
+                />
               </TabsContent>
 
-              {/* === ANOMALIES TAB === */}
               <TabsContent value="anomalies">
                 <Card>
                   <CardHeader>
@@ -970,7 +705,6 @@ export function CaseDetailClient({
                 </Card>
               </TabsContent>
 
-              {/* === MISSING DOCS TAB === */}
               <TabsContent value="missing">
                 <Card>
                   <CardHeader>
@@ -999,7 +733,6 @@ export function CaseDetailClient({
                 </Card>
               </TabsContent>
 
-              {/* === PERIZIA TAB === */}
               <TabsContent value="perizia">
                 <PeriziaMetadataForm caseId={caseId} caseData={caseData} onSaved={() => router.refresh()} />
               </TabsContent>
@@ -1034,814 +767,6 @@ export function CaseDetailClient({
           </DialogContent>
         </Dialog>
       )}
-    </div>
-  );
-}
-
-// --- Edit Case Dialog ---
-
-function EditCaseDialogInner({
-  caseData, onOpenChange, onSaved,
-}: {
-  caseData: CaseData;
-  onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [form, setForm] = useState({
-    caseType: caseData.case_type,
-    caseRole: caseData.case_role,
-    patientInitials: caseData.patient_initials ?? '',
-    practiceReference: caseData.practice_reference ?? '',
-    notes: caseData.notes ?? '',
-  });
-
-  const handleSubmit = () => {
-    startTransition(async () => {
-      const result = await updateCase({
-        caseId: caseData.id,
-        caseType: form.caseType as 'ortopedica' | 'oncologica' | 'ostetrica' | 'anestesiologica' | 'infezione_nosocomiale' | 'errore_diagnostico' | 'rc_auto' | 'previdenziale' | 'infortuni' | 'generica',
-        caseRole: form.caseRole as 'ctu' | 'ctp' | 'stragiudiziale',
-        patientInitials: form.patientInitials || null,
-        practiceReference: form.practiceReference || null,
-        notes: form.notes || null,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      onSaved();
-    });
-  };
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Modifica Caso {caseData.code}</DialogTitle>
-        <DialogDescription>Modifica le informazioni del caso.</DialogDescription>
-      </DialogHeader>
-      <div className="grid gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label>Tipologia caso</Label>
-            <Select value={form.caseType} onValueChange={(v) => setForm({ ...form, caseType: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CASE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Tipo incarico</Label>
-            <Select value={form.caseRole} onValueChange={(v) => setForm({ ...form, caseRole: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CASE_ROLES_SHORT.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label>Iniziali paziente</Label>
-            <Input
-              value={form.patientInitials}
-              onChange={(e) => setForm({ ...form, patientInitials: e.target.value })}
-              maxLength={10}
-              placeholder="es. M.R."
-            />
-          </div>
-          <div>
-            <Label>Riferimento pratica</Label>
-            <Input
-              value={form.practiceReference}
-              onChange={(e) => setForm({ ...form, practiceReference: e.target.value })}
-              placeholder="es. RG 1234/2024"
-            />
-          </div>
-        </div>
-        <div>
-          <Label>Note</Label>
-          <Textarea
-            rows={3}
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Note aggiuntive sul caso..."
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>Annulla</Button>
-        <Button onClick={handleSubmit} disabled={isPending}>
-          {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-          Salva
-        </Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-/**
- * Wrapper that remounts the inner form each time the dialog opens,
- * ensuring fresh state without useEffect + setState.
- */
-function EditCaseDialog({
-  caseData, open, onOpenChange, onSaved,
-}: {
-  caseData: CaseData;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        {open && (
-          <EditCaseDialogInner
-            caseData={caseData}
-            onOpenChange={onOpenChange}
-            onSaved={onSaved}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Event Card Component ---
-
-function EventCard({
-  event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  eventImages, onImageClick,
-}: {
-  event: EventRow;
-  caseId: string;
-  isExpanded: boolean;
-  isEditing: boolean;
-  onToggle: () => void;
-  onStartEdit: () => void;
-  onCancelEdit: () => void;
-  onSaved: () => void;
-  onDeleted: () => void;
-  eventImages: Record<string, string[]>;
-  onImageClick: (url: string) => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [editForm, setEditForm] = useState({
-    title: event.title,
-    description: event.description,
-    eventType: event.event_type,
-    eventDate: event.event_date,
-    diagnosis: event.diagnosis ?? '',
-    doctor: event.doctor ?? '',
-    facility: event.facility ?? '',
-    expertNotes: event.expert_notes ?? '',
-  });
-
-  const handleSave = () => {
-    startTransition(async () => {
-      const result = await updateEvent({
-        eventId: event.id,
-        caseId,
-        title: editForm.title,
-        description: editForm.description,
-        eventType: editForm.eventType,
-        eventDate: editForm.eventDate,
-        diagnosis: editForm.diagnosis || null,
-        doctor: editForm.doctor || null,
-        facility: editForm.facility || null,
-        expertNotes: editForm.expertNotes || null,
-      });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
-      }
-      onSaved();
-    });
-  };
-
-  const handleDelete = () => {
-    toast('Eliminare questo evento?', {
-      description: 'L\'evento potrà essere recuperato.',
-      action: {
-        label: 'Elimina',
-        onClick: () => {
-          startTransition(async () => {
-            const result = await deleteEvent({ eventId: event.id, caseId });
-            if (result?.error) {
-              toast.error(result.error);
-              return;
-            }
-            onDeleted();
-          });
-        },
-      },
-      cancel: { label: 'Annulla', onClick: () => {} },
-    });
-  };
-
-  const images = eventImages[event.id] ?? [];
-
-  return (
-    <div className="rounded-md border p-3">
-      {/* Header row - always visible */}
-      <div className="flex items-start justify-between">
-        <button type="button" className="flex flex-1 items-start text-left" onClick={onToggle}>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium">
-                {formatDate(event.event_date)}
-              </span>
-              <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
-              {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
-            </div>
-            <p className="mt-1 text-sm font-medium">{event.title}</p>
-          </div>
-        </button>
-        <div className="flex items-center gap-1 ml-2">
-          {!isEditing && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica" aria-label="Modifica evento">
-              <Pencil className="h-3 w-3" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'} aria-expanded={isExpanded}>
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
-
-      {/* Expanded content */}
-      {isExpanded && !isEditing && (
-        <div className="mt-3 space-y-2 border-t pt-3">
-          <p className="text-sm whitespace-pre-wrap">{event.description}</p>
-          {event.diagnosis && <p className="text-sm"><span className="font-medium">Diagnosi:</span> {event.diagnosis}</p>}
-          {event.doctor && <p className="text-sm"><span className="font-medium">Medico:</span> {event.doctor}</p>}
-          {event.facility && <p className="text-sm"><span className="font-medium">Struttura:</span> {event.facility}</p>}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>Fonte: {sourceLabels[event.source_type] ?? event.source_type}</span>
-            <span className={confidenceColor(event.confidence)}>{confidenceLabel(event.confidence)}</span>
-          </div>
-          {event.reliability_notes && <p className="text-sm text-muted-foreground italic">{event.reliability_notes}</p>}
-          {event.expert_notes && (
-            <div className="rounded bg-muted p-2">
-              <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
-            </div>
-          )}
-          {event.source_text && (
-            <SourceTextSection sourceText={event.source_text} sourcePages={event.source_pages} />
-          )}
-          {images.length > 0 && (
-            <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Immagini associate</p>
-              <div className="flex flex-wrap gap-2">
-                {images.map((url, idx) => (
-                  <button
-                    key={url}
-                    type="button"
-                    className="rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-                    onClick={() => onImageClick(url)}
-                    aria-label={`Visualizza immagine ${idx + 1}`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`Immagine ${idx + 1}`}
-                      className="h-20 w-20 object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Edit form */}
-      {isExpanded && isEditing && (
-        <div className="mt-3 space-y-3 border-t pt-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Titolo</Label>
-              <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
-            </div>
-            <div>
-              <Label>Data</Label>
-              <Input type="date" value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} />
-            </div>
-            <div>
-              <Label>Tipo evento</Label>
-              <Select value={editForm.eventType} onValueChange={(v) => setEditForm({ ...editForm, eventType: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Diagnosi</Label>
-              <Input value={editForm.diagnosis} onChange={(e) => setEditForm({ ...editForm, diagnosis: e.target.value })} />
-            </div>
-            <div>
-              <Label>Medico</Label>
-              <Input value={editForm.doctor} onChange={(e) => setEditForm({ ...editForm, doctor: e.target.value })} />
-            </div>
-            <div>
-              <Label>Struttura</Label>
-              <Input value={editForm.facility} onChange={(e) => setEditForm({ ...editForm, facility: e.target.value })} />
-            </div>
-          </div>
-          <div>
-            <Label>Descrizione</Label>
-            <Textarea rows={4} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-          </div>
-          <div>
-            <Label>Note perito</Label>
-            <Textarea rows={2} value={editForm.expertNotes} onChange={(e) => setEditForm({ ...editForm, expertNotes: e.target.value })} placeholder="Annotazioni del perito..." />
-          </div>
-          <div className="flex items-center justify-between">
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}>
-              <Trash2 className="mr-1 h-3 w-3" />Elimina
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={onCancelEdit} disabled={isPending}>
-                <X className="mr-1 h-3 w-3" />Annulla
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={isPending}>
-                {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
-                Salva
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Source Text Section (collapsible) ---
-
-function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; sourcePages: string | null }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const parsedPages: number[] = sourcePages ? (() => {
-    try { return JSON.parse(sourcePages) as number[]; } catch { return []; }
-  })() : [];
-
-  return (
-    <div className="pt-2 border-t">
-      <button
-        type="button"
-        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        Testo OCR originale
-        {parsedPages.length > 0 && (
-          <span className="text-xs text-muted-foreground ml-1">
-            (pag. {parsedPages.join(', ')})
-          </span>
-        )}
-      </button>
-      {isOpen && (
-        <pre className="mt-2 rounded bg-muted p-3 text-xs whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
-          {sourceText}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-// --- Add Event Dialog ---
-
-function AddEventDialog({
-  caseId, open, onOpenChange, onSuccess,
-}: {
-  caseId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [form, setForm] = useState({
-    eventDate: '',
-    datePrecision: 'giorno',
-    eventType: 'altro',
-    title: '',
-    description: '',
-    sourceType: 'altro',
-    diagnosis: '',
-    doctor: '',
-    facility: '',
-  });
-
-  const handleSubmit = () => {
-    if (!form.eventDate || !form.title || !form.description) return;
-    startTransition(async () => {
-      const result = await addManualEvent({
-        caseId,
-        eventDate: form.eventDate,
-        datePrecision: form.datePrecision,
-        eventType: form.eventType,
-        title: form.title,
-        description: form.description,
-        sourceType: form.sourceType,
-        diagnosis: form.diagnosis || null,
-        doctor: form.doctor || null,
-        facility: form.facility || null,
-      });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
-      }
-      setForm({ eventDate: '', datePrecision: 'giorno', eventType: 'altro', title: '', description: '', sourceType: 'altro', diagnosis: '', doctor: '', facility: '' });
-      onSuccess();
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Plus className="mr-1 h-3 w-3" />Aggiungi Evento
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Aggiungi Evento Manuale</DialogTitle>
-          <DialogDescription>Aggiungi un evento non rilevato dal sistema.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Data *</Label>
-              <Input type="date" value={form.eventDate} onChange={(e) => setForm({ ...form, eventDate: e.target.value })} />
-            </div>
-            <div>
-              <Label>Precisione data</Label>
-              <Select value={form.datePrecision} onValueChange={(v) => setForm({ ...form, datePrecision: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="giorno">Giorno</SelectItem>
-                  <SelectItem value="mese">Mese</SelectItem>
-                  <SelectItem value="anno">Anno</SelectItem>
-                  <SelectItem value="sconosciuta">Sconosciuta</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Tipo evento *</Label>
-              <Select value={form.eventType} onValueChange={(v) => setForm({ ...form, eventType: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Fonte</Label>
-              <Select value={form.sourceType} onValueChange={(v) => setForm({ ...form, sourceType: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SOURCE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <Label>Titolo *</Label>
-            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Breve descrizione dell'evento" />
-          </div>
-          <div>
-            <Label>Descrizione *</Label>
-            <Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrizione completa..." />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <Label>Diagnosi</Label>
-              <Input value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
-            </div>
-            <div>
-              <Label>Medico</Label>
-              <Input value={form.doctor} onChange={(e) => setForm({ ...form, doctor: e.target.value })} />
-            </div>
-            <div>
-              <Label>Struttura</Label>
-              <Input value={form.facility} onChange={(e) => setForm({ ...form, facility: e.target.value })} />
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annulla</Button>
-          <Button onClick={handleSubmit} disabled={isPending || !form.eventDate || !form.title || !form.description}>
-            {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
-            Aggiungi
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Report Status Buttons ---
-
-function ReportStatusButtons({
-  caseId, report, onChanged,
-}: {
-  caseId: string;
-  report: ReportRow;
-  onChanged: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const currentStatus = report.report_status;
-
-  const handleStatusChange = (newStatus: string) => {
-    startTransition(async () => {
-      await updateReportStatus({ caseId, reportId: report.id, newStatus });
-      onChanged();
-    });
-  };
-
-  return (
-    <div className="flex items-center gap-1">
-      {currentStatus === 'bozza' && (
-        <Button variant="outline" size="sm" onClick={() => handleStatusChange('in_revisione')} disabled={isPending}>
-          In Revisione
-        </Button>
-      )}
-      {currentStatus === 'in_revisione' && (
-        <>
-          <Button variant="outline" size="sm" onClick={() => handleStatusChange('bozza')} disabled={isPending}>
-            Bozza
-          </Button>
-          <Button size="sm" onClick={() => handleStatusChange('definitivo')} disabled={isPending}>
-            Definitivo
-          </Button>
-        </>
-      )}
-      {currentStatus === 'definitivo' && (
-        <Badge variant="success">Definitivo</Badge>
-      )}
-    </div>
-  );
-}
-
-// --- Perizia Metadata Form ---
-
-function PeriziaMetadataForm({
-  caseId, caseData, onSaved,
-}: {
-  caseId: string;
-  caseData: CaseData;
-  onSaved: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const existing = caseData.perizia_metadata ?? {};
-
-  const [form, setForm] = useState({
-    tribunale: existing.tribunale ?? '',
-    sezione: existing.sezione ?? '',
-    rgNumber: existing.rgNumber ?? '',
-    judgeName: existing.judgeName ?? '',
-    ctuName: existing.ctuName ?? '',
-    ctuTitle: existing.ctuTitle ?? '',
-    ctpRicorrente: existing.ctpRicorrente ?? '',
-    ctpResistente: existing.ctpResistente ?? '',
-    parteRicorrente: existing.parteRicorrente ?? '',
-    parteResistente: existing.parteResistente ?? '',
-    dataIncarico: existing.dataIncarico ?? '',
-    dataOperazioni: existing.dataOperazioni ?? '',
-    dataDeposito: existing.dataDeposito ?? '',
-    fondoSpese: existing.fondoSpese ?? '',
-    esameObiettivo: existing.esameObiettivo ?? '',
-    speseMediche: existing.speseMediche ?? '',
-  });
-
-  const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? ['']);
-
-  const handleSave = () => {
-    startTransition(async () => {
-      const filteredQuesiti = quesiti.filter((q) => q.trim().length > 0);
-      const metadata: PeriziaMetadataUI = {
-        ...(form.tribunale ? { tribunale: form.tribunale } : {}),
-        ...(form.sezione ? { sezione: form.sezione } : {}),
-        ...(form.rgNumber ? { rgNumber: form.rgNumber } : {}),
-        ...(form.judgeName ? { judgeName: form.judgeName } : {}),
-        ...(form.ctuName ? { ctuName: form.ctuName } : {}),
-        ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
-        ...(form.ctpRicorrente ? { ctpRicorrente: form.ctpRicorrente } : {}),
-        ...(form.ctpResistente ? { ctpResistente: form.ctpResistente } : {}),
-        ...(form.parteRicorrente ? { parteRicorrente: form.parteRicorrente } : {}),
-        ...(form.parteResistente ? { parteResistente: form.parteResistente } : {}),
-        ...(form.dataIncarico ? { dataIncarico: form.dataIncarico } : {}),
-        ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
-        ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
-        ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
-        ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
-        ...(form.speseMediche ? { speseMediche: form.speseMediche } : {}),
-        ...(filteredQuesiti.length > 0 ? { quesiti: filteredQuesiti } : {}),
-      };
-
-      const hasAnyValue = Object.keys(metadata).length > 0;
-
-      const result = await updateCase({
-        caseId,
-        periziaMetadata: hasAnyValue ? metadata : null,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Dati perizia salvati');
-      onSaved();
-    });
-  };
-
-  const addQuesito = () => setQuesiti([...quesiti, '']);
-  const removeQuesito = (index: number) => setQuesiti(quesiti.filter((_, i) => i !== index));
-  const updateQuesito = (index: number, value: string) => {
-    const next = [...quesiti];
-    next[index] = value;
-    setQuesiti(next);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Info className="h-4 w-4" />
-        <span>Questi dati vengono inseriti nell&apos;intestazione formale della perizia esportata e nel prompt di generazione del report.</span>
-      </div>
-
-      {/* Intestazione Perizia */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Intestazione Perizia</CardTitle>
-          <CardDescription>Dati formali del procedimento</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <Label>Tribunale</Label>
-              <Input value={form.tribunale} onChange={(e) => setForm({ ...form, tribunale: e.target.value })} placeholder="es. Tribunale Ordinario di Brescia" />
-            </div>
-            <div>
-              <Label>Sezione</Label>
-              <Input value={form.sezione} onChange={(e) => setForm({ ...form, sezione: e.target.value })} placeholder="es. Sezione Centrale Civile" />
-            </div>
-            <div>
-              <Label>Numero RG</Label>
-              <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 10965/2025" />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>Giudice</Label>
-              <Input value={form.judgeName} onChange={(e) => setForm({ ...form, judgeName: e.target.value })} placeholder="es. Dott. Raffaele Del Porto" />
-            </div>
-            <div>
-              <Label>Fondo spese</Label>
-              <Input value={form.fondoSpese} onChange={(e) => setForm({ ...form, fondoSpese: e.target.value })} placeholder="es. Euro 1.800,00" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Parti e CTP */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Parti e Consulenti</CardTitle>
-          <CardDescription>Parti del procedimento e consulenti tecnici</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>CTU (nome)</Label>
-              <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Nicola Pigaiani" />
-            </div>
-            <div>
-              <Label>Qualifica CTU</Label>
-              <Input value={form.ctuTitle} onChange={(e) => setForm({ ...form, ctuTitle: e.target.value })} placeholder="es. medico legale presso..." />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>Parte Ricorrente</Label>
-              <Input value={form.parteRicorrente} onChange={(e) => setForm({ ...form, parteRicorrente: e.target.value })} placeholder="Nome parte ricorrente" />
-            </div>
-            <div>
-              <Label>Parte Resistente</Label>
-              <Input value={form.parteResistente} onChange={(e) => setForm({ ...form, parteResistente: e.target.value })} placeholder="es. ASST Spedali Civili" />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>CTP Ricorrente</Label>
-              <Input value={form.ctpRicorrente} onChange={(e) => setForm({ ...form, ctpRicorrente: e.target.value })} placeholder="es. Dott.ssa Sarah Nalin" />
-            </div>
-            <div>
-              <Label>CTP Resistente</Label>
-              <Input value={form.ctpResistente} onChange={(e) => setForm({ ...form, ctpResistente: e.target.value })} placeholder="es. Dott. Lorenzo Micheli" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Date */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Date</CardTitle>
-          <CardDescription>Date del procedimento peritale</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <Label>Data conferimento incarico</Label>
-              <Input value={form.dataIncarico} onChange={(e) => setForm({ ...form, dataIncarico: e.target.value })} placeholder="es. 15/01/2025" />
-            </div>
-            <div>
-              <Label>Data inizio operazioni</Label>
-              <Input value={form.dataOperazioni} onChange={(e) => setForm({ ...form, dataOperazioni: e.target.value })} placeholder="es. 20/02/2025" />
-            </div>
-            <div>
-              <Label>Termine deposito</Label>
-              <Input value={form.dataDeposito} onChange={(e) => setForm({ ...form, dataDeposito: e.target.value })} placeholder="es. 20/05/2025" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quesiti */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Quesiti del Giudice</CardTitle>
-              <CardDescription>I quesiti verranno inclusi nella perizia con risposte punto per punto</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={addQuesito}>
-              <Plus className="mr-1 h-3 w-3" />Aggiungi quesito
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {quesiti.map((q, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="mt-2.5 text-sm font-medium text-muted-foreground shrink-0">{i + 1}.</span>
-              <Textarea
-                rows={2}
-                value={q}
-                onChange={(e) => updateQuesito(i, e.target.value)}
-                placeholder={`Quesito ${i + 1}...`}
-                className="flex-1"
-              />
-              {quesiti.length > 1 && (
-                <Button variant="ghost" size="icon" className="mt-1 h-8 w-8 shrink-0" onClick={() => removeQuesito(i)} aria-label={`Rimuovi quesito ${i + 1}`}>
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Esame Obiettivo */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Esame Obiettivo</CardTitle>
-          <CardDescription>Dati della visita medico-legale del paziente</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            rows={6}
-            value={form.esameObiettivo}
-            onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
-            placeholder="Inserisci i dati dell'esame obiettivo..."
-          />
-        </CardContent>
-      </Card>
-
-      {/* Spese Mediche */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Spese Mediche</CardTitle>
-          <CardDescription>Documentazione delle spese mediche sostenute</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            rows={4}
-            value={form.speseMediche}
-            onChange={(e) => setForm({ ...form, speseMediche: e.target.value })}
-            placeholder="Elenco spese mediche documentate..."
-          />
-        </CardContent>
-      </Card>
-
-      {/* Save button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isPending}>
-          {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-          Salva dati perizia
-        </Button>
-      </div>
     </div>
   );
 }
