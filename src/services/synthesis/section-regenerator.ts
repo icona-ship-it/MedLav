@@ -1,5 +1,5 @@
 import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION } from '@/lib/mistral/client';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
@@ -20,6 +20,7 @@ interface RegenerateSectionParams {
   missingDocuments: MissingDocument[];
   calculations?: MedicoLegalCalculation[];
   userInstruction?: string;
+  periziaMetadata?: PeriziaMetadata;
 }
 
 /**

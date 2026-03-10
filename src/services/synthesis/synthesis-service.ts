@@ -13,7 +13,7 @@ import {
   buildSummaryUserPrompt,
   CASE_TYPE_LABELS,
 } from './synthesis-prompts';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
@@ -45,10 +45,11 @@ export async function generateSynthesis(params: {
   calculations?: MedicoLegalCalculation[];
   caseTypeLabel?: string;
   expertRole?: string;
+  periziaMetadata?: PeriziaMetadata;
 }): Promise<SynthesisResult> {
   const {
     caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
-    patientInitials, calculations,
+    patientInitials, calculations, periziaMetadata,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -95,7 +96,7 @@ export async function generateSynthesis(params: {
         messages: [
           {
             role: 'system',
-            content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes }),
+            content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
           },
           {
             role: 'user',
@@ -108,6 +109,7 @@ export async function generateSynthesis(params: {
               missingDocuments,
               calculations,
               caseTypes,
+              periziaMetadata,
             }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
           },
         ],
@@ -159,6 +161,7 @@ export async function generateSynthesis(params: {
               anomalies: anomaliesFormatted,
               missingDocs: missingDocsFormatted,
               calculations: calculationsFormatted,
+              periziaMetadata,
             }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
           },
         ],

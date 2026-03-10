@@ -40,6 +40,25 @@ interface DocxMissingDoc {
   reason: string;
 }
 
+interface PeriziaMetadataExport {
+  tribunale?: string;
+  sezione?: string;
+  rgNumber?: string;
+  judgeName?: string;
+  ctuName?: string;
+  ctuTitle?: string;
+  ctpRicorrente?: string;
+  ctpResistente?: string;
+  parteRicorrente?: string;
+  parteResistente?: string;
+  dataIncarico?: string;
+  dataOperazioni?: string;
+  dataDeposito?: string;
+  quesiti?: string[];
+  fondoSpese?: string;
+  [key: string]: unknown;
+}
+
 interface DocxExportParams {
   caseCode: string;
   caseType: string;
@@ -50,6 +69,7 @@ interface DocxExportParams {
   anomalies: DocxAnomaly[];
   missingDocs: DocxMissingDoc[];
   calculations?: MedicoLegalCalculation[];
+  periziaMetadata?: PeriziaMetadataExport | null;
 }
 
 /**
@@ -57,11 +77,71 @@ interface DocxExportParams {
  * Returns a Buffer ready for download.
  */
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
   const children: Paragraph[] = [];
+
+  // Formal perizia header (if metadata present)
+  if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName)) {
+    const roleTitle = caseRole === 'ctu' ? 'CONSULENZA TECNICA D\'UFFICIO'
+      : caseRole === 'ctp' ? 'CONSULENZA TECNICA DI PARTE'
+      : 'PERIZIA STRAGIUDIZIALE';
+
+    if (periziaMetadata.tribunale) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: periziaMetadata.tribunale.toUpperCase(), bold: true, size: 28 })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    if (periziaMetadata.sezione) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: periziaMetadata.sezione, size: 24 })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    if (periziaMetadata.rgNumber) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `n. R.G. ${periziaMetadata.rgNumber}`, size: 24 })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
+    children.push(new Paragraph({
+      children: [new TextRun({ text: roleTitle, bold: true, size: 26 })],
+      alignment: AlignmentType.CENTER,
+    }));
+    if (patientInitials) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `relativa alla vicenda clinica del/della sig. ${patientInitials}`, size: 24 })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
+
+    const details: Array<{ label: string; value: string }> = [];
+    if (periziaMetadata.ctuName) details.push({ label: 'CTU', value: `${periziaMetadata.ctuName}${periziaMetadata.ctuTitle ? ` — ${periziaMetadata.ctuTitle}` : ''}` });
+    if (periziaMetadata.judgeName) details.push({ label: 'Giudice', value: periziaMetadata.judgeName });
+    if (periziaMetadata.parteRicorrente) details.push({ label: 'Parte Ricorrente', value: periziaMetadata.parteRicorrente });
+    if (periziaMetadata.parteResistente) details.push({ label: 'Parte Resistente', value: periziaMetadata.parteResistente });
+    if (periziaMetadata.ctpRicorrente) details.push({ label: 'CTP Ricorrente', value: periziaMetadata.ctpRicorrente });
+    if (periziaMetadata.ctpResistente) details.push({ label: 'CTP Resistente', value: periziaMetadata.ctpResistente });
+    if (periziaMetadata.dataIncarico) details.push({ label: 'Data incarico', value: periziaMetadata.dataIncarico });
+    if (periziaMetadata.dataOperazioni) details.push({ label: 'Data operazioni', value: periziaMetadata.dataOperazioni });
+    if (periziaMetadata.dataDeposito) details.push({ label: 'Termine deposito', value: periziaMetadata.dataDeposito });
+    if (periziaMetadata.fondoSpese) details.push({ label: 'Fondo spese', value: periziaMetadata.fondoSpese });
+
+    for (const detail of details) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({ text: `${detail.label}: `, bold: true }),
+          new TextRun({ text: detail.value }),
+        ],
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
+  }
 
   // Title
   children.push(

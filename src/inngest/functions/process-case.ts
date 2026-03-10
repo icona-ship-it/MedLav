@@ -8,7 +8,7 @@ import { linkImagesToEvents } from '@/services/extraction/image-event-linker';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 
@@ -19,6 +19,7 @@ interface CaseMetadata {
   caseRole: CaseRole;
   patientInitials: string | null;
   userId: string;
+  periziaMetadata?: PeriziaMetadata;
 }
 
 interface DocumentInfo {
@@ -60,7 +61,7 @@ export const processCaseDocuments = inngest.createFunction(
 
       const { data: caseRow, error: caseError } = await supabase
         .from('cases')
-        .select('id, case_type, case_types, case_role, patient_initials, user_id')
+        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata')
         .eq('id', caseId)
         .single();
 
@@ -112,6 +113,7 @@ export const processCaseDocuments = inngest.createFunction(
           caseRole: caseRow.case_role as CaseRole,
           patientInitials: caseRow.patient_initials as string | null,
           userId: caseRow.user_id as string,
+          periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
         } satisfies CaseMetadata,
         documents: (docs ?? []).map((d) => ({
           id: d.id as string,
@@ -295,6 +297,52 @@ export const processCaseDocuments = inngest.createFunction(
             ]);
             const VALID_DATE_PRECISIONS = new Set(['giorno', 'mese', 'anno', 'sconosciuta']);
 
+            // Fuzzy normalization for event types the LLM may produce
+            const EVENT_TYPE_ALIASES: Record<string, string> = {
+              'surgery': 'intervento', 'chirurgia': 'intervento', 'operazione': 'intervento',
+              'procedure': 'intervento', 'biopsia': 'intervento',
+              'exam': 'esame', 'examination': 'esame', 'laboratorio': 'esame', 'lab': 'esame',
+              'imaging': 'esame', 'radiologia': 'esame', 'analisi': 'esame',
+              'visit': 'visita', 'consultation': 'visita', 'consulenza': 'visita', 'accesso_ps': 'visita',
+              'pronto_soccorso': 'visita', 'ambulatoriale': 'visita',
+              'diagnosis': 'diagnosi', 'diagnostic': 'diagnosi', 'staging': 'diagnosi',
+              'therapy': 'terapia', 'treatment': 'terapia', 'trattamento': 'terapia',
+              'chemioterapia': 'terapia', 'radioterapia': 'terapia', 'farmaco': 'terapia',
+              'farmacologica': 'terapia', 'trasfusione': 'terapia', 'fisioterapia': 'terapia',
+              'hospitalization': 'ricovero', 'admission': 'ricovero', 'accettazione': 'ricovero',
+              'dimissione': 'referto', 'lettera_dimissione': 'referto', 'report': 'referto',
+              'certificato': 'referto', 'relazione': 'referto',
+              'followup': 'follow-up', 'follow_up': 'follow-up', 'controllo': 'follow-up',
+              'rivalutazione': 'follow-up',
+              'prescription': 'prescrizione', 'richiesta': 'prescrizione',
+              'consent': 'consenso', 'consenso_informato': 'consenso', 'informativa': 'consenso',
+              'complication': 'complicanza', 'evento_avverso': 'complicanza', 'infezione': 'complicanza',
+              'reazione': 'complicanza',
+            };
+
+            const SOURCE_TYPE_ALIASES: Record<string, string> = {
+              'cartella': 'cartella_clinica', 'clinical_record': 'cartella_clinica', 'diario': 'cartella_clinica',
+              'dimissione': 'cartella_clinica', 'lettera': 'cartella_clinica', 'operatoria': 'cartella_clinica',
+              'referto': 'referto_controllo', 'certificato': 'referto_controllo', 'visita': 'referto_controllo',
+              'rx': 'esame_strumentale', 'tac': 'esame_strumentale', 'rm': 'esame_strumentale',
+              'ecografia': 'esame_strumentale', 'ecg': 'esame_strumentale', 'radiologia': 'esame_strumentale',
+              'strumentale': 'esame_strumentale', 'imaging': 'esame_strumentale',
+              'ematochimico': 'esame_ematochimico', 'laboratorio': 'esame_ematochimico',
+              'emocromo': 'esame_ematochimico', 'sangue': 'esame_ematochimico', 'lab': 'esame_ematochimico',
+            };
+
+            function normalizeEventType(raw: string): string {
+              if (VALID_EVENT_TYPES.has(raw)) return raw;
+              const lower = raw.toLowerCase().replace(/[\s_-]+/g, '_');
+              return EVENT_TYPE_ALIASES[lower] ?? 'altro';
+            }
+
+            function normalizeSourceType(raw: string): string {
+              if (VALID_SOURCE_TYPES.has(raw)) return raw;
+              const lower = raw.toLowerCase().replace(/[\s_-]+/g, '_');
+              return SOURCE_TYPE_ALIASES[lower] ?? 'altro';
+            }
+
             // Save events directly to DB with enum normalization
             const eventRows = result.events.map((e, idx) => ({
               case_id: caseId,
@@ -302,10 +350,10 @@ export const processCaseDocuments = inngest.createFunction(
               order_number: (range.start - 1) * 100 + idx + 1,
               event_date: e.eventDate,
               date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
-              event_type: VALID_EVENT_TYPES.has(e.eventType) ? e.eventType : 'altro',
+              event_type: normalizeEventType(e.eventType),
               title: e.title,
               description: e.description,
-              source_type: VALID_SOURCE_TYPES.has(e.sourceType) ? e.sourceType : 'altro',
+              source_type: normalizeSourceType(e.sourceType),
               diagnosis: e.diagnosis ?? null,
               doctor: e.doctor ?? null,
               facility: e.facility ?? null,
@@ -339,9 +387,13 @@ export const processCaseDocuments = inngest.createFunction(
       if (totalEvents === 0) {
         await step.run(`mark-error-${ocrResult.documentId}`, async () => {
           const supabase = createAdminClient();
+          const pageCount = ocrResult.pageCount;
+          const reason = pageCount === 0
+            ? 'Il documento non contiene testo leggibile (0 pagine estratte dall\'OCR). Verificare che il file non sia corrotto o protetto.'
+            : `Nessun evento clinico individuato nelle ${pageCount} pagine analizzate. Il documento potrebbe non contenere dati clinici strutturati (es. documento amministrativo, modulo vuoto, copertina) oppure il testo potrebbe essere di qualità insufficiente.`;
           await supabase.from('documents').update({
             processing_status: 'errore',
-            processing_error: 'Nessun evento estratto',
+            processing_error: reason,
             updated_at: new Date().toISOString(),
           }).eq('id', ocrResult.documentId);
         });
@@ -572,6 +624,7 @@ export const processCaseDocuments = inngest.createFunction(
         anomalies,
         missingDocuments: missingDocs,
         calculations,
+        periziaMetadata: metadata.periziaMetadata,
       });
 
       console.log(`[pipeline] Step 7: Synthesis completed in ${Date.now() - synthesisStartMs}ms (${result.wordCount} words)`);

@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
 
@@ -26,6 +26,7 @@ export async function createCase(formData: FormData) {
   const patientInitials = formData.get('patientInitials') as string;
   const practiceReference = formData.get('practiceReference') as string;
   const notes = formData.get('notes') as string;
+  const periziaMetadataRaw = formData.get('periziaMetadata') as string;
 
   if (!caseType || !caseRole) {
     return { error: 'Tipo caso e tipo incarico sono obbligatori' };
@@ -45,6 +46,19 @@ export async function createCase(formData: FormData) {
       }
     } catch {
       // Fallback to single caseType
+    }
+  }
+
+  // Parse optional perizia metadata
+  let periziaMetadata: PeriziaMetadata | null = null;
+  if (periziaMetadataRaw) {
+    try {
+      const parsed = JSON.parse(periziaMetadataRaw) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        periziaMetadata = parsed as PeriziaMetadata;
+      }
+    } catch {
+      // Ignore invalid JSON
     }
   }
 
@@ -85,6 +99,7 @@ export async function createCase(formData: FormData) {
         patient_initials: patientInitials || null,
         practice_reference: practiceReference || null,
         notes: notes || null,
+        perizia_metadata: periziaMetadata,
         status: 'bozza',
         document_count: 0,
       })
@@ -708,6 +723,7 @@ export async function updateCase(params: {
   patientInitials?: string | null;
   practiceReference?: string | null;
   notes?: string | null;
+  periziaMetadata?: PeriziaMetadata | null;
 }) {
   const supabase = await createClient();
 
@@ -734,6 +750,7 @@ export async function updateCase(params: {
   if (params.patientInitials !== undefined) updateFields.patient_initials = params.patientInitials;
   if (params.practiceReference !== undefined) updateFields.practice_reference = params.practiceReference;
   if (params.notes !== undefined) updateFields.notes = params.notes;
+  if (params.periziaMetadata !== undefined) updateFields.perizia_metadata = params.periziaMetadata;
 
   const { error } = await supabase
     .from('cases')

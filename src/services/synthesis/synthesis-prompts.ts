@@ -1,4 +1,4 @@
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
@@ -56,8 +56,9 @@ export function buildSynthesisSystemPrompt(params: {
   caseType: CaseType;
   caseRole: CaseRole;
   caseTypes?: CaseType[];
+  periziaMetadata?: PeriziaMetadata;
 }): string {
-  const { caseType, caseRole, caseTypes } = params;
+  const { caseType, caseRole, caseTypes, periziaMetadata } = params;
   const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
   const caseTypeDirective = buildCaseTypeDirective(effectiveTypes);
@@ -68,14 +69,60 @@ export function buildSynthesisSystemPrompt(params: {
     ? `\n\n## ESEMPIO DI RIFERIMENTO\n\nIl seguente è un estratto di una perizia di riferimento per questo tipo di caso e ruolo. Usa tono, struttura e livello di dettaglio simili.\n\n---\n${goldenExample}\n---\n\nIMPORTANTE: L'esempio sopra è solo un RIFERIMENTO per tono e struttura. NON copiare il contenuto — genera il report basandoti ESCLUSIVAMENTE sugli eventi forniti.`
     : '';
 
+  const hasPeriziaData = periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.quesiti?.length);
+
+  const periziaStructure = `## STRUTTURA OBBLIGATORIA DELLA PERIZIA
+
+${hasPeriziaData ? `### PREMESSE
+Riassunto formale del conferimento dell'incarico, delle parti coinvolte, dei CTP presenti e dei quesiti posti dal Giudice.
+Includi: Tribunale, n. RG, nomi delle parti, data conferimento incarico, data inizio operazioni peritali, termine deposito.
+
+### PROFILO METODOLOGICO
+Descrizione del metodo di lavoro adottato: esame della documentazione, eventuale visita medico-legale, criteri di valutazione utilizzati.
+
+` : ''}### DOCUMENTAZIONE ESAMINATA
+Elenco dettagliato di TUTTA la documentazione analizzata con data e tipo di ciascun documento.
+
+### RIASSUNTO DEL CASO
+Sintesi narrativa della vicenda clinica completa.
+
+### CRONOLOGIA MEDICO-LEGALE
+Elenco cronologico completo con fonti (A/B/C/D).
+
+### [SEZIONI SPECIALIZZATE PER TIPO CASO]
+Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Complicanze, Timeline diagnostica).
+
+${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
+Riporta i dati dell'esame obiettivo forniti.
+
+` : ''}### CONSIDERAZIONI MEDICO-LEGALI
+Analisi critica punto per punto dei profili di responsabilità. Valutazione di merito approfondita.
+
+### NESSO CAUSALE
+Analisi del nesso di causalità con i criteri giuridici (più probabile che non, ragionevole certezza medico-legale).
+
+### VALUTAZIONE DEL DANNO BIOLOGICO
+ITT/ITP calcolati + elementi per danno permanente.
+
+${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### RISPOSTA AI QUESITI
+Risposta punto per punto a CIASCUN quesito del Giudice. Ogni risposta deve essere argomentata con riferimenti alla documentazione.
+
+` : ''}${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE
+Analisi delle spese mediche documentate.
+
+` : ''}### CONCLUSIONI
+Sintesi finale con formula di rito appropriata al ruolo.`;
+
   return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
 
 ## IL TUO COMPITO
-Genera un REPORT MEDICO-LEGALE completo e dettagliato basato sugli eventi clinici estratti dalla documentazione.
+Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione.
 
 ${roleDirective}
 
 ${caseTypeDirective}
+
+${periziaStructure}
 
 ## CRITERI PER LA VALUTAZIONE DEL NESSO CAUSALE
 
@@ -105,8 +152,9 @@ export function buildSynthesisUserPrompt(params: {
   missingDocuments: MissingDocument[];
   calculations?: MedicoLegalCalculation[];
   caseTypes?: CaseType[];
+  periziaMetadata?: PeriziaMetadata;
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata } = params;
 
   const eventsText = formatEventsForPrompt(events);
   const anomaliesText = formatAnomaliesForPrompt(anomalies);
@@ -120,6 +168,9 @@ export function buildSynthesisUserPrompt(params: {
   const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const caseTypeLabelsText = effectiveTypes.map(t => CASE_TYPE_LABELS[t]).join(' + ');
 
+  // Build perizia metadata section
+  const periziaSection = formatPeriziaMetadataForPrompt(periziaMetadata);
+
   return `Genera il report medico-legale completo per il seguente caso.
 
 TIPO CASO: ${caseTypeLabelsText}
@@ -127,7 +178,7 @@ RUOLO PERITO: ${roleLabel}
 PAZIENTE: ${patientInitials || 'N/D'}
 NUMERO EVENTI DOCUMENTATI: ${events.length}
 PERIODO DOCUMENTATO: ${events.length > 0 ? `${formatDate(events[0].eventDate)} — ${formatDate(events[events.length - 1].eventDate)}` : 'N/D'}
-
+${periziaSection}
 ## TUTTI GLI EVENTI CLINICI IN ORDINE CRONOLOGICO
 
 ${eventsText}
@@ -266,12 +317,16 @@ export function buildSummaryUserPrompt(params: {
   anomalies?: string;
   missingDocs?: string;
   calculations?: string;
+  periziaMetadata?: PeriziaMetadata;
 }): string {
-  const { chronology, caseTypeLabel, expertRole, patientInitials, anomalies, missingDocs, calculations } = params;
+  const { chronology, caseTypeLabel, expertRole, patientInitials, anomalies, missingDocs, calculations, periziaMetadata } = params;
 
   let prompt = `TIPO CASO: ${caseTypeLabel}\n`;
   prompt += `RUOLO PERITO: ${expertRole}\n`;
   if (patientInitials) prompt += `PAZIENTE: ${patientInitials}\n`;
+
+  const periziaSection = formatPeriziaMetadataForPrompt(periziaMetadata);
+  if (periziaSection) prompt += periziaSection;
 
   prompt += `\n## CRONOLOGIA DI RIFERIMENTO (già compilata):\n${chronology}\n`;
 
@@ -328,6 +383,51 @@ function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): s
     `- ${c.label}: ${c.value}${c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : ''}\n  ${c.notes}`,
   );
   return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)\n\n${lines.join('\n')}\n\nNOTA: Integra questi periodi nella valutazione del danno biologico. Sono stime automatiche da confermare.`;
+}
+
+function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): string {
+  if (!periziaMetadata) return '';
+
+  const lines: string[] = [];
+
+  if (periziaMetadata.tribunale) lines.push(`TRIBUNALE: ${periziaMetadata.tribunale}`);
+  if (periziaMetadata.sezione) lines.push(`SEZIONE: ${periziaMetadata.sezione}`);
+  if (periziaMetadata.rgNumber) lines.push(`N. RG: ${periziaMetadata.rgNumber}`);
+  if (periziaMetadata.judgeName) lines.push(`GIUDICE: ${periziaMetadata.judgeName}`);
+  if (periziaMetadata.ctuName) lines.push(`CTU: ${periziaMetadata.ctuName}`);
+  if (periziaMetadata.ctuTitle) lines.push(`QUALIFICA CTU: ${periziaMetadata.ctuTitle}`);
+  if (periziaMetadata.ctpRicorrente) lines.push(`CTP RICORRENTE: ${periziaMetadata.ctpRicorrente}`);
+  if (periziaMetadata.ctpResistente) lines.push(`CTP RESISTENTE: ${periziaMetadata.ctpResistente}`);
+  if (periziaMetadata.parteRicorrente) lines.push(`PARTE RICORRENTE: ${periziaMetadata.parteRicorrente}`);
+  if (periziaMetadata.parteResistente) lines.push(`PARTE RESISTENTE: ${periziaMetadata.parteResistente}`);
+  if (periziaMetadata.dataIncarico) lines.push(`DATA INCARICO: ${periziaMetadata.dataIncarico}`);
+  if (periziaMetadata.dataOperazioni) lines.push(`DATA OPERAZIONI: ${periziaMetadata.dataOperazioni}`);
+  if (periziaMetadata.dataDeposito) lines.push(`TERMINE DEPOSITO: ${periziaMetadata.dataDeposito}`);
+  if (periziaMetadata.fondoSpese) lines.push(`FONDO SPESE: ${periziaMetadata.fondoSpese}`);
+
+  if (periziaMetadata.quesiti && periziaMetadata.quesiti.length > 0) {
+    lines.push('');
+    lines.push('QUESITI DEL GIUDICE:');
+    periziaMetadata.quesiti.forEach((q, i) => {
+      lines.push(`${i + 1}. ${q}`);
+    });
+  }
+
+  if (periziaMetadata.esameObiettivo) {
+    lines.push('');
+    lines.push('ESAME OBIETTIVO:');
+    lines.push(periziaMetadata.esameObiettivo);
+  }
+
+  if (periziaMetadata.speseMediche) {
+    lines.push('');
+    lines.push('SPESE MEDICHE:');
+    lines.push(periziaMetadata.speseMediche);
+  }
+
+  if (lines.length === 0) return '';
+
+  return `\n## DATI PERIZIA FORMALE\n\n${lines.join('\n')}\n`;
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

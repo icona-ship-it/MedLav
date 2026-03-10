@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_types, case_role, patient_initials')
+      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
       missingDocuments: missingDocs,
       calculations,
       userInstruction: instruction,
+      periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
     });
 
     // Save as new version

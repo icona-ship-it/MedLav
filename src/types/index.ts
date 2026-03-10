@@ -64,6 +64,27 @@ export type ProcessingStatus =
   | 'completato'
   | 'errore';
 
+// Perizia metadata (formal court expert report data)
+export interface PeriziaMetadata {
+  tribunale?: string;          // "Tribunale Ordinario di Brescia"
+  sezione?: string;            // "Sezione Centrale Civile"
+  rgNumber?: string;           // "10965/2025"
+  judgeName?: string;           // "Dott. Raffaele Del Porto"
+  ctuName?: string;            // "Dott. Nicola Pigaiani"
+  ctuTitle?: string;           // "medico legale presso..."
+  ctpRicorrente?: string;      // "Dott.ssa Sarah Nalin"
+  ctpResistente?: string;      // "Dott. Lorenzo Micheli"
+  parteRicorrente?: string;    // nome parte ricorrente
+  parteResistente?: string;    // nome parte resistente (ASST, ospedale, etc.)
+  dataIncarico?: string;       // data conferimento incarico
+  dataOperazioni?: string;     // data inizio operazioni peritali
+  dataDeposito?: string;       // termine deposito relazione
+  quesiti?: string[];          // array di quesiti del giudice
+  speseMediche?: string;       // testo libero spese mediche
+  esameObiettivo?: string;     // testo libero esame del paziente
+  fondoSpese?: string;         // "Euro 1.800,00"
+}
+
 // API Response
 export interface ApiResponse<T> {
   success: boolean;

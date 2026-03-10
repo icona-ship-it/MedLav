@@ -36,6 +36,7 @@ export async function GET(
     anomalies: data.anomalies,
     missingDocs: data.missingDocs,
     calculations: data.calculations,
+    periziaMetadata: data.periziaMetadata,
   });
 
   return new NextResponse(html, {

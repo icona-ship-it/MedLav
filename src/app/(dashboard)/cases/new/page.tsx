@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,8 @@ export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['generica']);
+  const [periziaOpen, setPeriziaOpen] = useState(false);
+  const [perizia, setPerizia] = useState({ tribunale: '', rgNumber: '', judgeName: '' });
 
   function toggleType(value: string) {
     setSelectedTypes(prev => {
@@ -182,6 +184,67 @@ export default function NewCasePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Perizia metadata (collapsible) */}
+        <Card>
+          <CardHeader className="cursor-pointer" onClick={() => setPeriziaOpen(!periziaOpen)}>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Dati Perizia (opzionale)</CardTitle>
+                <CardDescription>
+                  Tribunale, numero RG, giudice. Puoi aggiungerli anche dopo.
+                </CardDescription>
+              </div>
+              {periziaOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </div>
+          </CardHeader>
+          {periziaOpen && (
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label htmlFor="periziaT" className="text-sm font-medium">Tribunale</label>
+                  <Input
+                    id="periziaT"
+                    value={perizia.tribunale}
+                    onChange={(e) => setPerizia({ ...perizia, tribunale: e.target.value })}
+                    placeholder="es. Tribunale Ordinario di Brescia"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="periziaRG" className="text-sm font-medium">Numero RG</label>
+                  <Input
+                    id="periziaRG"
+                    value={perizia.rgNumber}
+                    onChange={(e) => setPerizia({ ...perizia, rgNumber: e.target.value })}
+                    placeholder="es. 10965/2025"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="periziaJ" className="text-sm font-medium">Giudice</label>
+                  <Input
+                    id="periziaJ"
+                    value={perizia.judgeName}
+                    onChange={(e) => setPerizia({ ...perizia, judgeName: e.target.value })}
+                    placeholder="es. Dott. Raffaele Del Porto"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* Hidden input for perizia metadata */}
+        {(perizia.tribunale || perizia.rgNumber || perizia.judgeName) && (
+          <input
+            type="hidden"
+            name="periziaMetadata"
+            value={JSON.stringify({
+              ...(perizia.tribunale ? { tribunale: perizia.tribunale } : {}),
+              ...(perizia.rgNumber ? { rgNumber: perizia.rgNumber } : {}),
+              ...(perizia.judgeName ? { judgeName: perizia.judgeName } : {}),
+            })}
+          />
+        )}
 
         {/* Submit */}
         <div className="flex justify-end gap-4">

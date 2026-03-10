@@ -6,7 +6,7 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
-import type { CaseType, CaseRole } from '@/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_types, case_role, patient_initials')
+      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
       anomalies,
       missingDocuments: missingDocs,
       calculations,
+      periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
     });
 
     // Get current max version

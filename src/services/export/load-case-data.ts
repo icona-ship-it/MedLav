@@ -65,5 +65,6 @@ export async function loadCaseDataForExport(caseId: string) {
     missingDocs: missingRes.data ?? [],
     report: reportRes.data,
     calculations,
+    periziaMetadata: (caseRow.perizia_metadata ?? null) as Record<string, unknown> | null,
   };
 }

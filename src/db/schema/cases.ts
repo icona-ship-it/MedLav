@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, timestamp, integer, pgEnum, jsonb } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
+import type { PeriziaMetadata } from '@/types';
 
 export const caseTypeEnum = pgEnum('case_type', [
   'ortopedica',
@@ -38,6 +39,7 @@ export const cases = pgTable('cases', {
   caseRole: caseRoleEnum('case_role').notNull().default('ctu'),
   status: caseStatusEnum('status').notNull().default('bozza'),
   notes: text('notes'),
+  periziaMetadata: jsonb('perizia_metadata').$type<PeriziaMetadata>(),
   documentCount: integer('document_count').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

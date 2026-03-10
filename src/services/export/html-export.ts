@@ -32,6 +32,25 @@ interface ExportMissingDoc {
   related_event: string | null;
 }
 
+interface PeriziaMetadataExport {
+  tribunale?: string;
+  sezione?: string;
+  rgNumber?: string;
+  judgeName?: string;
+  ctuName?: string;
+  ctuTitle?: string;
+  ctpRicorrente?: string;
+  ctpResistente?: string;
+  parteRicorrente?: string;
+  parteResistente?: string;
+  dataIncarico?: string;
+  dataOperazioni?: string;
+  dataDeposito?: string;
+  quesiti?: string[];
+  fondoSpese?: string;
+  [key: string]: unknown;
+}
+
 interface HtmlExportParams {
   caseCode: string;
   caseType: string;
@@ -42,6 +61,7 @@ interface HtmlExportParams {
   anomalies: ExportAnomaly[];
   missingDocs: ExportMissingDoc[];
   calculations?: MedicoLegalCalculation[];
+  periziaMetadata?: PeriziaMetadataExport | null;
 }
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -67,8 +87,55 @@ function confidenceClass(confidence: number): string {
 /**
  * Generate a complete HTML report document.
  */
+function buildFormalHeader(pm: PeriziaMetadataExport, caseRole: string, patientInitials: string | null): string {
+  const roleTitle = caseRole === 'ctu' ? 'Consulenza Tecnica d\'Ufficio'
+    : caseRole === 'ctp' ? 'Consulenza Tecnica di Parte'
+    : 'Perizia Stragiudiziale';
+
+  let html = '<div style="text-align:center;margin-bottom:30px;border-bottom:2px solid #1e40af;padding-bottom:20px">';
+
+  if (pm.tribunale) {
+    html += `<p style="font-size:18px;font-weight:bold;text-transform:uppercase;margin-bottom:4px">${escapeHtml(pm.tribunale)}</p>`;
+  }
+  if (pm.sezione) {
+    html += `<p style="font-size:14px;margin-bottom:12px">${escapeHtml(pm.sezione)}</p>`;
+  }
+  if (pm.rgNumber) {
+    html += `<p style="font-size:14px;margin-bottom:12px">n. R.G. ${escapeHtml(pm.rgNumber)}</p>`;
+  }
+
+  html += `<p style="font-size:16px;font-weight:bold;margin:16px 0">${escapeHtml(roleTitle)}</p>`;
+
+  if (patientInitials) {
+    html += `<p style="font-size:14px;margin-bottom:12px">relativa alla vicenda clinica del/della sig. ${escapeHtml(patientInitials)}</p>`;
+  }
+
+  html += '</div>';
+
+  // Parties and roles
+  const details: string[] = [];
+  if (pm.ctuName) details.push(`<strong>CTU:</strong> ${escapeHtml(pm.ctuName)}${pm.ctuTitle ? ` — ${escapeHtml(pm.ctuTitle)}` : ''}`);
+  if (pm.judgeName) details.push(`<strong>Giudice:</strong> ${escapeHtml(pm.judgeName)}`);
+  if (pm.parteRicorrente) details.push(`<strong>Parte Ricorrente:</strong> ${escapeHtml(pm.parteRicorrente)}`);
+  if (pm.parteResistente) details.push(`<strong>Parte Resistente:</strong> ${escapeHtml(pm.parteResistente)}`);
+  if (pm.ctpRicorrente) details.push(`<strong>CTP Ricorrente:</strong> ${escapeHtml(pm.ctpRicorrente)}`);
+  if (pm.ctpResistente) details.push(`<strong>CTP Resistente:</strong> ${escapeHtml(pm.ctpResistente)}`);
+  if (pm.dataIncarico) details.push(`<strong>Data incarico:</strong> ${escapeHtml(pm.dataIncarico)}`);
+  if (pm.dataOperazioni) details.push(`<strong>Data operazioni:</strong> ${escapeHtml(pm.dataOperazioni)}`);
+  if (pm.dataDeposito) details.push(`<strong>Termine deposito:</strong> ${escapeHtml(pm.dataDeposito)}`);
+  if (pm.fondoSpese) details.push(`<strong>Fondo spese:</strong> ${escapeHtml(pm.fondoSpese)}`);
+
+  if (details.length > 0) {
+    html += '<div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:20px">';
+    html += details.map((d) => `<p style="margin:3px 0;font-size:14px">${d}</p>`).join('\n');
+    html += '</div>';
+  }
+
+  return html;
+}
+
 export function generateHtmlReport(params: HtmlExportParams): string {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -125,6 +192,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
 </style>
 </head>
 <body>
+${periziaMetadata ? buildFormalHeader(periziaMetadata, caseRole, patientInitials) : ''}
 <h1>Report Medico-Legale</h1>
 <div class="header-info">
   <p><strong>Caso:</strong> ${escapeHtml(caseCode)}</p>
