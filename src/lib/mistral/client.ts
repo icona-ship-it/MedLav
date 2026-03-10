@@ -1,4 +1,4 @@
-import { Mistral } from '@mistralai/mistralai';
+import { Mistral, HTTPClient } from '@mistralai/mistralai';
 
 // ── Timeout per tipo di operazione ──
 export const TIMEOUT_EXTRACTION = 300_000;  // 5 minuti
@@ -22,6 +22,44 @@ export const MISTRAL_MODELS = {
   OCR: 'mistral-ocr-latest',
 } as const;
 
+/**
+ * Custom fetcher that ensures Content-Length header is set on POST requests.
+ * Mistral's OCR endpoint returns 411 if Content-Length is missing,
+ * and Node.js fetch() sometimes uses Transfer-Encoding: chunked instead.
+ */
+async function fetchWithContentLength(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (init == null) {
+    // Request object — read body and ensure Content-Length
+    if (input instanceof Request && input.body && !input.headers.has('content-length')) {
+      const cloned = input.clone();
+      const bodyBytes = await cloned.arrayBuffer();
+      const headers = new Headers(input.headers);
+      headers.set('content-length', String(bodyBytes.byteLength));
+
+      return fetch(input.url, {
+        method: input.method,
+        headers,
+        body: bodyBytes,
+        signal: input.signal,
+      });
+    }
+    return fetch(input);
+  }
+
+  // init provided — check if body needs Content-Length
+  if (init.body && typeof init.body === 'string') {
+    const headers = new Headers(init.headers);
+    if (!headers.has('content-length')) {
+      headers.set('content-length', String(new TextEncoder().encode(init.body).byteLength));
+      return fetch(input, { ...init, headers });
+    }
+  }
+  return fetch(input, init);
+}
+
 export function getMistralClient(): Mistral {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) {
@@ -30,6 +68,7 @@ export function getMistralClient(): Mistral {
   return new Mistral({
     apiKey,
     timeoutMs: TIMEOUT_DEFAULT,
+    httpClient: new HTTPClient({ fetcher: fetchWithContentLength }),
   });
 }
 

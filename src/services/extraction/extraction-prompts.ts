@@ -147,6 +147,29 @@ Cerca con particolare cura:
 - Eventi impliciti: date di ricovero/dimissione deducibili dal contesto, durate terapie
 - Informazioni negli HEADER/FOOTER: intestazioni con struttura/reparto, date documento
 
+## VALORI AMMESSI PER eventType (USA SOLO QUESTI)
+- "visita" — visite mediche, accessi in PS, visite specialistiche, visite ambulatoriali, consulenze
+- "esame" — esami strumentali (RX, TAC, RM, ecografia, ECG, EMG), esami di laboratorio, emocromo, biochimica, markers
+- "diagnosi" — diagnosi formali, comunicazione diagnosi, staging, classificazioni
+- "intervento" — interventi chirurgici, procedure invasive, biopsie, endoscopie
+- "terapia" — prescrizioni terapeutiche, chemioterapia, radioterapia, fisioterapia, farmaci, trasfusioni
+- "ricovero" — ricoveri ospedalieri (inizio), trasferimenti reparto, accettazione
+- "follow-up" — controlli programmati, visite di controllo post-intervento, rivalutazioni
+- "referto" — referti di esami, lettere di dimissione, relazioni cliniche, certificati
+- "prescrizione" — prescrizioni farmacologiche, richieste esami, impegnative
+- "consenso" — consensi informati, informative al paziente
+- "complicanza" — complicanze post-operatorie, eventi avversi, reazioni, infezioni
+- "altro" — SOLO se nessuna delle categorie sopra è applicabile
+
+IMPORTANTE: Classifica SEMPRE l'evento nella categoria più specifica possibile. "altro" deve essere l'eccezione, NON la regola.
+
+## VALORI AMMESSI PER sourceType (USA SOLO QUESTI)
+- "cartella_clinica" — cartelle cliniche, diari, lettere dimissione, descrizioni operatorie
+- "referto_controllo" — referti visite, certificati, relazioni mediche
+- "esame_strumentale" — referti RX, TAC, RM, ECG, ecografie
+- "esame_ematochimico" — esami sangue, urine, markers, colturali
+- "altro" — solo se nessuna delle categorie sopra è applicabile
+
 ## FORMATO OUTPUT
 Rispondi con un JSON valido. La struttura ESATTA deve essere:
 

@@ -83,12 +83,13 @@ function detectRitardoDiagnostico(events: ConsolidatedEvent[]): DetectedAnomaly[
     const daysBetween = daysDiff(firstVisit.eventDate, firstDiagnosis.eventDate);
 
     if (daysBetween > THRESHOLDS.RITARDO_DIAGNOSTICO) {
+      const months = Math.round(daysBetween / 30);
       anomalies.push({
         anomalyType: 'ritardo_diagnostico',
         severity: daysBetween > 180 ? 'critica' : daysBetween > 120 ? 'alta' : 'media',
-        description: `Ritardo di ${daysBetween} giorni tra la prima visita (${formatDate(firstVisit.eventDate)}) e la diagnosi (${formatDate(firstDiagnosis.eventDate)}).`,
+        description: `Ritardo diagnostico di ${daysBetween} giorni (circa ${months} mesi). La prima visita medica risulta in data ${formatDate(firstVisit.eventDate)} ("${firstVisit.title}"), mentre la prima diagnosi formale viene formulata solo il ${formatDate(firstDiagnosis.eventDate)} ("${firstDiagnosis.diagnosis ?? firstDiagnosis.title}"). Il lasso temporale tra il primo contatto clinico e la formulazione diagnostica supera i ${THRESHOLDS.RITARDO_DIAGNOSTICO} giorni previsti come soglia di attenzione.`,
         involvedEvents: [makeEventRef(firstVisit), makeEventRef(firstDiagnosis)],
-        suggestion: `Verificare se il ritardo diagnostico di ${daysBetween} giorni ha influito sulla prognosi.`,
+        suggestion: `Valutare se il ritardo di ${months} mesi nella formulazione diagnostica abbia avuto ripercussioni sulla prognosi del paziente, considerando se erano indicati ulteriori accertamenti nel periodo intermedio.`,
       });
     }
   }
@@ -117,9 +118,9 @@ function detectGapPostChirurgico(events: ConsolidatedEvent[]): DetectedAnomaly[]
         anomalies.push({
           anomalyType: 'gap_post_chirurgico',
           severity: 'media',
-          description: `Nessun follow-up documentato dopo l'intervento del ${formatDate(surgery.eventDate)}: "${surgery.title}".`,
+          description: `Assenza di follow-up post-operatorio documentato. L'intervento "${surgery.title}" è stato eseguito il ${formatDate(surgery.eventDate)}, ma nella documentazione esaminata non risultano visite di controllo, esami o rivalutazioni successive, nonostante siano presenti altri eventi clinici in date posteriori. Ciò può indicare una lacuna nella documentazione fornita o un'effettiva omissione di controlli post-chirurgici.`,
           involvedEvents: [makeEventRef(surgery)],
-          suggestion: 'Verificare se sono stati effettuati controlli post-operatori non inclusi nella documentazione.',
+          suggestion: 'Verificare se sono stati effettuati controlli post-operatori non inclusi nella documentazione fornita. Richiedere eventuale documentazione integrativa relativa al decorso post-operatorio.',
         });
       }
     } else {
@@ -129,9 +130,9 @@ function detectGapPostChirurgico(events: ConsolidatedEvent[]): DetectedAnomaly[]
         anomalies.push({
           anomalyType: 'gap_post_chirurgico',
           severity: daysBetween > 120 ? 'alta' : 'media',
-          description: `Gap di ${daysBetween} giorni senza follow-up dopo l'intervento del ${formatDate(surgery.eventDate)}.`,
+          description: `Intervallo di ${daysBetween} giorni (circa ${Math.round(daysBetween / 30)} mesi) senza follow-up dopo l'intervento chirurgico. L'intervento "${surgery.title}" è stato eseguito il ${formatDate(surgery.eventDate)}, mentre il primo controllo documentato ("${followUp.title}") risulta solo il ${formatDate(followUp.eventDate)}. Le linee guida raccomandano generalmente un follow-up post-chirurgico entro ${THRESHOLDS.GAP_POST_CHIRURGICO} giorni.`,
           involvedEvents: [makeEventRef(surgery), makeEventRef(followUp)],
-          suggestion: `Verificare se il gap di ${daysBetween} giorni post-operatorio è clinicamente giustificato.`,
+          suggestion: `Valutare se l'assenza di controlli nei ${daysBetween} giorni successivi all'intervento possa aver contribuito a un ritardo nel riconoscimento di eventuali complicanze post-operatorie.`,
         });
       }
     }
@@ -154,13 +155,14 @@ function detectGapDocumentale(events: ConsolidatedEvent[]): DetectedAnomaly[] {
 
     if (daysBetween > THRESHOLDS.GAP_DOCUMENTALE_WARNING) {
       const isCritical = daysBetween > THRESHOLDS.GAP_DOCUMENTALE_CRITICO;
+      const months = Math.round(daysBetween / 30);
 
       anomalies.push({
         anomalyType: 'gap_documentale',
         severity: isCritical ? 'alta' : 'media',
-        description: `Gap documentale di ${daysBetween} giorni (${Math.round(daysBetween / 30)} mesi) tra il ${formatDate(current.eventDate)} e il ${formatDate(next.eventDate)}.`,
+        description: `Lacuna documentale di ${daysBetween} giorni (circa ${months} mesi). L'ultimo evento documentato prima del gap è del ${formatDate(current.eventDate)} ("${current.title}"), mentre il primo evento successivo è del ${formatDate(next.eventDate)} ("${next.title}"). In questo intervallo temporale non risulta alcuna documentazione clinica. Ciò può dipendere da documentazione non fornita, assenza di accessi sanitari, o perdita di documenti.`,
         involvedEvents: [makeEventRef(current), makeEventRef(next)],
-        suggestion: `Richiedere documentazione per il periodo ${formatDate(current.eventDate)} - ${formatDate(next.eventDate)}.`,
+        suggestion: `Richiedere alla parte la documentazione clinica relativa al periodo ${formatDate(current.eventDate)} — ${formatDate(next.eventDate)}. Verificare in particolare se in tale intervallo siano state effettuate visite, esami o terapie non incluse nel fascicolo.`,
       });
     }
   }
@@ -188,9 +190,9 @@ function detectComplicanzaNonGestita(events: ConsolidatedEvent[]): DetectedAnoma
       anomalies.push({
         anomalyType: 'complicanza_non_gestita',
         severity: 'alta',
-        description: `Complicanza "${complication.title}" del ${formatDate(complication.eventDate)} senza trattamento documentato.`,
+        description: `Complicanza senza trattamento documentato. In data ${formatDate(complication.eventDate)} è stata rilevata la complicanza "${complication.title}"${complication.description ? ` (${complication.description.slice(0, 150)})` : ''}, ma nei 14 giorni successivi non risulta documentato alcun trattamento specifico (farmacologico o chirurgico) per la gestione di tale complicanza.`,
         involvedEvents: [makeEventRef(complication)],
-        suggestion: 'Verificare se la complicanza è stata trattata ma non documentata.',
+        suggestion: 'Verificare se la complicanza è stata trattata ma il trattamento non è documentato nel fascicolo fornito, oppure se vi sia stata un\'effettiva omissione di intervento terapeutico.',
       });
     }
   }
@@ -209,12 +211,15 @@ function detectConsensoNonDocumentato(events: ConsolidatedEvent[]): DetectedAnom
 
   // If no consent events at all and there are procedures, flag ONE general anomaly
   if (consents.length === 0 && procedures.length > 0) {
+    const procedureList = procedures.slice(0, 3).map((p) =>
+      `"${p.title}" del ${formatDate(p.eventDate)}`,
+    ).join('; ');
     anomalies.push({
       anomalyType: 'consenso_non_documentato',
       severity: 'media',
-      description: `Nessun consenso informato documentato per ${procedures.length} procedura/e chirurgica/e.`,
+      description: `Nella documentazione esaminata non risultano consensi informati per ${procedures.length} procedura/e chirurgica/e documentata/e: ${procedureList}. L'assenza del consenso informato nella documentazione può indicare che il documento non è stato incluso nel fascicolo fornito, oppure che non sia stato acquisito.`,
       involvedEvents: procedures.slice(0, 3).map(makeEventRef),
-      suggestion: 'Verificare se i consensi informati sono stati acquisiti ma non inclusi nella documentazione.',
+      suggestion: 'Richiedere i moduli di consenso informato relativi alle procedure chirurgiche. L\'acquisizione del consenso informato è un obbligo deontologico e giuridico (art. 1 L. 219/2017).',
     });
     return anomalies;
   }
@@ -243,12 +248,13 @@ function detectDiagnosiContraddittoria(events: ConsolidatedEvent[]): DetectedAno
       }
 
       if (areDiagnosesContradictory(a.diagnosis!, b.diagnosis!)) {
+        const gapDays = daysDiff(a.eventDate, b.eventDate);
         anomalies.push({
           anomalyType: 'diagnosi_contraddittoria',
           severity: 'media',
-          description: `Diagnosi potenzialmente contraddittorie: "${a.diagnosis}" vs "${b.diagnosis}" (entro ${daysDiff(a.eventDate, b.eventDate)} giorni).`,
+          description: `Diagnosi potenzialmente discordanti a distanza di ${gapDays} giorni. In data ${formatDate(a.eventDate)} la diagnosi formulata è "${a.diagnosis}" (evento: "${a.title}"), mentre in data ${formatDate(b.eventDate)} viene formulata la diagnosi "${b.diagnosis}" (evento: "${b.title}"). La significativa differenza nel contenuto diagnostico entro un intervallo temporale ristretto richiede un approfondimento per stabilire se si tratti di un'evoluzione clinica, di un aggiornamento diagnostico motivato da nuovi accertamenti, oppure di una reale discordanza valutativa.`,
           involvedEvents: [makeEventRef(a), makeEventRef(b)],
-          suggestion: 'Verificare se si tratta di un aggiornamento diagnostico o di una reale contraddizione.',
+          suggestion: 'Analizzare se tra le due diagnosi siano stati eseguiti accertamenti che giustifichino il cambiamento diagnostico. Valutare se la discordanza possa configurare un errore diagnostico rilevante ai fini medico-legali.',
         });
       }
     }
@@ -279,9 +285,9 @@ function detectTerapiaSenzaFollowup(events: ConsolidatedEvent[]): DetectedAnomal
         anomalies.push({
           anomalyType: 'terapia_senza_followup',
           severity: 'bassa',
-          description: `Nessun controllo documentato entro ${THRESHOLDS.TERAPIA_SENZA_FOLLOWUP} giorni dalla terapia del ${formatDate(therapy.eventDate)}.`,
+          description: `Assenza di controllo dopo terapia. La terapia "${therapy.title}" è stata avviata il ${formatDate(therapy.eventDate)}, ma non risulta documentato alcun controllo o rivalutazione entro i ${THRESHOLDS.TERAPIA_SENZA_FOLLOWUP} giorni successivi, nonostante siano presenti ulteriori eventi clinici in date successive.`,
           involvedEvents: [makeEventRef(therapy)],
-          suggestion: 'Verificare se sono stati effettuati controlli per monitorare gli effetti della terapia.',
+          suggestion: 'Verificare se sono stati effettuati controlli per monitorare efficacia ed eventuali effetti avversi della terapia, non inclusi nella documentazione fornita.',
         });
       }
     }

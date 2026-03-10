@@ -113,8 +113,11 @@ function getOverallStepIndex(documents: ProcessingDocument[]): number {
   );
 
   if (processing.length === 0) {
-    const allCompleted = documents.every((d) => d.processing_status === 'completato');
-    return allCompleted ? 4 : -1;
+    // Consider it complete if at least one doc completed (even if some errored)
+    const hasCompleted = documents.some((d) => d.processing_status === 'completato');
+    const allErrored = documents.every((d) => d.processing_status === 'errore');
+    if (allErrored) return -1;
+    return hasCompleted ? 4 : -1;
   }
 
   return Math.min(...processing.map((d) => getStepIndex(d.processing_status)));
