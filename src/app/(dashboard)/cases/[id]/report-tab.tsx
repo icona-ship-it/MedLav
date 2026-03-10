@@ -106,7 +106,12 @@ export function ReportTab({
   }, [caseId, report, editedSynthesis, router]);
 
   const handlePdfExport = useCallback(() => {
-    window.open(`/api/cases/${caseId}/export/html`, '_blank');
+    const printWindow = window.open(`/api/cases/${caseId}/export/html`, '_blank');
+    if (printWindow) {
+      printWindow.addEventListener('load', () => {
+        printWindow.print();
+      });
+    }
   }, [caseId]);
 
   const handleToggleVersions = useCallback(async () => {

@@ -1,6 +1,9 @@
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
+import type { DocumentWithPages } from './load-case-data';
+import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { markdownToHtml } from './markdown-to-html';
 
 interface ExportEvent {
   order_number: number;
@@ -39,6 +42,8 @@ interface PeriziaMetadataExport {
   judgeName?: string;
   ctuName?: string;
   ctuTitle?: string;
+  collaboratoreName?: string;
+  collaboratoreTitle?: string;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;
@@ -273,6 +278,345 @@ ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' 
 </div>`).join('\n')}
 
 <footer style="margin-top:40px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#94a3b8;text-align:center">
+  Report generato da MedLav il ${now}
+</footer>
+</body>
+</html>`;
+}
+
+// ── Professional HTML Export ──
+
+interface ProfessionalHtmlExportParams {
+  caseCode: string;
+  caseType: string;
+  caseRole: string;
+  patientInitials: string | null;
+  synthesis: string | null;
+  events: ExportEvent[];
+  anomalies: ExportAnomaly[];
+  missingDocs: ExportMissingDoc[];
+  calculations?: MedicoLegalCalculation[];
+  periziaMetadata: PeriziaMetadataExport;
+  documentsWithPages: DocumentWithPages[];
+}
+
+function escapeHtmlPro(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Render section content: markdown sections go through markdownToHtml,
+ * plain text sections get inline formatting + paragraph wrapping.
+ */
+function renderSectionContent(content: string, isMarkdown: boolean): string {
+  if (isMarkdown) {
+    return markdownToHtml(content);
+  }
+  // Simple rendering: convert markdown-like inline formatting
+  return markdownToHtml(content);
+}
+
+/**
+ * Generate a court-quality professional HTML report.
+ * Uses assembled sections with full OCR documentation, print-optimized CSS.
+ */
+export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportParams): string {
+  const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations } = params;
+
+  const pm = periziaMetadata as AssemblerPeriziaMetadata;
+  const assembled = assembleFullReport({
+    periziaMetadata: pm,
+    caseRole,
+    documentsWithPages,
+    synthesis,
+    anomalies,
+    missingDocs,
+    calculations,
+  });
+
+  const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
+  const roleTitle = caseRole === 'ctu' ? 'CONSULENZA TECNICA D\'UFFICIO'
+    : caseRole === 'ctp' ? 'CONSULENZA TECNICA DI PARTE'
+    : 'PERIZIA STRAGIUDIZIALE';
+
+  const nrgInfo = pm.rgNumber ? `R.G. ${pm.rgNumber}` : caseCode;
+  const patientInfo = patientInitials ?? '';
+  const hasCollaboratore = Boolean(pm.collaboratoreName);
+
+  // Build TOC
+  const tocHtml = assembled.tableOfContents.map((item) =>
+    `<a href="#section-${item.id}">${item.number}. ${escapeHtmlPro(item.title)}</a>`,
+  ).join('\n    ');
+
+  // Build sections
+  const sectionsHtml = assembled.sections.map((section) => {
+    const content = renderSectionContent(section.content, section.isMarkdown);
+    return `<section class="report-section" id="section-${section.id}">
+  <h2>${section.number}. ${escapeHtmlPro(section.title)}</h2>
+  <div class="section-content">${content}</div>
+</section>`;
+  }).join('\n\n');
+
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtmlPro(roleTitle)} - ${escapeHtmlPro(nrgInfo)}</title>
+<style>
+  @page {
+    margin: 2.5cm 2cm 2cm 2cm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Times New Roman', Georgia, 'DejaVu Serif', serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: justify;
+  }
+
+  /* ── Running Header (2-column, benchmark style) ── */
+  .running-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 6px;
+    border-bottom: 1.5px dotted #444;
+    margin-bottom: 20px;
+    font-size: 9.5pt;
+    line-height: 1.3;
+  }
+  .running-header .rh-col {
+    max-width: 48%;
+  }
+  .running-header .rh-col-left { text-align: left; }
+  .running-header .rh-col-right { text-align: right; }
+  .running-header .rh-name {
+    font-weight: bold;
+    font-style: italic;
+    font-variant: small-caps;
+    font-size: 10pt;
+  }
+  .running-header .rh-title {
+    font-variant: small-caps;
+    font-size: 8.5pt;
+    color: #333;
+  }
+
+  /* ── Running Footer (benchmark style) ── */
+  .running-footer {
+    border-top: 1.5px dotted #444;
+    padding-top: 6px;
+    margin-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+    font-style: italic;
+    color: #444;
+  }
+
+  /* Cover / Title */
+  .cover {
+    text-align: center;
+    padding: 40px 0 30px;
+    margin-bottom: 30px;
+    page-break-after: always;
+  }
+  .cover .tribunale { font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; }
+  .cover .sezione { font-size: 12pt; font-style: italic; margin-bottom: 6px; }
+  .cover .rg { font-size: 12pt; margin-bottom: 20px; }
+  .cover .role-title { font-size: 14pt; font-weight: bold; font-style: italic; text-decoration: underline; margin: 20px 0 10px; }
+  .cover .patient { font-size: 12pt; margin-bottom: 20px; font-variant: small-caps; }
+  .cover .details { text-align: left; font-size: 11pt; margin: 20px auto; max-width: 500px; }
+  .cover .details p { margin: 4px 0; }
+
+  /* Table of Contents */
+  .toc {
+    page-break-after: always;
+    margin-bottom: 30px;
+  }
+  .toc h2 { text-align: center; font-size: 14pt; text-decoration: underline; margin-bottom: 20px; }
+  .toc a { color: #000; text-decoration: none; display: block; padding: 4px 0; font-size: 11pt; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* Sections */
+  .report-section { margin-bottom: 24px; }
+  .report-section h2 {
+    font-size: 13pt;
+    text-decoration: underline;
+    text-transform: uppercase;
+    margin: 30px 0 12px;
+    page-break-after: avoid;
+  }
+  .report-section h3 {
+    font-size: 12pt;
+    font-weight: bold;
+    margin: 16px 0 8px;
+    page-break-after: avoid;
+  }
+  .report-section h4 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 12px 0 6px;
+    page-break-after: avoid;
+  }
+  .section-content { margin-top: 8px; }
+  .section-content p { margin-bottom: 8px; text-indent: 0; }
+  .section-content ul, .section-content ol { margin: 8px 0 8px 24px; }
+  .section-content li { margin-bottom: 4px; }
+
+  /* OCR Tables */
+  .ocr-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .ocr-table th, .ocr-table td {
+    border: 1px solid #333;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .ocr-table th {
+    background: #f0f0f0;
+    font-weight: bold;
+  }
+
+  /* Horizontal rule (page separator in OCR) */
+  hr { border: none; border-top: 1px dashed #999; margin: 16px 0; }
+
+  /* Footer for screen */
+  .screen-footer {
+    margin-top: 40px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+    font-size: 9pt;
+    color: #999;
+    text-align: center;
+  }
+
+  /* Print: fixed header/footer on every page */
+  .print-header, .print-footer { display: none; }
+
+  @media print {
+    body { padding: 0; max-width: 100%; padding-top: 60px; padding-bottom: 40px; }
+    .screen-footer { display: none; }
+    .running-header { display: none; }
+    .running-footer { display: none; }
+    .print-header {
+      display: flex;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0 0 6px 0;
+      border-bottom: 1.5px dotted #444;
+      font-size: 9.5pt;
+      line-height: 1.3;
+      background: #fff;
+      z-index: 100;
+    }
+    .print-header .rh-col { max-width: 48%; }
+    .print-header .rh-col-left { text-align: left; }
+    .print-header .rh-col-right { text-align: right; }
+    .print-header .rh-name { font-weight: bold; font-style: italic; font-variant: small-caps; font-size: 10pt; }
+    .print-header .rh-title { font-variant: small-caps; font-size: 8.5pt; color: #333; }
+    .print-footer {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      justify-content: space-between;
+      padding: 6px 0 0 0;
+      border-top: 1.5px dotted #444;
+      font-size: 8.5pt;
+      font-style: italic;
+      color: #444;
+      background: #fff;
+      z-index: 100;
+    }
+    .report-section { page-break-before: auto; }
+    .report-section h2 { page-break-after: avoid; }
+    .ocr-table { page-break-inside: avoid; }
+    a { color: #000; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<!-- Print-only fixed header (2 columns, benchmark style) -->
+<div class="print-header">
+  <div class="rh-col rh-col-left">
+    ${pm.ctuName ? `<div class="rh-name">${escapeHtmlPro(pm.ctuName)}</div>` : ''}
+    ${pm.ctuTitle ? `<div class="rh-title">${escapeHtmlPro(pm.ctuTitle)}</div>` : ''}
+  </div>
+  ${hasCollaboratore ? `<div class="rh-col rh-col-right">
+    <div class="rh-name">${escapeHtmlPro(pm.collaboratoreName!)}</div>
+    ${pm.collaboratoreTitle ? `<div class="rh-title">${escapeHtmlPro(pm.collaboratoreTitle)}</div>` : ''}
+  </div>` : ''}
+</div>
+<!-- Print-only fixed footer -->
+<div class="print-footer">
+  <span>${escapeHtmlPro(pm.rgNumber ? `${pm.rgNumber} N.R.G.` : caseCode)} – ${escapeHtmlPro(patientInfo)}${pm.parteResistente ? ` // ${escapeHtmlPro(pm.parteResistente)}` : ''}</span>
+</div>
+
+<!-- Screen header (visible on screen, hidden in print) -->
+<div class="running-header">
+  <div class="rh-col rh-col-left">
+    ${pm.ctuName ? `<div class="rh-name">${escapeHtmlPro(pm.ctuName)}</div>` : ''}
+    ${pm.ctuTitle ? `<div class="rh-title">${escapeHtmlPro(pm.ctuTitle)}</div>` : ''}
+  </div>
+  ${hasCollaboratore ? `<div class="rh-col rh-col-right">
+    <div class="rh-name">${escapeHtmlPro(pm.collaboratoreName!)}</div>
+    ${pm.collaboratoreTitle ? `<div class="rh-title">${escapeHtmlPro(pm.collaboratoreTitle)}</div>` : ''}
+  </div>` : ''}
+</div>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  ${pm.tribunale ? `<div class="tribunale">${escapeHtmlPro(pm.tribunale)}</div>` : ''}
+  ${pm.sezione ? `<div class="sezione">${escapeHtmlPro(pm.sezione)}</div>` : ''}
+  ${pm.rgNumber ? `<div class="rg">n. R.G. ${escapeHtmlPro(pm.rgNumber)}</div>` : ''}
+  <div class="role-title">${escapeHtmlPro(roleTitle)}</div>
+  ${patientInitials ? `<div class="patient">relativa alla vicenda clinica del/della sig. ${escapeHtmlPro(patientInitials)}</div>` : ''}
+  <div class="details">
+    ${pm.ctuName ? `<p><strong>${caseRole === 'ctu' ? 'CTU' : 'CTP'}:</strong> ${escapeHtmlPro(pm.ctuName)}${pm.ctuTitle ? ` — ${escapeHtmlPro(pm.ctuTitle)}` : ''}</p>` : ''}
+    ${hasCollaboratore ? `<p><strong>Collaboratore:</strong> ${escapeHtmlPro(pm.collaboratoreName!)}${pm.collaboratoreTitle ? ` — ${escapeHtmlPro(pm.collaboratoreTitle)}` : ''}</p>` : ''}
+    ${pm.judgeName ? `<p><strong>Giudice:</strong> ${escapeHtmlPro(pm.judgeName)}</p>` : ''}
+    ${pm.parteRicorrente ? `<p><strong>Parte Ricorrente:</strong> ${escapeHtmlPro(pm.parteRicorrente)}</p>` : ''}
+    ${pm.parteResistente ? `<p><strong>Parte Resistente:</strong> ${escapeHtmlPro(pm.parteResistente)}</p>` : ''}
+    ${pm.ctpRicorrente ? `<p><strong>CTP Ricorrente:</strong> ${escapeHtmlPro(pm.ctpRicorrente)}</p>` : ''}
+    ${pm.ctpResistente ? `<p><strong>CTP Resistente:</strong> ${escapeHtmlPro(pm.ctpResistente)}</p>` : ''}
+    ${pm.dataIncarico ? `<p><strong>Data incarico:</strong> ${escapeHtmlPro(pm.dataIncarico)}</p>` : ''}
+    ${pm.dataDeposito ? `<p><strong>Termine deposito:</strong> ${escapeHtmlPro(pm.dataDeposito)}</p>` : ''}
+    ${pm.fondoSpese ? `<p><strong>Fondo spese:</strong> ${escapeHtmlPro(pm.fondoSpese)}</p>` : ''}
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <h2>INDICE</h2>
+  <div>
+    ${tocHtml}
+  </div>
+</div>
+
+<!-- REPORT SECTIONS -->
+${sectionsHtml}
+
+<footer class="screen-footer">
   Report generato da MedLav il ${now}
 </footer>
 </body>

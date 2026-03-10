@@ -71,7 +71,9 @@ export interface PeriziaMetadata {
   rgNumber?: string;           // "10965/2025"
   judgeName?: string;           // "Dott. Raffaele Del Porto"
   ctuName?: string;            // "Dott. Nicola Pigaiani"
-  ctuTitle?: string;           // "medico legale presso..."
+  ctuTitle?: string;           // "Specialista in Medicina Legale"
+  collaboratoreName?: string;  // "Dott. Franco Lavini"
+  collaboratoreTitle?: string; // "Specialista in Ortopedia e Traumatologia"
   ctpRicorrente?: string;      // "Dott.ssa Sarah Nalin"
   ctpResistente?: string;      // "Dott. Lorenzo Micheli"
   parteRicorrente?: string;    // nome parte ricorrente

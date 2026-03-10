@@ -1,10 +1,23 @@
 import { createClient } from '@/lib/supabase/server';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 
+export interface DocumentPage {
+  pageNumber: number;
+  ocrText: string;
+}
+
+export interface DocumentWithPages {
+  id: string;
+  fileName: string;
+  documentType: string;
+  pageCount: number | null;
+  pages: DocumentPage[];
+}
+
 /**
  * Load all case data needed for export.
  * Verifies auth and ownership.
- * Includes medico-legal calculations.
+ * Includes medico-legal calculations and documents with OCR pages.
  */
 export async function loadCaseDataForExport(caseId: string) {
   const supabase = await createClient();
@@ -21,7 +34,7 @@ export async function loadCaseDataForExport(caseId: string) {
 
   if (!caseRow) return null;
 
-  const [eventsRes, anomaliesRes, missingRes, reportRes] = await Promise.all([
+  const [eventsRes, anomaliesRes, missingRes, reportRes, documentsRes] = await Promise.all([
     supabase
       .from('events')
       .select('*')
@@ -45,7 +58,43 @@ export async function loadCaseDataForExport(caseId: string) {
       .order('version', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('documents')
+      .select('id, file_name, document_type, page_count')
+      .eq('case_id', caseId)
+      .order('created_at', { ascending: true }),
   ]);
+
+  // Fetch pages for all documents (requires doc IDs from previous query)
+  const docIds = (documentsRes.data ?? []).map((d) => d.id as string);
+  const pagesRes = docIds.length > 0
+    ? await supabase
+      .from('pages')
+      .select('document_id, page_number, ocr_text')
+      .in('document_id', docIds)
+      .order('page_number', { ascending: true })
+    : { data: [] };
+
+  // Group pages by document
+  const pagesByDoc = new Map<string, DocumentPage[]>();
+  for (const page of pagesRes.data ?? []) {
+    const docId = page.document_id as string;
+    if (!pagesByDoc.has(docId)) {
+      pagesByDoc.set(docId, []);
+    }
+    pagesByDoc.get(docId)!.push({
+      pageNumber: page.page_number as number,
+      ocrText: (page.ocr_text as string) ?? '',
+    });
+  }
+
+  const documentsWithPages: DocumentWithPages[] = (documentsRes.data ?? []).map((doc) => ({
+    id: doc.id as string,
+    fileName: doc.file_name as string,
+    documentType: (doc.document_type as string) ?? 'altro',
+    pageCount: doc.page_count as number | null,
+    pages: pagesByDoc.get(doc.id as string) ?? [],
+  }));
 
   // Calculate medico-legal periods from events
   const eventsList = eventsRes.data ?? [];
@@ -66,5 +115,6 @@ export async function loadCaseDataForExport(caseId: string) {
     report: reportRes.data,
     calculations,
     periziaMetadata: (caseRow.perizia_metadata ?? null) as Record<string, unknown> | null,
+    documentsWithPages,
   };
 }

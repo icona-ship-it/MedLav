@@ -95,28 +95,46 @@ Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Co
 ${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
 Riporta i dati dell'esame obiettivo forniti.
 
-` : ''}### CONSIDERAZIONI MEDICO-LEGALI
-Analisi critica punto per punto dei profili di responsabilità. Valutazione di merito approfondita.
+` : ''}### CONSIDERAZIONI MEDICO-LEGALI / ELEMENTI DI RILIEVO
+Analisi critica punto per punto dei profili di responsabilità. Per OGNI criticità individuata, struttura la trattazione come segue:
+- **RILIEVO**: Descrizione oggettiva dell'elemento critico emerso dalla documentazione
+- **POSSIBILE CRITICITÀ**: Analisi del profilo di responsabilità professionale
+- **CONTRODEDUZIONI**: Argomentazioni a difesa dell'operato sanitario (se applicabili al ruolo)
+- **VALUTAZIONE**: Giudizio medico-legale motivato con riferimenti alla letteratura e alle linee guida
 
 ### NESSO CAUSALE
 Analisi del nesso di causalità con i criteri giuridici (più probabile che non, ragionevole certezza medico-legale).
 
 ### VALUTAZIONE DEL DANNO BIOLOGICO
-ITT/ITP calcolati + elementi per danno permanente.
+Quantificazione esplicita:
+- Danno biologico permanente: percentuale (%) con criteri tabellari utilizzati
+- ITT (Invalidità Temporanea Totale): periodo esatto con date
+- ITP (Invalidità Temporanea Parziale): periodo esatto con date e percentuale
+- Danno morale/esistenziale: se applicabile, con motivazione
+- Spese mediche future prevedibili: se documentabili
 
 ${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### RISPOSTA AI QUESITI
-Risposta punto per punto a CIASCUN quesito del Giudice. Ogni risposta deve essere argomentata con riferimenti alla documentazione.
+Risposta punto per punto a CIASCUN quesito del Giudice, NUMERATA corrispondentemente. Ogni risposta deve essere:
+- Argomentata con riferimenti specifici alla documentazione esaminata
+- Completa e autonomamente comprensibile
+- Conclusiva (esprimere un giudizio motivato, non lasciare la risposta aperta)
 
 ` : ''}${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE
 Analisi delle spese mediche documentate.
 
 ` : ''}### CONCLUSIONI
-Sintesi finale con formula di rito appropriata al ruolo.`;
+Sintesi finale con:
+- Formula di rito appropriata al ruolo (CTU: "A parere di questo CTU...", CTP: "Risulta evidente che...", Stragiudiziale: "Il caso presenta fondatezza per...")
+- Riepilogo quantitativo del danno biologico (% permanente, periodi ITT/ITP)
+- Giudizio complessivo sul nesso causale
+- Eventuali riserve o necessità di approfondimento`;
 
   return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
 
 ## IL TUO COMPITO
 Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione.
+
+NOTA: La documentazione sanitaria integrale viene riprodotta SEPARATAMENTE nel report finale (sezione DATI DOCUMENTAZIONE SANITARIA). Tu concentrati esclusivamente sull'ANALISI MEDICO-LEGALE: riassunto, cronologia ragionata, considerazioni critiche, nesso causale, valutazione danno e conclusioni. NON riprodurre il testo dei documenti — analizzalo.
 
 ${roleDirective}
 
