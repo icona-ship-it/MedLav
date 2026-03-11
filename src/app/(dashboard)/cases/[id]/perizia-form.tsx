@@ -2,19 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import {
-  Plus, X, Loader2, Save, Info, FileText,
+  Loader2, Save, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { updateCase } from '../../actions';
-import { QUESITI_TEMPLATES } from '@/lib/quesiti-templates';
-import { EsameObiettivoForm, type EsameObiettivoStructured } from '@/components/esame-obiettivo-form';
 import type { CaseData, PeriziaMetadataUI } from './types';
-import type { CaseType } from '@/types';
 
 export function PeriziaMetadataForm({
   caseId, caseData, onSaved, onProceedToNext,
@@ -41,18 +37,10 @@ export function PeriziaMetadataForm({
     dataOperazioni: existing.dataOperazioni ?? '',
     dataDeposito: existing.dataDeposito ?? '',
     fondoSpese: existing.fondoSpese ?? '',
-    esameObiettivo: existing.esameObiettivo ?? '',
-    speseMediche: existing.speseMediche ?? '',
   });
-
-  const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? ['']);
-  const [esameStrutturato, setEsameStrutturato] = useState<EsameObiettivoStructured | null>(
-    existing.esameObiettivoStrutturato ?? null,
-  );
 
   const handleSave = (proceed?: boolean) => {
     startTransition(async () => {
-      const filteredQuesiti = quesiti.filter((q) => q.trim().length > 0);
       const metadata: PeriziaMetadataUI = {
         ...(form.tribunale ? { tribunale: form.tribunale } : {}),
         ...(form.sezione ? { sezione: form.sezione } : {}),
@@ -68,10 +56,6 @@ export function PeriziaMetadataForm({
         ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
-        ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
-        ...(esameStrutturato ? { esameObiettivoStrutturato: esameStrutturato } : {}),
-        ...(form.speseMediche ? { speseMediche: form.speseMediche } : {}),
-        ...(filteredQuesiti.length > 0 ? { quesiti: filteredQuesiti } : {}),
       };
 
       const hasAnyValue = Object.keys(metadata).length > 0;
@@ -103,32 +87,6 @@ export function PeriziaMetadataForm({
       }
       onSaved();
     });
-  };
-
-  const addQuesito = () => setQuesiti([...quesiti, '']);
-  const removeQuesito = (index: number) => setQuesiti(quesiti.filter((_, i) => i !== index));
-  const updateQuesito = (index: number, value: string) => {
-    const next = [...quesiti];
-    next[index] = value;
-    setQuesiti(next);
-  };
-
-  const handleUseTemplate = () => {
-    const caseType = caseData.case_type as CaseType;
-    const template = QUESITI_TEMPLATES[caseType] ?? QUESITI_TEMPLATES.generica;
-
-    const hasExistingQuesiti = quesiti.some((q) => q.trim().length > 0);
-    if (hasExistingQuesiti) {
-      toast('Sovrascrivere i quesiti esistenti?', {
-        action: {
-          label: 'Sovrascrivi',
-          onClick: () => setQuesiti([...template]),
-        },
-        cancel: { label: 'Annulla', onClick: () => {} },
-      });
-    } else {
-      setQuesiti([...template]);
-    }
   };
 
   return (
@@ -233,80 +191,6 @@ export function PeriziaMetadataForm({
               <Input value={form.dataDeposito} onChange={(e) => setForm({ ...form, dataDeposito: e.target.value })} placeholder="es. 20/05/2025" />
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Quesiti */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Quesiti del Giudice</CardTitle>
-              <CardDescription>I quesiti verranno inclusi nella perizia con risposte punto per punto</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleUseTemplate}>
-                <FileText className="mr-1 h-3 w-3" />Usa template
-              </Button>
-              <Button variant="outline" size="sm" onClick={addQuesito}>
-                <Plus className="mr-1 h-3 w-3" />Aggiungi quesito
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {quesiti.map((q, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="mt-2.5 text-sm font-medium text-muted-foreground shrink-0">{i + 1}.</span>
-              <Textarea
-                rows={2}
-                value={q}
-                onChange={(e) => updateQuesito(i, e.target.value)}
-                placeholder={`Quesito ${i + 1}...`}
-                className="flex-1"
-              />
-              {quesiti.length > 1 && (
-                <Button variant="ghost" size="icon" className="mt-1 h-8 w-8 shrink-0" onClick={() => removeQuesito(i)} aria-label={`Rimuovi quesito ${i + 1}`}>
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Esame Obiettivo */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Esame Obiettivo</CardTitle>
-          <CardDescription>Dati della visita medico-legale del paziente</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EsameObiettivoForm
-            value={esameStrutturato}
-            freeText={form.esameObiettivo}
-            onChange={(structured, formattedText) => {
-              setEsameStrutturato(structured);
-              setForm({ ...form, esameObiettivo: formattedText });
-            }}
-            onFreeTextChange={(text) => setForm({ ...form, esameObiettivo: text })}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Spese Mediche */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Spese Mediche</CardTitle>
-          <CardDescription>Documentazione delle spese mediche sostenute</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            rows={4}
-            value={form.speseMediche}
-            onChange={(e) => setForm({ ...form, speseMediche: e.target.value })}
-            placeholder="Elenco spese mediche documentate..."
-          />
         </CardContent>
       </Card>
 
