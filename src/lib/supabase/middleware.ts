@@ -3,16 +3,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { generateCsrfToken } from '@/lib/csrf';
 
 /**
- * Build a Content-Security-Policy header with a per-request nonce.
- * In development, 'unsafe-eval' is added for Next.js HMR.
- * 'unsafe-inline' is kept for style-src (Tailwind CSS / shadcn inject inline styles).
+ * Build a Content-Security-Policy header.
+ * Uses 'unsafe-inline' for both script-src and style-src because:
+ * - Next.js App Router injects inline scripts for hydration without nonce support
+ * - Tailwind CSS / shadcn inject inline styles
+ * In development, 'unsafe-eval' is added for HMR.
  */
-function buildCspHeader(nonce: string): string {
+function buildCspHeader(): string {
   const isDev = process.env.NODE_ENV === 'development';
 
   const scriptSrc = isDev
-    ? `'self' 'nonce-${nonce}' 'unsafe-eval'`
-    : `'self' 'nonce-${nonce}'`;
+    ? `'self' 'unsafe-inline' 'unsafe-eval'`
+    : `'self' 'unsafe-inline'`;
 
   const directives = [
     `default-src 'self'`,
@@ -105,13 +107,8 @@ export async function updateSession(request: NextRequest) {
     });
   }
 
-  // Generate a per-request nonce for CSP (Edge-compatible, no Buffer)
-  const nonce = btoa(globalThis.crypto.randomUUID());
-  const cspHeader = buildCspHeader(nonce);
-
-  // Set CSP header and expose nonce so the root layout can read it
-  supabaseResponse.headers.set('Content-Security-Policy', cspHeader);
-  supabaseResponse.headers.set('x-nonce', nonce);
+  // Set CSP header (without nonce — Next.js App Router doesn't propagate nonces to hydration scripts)
+  supabaseResponse.headers.set('Content-Security-Policy', buildCspHeader());
 
   return supabaseResponse;
 }
