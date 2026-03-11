@@ -2,9 +2,9 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Trash2, RotateCcw, Loader2 } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileUpload } from '@/components/file-upload';
@@ -94,39 +94,61 @@ export function DocumentsSection({
     });
   }, [caseId, router]);
 
+  const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="space-y-4">
+      {/* Prosegui button — at top, always visible when docs uploaded */}
+      {hasUploadedDocs && (
+        <Button
+          size="lg"
+          className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+          onClick={onProceedToNext}
+        >
+          Prosegui con {uploadedCount} {uploadedCount === 1 ? 'documento' : 'documenti'}
+          <ArrowRight className="ml-2 h-5 w-5" />
+        </Button>
+      )}
+
+      {/* Upload area */}
       <Card>
         <CardHeader>
           <CardTitle>Carica Documentazione</CardTitle>
-          <CardDescription>Aggiungi documenti clinici al caso</CardDescription>
         </CardHeader>
         <CardContent>
           <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Documenti Caricati</CardTitle>
-          <CardDescription>
-            {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {documents.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Nessun documento caricato.
-            </p>
-          ) : (
-            <div className={`space-y-2 ${documents.length > 5 ? 'max-h-[400px] overflow-y-auto pr-1' : ''}`}>
+      {/* Documents list — single column */}
+      {documents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Documenti Caricati</span>
+              <Badge variant="secondary">{documents.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`space-y-2 ${documents.length > 6 ? 'max-h-[400px] overflow-y-auto pr-1' : ''}`}>
               {documents.map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
+                const isUploaded = doc.processing_status === 'caricato';
+                const isComplete = doc.processing_status === 'completato';
                 return (
-                  <div key={doc.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div
+                    key={doc.id}
+                    className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                      isComplete ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' : ''
+                    }`}
+                  >
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      {isComplete ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                      ) : (
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      )}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{doc.file_name}</p>
                         <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
@@ -134,9 +156,14 @@ export function DocumentsSection({
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="text-right">
-                        <Badge variant={processingVariant(doc.processing_status)}>
-                          {processingLabels[doc.processing_status] ?? doc.processing_status}
-                        </Badge>
+                        {!isUploaded && !isComplete && (
+                          <Badge variant={processingVariant(doc.processing_status)}>
+                            {processingLabels[doc.processing_status] ?? doc.processing_status}
+                          </Badge>
+                        )}
+                        {isUploaded && (
+                          <Badge variant="secondary">Pronto</Badge>
+                        )}
                         {doc.processing_status === 'errore' && doc.processing_error && (
                           <p className="mt-1 text-xs text-destructive max-w-[200px]">{doc.processing_error}</p>
                         )}
@@ -175,23 +202,8 @@ export function DocumentsSection({
                 );
               })}
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {hasUploadedDocs && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur p-4 lg:left-64">
-          <div className="mx-auto max-w-7xl">
-            <Button
-              size="lg"
-              className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
-              onClick={onProceedToNext}
-            >
-              Prosegui con {documents.filter(d => d.processing_status === 'caricato').length} documenti
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

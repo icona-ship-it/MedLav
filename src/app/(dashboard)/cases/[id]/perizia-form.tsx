@@ -194,23 +194,21 @@ export function PeriziaMetadataForm({
         </CardContent>
       </Card>
 
-      {/* Save button */}
-      <div className="flex justify-end gap-2">
+      {/* Action buttons — only two: save+proceed and skip */}
+      <div className="flex gap-3">
         {onProceedToNext && (
-          <Button variant="ghost" onClick={onProceedToNext} disabled={isPending}>
-            Salta
+          <Button variant="outline" onClick={onProceedToNext} disabled={isPending} className="flex-1">
+            Salta e continua
           </Button>
         )}
-        <Button variant="outline" onClick={() => handleSave()} disabled={isPending}>
+        <Button
+          onClick={() => handleSave(!!onProceedToNext)}
+          disabled={isPending}
+          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+        >
           {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-          Salva dati perizia
+          {onProceedToNext ? 'Salva e prosegui' : 'Salva'}
         </Button>
-        {onProceedToNext && (
-          <Button onClick={() => handleSave(true)} disabled={isPending}>
-            {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            Salva e prosegui
-          </Button>
-        )}
       </div>
     </div>
   );

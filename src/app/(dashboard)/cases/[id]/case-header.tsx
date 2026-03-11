@@ -15,7 +15,6 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { CompletenessIndicator } from '@/components/completeness-indicator';
 import { deleteCase, updateCaseStatus } from '../../actions';
 import { caseTypeLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
@@ -47,7 +46,6 @@ interface CaseHeaderProps {
 export function CaseHeader({
   caseId,
   caseData,
-  events,
   report,
   hasProcessingDocs,
   hasResults,
@@ -63,13 +61,6 @@ export function CaseHeader({
   const [isSearching, setIsSearching] = useState(false);
 
   const isArchived = caseData.status === 'archiviato';
-
-  // Completeness data
-  const pm = caseData.perizia_metadata;
-  const hasTribunale = !!(pm?.tribunale || pm?.rgNumber);
-  const hasQuesiti = !!(pm?.quesiti && pm.quesiti.some((q) => q.trim().length > 0));
-  const hasEsameObiettivo = !!(pm?.esameObiettivo && pm.esameObiettivo.trim().length > 0);
-  const hasParti = !!(pm?.parteRicorrente || pm?.parteResistente);
 
   // Debounced search
   const searchAbortRef = useRef<AbortController | null>(null);
@@ -218,18 +209,6 @@ export function CaseHeader({
         <div className="rounded-md border border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/20 px-4 py-2 text-sm text-yellow-800 dark:text-yellow-300">
           Questo è un caso dimostrativo con dati sintetici. Creane uno reale con i tuoi documenti.
         </div>
-      )}
-
-      {/* Completeness indicator - visible when results exist */}
-      {hasResults && (
-        <CompletenessIndicator
-          eventCount={events.length}
-          hasReport={!!report?.synthesis}
-          hasTribunale={hasTribunale}
-          hasQuesiti={hasQuesiti}
-          hasEsameObiettivo={hasEsameObiettivo}
-          hasParti={hasParti}
-        />
       )}
 
       {/* Edit Case Dialog */}

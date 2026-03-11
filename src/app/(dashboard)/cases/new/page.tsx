@@ -1,16 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, Scale, UserCheck, FileSearch, ChevronDown, Loader2 } from 'lucide-react';
+import { ArrowLeft, Scale, UserCheck, FileSearch, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createCase } from '../../actions';
 import { CASE_TYPES as caseTypes } from '@/lib/constants';
 
-// --- Role definitions with descriptions and icons ---
+// --- Role definitions ---
 
 const ROLE_OPTIONS = [
   {
@@ -36,23 +34,17 @@ const ROLE_OPTIONS = [
   },
 ] as const;
 
-// Split case types: common (first 7) vs other (rest)
-const COMMON_CASE_TYPES = caseTypes.slice(0, 7);
-const OTHER_CASE_TYPES = caseTypes.slice(7);
-
 // --- Component ---
 
 export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('ctu');
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(['generica']);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
   function toggleType(value: string) {
     setSelectedTypes(prev => {
       if (prev.includes(value)) {
-        if (prev.length === 1) return prev;
         return prev.filter(v => v !== value);
       }
       if (prev.length >= 3) return prev;
@@ -60,8 +52,14 @@ export default function NewCasePage() {
     });
   }
 
+  const canSubmit = selectedTypes.length > 0 && !isSubmitting;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (selectedTypes.length === 0) {
+      setError('Seleziona almeno una tipologia di caso');
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
 
@@ -106,7 +104,7 @@ export default function NewCasePage() {
 
         <Card>
           <CardContent className="pt-6 space-y-8">
-            {/* Step 1: Role selection — 3 big clickable cards */}
+            {/* Tipo di incarico — 3 big clickable cards */}
             <div className="space-y-3">
               <h2 className="text-lg font-semibold">Tipo di incarico</h2>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -136,20 +134,21 @@ export default function NewCasePage() {
                   );
                 })}
               </div>
-              {/* Hidden input for form submission */}
               <input type="hidden" name="caseRole" value={selectedRole} />
             </div>
 
-            {/* Step 2: Case type selection */}
+            {/* Tipologia caso — tutte visibili, nessuna pre-selezionata */}
             <div className="space-y-3">
               <div className="flex items-baseline gap-2">
                 <h2 className="text-lg font-semibold">Tipologia caso</h2>
                 <span className="text-xs text-muted-foreground">
-                  ({selectedTypes.length}/3 selezionati)
+                  {selectedTypes.length === 0
+                    ? 'Seleziona almeno 1 (max 3)'
+                    : `${selectedTypes.length}/3 selezionati`}
                 </span>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {COMMON_CASE_TYPES.map((type) => {
+                {caseTypes.map((type) => {
                   const isChecked = selectedTypes.includes(type.value);
                   const isDisabled = !isChecked && selectedTypes.length >= 3;
                   return (
@@ -178,100 +177,9 @@ export default function NewCasePage() {
                   );
                 })}
               </div>
-
-              {/* Other case types — collapsible */}
-              {OTHER_CASE_TYPES.length > 0 && (
-                <Collapsible>
-                  <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    <ChevronDown className="h-4 w-4" />
-                    Altre tipologie
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-2">
-                      {OTHER_CASE_TYPES.map((type) => {
-                        const isChecked = selectedTypes.includes(type.value);
-                        const isDisabled = !isChecked && selectedTypes.length >= 3;
-                        return (
-                          <label
-                            key={type.value}
-                            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm cursor-pointer transition-all ${
-                              isChecked
-                                ? 'border-primary bg-primary/5 font-medium'
-                                : isDisabled
-                                  ? 'opacity-50 cursor-not-allowed border-muted'
-                                  : 'border-muted hover:border-primary/40 hover:bg-muted/50'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              disabled={isDisabled}
-                              onChange={() => toggleType(type.value)}
-                              className="h-4 w-4 rounded border-gray-300 accent-primary"
-                            />
-                            <span>{type.label}</span>
-                            {selectedTypes[0] === type.value && selectedTypes.length > 1 && (
-                              <span className="ml-auto text-xs text-primary">(principale)</span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-
-              {/* Hidden inputs for form submission */}
-              <input type="hidden" name="caseType" value={selectedTypes[0]} />
-              <input type="hidden" name="caseTypes" value={JSON.stringify(selectedTypes)} />
+              <input type="hidden" name="caseType" value={selectedTypes[0] ?? 'generica'} />
+              <input type="hidden" name="caseTypes" value={JSON.stringify(selectedTypes.length > 0 ? selectedTypes : ['generica'])} />
             </div>
-
-            {/* Collapsible: Dettagli aggiuntivi */}
-            <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                <ChevronDown className={`h-4 w-4 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
-                Dettagli aggiuntivi (opzionale)
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3 space-y-4 rounded-lg border border-muted p-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label htmlFor="patientInitials" className="text-sm font-medium">
-                        Iniziali Paziente
-                      </label>
-                      <Input
-                        id="patientInitials"
-                        name="patientInitials"
-                        placeholder="es. M.R."
-                        maxLength={10}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="practiceReference" className="text-sm font-medium">
-                        Riferimento Pratica
-                      </label>
-                      <Input
-                        id="practiceReference"
-                        name="practiceReference"
-                        placeholder="es. RG 1234/2026"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label htmlFor="notes" className="text-sm font-medium">
-                      Note
-                    </label>
-                    <textarea
-                      id="notes"
-                      name="notes"
-                      rows={3}
-                      placeholder="Eventuali note o appunti sul caso"
-                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
           </CardContent>
         </Card>
 
@@ -283,8 +191,8 @@ export default function NewCasePage() {
           <Button
             type="submit"
             size="lg"
-            disabled={isSubmitting}
-            className="flex-1 py-6 text-base bg-green-600 hover:bg-green-700 text-white"
+            disabled={!canSubmit}
+            className="flex-1 py-6 text-base bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
