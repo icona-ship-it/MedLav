@@ -126,7 +126,12 @@ async function checkRateLimitRedis(params: RateLimitParams): Promise<RateLimitRe
  */
 export async function checkRateLimit(params: RateLimitParams): Promise<RateLimitResult> {
   if (isRedisConfigured) {
-    return checkRateLimitRedis(params);
+    try {
+      return await checkRateLimitRedis(params);
+    } catch {
+      // Redis error — fall back to in-memory instead of crashing
+      return checkRateLimitInMemory(params);
+    }
   }
   return checkRateLimitInMemory(params);
 }
