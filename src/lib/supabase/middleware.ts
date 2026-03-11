@@ -105,8 +105,8 @@ export async function updateSession(request: NextRequest) {
     });
   }
 
-  // Generate a per-request nonce for CSP (base64-encoded UUID)
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  // Generate a per-request nonce for CSP (Edge-compatible, no Buffer)
+  const nonce = btoa(globalThis.crypto.randomUUID());
   const cspHeader = buildCspHeader(nonce);
 
   // Set CSP header and expose nonce so the root layout can read it
