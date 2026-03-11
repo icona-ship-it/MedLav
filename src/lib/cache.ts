@@ -22,6 +22,7 @@ export const CACHE_TAGS = {
  * Revalidate a specific case's detail page and the cases list.
  * Call after any mutation that modifies case data, documents, events, or reports.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function revalidateCase(_caseId: string): void {
   revalidateTag(CACHE_TAGS.CASE_DETAIL);
   revalidateTag(CACHE_TAGS.CASES);
@@ -31,6 +32,7 @@ export function revalidateCase(_caseId: string): void {
  * Revalidate the cases list (dashboard stats + /cases page).
  * Call after create, delete, or status change on a case.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function revalidateCases(_userId: string): void {
   revalidateTag(CACHE_TAGS.CASES);
 }

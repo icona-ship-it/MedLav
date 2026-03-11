@@ -120,7 +120,7 @@ export function estimateBiologicalDamage(
     milanoComparison = buildMilanoComparison(midpoint);
   } else {
     // Milano as primary, TUN as secondary comparison
-    milanoComparison = buildMilanoComparison(midpoint, true);
+    milanoComparison = buildMilanoComparison(midpoint);
     lookupResult = calculateDannoBiologico(midpoint);
   }
 
@@ -216,7 +216,6 @@ function refineRange(
  */
 function buildMilanoComparison(
   midpoint: number,
-  _isPrimary: boolean = false,
 ): MilanoResult | null {
   // Milano tables only cover macropermanenti (10-100%)
   if (midpoint < 10) return null;

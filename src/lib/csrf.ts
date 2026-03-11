@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 
 /**
  * Generate a cryptographically random CSRF token.
+ * Uses Web Crypto API (available in Edge Runtime, Node.js, and browsers).
  */
 export function generateCsrfToken(): string {
-  return crypto.randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 /**
