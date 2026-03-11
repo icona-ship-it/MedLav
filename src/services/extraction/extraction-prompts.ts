@@ -150,7 +150,7 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 
 1. **ZERO DISCARD**: Non scartare MAI nessun evento. Tutto ciò che è documentato DEVE essere estratto.
 2. **COPIA FEDELE E DETTAGLIATA**: La descrizione deve essere LUNGA e COMPLETA — riporta FEDELMENTE tutto il contenuto clinico rilevante dal testo originale. Includi tutti i valori numerici, dosaggi, parametri. NON sintetizzare, NON abbreviare. Questa descrizione verrà usata direttamente nella relazione peritale.
-3. **DATE**: Usa formato YYYY-MM-DD. Se la data è imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese").
+3. **DATE**: Usa formato YYYY-MM-DD. Se la data è imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese"). Se la data è COMPLETAMENTE ASSENTE e non deducibile dal contesto, usa NULL per eventDate e datePrecision "sconosciuta". NON inventare MAI date — è meglio una data mancante che una data sbagliata.
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
@@ -220,6 +220,22 @@ Rispondi con un JSON valido. La struttura ESATTA deve essere:
       "reliabilityNotes": null,
       "sourceText": "Ricovero presso reparto ortopedia per coxartrosi dx",
       "sourcePages": [1]
+    },
+    {
+      "eventDate": null,
+      "datePrecision": "sconosciuta",
+      "eventType": "visita",
+      "title": "Visita di controllo (data non documentata)",
+      "description": "Referto di visita di controllo senza data indicata nel documento.",
+      "sourceType": "referto_controllo",
+      "diagnosis": null,
+      "doctor": null,
+      "facility": null,
+      "confidence": 50,
+      "requiresVerification": true,
+      "reliabilityNotes": "Data non presente nel documento originale",
+      "sourceText": "Visita di controllo: condizioni generali buone",
+      "sourcePages": [3]
     }
   ],
   "abbreviations": [

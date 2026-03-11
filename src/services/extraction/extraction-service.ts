@@ -348,9 +348,18 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     if (!e || typeof e !== 'object') continue;
     if (!('title' in e) && !('description' in e)) continue;
 
+    // Handle missing/invalid dates — never invent dates
+    const rawDate = e.eventDate ?? e.event_date;
+    const dateStr = rawDate != null ? String(rawDate) : '';
+    const isDateMissing = !dateStr || dateStr === '1900-01-01' || dateStr === 'null' || dateStr === 'undefined';
+    const eventDate = isDateMissing ? '' : dateStr;
+    const datePrecision = isDateMissing
+      ? 'sconosciuta'
+      : String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');
+
     validEvents.push({
-      eventDate: String(e.eventDate ?? e.event_date ?? '1900-01-01'),
-      datePrecision: String(e.datePrecision ?? e.date_precision ?? 'sconosciuta'),
+      eventDate,
+      datePrecision,
       eventType: String(e.eventType ?? e.event_type ?? 'altro'),
       title: String(e.title ?? 'Evento clinico'),
       description: String(e.description ?? ''),
@@ -359,8 +368,10 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
       doctor: e.doctor != null ? String(e.doctor) : null,
       facility: e.facility != null ? String(e.facility) : null,
       confidence: typeof e.confidence === 'number' ? Math.min(100, Math.max(0, e.confidence)) : 70,
-      requiresVerification: Boolean(e.requiresVerification ?? e.requires_verification ?? false),
-      reliabilityNotes: e.reliabilityNotes != null ? String(e.reliabilityNotes) : null,
+      requiresVerification: isDateMissing ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
+      reliabilityNotes: isDateMissing
+        ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Data non presente nel documento originale` : 'Data non presente nel documento originale')
+        : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
       sourceText: String(e.sourceText ?? e.source_text ?? ''),
       sourcePages: Array.isArray(e.sourcePages ?? e.source_pages) ? ((e.sourcePages ?? e.source_pages) as number[]) : [1],
     });

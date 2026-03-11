@@ -43,6 +43,8 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - NON omettere NESSUN evento dalla cronologia
 - Riportare i dati FEDELMENTE come dal documento, non sintetizzare
 - NON inventare dati non presenti negli eventi
+- NON inventare MAI date. Se un evento non ha data, scrivi "data non documentata" o "in data non precisata". NON usare date fittizie come 01/01/1900 o simili
+- Quando una data è segnata come "sconosciuta" o vuota, indicalo esplicitamente nel testo: "in data non risultante dalla documentazione in atti"
 - Linguaggio medico-legale formale
 - Scrivi in italiano
 - Usa intestazioni markdown (## per parti, ### per sotto-sezioni)

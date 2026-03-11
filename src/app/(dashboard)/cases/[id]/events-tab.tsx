@@ -156,7 +156,7 @@ function AddEventDialog({
 // --- Helpers ---
 
 function isVerificationEvent(e: EventRow): boolean {
-  return e.requires_verification || e.event_date.startsWith('1900-01-01');
+  return e.requires_verification || !e.event_date || e.event_date === '';
 }
 
 // --- Events Tab ---
