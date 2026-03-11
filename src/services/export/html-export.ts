@@ -332,7 +332,7 @@ ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' 
 </html>`;
 }
 
-// ── Professional HTML Export ──
+// ── Professional HTML Export (Court-Quality PDF) ──
 
 interface ProfessionalHtmlExportParams {
   caseCode: string;
@@ -370,8 +370,46 @@ function renderSectionContent(content: string, isMarkdown: boolean): string {
 }
 
 /**
- * Generate a court-quality professional HTML report.
- * Uses assembled sections with full OCR documentation, print-optimized CSS.
+ * Build CSS for BOZZA diagonal watermark (only when report status is 'bozza').
+ * For non-bozza reports, no watermark is rendered.
+ */
+function buildDraftWatermarkCss(reportStatus?: string): string {
+  if (reportStatus !== 'bozza') return '';
+  return `
+  .watermark-overlay::after {
+    content: 'BOZZA';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 100pt;
+    font-weight: bold;
+    color: rgba(200, 0, 0, 0.08);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+    letter-spacing: 20px;
+    text-transform: uppercase;
+    font-family: 'Times New Roman', Georgia, serif;
+  }
+  @media print {
+    .watermark-overlay::after {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 100pt;
+      color: rgba(200, 0, 0, 0.06);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }`;
+}
+
+/**
+ * Generate a court-quality professional HTML report optimized for Cmd+P -> Save as PDF.
+ * Produces A4 pages with proper legal formatting, cover page, TOC, running headers/footers,
+ * and professional typography suitable for court submission.
  */
 export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportParams): string {
   const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus } = params;
@@ -406,20 +444,39 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
   const nrgInfo = pm.rgNumber ? `R.G. ${pm.rgNumber}` : caseCode;
   const patientInfo = patientInitials ?? '';
   const hasCollaboratore = Boolean(pm.collaboratoreName);
+  const isDraft = reportStatus === 'bozza';
 
-  // Build TOC
+  // Build TOC entries with dotted leaders
   const tocHtml = assembled.tableOfContents.map((item) =>
-    `<a href="#section-${item.id}">${item.number}. ${escapeHtmlPro(item.title)}</a>`,
+    `<div class="toc-entry">
+      <a href="#section-${item.id}">
+        <span class="toc-number">${item.number}.</span>
+        <span class="toc-title">${escapeHtmlPro(item.title)}</span>
+        <span class="toc-dots"></span>
+      </a>
+    </div>`,
   ).join('\n    ');
 
-  // Build sections
+  // Build sections with proper legal formatting
   const sectionsHtml = assembled.sections.map((section) => {
     const content = renderSectionContent(section.content, section.isMarkdown);
     return `<section class="report-section" id="section-${section.id}">
-  <h2>${section.number}. ${escapeHtmlPro(section.title)}</h2>
+  <h2><span class="section-num">${section.number}.</span> ${escapeHtmlPro(section.title)}</h2>
   <div class="section-content">${content}</div>
 </section>`;
   }).join('\n\n');
+
+  // Cover page: build party line for "Ricorrente vs Resistente"
+  const partiesLine = (pm.parteRicorrente && pm.parteResistente)
+    ? `<div class="cover-parties">
+        <span class="party-name">${escapeHtmlPro(pm.parteRicorrente)}</span>
+        <span class="party-vs">contro</span>
+        <span class="party-name">${escapeHtmlPro(pm.parteResistente)}</span>
+      </div>`
+    : [
+      pm.parteRicorrente ? `<div class="cover-party-single"><strong>Parte ricorrente:</strong> ${escapeHtmlPro(pm.parteRicorrente)}</div>` : '',
+      pm.parteResistente ? `<div class="cover-party-single"><strong>Parte resistente:</strong> ${escapeHtmlPro(pm.parteResistente)}</div>` : '',
+    ].filter(Boolean).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="it">
@@ -428,259 +485,611 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtmlPro(roleTitle)} - ${escapeHtmlPro(nrgInfo)}</title>
 <style>
+  /* ══════════════════════════════════════════════════════
+     A4 PAGE SETUP — Court-Quality Legal Document
+     ══════════════════════════════════════════════════════ */
   @page {
-    margin: 2.5cm 2cm 2cm 2cm;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Times New Roman', Georgia, 'DejaVu Serif', serif;
-    font-size: 11pt;
-    line-height: 1.6;
-    color: #000;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-    text-align: justify;
+    size: A4;
+    margin: 2.5cm 2cm 2.5cm 2.5cm;
   }
 
-  /* ── Running Header (2-column, benchmark style) ── */
+  @page :first {
+    margin-top: 2cm;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Times New Roman', Georgia, 'DejaVu Serif', 'Liberation Serif', serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #000;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 30px 20px;
+    text-align: justify;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+  }
+
+  /* ── Print Button (screen only) ── */
+  .print-toolbar {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10000;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn-print {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: #1e40af;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .btn-print:hover {
+    background: #1534a0;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.4);
+  }
+  .btn-print svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+  ${isDraft ? `.draft-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #dc2626;
+    color: #fff;
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }` : ''}
+
+  /* ── Running Header (screen) ── */
   .running-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    padding-bottom: 6px;
-    border-bottom: 1.5px dotted #444;
-    margin-bottom: 20px;
-    font-size: 9.5pt;
-    line-height: 1.3;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #444;
+    margin-bottom: 24px;
+    font-size: 9pt;
+    color: #444;
   }
-  .running-header .rh-col {
-    max-width: 48%;
-  }
-  .running-header .rh-col-left { text-align: left; }
-  .running-header .rh-col-right { text-align: right; }
-  .running-header .rh-name {
+  .running-header .rh-left { text-align: left; }
+  .running-header .rh-right {
+    text-align: right;
     font-weight: bold;
-    font-style: italic;
     font-variant: small-caps;
-    font-size: 10pt;
-  }
-  .running-header .rh-title {
-    font-variant: small-caps;
-    font-size: 8.5pt;
-    color: #333;
+    letter-spacing: 2px;
   }
 
-  /* ── Running Footer (benchmark style) ── */
+  /* ── Running Footer (screen) ── */
   .running-footer {
-    border-top: 1.5px dotted #444;
-    padding-top: 6px;
-    margin-top: 24px;
+    border-top: 1px solid #444;
+    padding-top: 8px;
+    margin-top: 30px;
     display: flex;
     justify-content: space-between;
     font-size: 8.5pt;
-    font-style: italic;
-    color: #444;
+    color: #555;
   }
 
-  /* Cover / Title */
+  /* ══════════════════════════════════════════════════════
+     COVER PAGE
+     ══════════════════════════════════════════════════════ */
   .cover {
     text-align: center;
-    padding: 40px 0 30px;
-    margin-bottom: 30px;
+    padding: 60px 0 40px;
     page-break-after: always;
+    min-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
   }
-  .cover .tribunale { font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; }
-  .cover .sezione { font-size: 12pt; font-style: italic; margin-bottom: 6px; }
-  .cover .rg { font-size: 12pt; margin-bottom: 20px; }
-  .cover .role-title { font-size: 14pt; font-weight: bold; font-style: italic; text-decoration: underline; margin: 20px 0 10px; }
-  .cover .patient { font-size: 12pt; margin-bottom: 20px; font-variant: small-caps; }
-  .cover .details { text-align: left; font-size: 11pt; margin: 20px auto; max-width: 500px; }
-  .cover .details p { margin: 4px 0; }
+  .cover-rule {
+    width: 60%;
+    height: 2px;
+    background: #000;
+    margin: 0 auto;
+  }
+  .cover-rule-thin {
+    width: 40%;
+    height: 1px;
+    background: #666;
+    margin: 8px auto;
+  }
+  .cover .tribunale {
+    font-size: 16pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin: 24px 0 4px;
+  }
+  .cover .sezione {
+    font-size: 12pt;
+    font-style: italic;
+    margin-bottom: 4px;
+  }
+  .cover .rg {
+    font-size: 13pt;
+    font-weight: bold;
+    margin: 8px 0 24px;
+  }
+  .cover .role-title {
+    font-size: 16pt;
+    font-weight: bold;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin: 30px 0 16px;
+    padding: 12px 0;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+  }
+  .cover .patient {
+    font-size: 13pt;
+    margin: 16px 0 8px;
+    font-style: italic;
+  }
+  .cover-parties {
+    margin: 20px 0;
+    font-size: 13pt;
+  }
+  .cover-parties .party-name {
+    font-weight: bold;
+    display: block;
+    margin: 4px 0;
+  }
+  .cover-parties .party-vs {
+    font-style: italic;
+    font-size: 11pt;
+    color: #444;
+    display: block;
+    margin: 6px 0;
+  }
+  .cover-party-single {
+    font-size: 12pt;
+    margin: 4px 0;
+  }
+  .cover .judge-line {
+    font-size: 12pt;
+    margin: 16px 0 6px;
+    font-style: italic;
+  }
+  .cover-details {
+    text-align: left;
+    font-size: 11pt;
+    margin: 30px auto 0;
+    max-width: 480px;
+    line-height: 1.8;
+  }
+  .cover-details table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .cover-details td {
+    padding: 3px 8px;
+    vertical-align: top;
+    font-size: 11pt;
+  }
+  .cover-details td:first-child {
+    font-weight: bold;
+    white-space: nowrap;
+    width: 1%;
+    padding-right: 16px;
+  }
+  .cover-ctp-block {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px dotted #999;
+  }
+  .cover-ctp-block p {
+    margin: 3px 0;
+    font-size: 11pt;
+  }
+  .cover-dates {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 10pt;
+    color: #444;
+  }
+  .cover-dates p {
+    margin: 2px 0;
+  }
+  .cover-casecode {
+    margin-top: 40px;
+    font-size: 9pt;
+    color: #888;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+  }
 
-  /* Table of Contents */
+  /* ══════════════════════════════════════════════════════
+     TABLE OF CONTENTS
+     ══════════════════════════════════════════════════════ */
   .toc {
     page-break-after: always;
-    margin-bottom: 30px;
+    padding: 40px 0 20px;
   }
-  .toc h2 { text-align: center; font-size: 14pt; text-decoration: underline; margin-bottom: 20px; }
-  .toc a { color: #000; text-decoration: none; display: block; padding: 4px 0; font-size: 11pt; }
-  .toc a:hover { text-decoration: underline; }
+  .toc-heading {
+    text-align: center;
+    font-size: 14pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+  .toc-rule {
+    width: 30%;
+    height: 1px;
+    background: #000;
+    margin: 0 auto 30px;
+  }
+  .toc-entry {
+    margin-bottom: 2px;
+  }
+  .toc-entry a {
+    color: #000;
+    text-decoration: none;
+    display: flex;
+    align-items: baseline;
+    font-size: 12pt;
+    line-height: 2;
+  }
+  .toc-entry a:hover {
+    color: #1e40af;
+  }
+  .toc-number {
+    font-weight: bold;
+    min-width: 30px;
+    flex-shrink: 0;
+  }
+  .toc-title {
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+  .toc-dots {
+    flex-grow: 1;
+    border-bottom: 1px dotted #999;
+    margin: 0 4px;
+    min-width: 20px;
+    position: relative;
+    top: -4px;
+  }
 
-  /* Sections */
-  .report-section { margin-bottom: 24px; }
+  /* ══════════════════════════════════════════════════════
+     REPORT SECTIONS
+     ══════════════════════════════════════════════════════ */
+  .report-section {
+    margin-bottom: 28px;
+  }
   .report-section h2 {
     font-size: 13pt;
-    text-decoration: underline;
+    font-weight: bold;
     text-transform: uppercase;
-    margin: 30px 0 12px;
+    margin: 32px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1.5px solid #000;
     page-break-after: avoid;
+    letter-spacing: 1px;
+  }
+  .report-section h2 .section-num {
+    font-weight: bold;
   }
   .report-section h3 {
     font-size: 12pt;
     font-weight: bold;
-    margin: 16px 0 8px;
+    margin: 18px 0 8px;
     page-break-after: avoid;
   }
   .report-section h4 {
     font-size: 11pt;
     font-weight: bold;
-    margin: 12px 0 6px;
+    font-style: italic;
+    margin: 14px 0 6px;
     page-break-after: avoid;
   }
-  .section-content { margin-top: 8px; }
-  .section-content p { margin-bottom: 8px; text-indent: 0; }
-  .section-content ul, .section-content ol { margin: 8px 0 8px 24px; }
-  .section-content li { margin-bottom: 4px; }
 
-  /* OCR Tables */
+  .section-content {
+    margin-top: 10px;
+  }
+  .section-content p {
+    margin-bottom: 10px;
+    text-indent: 1cm;
+    text-align: justify;
+  }
+  .section-content p:first-child {
+    text-indent: 0;
+  }
+  .section-content ul {
+    margin: 10px 0 10px 1.5cm;
+    list-style-type: disc;
+  }
+  .section-content ol {
+    margin: 10px 0 10px 1.5cm;
+    list-style-type: none;
+    counter-reset: legal-list;
+  }
+  .section-content ol > li {
+    counter-increment: legal-list;
+    position: relative;
+    padding-left: 0;
+  }
+  .section-content ol > li::before {
+    content: counter(legal-list) ")";
+    font-weight: bold;
+    position: absolute;
+    left: -1.5cm;
+    width: 1.2cm;
+    text-align: right;
+  }
+  .section-content li {
+    margin-bottom: 6px;
+    text-align: justify;
+  }
+
+  /* ── Tables in sections ── */
   .ocr-table {
     width: 100%;
     border-collapse: collapse;
-    margin: 12px 0;
+    margin: 14px 0;
     font-size: 10pt;
     page-break-inside: avoid;
   }
-  .ocr-table th, .ocr-table td {
+  .ocr-table th,
+  .ocr-table td {
     border: 1px solid #333;
-    padding: 4px 8px;
+    padding: 5px 10px;
     text-align: left;
     vertical-align: top;
   }
   .ocr-table th {
-    background: #f0f0f0;
+    background: #e8e8e8;
     font-weight: bold;
+    text-transform: uppercase;
+    font-size: 9pt;
+    letter-spacing: 0.5px;
+  }
+  .ocr-table tr:nth-child(even) td {
+    background: #fafafa;
   }
 
-  /* Horizontal rule (page separator in OCR) */
-  hr { border: none; border-top: 1px dashed #999; margin: 16px 0; }
+  /* ── Horizontal rule ── */
+  hr {
+    border: none;
+    border-top: 1px dashed #999;
+    margin: 18px 0;
+  }
 
-  /* Footer for screen */
+  /* ── Screen footer ── */
   .screen-footer {
-    margin-top: 40px;
+    margin-top: 50px;
     padding-top: 15px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid #ccc;
     font-size: 9pt;
     color: #999;
     text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
-  /* Print: fixed header/footer on every page */
-  .print-header, .print-footer { display: none; }
+  /* ══════════════════════════════════════════════════════
+     PRINT STYLES — Cmd+P / Save as PDF
+     ══════════════════════════════════════════════════════ */
+  .print-header-fixed,
+  .print-footer-fixed {
+    display: none;
+  }
 
   @media print {
-    body { padding: 0; max-width: 100%; padding-top: 60px; padding-bottom: 40px; }
-    .screen-footer { display: none; }
-    .running-header { display: none; }
-    .running-footer { display: none; }
-    .print-header {
+    body {
+      padding: 0;
+      max-width: 100%;
+      font-size: 12pt;
+      padding-top: 50px;
+      padding-bottom: 40px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Hide screen-only elements */
+    .print-toolbar { display: none !important; }
+    .screen-footer { display: none !important; }
+    .running-header { display: none !important; }
+    .running-footer { display: none !important; }
+
+    /* Fixed header on every printed page */
+    .print-header-fixed {
       display: flex;
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       justify-content: space-between;
-      align-items: flex-start;
-      padding: 0 0 6px 0;
-      border-bottom: 1.5px dotted #444;
-      font-size: 9.5pt;
-      line-height: 1.3;
+      align-items: center;
+      padding: 0 0 4px 0;
+      border-bottom: 1px solid #666;
+      font-size: 8.5pt;
+      color: #555;
       background: #fff;
       z-index: 100;
     }
-    .print-header .rh-col { max-width: 48%; }
-    .print-header .rh-col-left { text-align: left; }
-    .print-header .rh-col-right { text-align: right; }
-    .print-header .rh-name { font-weight: bold; font-style: italic; font-variant: small-caps; font-size: 10pt; }
-    .print-header .rh-title { font-variant: small-caps; font-size: 8.5pt; color: #333; }
-    .print-footer {
-      display: flex;
+    .print-header-fixed .ph-left {
+      font-style: italic;
+    }
+    .print-header-fixed .ph-right {
+      font-weight: bold;
+      font-variant: small-caps;
+      letter-spacing: 2px;
+      font-size: 8pt;
+    }
+
+    /* Fixed footer on every printed page */
+    .print-footer-fixed {
+      display: block;
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      justify-content: space-between;
-      padding: 6px 0 0 0;
-      border-top: 1.5px dotted #444;
-      font-size: 8.5pt;
-      font-style: italic;
-      color: #444;
+      text-align: center;
+      padding: 4px 0 0 0;
+      border-top: 1px solid #666;
+      font-size: 8pt;
+      color: #555;
       background: #fff;
       z-index: 100;
     }
-    .report-section { page-break-before: auto; }
-    .report-section h2 { page-break-after: avoid; }
-    .ocr-table { page-break-inside: avoid; }
+
+    /* Page break control */
+    h2, h3 {
+      page-break-after: avoid;
+    }
+    .report-section {
+      page-break-before: auto;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .ocr-table {
+      page-break-inside: avoid;
+    }
+
+    /* Tables print with visible borders */
+    .ocr-table th {
+      background: #e8e8e8 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .ocr-table tr:nth-child(even) td {
+      background: #fafafa !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Links: no color change */
     a { color: #000; text-decoration: none; }
+
+    /* Cover page fills the page */
+    .cover {
+      min-height: auto;
+      padding: 80px 0 40px;
+    }
   }
-  ${buildWatermarkCss(reportStatus)}
+
+  /* ── BOZZA Watermark (draft only) ── */
+  ${buildDraftWatermarkCss(reportStatus)}
 </style>
 </head>
 <body>
-<div class="watermark-wrapper">
-<!-- Print-only fixed header (2 columns, benchmark style) -->
-<div class="print-header">
-  <div class="rh-col rh-col-left">
-    ${pm.ctuName ? `<div class="rh-name">${escapeHtmlPro(pm.ctuName)}</div>` : ''}
-    ${pm.ctuTitle ? `<div class="rh-title">${escapeHtmlPro(pm.ctuTitle)}</div>` : ''}
-  </div>
-  ${hasCollaboratore ? `<div class="rh-col rh-col-right">
-    <div class="rh-name">${escapeHtmlPro(pm.collaboratoreName!)}</div>
-    ${pm.collaboratoreTitle ? `<div class="rh-title">${escapeHtmlPro(pm.collaboratoreTitle)}</div>` : ''}
-  </div>` : ''}
-</div>
-<!-- Print-only fixed footer -->
-<div class="print-footer">
-  <span>${escapeHtmlPro(pm.rgNumber ? `${pm.rgNumber} N.R.G.` : caseCode)} – ${escapeHtmlPro(patientInfo)}${pm.parteResistente ? ` // ${escapeHtmlPro(pm.parteResistente)}` : ''}</span>
+<div class="watermark-overlay">
+<!-- ═══ Print Toolbar (screen only) ═══ -->
+<div class="print-toolbar no-print">
+  <button class="btn-print" onclick="window.print()" title="Stampa o salva come PDF">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+    Stampa PDF
+  </button>
+  ${isDraft ? '<span class="draft-badge">BOZZA</span>' : ''}
 </div>
 
-<!-- Screen header (visible on screen, hidden in print) -->
-<div class="running-header">
-  <div class="rh-col rh-col-left">
-    ${pm.ctuName ? `<div class="rh-name">${escapeHtmlPro(pm.ctuName)}</div>` : ''}
-    ${pm.ctuTitle ? `<div class="rh-title">${escapeHtmlPro(pm.ctuTitle)}</div>` : ''}
-  </div>
-  ${hasCollaboratore ? `<div class="rh-col rh-col-right">
-    <div class="rh-name">${escapeHtmlPro(pm.collaboratoreName!)}</div>
-    ${pm.collaboratoreTitle ? `<div class="rh-title">${escapeHtmlPro(pm.collaboratoreTitle)}</div>` : ''}
-  </div>` : ''}
+<!-- ═══ Print-only fixed header ═══ -->
+<div class="print-header-fixed">
+  <span class="ph-left">${escapeHtmlPro(nrgInfo)}</span>
+  <span class="ph-right">Riservato</span>
 </div>
 
-<!-- COVER PAGE -->
+<!-- ═══ Print-only fixed footer ═══ -->
+<div class="print-footer-fixed">
+  ${escapeHtmlPro(roleTitle)} &mdash; ${escapeHtmlPro(nrgInfo)}
+</div>
+
+<!-- ═══ Screen header ═══ -->
+<div class="running-header no-print-hide">
+  <div class="rh-left">${escapeHtmlPro(nrgInfo)}${patientInfo ? ` &mdash; ${escapeHtmlPro(patientInfo)}` : ''}</div>
+  <div class="rh-right">Riservato</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     COVER PAGE (Frontespizio)
+     ═══════════════════════════════════════════════ -->
 <div class="cover">
+  <div class="cover-rule"></div>
+  <div class="cover-rule-thin"></div>
+
   ${pm.tribunale ? `<div class="tribunale">${escapeHtmlPro(pm.tribunale)}</div>` : ''}
   ${pm.sezione ? `<div class="sezione">${escapeHtmlPro(pm.sezione)}</div>` : ''}
   ${pm.rgNumber ? `<div class="rg">n. R.G. ${escapeHtmlPro(pm.rgNumber)}</div>` : ''}
+
+  ${pm.judgeName ? `<div class="judge-line">Giudice: ${escapeHtmlPro(pm.judgeName)}</div>` : ''}
+
+  ${partiesLine}
+
   <div class="role-title">${escapeHtmlPro(roleTitle)}</div>
+
   ${patientInitials ? `<div class="patient">relativa alla vicenda clinica del/della sig. ${escapeHtmlPro(patientInitials)}</div>` : ''}
-  <div class="details">
-    ${pm.ctuName ? `<p><strong>${caseRole === 'ctu' ? 'CTU' : 'CTP'}:</strong> ${escapeHtmlPro(pm.ctuName)}${pm.ctuTitle ? ` — ${escapeHtmlPro(pm.ctuTitle)}` : ''}</p>` : ''}
-    ${hasCollaboratore ? `<p><strong>Collaboratore:</strong> ${escapeHtmlPro(pm.collaboratoreName!)}${pm.collaboratoreTitle ? ` — ${escapeHtmlPro(pm.collaboratoreTitle)}` : ''}</p>` : ''}
-    ${pm.judgeName ? `<p><strong>Giudice:</strong> ${escapeHtmlPro(pm.judgeName)}</p>` : ''}
-    ${pm.parteRicorrente ? `<p><strong>Parte Ricorrente:</strong> ${escapeHtmlPro(pm.parteRicorrente)}</p>` : ''}
-    ${pm.parteResistente ? `<p><strong>Parte Resistente:</strong> ${escapeHtmlPro(pm.parteResistente)}</p>` : ''}
-    ${pm.ctpRicorrente ? `<p><strong>CTP Ricorrente:</strong> ${escapeHtmlPro(pm.ctpRicorrente)}</p>` : ''}
-    ${pm.ctpResistente ? `<p><strong>CTP Resistente:</strong> ${escapeHtmlPro(pm.ctpResistente)}</p>` : ''}
-    ${pm.dataIncarico ? `<p><strong>Data incarico:</strong> ${escapeHtmlPro(pm.dataIncarico)}</p>` : ''}
-    ${pm.dataDeposito ? `<p><strong>Termine deposito:</strong> ${escapeHtmlPro(pm.dataDeposito)}</p>` : ''}
-    ${pm.fondoSpese ? `<p><strong>Fondo spese:</strong> ${escapeHtmlPro(pm.fondoSpese)}</p>` : ''}
+
+  <div class="cover-details">
+    <table>
+      ${pm.ctuName ? `<tr><td>${caseRole === 'ctu' ? 'CTU:' : caseRole === 'ctp' ? 'CTP:' : 'Perito:'}</td><td>${escapeHtmlPro(pm.ctuName)}${pm.ctuTitle ? `<br><em>${escapeHtmlPro(pm.ctuTitle)}</em>` : ''}</td></tr>` : ''}
+      ${hasCollaboratore ? `<tr><td>Collaboratore:</td><td>${escapeHtmlPro(pm.collaboratoreName!)}${pm.collaboratoreTitle ? `<br><em>${escapeHtmlPro(pm.collaboratoreTitle)}</em>` : ''}</td></tr>` : ''}
+    </table>
   </div>
+
+  ${(pm.ctpRicorrente || pm.ctpResistente) ? `<div class="cover-ctp-block">
+    ${pm.ctpRicorrente ? `<p><strong>CTP parte ricorrente:</strong> ${escapeHtmlPro(pm.ctpRicorrente)}</p>` : ''}
+    ${pm.ctpResistente ? `<p><strong>CTP parte resistente:</strong> ${escapeHtmlPro(pm.ctpResistente)}</p>` : ''}
+  </div>` : ''}
+
+  <div class="cover-dates">
+    ${pm.dataIncarico ? `<p>Data incarico: ${escapeHtmlPro(pm.dataIncarico)}</p>` : ''}
+    ${pm.dataOperazioni ? `<p>Inizio operazioni: ${escapeHtmlPro(pm.dataOperazioni)}</p>` : ''}
+    ${pm.dataDeposito ? `<p>Termine deposito: ${escapeHtmlPro(pm.dataDeposito)}</p>` : ''}
+    ${pm.fondoSpese ? `<p>Fondo spese: ${escapeHtmlPro(pm.fondoSpese)}</p>` : ''}
+  </div>
+
+  <div class="cover-casecode">${escapeHtmlPro(caseCode)}</div>
 </div>
 
-<!-- TABLE OF CONTENTS -->
+<!-- ═══════════════════════════════════════════════
+     TABLE OF CONTENTS (Indice)
+     ═══════════════════════════════════════════════ -->
 <div class="toc">
-  <h2>INDICE</h2>
-  <div>
+  <div class="toc-heading">Indice</div>
+  <div class="toc-rule"></div>
+  <div class="toc-entries">
     ${tocHtml}
   </div>
 </div>
 
-<!-- REPORT SECTIONS -->
+<!-- ═══════════════════════════════════════════════
+     REPORT SECTIONS
+     ═══════════════════════════════════════════════ -->
 ${sectionsHtml}
 
+<!-- ═══ Screen footer ═══ -->
 <footer class="screen-footer">
   Report generato da MedLav il ${now}
 </footer>
+
+<!-- ═══ Running footer (screen) ═══ -->
+<div class="running-footer">
+  <span>${escapeHtmlPro(nrgInfo)}</span>
+  <span>${now}</span>
+</div>
 </div>
 </body>
 </html>`;

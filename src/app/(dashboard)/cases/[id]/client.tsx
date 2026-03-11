@@ -340,6 +340,9 @@ export function CaseDetailClient({
                   events={events}
                   anomalyCount={localAnomalies.length}
                   missingDocsCount={missingDocs.length}
+                  anomalies={localAnomalies}
+                  missingDocs={missingDocs}
+                  onSwitchToAnomalies={() => setActiveResultTab('anomalies')}
                   onEventClick={(orderNumber) => {
                     setHighlightedEventId(orderNumber);
                     setActiveResultTab('events');
@@ -363,7 +366,11 @@ export function CaseDetailClient({
               </TabsContent>
 
               <TabsContent value="missing">
-                <MissingDocsSection missingDocs={missingDocs} />
+                <MissingDocsSection
+                  missingDocs={missingDocs}
+                  caseId={caseId}
+                  onUploadComplete={() => router.refresh()}
+                />
               </TabsContent>
 
               <TabsContent value="perizia">

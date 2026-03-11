@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useCallback, useTransition } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2 } from 'lucide-react';
+import { useState, useCallback, useTransition, useRef } from 'react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { anomalyTypeLabels } from '@/lib/constants';
-import { updateAnomaly, dismissAnomaly } from '../../actions';
+import { updateAnomaly, dismissAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
+import { createClient } from '@/lib/supabase/client';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
 // --- Types ---
@@ -29,6 +30,8 @@ interface AnomaliesSectionProps {
 
 interface MissingDocsSectionProps {
   missingDocs: MissingDocRow[];
+  caseId?: string;
+  onUploadComplete?: () => void;
 }
 
 // --- Helpers ---
@@ -281,9 +284,106 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
   );
 }
 
+// --- Missing Doc Upload Button ---
+
+function MissingDocUploadButton({
+  docName,
+  caseId,
+  onUploadComplete,
+}: {
+  docName: string;
+  caseId: string;
+  onUploadComplete?: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Non autenticato');
+        return;
+      }
+
+      const ext = file.name.split('.').pop() ?? 'bin';
+      const storagePath = `${user.id}/${caseId}/${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        toast.error(`Errore upload: ${uploadError.message}`);
+        return;
+      }
+
+      const result = await saveDocumentMetadata({
+        caseId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        storagePath,
+        documentType: 'altro',
+      });
+
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      await updateCaseDocumentCount(caseId);
+      toast.success(`"${file.name}" caricato come "${docName}"`);
+      onUploadComplete?.();
+    } catch {
+      toast.error('Errore di rete durante il caricamento');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [caseId, docName, onUploadComplete]);
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-xs mt-2"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isUploading}
+      >
+        {isUploading ? (
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+        ) : (
+          <Upload className="mr-1 h-3 w-3" />
+        )}
+        {isUploading ? 'Caricamento...' : 'Carica documento'}
+      </Button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.doc,.docx,.xls,.xlsx"
+        className="hidden"
+        onChange={handleFileSelected}
+        aria-label={`Carica documento per ${docName}`}
+      />
+    </>
+  );
+}
+
 // --- Missing Docs Component ---
 
-export function MissingDocsSection({ missingDocs }: MissingDocsSectionProps) {
+export function MissingDocsSection({ missingDocs, caseId, onUploadComplete }: MissingDocsSectionProps) {
   return (
     <Card>
       <CardHeader>
@@ -323,6 +423,13 @@ export function MissingDocsSection({ missingDocs }: MissingDocsSectionProps) {
                   <p className="mt-1 text-sm text-muted-foreground">{d.reason}</p>
                   {d.related_event && (
                     <p className="mt-1 text-xs text-muted-foreground">Evento correlato: {d.related_event}</p>
+                  )}
+                  {caseId && (
+                    <MissingDocUploadButton
+                      docName={displayName}
+                      caseId={caseId}
+                      onUploadComplete={onUploadComplete}
+                    />
                   )}
                 </div>
               );
