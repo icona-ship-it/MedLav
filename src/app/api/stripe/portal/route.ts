@@ -26,7 +26,7 @@ export async function POST() {
     }
 
     const stripe = getStripeClient();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://medlav.it';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://medlav.it';
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,

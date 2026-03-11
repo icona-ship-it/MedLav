@@ -1,4 +1,4 @@
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://medlav.it';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://medlav.it';
 
 interface ReportReadyEmailParams {
   caseCode: string;
