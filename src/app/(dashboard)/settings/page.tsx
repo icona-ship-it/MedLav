@@ -4,9 +4,71 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getProfile, updateProfile, changePassword, exportMyData, deleteMyAccount } from './actions';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { getProfile, updateProfile, changePassword, updateRetentionPolicy, updateEmailNotifications, exportMyData, deleteMyAccount } from './actions';
 import type { ProfileData } from './actions';
-import { AlertTriangle, Download, CreditCard } from 'lucide-react';
+import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+
+interface PortalResponse {
+  success: boolean;
+  data?: { url: string };
+  error?: string;
+}
+
+function SubscriptionButton({
+  hasStripeCustomer,
+  isActive,
+}: {
+  hasStripeCustomer: boolean;
+  isActive: boolean;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  if (!hasStripeCustomer) {
+    return (
+      <Button size="sm" asChild>
+        <a href="/pricing">Passa a Pro</a>
+      </Button>
+    );
+  }
+
+  async function handlePortal() {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      const data = (await res.json()) as PortalResponse;
+      if (data.success && data.data?.url) {
+        window.location.href = data.data.url;
+      } else {
+        setIsLoading(false);
+      }
+    } catch {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={isLoading}
+      onClick={handlePortal}
+    >
+      {isLoading ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Caricamento...
+        </>
+      ) : (
+        isActive ? 'Gestisci abbonamento' : 'Gestisci pagamento'
+      )}
+    </Button>
+  );
+}
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -17,6 +79,12 @@ export default function SettingsPage() {
 
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [retentionSaving, setRetentionSaving] = useState(false);
+  const [retentionMessage, setRetentionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifMessage, setNotifMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -59,6 +127,26 @@ export default function SettingsPage() {
       e.currentTarget.reset();
     }
     setPasswordSaving(false);
+  }
+
+  async function handleRetentionChange(value: string) {
+    setRetentionSaving(true);
+    setRetentionMessage(null);
+
+    const formData = new FormData();
+    formData.set('retentionDays', value);
+    const result = await updateRetentionPolicy(formData);
+
+    if (result.error) {
+      setRetentionMessage({ type: 'error', text: result.error });
+    } else {
+      setProfile((prev) => prev ? {
+        ...prev,
+        dataRetentionDays: value === 'null' ? null : Number(value),
+      } : prev);
+      setRetentionMessage({ type: 'success', text: 'Policy di conservazione aggiornata' });
+    }
+    setRetentionSaving(false);
   }
 
   if (isLoadingProfile) {
@@ -222,42 +310,169 @@ export default function SettingsPage() {
           <CardTitle>Abbonamento</CardTitle>
           <CardDescription>Il tuo piano attuale e gestione abbonamento</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-md border p-4">
             <div className="flex items-center gap-3">
               <CreditCard className="h-5 w-5 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">
-                  Piano: {profile?.subscriptionPlan === 'pro' ? 'Pro' : 'Trial'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">
+                    Piano: {profile?.subscriptionPlan === 'pro' ? 'Pro' : 'Trial'}
+                  </p>
+                  {profile?.subscriptionStatus === 'active' && (
+                    <Badge variant="success">Attivo</Badge>
+                  )}
+                  {profile?.subscriptionStatus === 'past_due' && (
+                    <Badge variant="warning">Pagamento in ritardo</Badge>
+                  )}
+                  {!profile?.subscriptionStatus && (
+                    <Badge variant="secondary">Gratuito</Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {profile?.subscriptionStatus === 'active'
-                    ? 'Abbonamento attivo'
+                    ? 'Accesso completo a tutte le funzionalità Pro'
                     : profile?.subscriptionStatus === 'past_due'
-                      ? 'Pagamento in ritardo'
+                      ? 'Aggiorna il metodo di pagamento per continuare'
                       : 'Piano gratuito — 5 casi inclusi'}
                 </p>
               </div>
             </div>
-            {profile?.stripeCustomerId ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  const res = await fetch('/api/stripe/portal', { method: 'POST' });
-                  const data = await res.json() as { success: boolean; data?: { url: string } };
-                  if (data.success && data.data?.url) {
-                    window.location.href = data.data.url;
+            <SubscriptionButton
+              hasStripeCustomer={!!profile?.stripeCustomerId}
+              isActive={profile?.subscriptionStatus === 'active' || profile?.subscriptionStatus === 'past_due'}
+            />
+          </div>
+
+          {/* Upgrade prompt for trial users */}
+          {(!profile?.subscriptionPlan || profile?.subscriptionPlan === 'trial') && !profile?.stripeCustomerId && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+              <div className="flex items-start gap-3">
+                <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Passa a Pro per sbloccare tutto</p>
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    <li>Casi illimitati (invece di 5)</li>
+                    <li>RAG linee guida cliniche</li>
+                    <li>Calcoli medico-legali automatici (ITT/ITP)</li>
+                    <li>Export PCT per tribunale</li>
+                    <li>Supporto prioritario</li>
+                  </ul>
+                  <p className="mt-3 text-sm font-semibold">
+                    A partire da &euro;39/mese (annuale) o &euro;49/mese
+                  </p>
+                  <p className="text-xs text-muted-foreground">IVA esclusa</p>
+                  <Button size="sm" className="mt-3" asChild>
+                    <a href="/pricing">Vedi i piani</a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Data Retention */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Conservazione dati</CardTitle>
+          <CardDescription>
+            Periodo di conservazione automatica dei casi archiviati. I casi archiviati oltre questo periodo verranno eliminati automaticamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {retentionMessage && (
+            <div
+              className={`rounded-md p-3 text-sm ${
+                retentionMessage.type === 'error'
+                  ? 'bg-destructive/10 text-destructive'
+                  : 'bg-green-500/10 text-green-700 dark:text-green-400'
+              }`}
+            >
+              {retentionMessage.text}
+            </div>
+          )}
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Periodo di conservazione</p>
+                <p className="text-xs text-muted-foreground">
+                  Solo i casi con stato &quot;archiviato&quot; verranno eliminati automaticamente
+                </p>
+              </div>
+            </div>
+            <Select
+              value={profile?.dataRetentionDays?.toString() ?? 'null'}
+              onValueChange={handleRetentionChange}
+              disabled={retentionSaving}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Seleziona periodo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="90">90 giorni</SelectItem>
+                <SelectItem value="180">180 giorni</SelectItem>
+                <SelectItem value="365">365 giorni</SelectItem>
+                <SelectItem value="730">730 giorni</SelectItem>
+                <SelectItem value="null">Mai</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notifiche email</CardTitle>
+          <CardDescription>
+            Gestisci le notifiche via email per aggiornamenti sui tuoi casi
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {notifMessage && (
+            <div
+              className={`rounded-md p-3 text-sm ${
+                notifMessage.type === 'error'
+                  ? 'bg-destructive/10 text-destructive'
+                  : 'bg-green-500/10 text-green-700 dark:text-green-400'
+              }`}
+            >
+              {notifMessage.text}
+            </div>
+          )}
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Notifiche email</p>
+                <p className="text-xs text-muted-foreground">
+                  Ricevi email quando un caso viene elaborato o si verifica un errore
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {notifSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              <Checkbox
+                id="emailNotifications"
+                checked={profile?.emailNotifications ?? true}
+                disabled={notifSaving}
+                onCheckedChange={async (checked) => {
+                  const enabled = checked === true;
+                  setNotifSaving(true);
+                  setNotifMessage(null);
+                  const result = await updateEmailNotifications(enabled);
+                  if (result.error) {
+                    setNotifMessage({ type: 'error', text: result.error });
+                  } else {
+                    setProfile((prev) => prev ? { ...prev, emailNotifications: enabled } : prev);
+                    setNotifMessage({ type: 'success', text: enabled ? 'Notifiche attivate' : 'Notifiche disattivate' });
                   }
+                  setNotifSaving(false);
                 }}
-              >
-                Gestisci abbonamento
-              </Button>
-            ) : (
-              <Button size="sm" asChild>
-                <a href="/pricing">Passa a Pro</a>
-              </Button>
-            )}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

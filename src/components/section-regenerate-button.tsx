@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { csrfHeaders } from '@/lib/csrf-client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -29,7 +30,7 @@ export function SectionRegenerateButton({
     try {
       const response = await fetch('/api/processing/regenerate-section', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({
           caseId,
           sectionId,
@@ -56,9 +57,9 @@ export function SectionRegenerateButton({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          className="h-7 px-2 text-xs"
           disabled={disabled || isRegenerating}
           title={`Rigenera "${sectionTitle}"`}
         >
@@ -67,7 +68,7 @@ export function SectionRegenerateButton({
           ) : (
             <RefreshCw className="mr-1 h-3 w-3" />
           )}
-          Rigenera
+          Rigenera Sezione
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">

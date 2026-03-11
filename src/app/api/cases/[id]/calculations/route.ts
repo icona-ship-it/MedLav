@@ -19,7 +19,7 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
-  const rateCheck = checkRateLimit({ key: `calculations:${user.id}`, ...RATE_LIMITS.API });
+  const rateCheck = await checkRateLimit({ key: `calculations:${user.id}`, ...RATE_LIMITS.API });
   if (!rateCheck.success) {
     return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
   }

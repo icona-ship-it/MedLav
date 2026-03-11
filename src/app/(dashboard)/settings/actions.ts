@@ -19,6 +19,18 @@ const passwordSchema = z.object({
   path: ['confirmPassword'],
 });
 
+const VALID_RETENTION_DAYS = [90, 180, 365, 730] as const;
+
+const retentionSchema = z.object({
+  retentionDays: z.union([
+    z.literal('null'),
+    z.string().refine(
+      (val) => VALID_RETENTION_DAYS.includes(Number(val) as typeof VALID_RETENTION_DAYS[number]),
+      'Valore di conservazione non valido',
+    ),
+  ]),
+});
+
 export interface ProfileData {
   fullName: string;
   studio: string;
@@ -26,6 +38,8 @@ export interface ProfileData {
   subscriptionStatus: string | null;
   subscriptionPlan: string | null;
   stripeCustomerId: string | null;
+  dataRetentionDays: number | null;
+  emailNotifications: boolean;
 }
 
 export async function getProfile(): Promise<ProfileData> {
@@ -38,7 +52,7 @@ export async function getProfile(): Promise<ProfileData> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, studio, email, subscription_status, subscription_plan, stripe_customer_id')
+    .select('full_name, studio, email, subscription_status, subscription_plan, stripe_customer_id, data_retention_days, email_notifications')
     .eq('id', user.id)
     .single();
 
@@ -49,6 +63,8 @@ export async function getProfile(): Promise<ProfileData> {
     subscriptionStatus: (profile?.subscription_status as string) ?? null,
     subscriptionPlan: (profile?.subscription_plan as string) ?? null,
     stripeCustomerId: (profile?.stripe_customer_id as string) ?? null,
+    dataRetentionDays: (profile?.data_retention_days as number) ?? 365,
+    emailNotifications: (profile?.email_notifications as boolean) ?? true,
   };
 }
 
@@ -121,6 +137,76 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
 
   if (error) {
     return { error: 'Errore durante il cambio password. Riprova.' };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Update the user's data retention policy.
+ * Accepts a number of days (90, 180, 365, 730) or null for indefinite retention.
+ */
+export async function updateRetentionPolicy(
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+  const rawData = {
+    retentionDays: formData.get('retentionDays') as string,
+  };
+
+  const parsed = retentionSchema.safeParse(rawData);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'Non autenticato' };
+  }
+
+  const retentionValue = parsed.data.retentionDays === 'null'
+    ? null
+    : Number(parsed.data.retentionDays);
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      data_retention_days: retentionValue,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (error) {
+    return { error: 'Errore durante il salvataggio. Riprova.' };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Toggle email notifications for the authenticated user.
+ */
+export async function updateEmailNotifications(
+  enabled: boolean,
+): Promise<{ error?: string; success?: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'Non autenticato' };
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      email_notifications: enabled,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (error) {
+    return { error: 'Errore durante il salvataggio. Riprova.' };
   }
 
   return { success: true };
@@ -207,6 +293,9 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
     await admin.from('cases').delete().in('id', caseIds);
   }
 
+  // Deliberate: audit logs are deleted with the account per GDPR Art. 17 (right to erasure).
+  // The DB schema uses onDelete: 'set null' on user_id FK, but we explicitly delete here
+  // to ensure full data erasure as required for health data under Art. 9.
   await admin.from('audit_log').delete().eq('user_id', user.id);
   await admin.from('profiles').delete().eq('id', user.id);
   await admin.auth.admin.deleteUser(user.id);

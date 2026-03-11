@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { revalidateCase } from '@/lib/cache';
 
 /**
  * Fetch the latest report for a case.
@@ -64,6 +65,7 @@ export async function updateReportStatus(params: {
     metadata: { caseId: params.caseId, newStatus: params.newStatus },
   });
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 
@@ -108,6 +110,7 @@ export async function updateReportSynthesis(params: {
     metadata: { caseId: params.caseId },
   });
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 

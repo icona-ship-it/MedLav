@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages, getCaseDocumentPages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';
+import { createClient } from '@/lib/supabase/server';
+import { logAccess } from '@/lib/audit';
 import { CaseDetailClient } from './client';
 import { processingLabels } from '@/lib/constants';
 
@@ -17,6 +20,16 @@ export default async function CaseDetailPage({
   if (!caseData) {
     notFound();
   }
+
+  // Audit log: fire-and-forget, does not block page load
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  logAccess({
+    userId: user?.id ?? null,
+    action: 'case.viewed',
+    entityType: 'case',
+    entityId: id,
+  });
 
   const [documents, events, anomalies, missingDocs, report, eventImagesMap, documentPages] = await Promise.all([
     getCaseDocuments(id),

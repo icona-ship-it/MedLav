@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { validateCsrfToken } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
@@ -15,9 +17,13 @@ const requestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // CSRF validation
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     // Rate limiting
     const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    const rateCheck = checkRateLimit({ key: `cancel:${ip}`, ...RATE_LIMITS.PROCESSING });
+    const rateCheck = await checkRateLimit({ key: `cancel:${ip}`, ...RATE_LIMITS.PROCESSING });
     if (!rateCheck.success) {
       return NextResponse.json(
         { success: false, error: 'Troppe richieste. Riprova tra poco.' },
@@ -99,7 +105,7 @@ export async function POST(request: NextRequest) {
       data: { caseId, documentsCancelled: count ?? 0 },
     });
   } catch (error) {
-    console.error('[processing/cancel] Unexpected error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('processing/cancel', 'Unexpected error', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json(
       { success: false, error: 'Errore interno. Riprova.' },
       { status: 500 },

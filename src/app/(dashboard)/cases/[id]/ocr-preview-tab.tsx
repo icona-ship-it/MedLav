@@ -1,14 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Hand } from 'lucide-react';
+import { useState, useCallback, useTransition } from 'react';
+import { ChevronDown, ChevronRight, FileText, Hand, ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { getDocumentSignedUrl } from '../../actions';
 import type { Document } from './types';
 import type { DocumentPage } from '../../actions';
 
 interface OcrPreviewTabProps {
+  caseId: string;
   documents: Document[];
   documentPages: DocumentPage[];
 }
@@ -29,41 +33,70 @@ function confidenceBadge(confidence: number | null) {
 function DocumentOcrSection({
   document,
   pages,
+  caseId,
 }: {
   document: Document;
   pages: DocumentPage[];
+  caseId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [isLoadingUrl, startLoadUrl] = useTransition();
   const avgConfidence = pages.length > 0
     ? pages.reduce((sum, p) => sum + (p.ocr_confidence ?? 0), 0) / pages.length
     : null;
   const hasHandwriting = pages.some((p) => p.has_handwriting === 'yes' || p.has_handwriting === 'partial');
 
+  const handleViewOriginal = useCallback(() => {
+    startLoadUrl(async () => {
+      const result = await getDocumentSignedUrl({ documentId: document.id, caseId });
+      if ('error' in result) {
+        toast.error(result.error ?? 'Errore apertura documento');
+        return;
+      }
+      if (result.url) {
+        window.open(result.url, '_blank');
+      }
+    });
+  }, [document.id, caseId]);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-center justify-between rounded-md border px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{document.file_name}</p>
-              <p className="text-xs text-muted-foreground">{pages.length} pagine</p>
+      <div className="flex items-center gap-2 min-w-0">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center justify-between rounded-md border px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{document.file_name}</p>
+                <p className="text-xs text-muted-foreground">{pages.length} pagine</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {hasHandwriting && (
-              <Badge variant="outline" className="gap-1">
-                <Hand className="h-3 w-3" />Scrittura a mano
-              </Badge>
-            )}
-            {confidenceBadge(avgConfidence)}
-            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </div>
-        </button>
-      </CollapsibleTrigger>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasHandwriting && (
+                <Badge variant="outline" className="gap-1">
+                  <Hand className="h-3 w-3" />Scrittura a mano
+                </Badge>
+              )}
+              {confidenceBadge(avgConfidence)}
+              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={handleViewOriginal}
+          disabled={isLoadingUrl}
+          title="Visualizza documento originale"
+        >
+          <ExternalLink className="mr-1 h-3 w-3" />
+          Originale
+        </Button>
+      </div>
       <CollapsibleContent>
         <div className="mt-2 space-y-3 pl-2">
           {pages.map((page) => (
@@ -108,7 +141,7 @@ function DocumentOcrSection({
   );
 }
 
-export function OcrPreviewTab({ documents, documentPages }: OcrPreviewTabProps) {
+export function OcrPreviewTab({ caseId, documents, documentPages }: OcrPreviewTabProps) {
   // Group pages by document
   const pagesByDoc = new Map<string, DocumentPage[]>();
   for (const page of documentPages) {
@@ -145,6 +178,7 @@ export function OcrPreviewTab({ documents, documentPages }: OcrPreviewTabProps) 
                 key={doc.id}
                 document={doc}
                 pages={pagesByDoc.get(doc.id) ?? []}
+                caseId={caseId}
               />
             ))}
           </div>

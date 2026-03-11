@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getSignedUrl } from '@/lib/supabase/storage';
+import { revalidateCase } from '@/lib/cache';
 
 export async function getCaseDocuments(caseId: string) {
   const supabase = await createClient();
@@ -65,6 +67,7 @@ export async function saveDocumentMetadata(params: {
     return { error: 'Errore salvataggio metadati' };
   }
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 
@@ -176,6 +179,7 @@ export async function deleteDocument(params: { documentId: string; caseId: strin
     metadata: { caseId: params.caseId },
   });
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 
@@ -229,6 +233,98 @@ export async function getCasePageImages(caseId: string): Promise<Record<string, 
   }
 
   return result;
+}
+
+/**
+ * Get a signed URL to view/download the original document file.
+ */
+export async function getDocumentSignedUrl(params: { documentId: string; caseId: string }) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('storage_path')
+    .eq('id', params.documentId)
+    .eq('case_id', params.caseId)
+    .single();
+
+  if (!doc) return { error: 'Documento non trovato' };
+
+  try {
+    const url = await getSignedUrl(doc.storage_path);
+    return { url };
+  } catch {
+    return { error: 'Errore generazione URL' };
+  }
+}
+
+/**
+ * Retry a single failed document: reset to 'caricato' so next processing run picks it up.
+ */
+export async function retryDocument(params: { documentId: string; caseId: string }) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Fetch document and verify it's in error state
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('id, processing_status')
+    .eq('id', params.documentId)
+    .eq('case_id', params.caseId)
+    .single();
+
+  if (!doc) return { error: 'Documento non trovato' };
+  if (doc.processing_status !== 'errore') {
+    return { error: 'Il documento non è in stato di errore' };
+  }
+
+  // Reset to 'caricato'
+  const { error } = await supabase
+    .from('documents')
+    .update({
+      processing_status: 'caricato',
+      processing_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.documentId);
+
+  if (error) return { error: 'Errore durante il reset del documento' };
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'document.retried',
+    entity_type: 'document',
+    entity_id: params.documentId,
+    metadata: { caseId: params.caseId },
+  });
+
+  return { success: true };
 }
 
 // --- OCR Pages ---

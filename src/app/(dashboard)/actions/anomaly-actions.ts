@@ -37,3 +37,83 @@ export async function getCaseMissingDocs(caseId: string) {
 
   return data ?? [];
 }
+
+/**
+ * Update an anomaly's description and/or suggestion.
+ */
+export async function updateAnomaly(params: {
+  anomalyId: string;
+  caseId: string;
+  description: string;
+  suggestion: string | null;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { error } = await supabase
+    .from('anomalies')
+    .update({
+      description: params.description,
+      suggestion: params.suggestion,
+    })
+    .eq('id', params.anomalyId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore aggiornamento anomalia' };
+
+  return { success: true };
+}
+
+/**
+ * Dismiss (hard delete) an anomaly.
+ */
+export async function dismissAnomaly(params: {
+  anomalyId: string;
+  caseId: string;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { error } = await supabase
+    .from('anomalies')
+    .delete()
+    .eq('id', params.anomalyId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore eliminazione anomalia' };
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'anomaly.dismissed',
+    entity_type: 'anomaly',
+    entity_id: params.anomalyId,
+    metadata: { caseId: params.caseId },
+  });
+
+  return { success: true };
+}

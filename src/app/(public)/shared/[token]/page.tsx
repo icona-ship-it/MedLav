@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logAccess } from '@/lib/audit';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -46,6 +47,15 @@ export default async function SharedCasePage({
   if (!caseResult.data) {
     return <ExpiredView />;
   }
+
+  // Audit log: no authenticated user for shared views — userId is null
+  logAccess({
+    userId: null,
+    action: 'case.shared_view',
+    entityType: 'case',
+    entityId: caseId,
+    metadata: { shareId: share.id as string },
+  });
 
   return (
     <SharedCaseView

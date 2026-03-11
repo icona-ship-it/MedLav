@@ -4,6 +4,8 @@ import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getPlanLimits } from '@/lib/stripe/config';
+import { validateCsrfToken } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
 
@@ -18,9 +20,13 @@ const requestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // CSRF validation
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     // Rate limiting
     const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    const rateCheck = checkRateLimit({ key: `processing:${ip}`, ...RATE_LIMITS.PROCESSING });
+    const rateCheck = await checkRateLimit({ key: `processing:${ip}`, ...RATE_LIMITS.PROCESSING });
     if (!rateCheck.success) {
       return NextResponse.json(
         { success: false, error: 'Troppe richieste. Riprova tra poco.' },
@@ -161,7 +167,7 @@ export async function POST(request: NextRequest) {
       data: { caseId, documentsQueued: count },
     });
   } catch (error) {
-    console.error('[processing/start] Unexpected error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('processing/start', 'Unexpected error', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json(
       { success: false, error: 'Errore interno. Riprova.' },
       { status: 500 },

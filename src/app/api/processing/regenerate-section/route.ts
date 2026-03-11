@@ -10,6 +10,9 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import { regenerateSection } from '@/services/synthesis/section-regenerator';
+import { validateCsrfToken } from '@/lib/csrf';
+import { checkFeatureAccess } from '@/lib/subscription';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 300; // section regeneration can take several minutes
 
@@ -26,6 +29,10 @@ const requestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // CSRF validation
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const supabase = await createClient();
     const admin = createAdminClient();
 
@@ -34,7 +41,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
-    const rateCheck = checkRateLimit({
+    // Feature gate: check subscription allows section regeneration
+    const gate = await checkFeatureAccess(user.id, 'section_regenerate');
+    if (!gate.allowed) {
+      return NextResponse.json(
+        { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
+        { status: 403 },
+      );
+    }
+
+    const rateCheck = await checkRateLimit({
       key: `regen-section:${user.id}`,
       ...RATE_LIMITS.PROCESSING,
     });
@@ -172,7 +188,7 @@ export async function POST(request: NextRequest) {
       data: { version: newVersion, wordCount, sectionId },
     });
   } catch (error) {
-    console.error('[processing/regenerate-section] Error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('processing/regenerate-section', 'Section regeneration failed', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ success: false, error: 'Errore rigenerazione sezione.' }, { status: 500 });
   }
 }

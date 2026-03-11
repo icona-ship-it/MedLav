@@ -174,7 +174,7 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
   }, [startTimeMs, allDone]);
 
   return (
-    <div className="space-y-5" aria-live="polite">
+    <div className="space-y-5" aria-live="polite" aria-atomic="true">
       {/* Global stepper */}
       <div className="flex items-center justify-between">
         {PROCESSING_STEPS.map((step, index) => {

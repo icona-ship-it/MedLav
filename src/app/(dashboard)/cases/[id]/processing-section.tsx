@@ -3,33 +3,36 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Play, Loader2, XCircle,
-  ChevronDown, ChevronRight,
+  Play, Loader2, XCircle, RotateCcw, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { ProcessingProgress } from '@/components/processing-progress';
-import { PeriziaMetadataForm } from './perizia-form';
-import type { CaseData, Document } from './types';
+import { csrfHeaders } from '@/lib/csrf-client';
+import type { Document } from './types';
 
 // --- Types ---
 
 interface ProcessingSectionProps {
   caseId: string;
-  caseData: CaseData;
   documents: Document[];
   hasProcessingDocs: boolean;
   hasUploadedDocs: boolean;
+}
+
+// --- Helpers ---
+
+const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
+function isDocProcessing(status: string): boolean {
+  return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
 // --- Component ---
 
 export function ProcessingSection({
   caseId,
-  caseData,
   documents,
   hasProcessingDocs,
   hasUploadedDocs,
@@ -38,9 +41,22 @@ export function ProcessingSection({
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  const hasPeriziaMetadata = !!(caseData.perizia_metadata && Object.keys(caseData.perizia_metadata).length > 0);
-  const [periziaOpen, setPeriziaOpen] = useState(!hasPeriziaMetadata);
+  // Count failed documents (excluding warning-only)
+  const failedDocs = documents.filter((d) => {
+    if (d.processing_status !== 'errore') return false;
+    const err = (d.processing_error ?? '').toLowerCase();
+    return !err.includes('nessun evento');
+  });
+
+  // Detect stale processing (all processing docs updated > 15min ago)
+  const processingDocs = documents.filter((d) => isDocProcessing(d.processing_status));
+  const now = Date.now();
+  const isStale = hasProcessingDocs && processingDocs.length > 0 && processingDocs.every((d) => {
+    const updatedAt = new Date(d.created_at).getTime(); // created_at as proxy; updated_at not in Document type
+    return (now - updatedAt) > STALE_THRESHOLD_MS;
+  });
 
   const handleStartProcessing = useCallback(async () => {
     setIsStartingProcessing(true);
@@ -48,7 +64,7 @@ export function ProcessingSection({
     try {
       const response = await fetch('/api/processing/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({ caseId }),
       });
       const result = await response.json() as { success: boolean; error?: string };
@@ -75,7 +91,7 @@ export function ProcessingSection({
     try {
       const response = await fetch('/api/processing/cancel', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({ caseId }),
       });
       const result = await response.json() as { success: boolean; error?: string };
@@ -90,44 +106,54 @@ export function ProcessingSection({
     }
   }, [caseId, router]);
 
+  const handleRetryFailed = useCallback(async () => {
+    setIsRetrying(true);
+    try {
+      const response = await fetch('/api/processing/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId }),
+      });
+      const result = await response.json() as { success: boolean; error?: string; data?: { retriedCount: number } };
+      if (!result.success) {
+        toast.error(result.error ?? 'Errore durante il retry');
+      } else {
+        toast.success(`${result.data?.retriedCount ?? 0} documenti rimessi in coda`);
+      }
+      router.refresh();
+    } catch {
+      toast.error('Errore di rete. Verifica la connessione.');
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [caseId, router]);
+
   return (
     <div className="space-y-4">
-      {/* Perizia form (collapsible, before processing) */}
-      {!hasProcessingDocs && (
-        <Collapsible open={periziaOpen} onOpenChange={setPeriziaOpen}>
-          <Card>
-            <CardHeader className="pb-3">
-              <CollapsibleTrigger asChild>
-                <button type="button" className="flex w-full items-center justify-between text-left">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">Dati Perizia</CardTitle>
-                    <span className="text-xs text-muted-foreground">(opzionale, migliora il report)</span>
-                    {hasPeriziaMetadata && (
-                      <Badge variant="success" className="text-xs">Compilato</Badge>
-                    )}
-                  </div>
-                  {periziaOpen ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </button>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent>
-                <PeriziaMetadataForm caseId={caseId} caseData={caseData} onSaved={() => router.refresh()} />
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
-
       <Card>
         <CardContent className="pt-6">
           {hasProcessingDocs ? (
             <div className="space-y-4">
               <p className="text-sm font-medium text-center">Elaborazione in corso</p>
+
+              {/* Stale warning */}
+              {isStale && (
+                <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>L&apos;elaborazione sembra bloccata (oltre 15 minuti).</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto shrink-0"
+                    onClick={handleCancel}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XCircle className="mr-1 h-3 w-3" />}
+                    Annulla e riprova
+                  </Button>
+                </div>
+              )}
+
               <div className="flex items-center justify-end">
                 <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={handleCancel} disabled={isCancelling}>
                   {isCancelling ? (
@@ -170,6 +196,28 @@ export function ProcessingSection({
                 )}
                 {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
               </div>
+
+              {/* Retry failed docs button */}
+              {failedDocs.length > 0 && !hasUploadedDocs && (
+                <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                  <span className="text-destructive">{failedDocs.length} documenti non elaborati</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto shrink-0"
+                    onClick={handleRetryFailed}
+                    disabled={isRetrying}
+                  >
+                    {isRetrying ? (
+                      <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
+                    ) : (
+                      <><RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti</>
+                    )}
+                  </Button>
+                </div>
+              )}
+
               <Button
                 size="lg"
                 className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"

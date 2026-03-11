@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generatePctXml } from '@/services/export/pct-export';
+import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
 import type { PeriziaMetadata } from '@/types';
 
@@ -16,7 +17,16 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
-  const rateCheck = checkRateLimit({ key: `export:${user.id}`, ...RATE_LIMITS.API });
+  // Feature gate: PCT export requires Pro
+  const gate = await checkFeatureAccess(user.id, 'export');
+  if (!gate.allowed) {
+    return NextResponse.json(
+      { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
+      { status: 403 },
+    );
+  }
+
+  const rateCheck = await checkRateLimit({ key: `export:${user.id}`, ...RATE_LIMITS.API });
   if (!rateCheck.success) {
     return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
   }

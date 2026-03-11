@@ -4,6 +4,8 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { logAccess } from '@/lib/audit';
+import { checkFeatureAccess } from '@/lib/subscription';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -16,7 +18,16 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
-  const rateCheck = checkRateLimit({ key: `export:${user.id}`, ...RATE_LIMITS.API });
+  // Feature gate: DOCX export requires Pro
+  const gate = await checkFeatureAccess(user.id, 'export');
+  if (!gate.allowed) {
+    return NextResponse.json(
+      { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
+      { status: 403 },
+    );
+  }
+
+  const rateCheck = await checkRateLimit({ key: `export:${user.id}`, ...RATE_LIMITS.API });
   if (!rateCheck.success) {
     return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
   }
@@ -27,6 +38,14 @@ export async function GET(
   if (!data) {
     return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
   }
+
+  logAccess({
+    userId: user.id,
+    action: 'report.exported',
+    entityType: 'case',
+    entityId: caseId,
+    metadata: { format: 'docx' },
+  });
 
   const pm = data.periziaMetadata as Record<string, unknown> | null;
   const useProfessional = pm && (pm.tribunale || pm.ctuName);

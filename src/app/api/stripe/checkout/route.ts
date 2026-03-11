@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStripeClient } from '@/lib/stripe/client';
+import { validateCsrfToken } from '@/lib/csrf';
+import { PLANS } from '@/lib/stripe/config';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -9,6 +11,10 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // CSRF validation
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -20,6 +26,19 @@ export async function POST(request: NextRequest) {
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: 'Dati non validi' }, { status: 400 });
+    }
+
+    // Validate priceId against known prices to prevent arbitrary price injection
+    const allowedPriceIds = [
+      PLANS.pro.priceMonthly,
+      PLANS.pro.priceYearly,
+    ].filter(Boolean);
+
+    if (!allowedPriceIds.includes(parsed.data.priceId)) {
+      return NextResponse.json(
+        { success: false, error: 'Piano non valido. Seleziona un piano disponibile.' },
+        { status: 400 },
+      );
     }
 
     const stripe = getStripeClient();

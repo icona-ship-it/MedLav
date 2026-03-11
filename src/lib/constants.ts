@@ -83,7 +83,7 @@ export const sourceLabelsExport: Record<string, string> = {
 
 // --- Anomaly Types ---
 
-export const anomalyTypeLabels: Record<string, string> = {
+export const anomalyTypeLabels: Readonly<Record<string, string>> = {
   ritardo_diagnostico: 'Ritardo Diagnostico',
   gap_post_chirurgico: 'Gap Post-Chirurgico',
   gap_documentale: 'Gap Documentale',

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
@@ -68,7 +69,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
-    const rateCheck = checkRateLimit({ key: `quesito:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    const rateCheck = await checkRateLimit({ key: `quesito:${user.id}`, ...RATE_LIMITS.PROCESSING });
     if (!rateCheck.success) {
       return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
     }
@@ -175,7 +176,7 @@ Mappa ogni punto del quesito agli eventi e anomalie rilevanti.`,
       data: { mapping: mapping.points, quesito: parsed.data.quesito },
     });
   } catch (error) {
-    console.error('[quesito] Error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('quesito', 'Quesito mapping failed', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ success: false, error: 'Errore mappatura quesito' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Image from 'next/image';
 import {
   ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2, FileSearch,
 } from 'lucide-react';
@@ -213,11 +214,13 @@ export function EventCard({
                     onClick={() => onImageClick(url)}
                     aria-label={`Visualizza immagine ${idx + 1}`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={url}
                       alt={`Immagine ${idx + 1}`}
+                      width={80}
+                      height={80}
                       className="h-20 w-20 object-cover"
+                      unoptimized
                     />
                   </button>
                 ))}

@@ -17,11 +17,12 @@ import type { CaseData, PeriziaMetadataUI } from './types';
 import type { CaseType } from '@/types';
 
 export function PeriziaMetadataForm({
-  caseId, caseData, onSaved,
+  caseId, caseData, onSaved, onProceedToNext,
 }: {
   caseId: string;
   caseData: CaseData;
   onSaved: () => void;
+  onProceedToNext?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const existing = caseData.perizia_metadata ?? {};
@@ -49,7 +50,7 @@ export function PeriziaMetadataForm({
     existing.esameObiettivoStrutturato ?? null,
   );
 
-  const handleSave = () => {
+  const handleSave = (proceed?: boolean) => {
     startTransition(async () => {
       const filteredQuesiti = quesiti.filter((q) => q.trim().length > 0);
       const metadata: PeriziaMetadataUI = {
@@ -75,15 +76,31 @@ export function PeriziaMetadataForm({
 
       const hasAnyValue = Object.keys(metadata).length > 0;
 
+      // If proceeding with empty form, just skip without saving
+      if (proceed && !hasAnyValue && onProceedToNext) {
+        onProceedToNext();
+        return;
+      }
+
+      if (!hasAnyValue) {
+        toast('Nessun dato da salvare');
+        return;
+      }
+
       const result = await updateCase({
         caseId,
-        periziaMetadata: hasAnyValue ? metadata : null,
+        periziaMetadata: metadata,
       });
       if (result.error) {
         toast.error(result.error);
         return;
       }
       toast.success('Dati perizia salvati');
+      // Call onProceedToNext before onSaved (which triggers router.refresh)
+      // to ensure step change is applied before re-render
+      if (proceed && onProceedToNext) {
+        onProceedToNext();
+      }
       onSaved();
     });
   };
@@ -294,11 +311,22 @@ export function PeriziaMetadataForm({
       </Card>
 
       {/* Save button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isPending}>
+      <div className="flex justify-end gap-2">
+        {onProceedToNext && (
+          <Button variant="ghost" onClick={onProceedToNext} disabled={isPending}>
+            Salta
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => handleSave()} disabled={isPending}>
           {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
           Salva dati perizia
         </Button>
+        {onProceedToNext && (
+          <Button onClick={() => handleSave(true)} disabled={isPending}>
+            {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Salva e prosegui
+          </Button>
+        )}
       </div>
     </div>
   );

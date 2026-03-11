@@ -52,3 +52,20 @@ jobs:
           INNGEST_EVENT_KEY: stub-inngest-key
           INNGEST_SIGNING_KEY: stub-inngest-signing
           SENTRY_AUTH_TOKEN: stub-sentry-token
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        continue-on-error: true
+        run: |
+          pnpm start &
+          npx wait-on http://localhost:3000 --timeout 30000
+          pnpm test:e2e
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://stub.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: stub-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: stub-service-role-key
+          MISTRAL_API_KEY: stub-mistral-key
+          INNGEST_EVENT_KEY: stub-inngest-key
+          INNGEST_SIGNING_KEY: stub-inngest-signing

@@ -1,3 +1,5 @@
+import { logger } from '@/lib/logger';
+
 export interface ParsedSection {
   id: string;
   title: string;
@@ -95,7 +97,7 @@ export function replaceSectionContent(
   const target = sections.find((s) => s.id === sectionId);
 
   if (!target) {
-    console.warn(`[section-parser] Section "${sectionId}" not found, appending at end`);
+    logger.warn('section-parser', `Section not found, appending at end`, { sectionId });
     return synthesis + '\n\n' + newContent;
   }
 

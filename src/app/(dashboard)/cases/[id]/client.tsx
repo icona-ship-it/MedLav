@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import {
-  Loader2, FileText, CheckCircle2,
+  Loader2, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { csrfHeaders } from '@/lib/csrf-client';
 import { CaseHeader } from './case-header';
 import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
@@ -19,8 +23,20 @@ import { AnomaliesSection, MissingDocsSection } from './anomalies-section';
 import { EventsTab } from './events-tab';
 import { ReportTab } from './report-tab';
 import { PeriziaMetadataForm } from './perizia-form';
-import { ReportDialog } from './report-dialog';
-import { OcrPreviewTab } from './ocr-preview-tab';
+const ReportDialog = dynamic(
+  () => import('./report-dialog').then((m) => ({ default: m.ReportDialog })),
+  { loading: () => null },
+);
+const OcrPreviewTab = dynamic(
+  () => import('./ocr-preview-tab').then((m) => ({ default: m.OcrPreviewTab })),
+  { loading: () => null },
+);
+const AnonymizationTool = dynamic(
+  () => import('./anonymization-tool').then((m) => ({ default: m.AnonymizationTool })),
+  { loading: () => null },
+);
+import { QualitySummaryCard } from './quality-summary-card';
+import { WizardStepBar } from './wizard-step-bar';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
 } from './types';
@@ -47,8 +63,9 @@ const POLL_INTERVAL_MS = 5000;
 
 const WIZARD_STEPS = [
   { number: 1, label: 'Documenti' },
-  { number: 2, label: 'Elaborazione' },
-  { number: 3, label: 'Risultati' },
+  { number: 2, label: 'Info Perizia' },
+  { number: 3, label: 'Elaborazione' },
+  { number: 4, label: 'Risultati' },
 ] as const;
 
 // --- Helpers ---
@@ -58,8 +75,8 @@ function isDocProcessing(status: string): boolean {
 }
 
 function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean): number {
-  if (hasResults && !hasProcessingDocs) return 3;
-  if (hasProcessingDocs) return 2;
+  if (hasResults && !hasProcessingDocs) return 4;
+  if (hasProcessingDocs) return 3;
   return 1;
 }
 
@@ -83,18 +100,46 @@ export function CaseDetailClient({
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [activeResultTab, setActiveResultTab] = useState('events');
+  const [localAnomalies, setLocalAnomalies] = useState(anomalies);
+
+  // Sync with server data on refresh
+  useEffect(() => {
+    setLocalAnomalies(anomalies);
+  }, [anomalies]);
 
   // Wizard step
   const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
-  const hasResults = events.length > 0 || anomalies.length > 0 || !!report;
+  const hasResults = events.length > 0 || localAnomalies.length > 0 || !!report;
 
   const autoStep = computeAutoStep(hasResults, hasProcessingDocs);
   const [activeStep, setActiveStep] = useState(autoStep);
+  const userNavigatedRef = useRef(false);
+  const prevAutoStepRef = useRef(autoStep);
 
+  const handleSetStep = useCallback((step: number) => {
+    userNavigatedRef.current = true;
+    setActiveStep(step);
+  }, []);
+
+  // Auto-advance only on meaningful state transitions.
+  // Uses refs to avoid stale closure and unnecessary re-runs.
   useEffect(() => {
-    setActiveStep(computeAutoStep(hasResults, hasProcessingDocs));
-  }, [hasResults, hasProcessingDocs]);
+    const prev = prevAutoStepRef.current;
+    prevAutoStepRef.current = autoStep;
+
+    // Major transition detected (e.g. processing started or results arrived)
+    if (prev !== autoStep) {
+      userNavigatedRef.current = false;
+      setActiveStep(autoStep);
+      return;
+    }
+
+    // No transition, respect user's manual navigation
+    if (!userNavigatedRef.current) {
+      setActiveStep(autoStep);
+    }
+  }, [autoStep]);
 
   useEffect(() => {
     if (!hasProcessingDocs) return;
@@ -107,7 +152,7 @@ export function CaseDetailClient({
     try {
       const response = await fetch('/api/processing/regenerate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({ caseId }),
       });
       const result = await response.json() as { success: boolean; error?: string };
@@ -135,80 +180,63 @@ export function CaseDetailClient({
       />
 
       {/* Wizard Step Bar */}
-      <nav aria-label="Passaggi caso" className="flex items-center gap-2">
-        {WIZARD_STEPS.map((step, index) => {
-          const isActive = activeStep === step.number;
-          const isCompleted = autoStep > step.number;
-          return (
-            <div key={step.number} className="flex flex-1 items-center">
-              <button
-                type="button"
-                onClick={() => setActiveStep(step.number)}
-                className={`flex w-full items-center gap-3 rounded-lg border-2 px-4 py-3 text-left transition-all ${
-                  isActive
-                    ? 'border-primary bg-primary/5 shadow-sm'
-                    : isCompleted
-                      ? 'border-green-500/30 bg-green-50/50 dark:bg-green-950/10'
-                      : 'border-muted hover:border-muted-foreground/30'
-                }`}
-                aria-current={isActive ? 'step' : undefined}
-              >
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : isCompleted
-                      ? 'bg-green-500 text-white'
-                      : 'bg-muted text-muted-foreground'
-                }`}>
-                  {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : step.number}
-                </div>
-                <div className="min-w-0">
-                  <p className={`text-sm font-semibold ${
-                    isActive ? 'text-primary' : isCompleted ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
-                  }`}>
-                    {step.label}
-                  </p>
-                  <p className="text-xs text-muted-foreground hidden sm:block">
-                    {step.number === 1 && `${initialDocuments.length} documenti`}
-                    {step.number === 2 && (hasProcessingDocs ? 'In corso...' : 'Pronto')}
-                    {step.number === 3 && (hasResults ? `${events.length} eventi` : 'In attesa')}
-                  </p>
-                </div>
-              </button>
-              {index < WIZARD_STEPS.length - 1 && (
-                <div className={`mx-2 h-0.5 w-4 shrink-0 rounded ${
-                  autoStep > step.number ? 'bg-green-500' : 'bg-muted'
-                }`} />
-              )}
-            </div>
-          );
-        })}
-      </nav>
+      <WizardStepBar
+        steps={WIZARD_STEPS.map((step) => ({
+          ...step,
+          subtitle:
+            step.number === 1 ? `${initialDocuments.length} documenti`
+            : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
+            : step.number === 3 ? (hasProcessingDocs
+                ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
+                : 'Pronto')
+            : hasResults ? `${events.length} eventi` : 'In attesa',
+        }))}
+        activeStep={activeStep}
+        autoStep={autoStep}
+        onSetStep={handleSetStep}
+      />
 
+      {/* Step content - aria-live for screen readers */}
+      <div aria-live="polite">
       {/* === STEP 1: Documenti === */}
       {activeStep === 1 && (
+        <div key="step-1" className="animate-step-in">
         <DocumentsSection
           caseId={caseId}
           documents={initialDocuments}
           processingLabels={processingLabels}
           hasUploadedDocs={hasUploadedDocs}
-          onProceedToProcessing={() => setActiveStep(2)}
+          onProceedToNext={() => handleSetStep(2)}
         />
+        </div>
       )}
 
-      {/* === STEP 2: Elaborazione === */}
+      {/* === STEP 2: Info Perizia === */}
       {activeStep === 2 && (
-        <ProcessingSection
+        <div key="step-2" className="animate-step-in">
+        <PeriziaMetadataForm
           caseId={caseId}
           caseData={caseData}
+          onSaved={() => router.refresh()}
+          onProceedToNext={() => handleSetStep(3)}
+        />
+        </div>
+      )}
+
+      {/* === STEP 3: Elaborazione === */}
+      {activeStep === 3 && (
+        <div key="step-3" className="animate-step-in">
+        <ProcessingSection
+          caseId={caseId}
           documents={initialDocuments}
           hasProcessingDocs={hasProcessingDocs}
           hasUploadedDocs={hasUploadedDocs}
         />
+        </div>
       )}
 
-      {/* === STEP 3: Risultati === */}
-      {activeStep === 3 && hasProcessingDocs && (
+      {/* === STEP 4: Risultati === */}
+      {activeStep === 4 && hasProcessingDocs && !hasResults && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 py-8 justify-center">
@@ -220,10 +248,17 @@ export function CaseDetailClient({
           </CardContent>
         </Card>
       )}
-      {activeStep === 3 && !hasProcessingDocs && (
-        <>
+      {activeStep === 4 && (hasResults || hasProcessingDocs) && !(hasProcessingDocs && !hasResults) && (
+        <div key="step-4" className="animate-step-in">
           {hasResults ? (
             <div className="space-y-4">
+            {/* Processing indicator when partial results are visible */}
+            {hasProcessingDocs && (
+              <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>Elaborazione ancora in corso. I risultati parziali sono già visibili.</span>
+              </div>
+            )}
             {report?.synthesis && (
               <>
                 <Button
@@ -243,18 +278,35 @@ export function CaseDetailClient({
                 />
               </>
             )}
+            {/* Quality Summary Card (B1) */}
+            <QualitySummaryCard
+              events={events}
+              anomalies={localAnomalies}
+              missingDocs={missingDocs}
+              documentPages={documentPages}
+            />
             <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
-              <TabsList>
+              <TabsList className="overflow-x-auto scrollbar-hide flex-nowrap">
                 <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
                 <TabsTrigger value="ocr">OCR</TabsTrigger>
-                <TabsTrigger value="synthesis">Report</TabsTrigger>
-                {anomalies.length > 0 && (
-                  <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
+                <TabsTrigger value="synthesis" className="relative">
+                  Report
+                  {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length > 0 && (
+                    <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 leading-tight">
+                      {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                {localAnomalies.length > 0 && (
+                  <TabsTrigger value="anomalies">Anomalie ({localAnomalies.length})</TabsTrigger>
                 )}
                 {missingDocs.length > 0 && (
                   <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
                 )}
-                <TabsTrigger value="perizia">Metadati</TabsTrigger>
+                <TabsTrigger value="perizia">Info Perizia</TabsTrigger>
+                {report?.synthesis && (
+                  <TabsTrigger value="anonymization">Anonimizzazione</TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="events">
@@ -273,6 +325,7 @@ export function CaseDetailClient({
 
               <TabsContent value="ocr">
                 <OcrPreviewTab
+                  caseId={caseId}
                   documents={initialDocuments}
                   documentPages={documentPages}
                 />
@@ -285,6 +338,8 @@ export function CaseDetailClient({
                   isRegenerating={isRegenerating}
                   onRegenerate={handleRegenerate}
                   events={events}
+                  anomalyCount={localAnomalies.length}
+                  missingDocsCount={missingDocs.length}
                   onEventClick={(orderNumber) => {
                     setHighlightedEventId(orderNumber);
                     setActiveResultTab('events');
@@ -293,7 +348,18 @@ export function CaseDetailClient({
               </TabsContent>
 
               <TabsContent value="anomalies">
-                <AnomaliesSection anomalies={anomalies} />
+                <AnomaliesSection
+                  anomalies={localAnomalies}
+                  events={events}
+                  documents={initialDocuments}
+                  caseId={caseId}
+                  onChanged={(dismissedId) => {
+                    if (dismissedId) {
+                      setLocalAnomalies((prev) => prev.filter((a) => a.id !== dismissedId));
+                    }
+                    router.refresh();
+                  }}
+                />
               </TabsContent>
 
               <TabsContent value="missing">
@@ -303,6 +369,17 @@ export function CaseDetailClient({
               <TabsContent value="perizia">
                 <PeriziaMetadataForm caseId={caseId} caseData={caseData} onSaved={() => router.refresh()} />
               </TabsContent>
+
+              {report?.synthesis && (
+                <TabsContent value="anonymization">
+                  <AnonymizationTool
+                    caseId={caseId}
+                    caseData={caseData}
+                    report={report}
+                    events={events}
+                  />
+                </TabsContent>
+              )}
             </Tabs>
             </div>
           ) : (
@@ -314,8 +391,18 @@ export function CaseDetailClient({
               </CardContent>
             </Card>
           )}
-        </>
+        </div>
       )}
+      {activeStep === 4 && !hasProcessingDocs && !hasResults && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nessun risultato disponibile. Carica i documenti e avvia l&apos;elaborazione.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      </div>
 
       {/* Image Preview Dialog */}
       {previewImage && (
@@ -324,12 +411,14 @@ export function CaseDetailClient({
             <DialogHeader>
               <DialogTitle>Immagine documento</DialogTitle>
             </DialogHeader>
-            <div className="flex items-center justify-center overflow-auto">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <div className="relative flex items-center justify-center overflow-auto min-h-[300px]">
+              <Image
                 src={previewImage}
                 alt="Immagine documento medico"
-                className="max-w-full max-h-[75vh] object-contain"
+                fill
+                className="object-contain"
+                sizes="(max-width: 896px) 100vw, 896px"
+                unoptimized
               />
             </div>
           </DialogContent>

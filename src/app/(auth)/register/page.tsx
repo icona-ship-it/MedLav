@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { signUp } from '../actions';
 
@@ -12,6 +13,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [gdprConsent, setGdprConsent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -139,7 +141,33 @@ export default function RegisterPage() {
                 autoComplete="new-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <input type="hidden" name="privacyPolicyVersion" value="2026-03-11" />
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="gdprConsent"
+                name="gdprConsent"
+                checked={gdprConsent}
+                onCheckedChange={(checked) => setGdprConsent(checked === true)}
+                aria-describedby="gdpr-consent-description"
+              />
+              <label
+                htmlFor="gdprConsent"
+                id="gdpr-consent-description"
+                className="text-sm leading-snug text-muted-foreground cursor-pointer"
+              >
+                Ho letto e accetto i{' '}
+                <Link href="/terms" className="text-primary hover:underline" target="_blank">
+                  Termini di Servizio
+                </Link>{' '}
+                e la{' '}
+                <Link href="/privacy" className="text-primary hover:underline" target="_blank">
+                  Privacy Policy
+                </Link>
+                . Acconsento al trattamento dei miei dati sanitari ai sensi
+                dell&apos;Art. 9 GDPR.
+              </label>
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading || !gdprConsent}>
               {isLoading ? 'Registrazione in corso...' : 'Registrati'}
             </Button>
           </form>

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -153,6 +153,12 @@ function AddEventDialog({
   );
 }
 
+// --- Helpers ---
+
+function isVerificationEvent(e: EventRow): boolean {
+  return e.requires_verification || e.event_date.startsWith('1900-01-01');
+}
+
 // --- Events Tab ---
 
 export function EventsTab({
@@ -196,11 +202,45 @@ export function EventsTab({
 
   const altroEvents = events.filter((e) => e.event_type === 'altro');
 
+  // Split events into verification group
+  const verificationEvents = events.filter((e) => isVerificationEvent(e));
+
   const filteredEvents = events.filter((event) => {
-    if (showOnlyVerification) return event.requires_verification;
+    if (showOnlyVerification) return isVerificationEvent(event);
     if (eventTypeFilter) return event.event_type === eventTypeFilter;
     return true;
   });
+
+  // When showing all or filtered by type, split into groups
+  const displayNormal = showOnlyVerification
+    ? []
+    : filteredEvents.filter((e) => !isVerificationEvent(e));
+  const displayVerification = showOnlyVerification
+    ? filteredEvents
+    : filteredEvents.filter((e) => isVerificationEvent(e));
+
+  const renderEventCard = (event: EventRow, index: number, list: EventRow[]) => (
+    <EventCard
+      key={event.id}
+      event={event}
+      caseId={caseId}
+      isExpanded={expandedEvents.has(event.id)}
+      isEditing={editingEventId === event.id}
+      onToggle={() => toggleEvent(event.id)}
+      onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
+      onCancelEdit={() => setEditingEventId(null)}
+      onSaved={() => { setEditingEventId(null); router.refresh(); }}
+      onDeleted={() => router.refresh()}
+      eventImages={eventImages}
+      onImageClick={onImageClick}
+      onMoveUp={() => handleMoveEvent(event.id, 'up')}
+      onMoveDown={() => handleMoveEvent(event.id, 'down')}
+      isFirst={index === 0}
+      isLast={index === list.length - 1}
+      isHighlighted={highlightedEventOrderNumber === event.order_number}
+      onViewInReport={onViewInReport ? () => onViewInReport(event.order_number) : undefined}
+    />
+  );
 
   return (
     <Card>
@@ -210,6 +250,9 @@ export function EventsTab({
             <CardTitle>Eventi Clinici</CardTitle>
             <CardDescription>
               {events.length} eventi estratti
+              {verificationEvents.length > 0 && (
+                <span className="text-yellow-600"> ({verificationEvents.length} da verificare)</span>
+              )}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -259,7 +302,7 @@ export function EventsTab({
                   </button>
                 );
               })}
-              {events.some((e) => e.requires_verification) && (
+              {verificationEvents.length > 0 && (
                 <button
                   type="button"
                   onClick={() => { setShowOnlyVerification(!showOnlyVerification); setEventTypeFilter(null); }}
@@ -267,35 +310,31 @@ export function EventsTab({
                     showOnlyVerification ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                   }`}
                 >
-                  Da verificare ({events.filter((e) => e.requires_verification).length})
+                  Da verificare ({verificationEvents.length})
                 </button>
               )}
             </div>
           </div>
         )}
         <div className="space-y-2">
-          {filteredEvents.map((event, index) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              caseId={caseId}
-              isExpanded={expandedEvents.has(event.id)}
-              isEditing={editingEventId === event.id}
-              onToggle={() => toggleEvent(event.id)}
-              onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
-              onCancelEdit={() => setEditingEventId(null)}
-              onSaved={() => { setEditingEventId(null); router.refresh(); }}
-              onDeleted={() => router.refresh()}
-              eventImages={eventImages}
-              onImageClick={onImageClick}
-              onMoveUp={() => handleMoveEvent(event.id, 'up')}
-              onMoveDown={() => handleMoveEvent(event.id, 'down')}
-              isFirst={index === 0}
-              isLast={index === filteredEvents.length - 1}
-              isHighlighted={highlightedEventOrderNumber === event.order_number}
-              onViewInReport={onViewInReport ? () => onViewInReport(event.order_number) : undefined}
-            />
-          ))}
+          {/* Normal events */}
+          {displayNormal.map((event, index) => renderEventCard(event, index, displayNormal))}
+
+          {/* Verification events separator */}
+          {displayVerification.length > 0 && displayNormal.length > 0 && (
+            <div className="flex items-center gap-2 py-3 mt-2">
+              <div className="h-px flex-1 bg-yellow-300" />
+              <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Eventi da verificare ({displayVerification.length})
+              </div>
+              <div className="h-px flex-1 bg-yellow-300" />
+            </div>
+          )}
+
+          {/* Verification events */}
+          {displayVerification.map((event, index) => renderEventCard(event, index, displayVerification))}
+
           {events.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.

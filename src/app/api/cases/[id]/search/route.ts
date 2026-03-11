@@ -54,7 +54,7 @@ export async function GET(
   }
 
   // Rate limiting per user
-  const rateLimitResult = checkRateLimit({
+  const rateLimitResult = await checkRateLimit({
     key: `search:${user.id}`,
     ...RATE_LIMITS.API,
   });

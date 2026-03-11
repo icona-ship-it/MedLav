@@ -10,6 +10,7 @@ import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistra
 import { CASE_TYPE_GUIDANCE } from './extraction-prompts';
 import type { ExtractedEvent } from './extraction-schemas';
 import type { CaseType } from '@/types';
+import { logger } from '@/lib/logger';
 
 // Max text length to send to reviewer (Mistral Large 128k context)
 const MAX_REVIEW_TEXT_CHARS = 100_000;
@@ -94,7 +95,7 @@ export async function reviewExtraction(params: {
     return parseReviewResponse(content, events.length);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Review failed';
-    console.error(`[review] LLM review failed (non-fatal): ${message}`);
+    logger.warn('review', 'LLM review failed (non-fatal)', { error: message });
     return { missingEvents: [], corrections: [] };
   }
 }
@@ -198,7 +199,7 @@ function parseReviewResponse(content: string, existingEventCount: number): Revie
 
     return { missingEvents, corrections };
   } catch {
-    console.error('[review] Failed to parse review response');
+    logger.warn('review', 'Failed to parse review response');
     return { missingEvents: [], corrections: [] };
   }
 }

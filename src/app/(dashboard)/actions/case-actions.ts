@@ -6,6 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
+import { logger } from '@/lib/logger';
+import { revalidateCase, revalidateCases } from '@/lib/cache';
 
 export async function createCase(formData: FormData) {
   const supabase = await createClient();
@@ -15,7 +17,7 @@ export async function createCase(formData: FormData) {
     return { error: 'Non autenticato' };
   }
 
-  const rateCheck = checkRateLimit({ key: `create-case:${user.id}`, ...RATE_LIMITS.API });
+  const rateCheck = await checkRateLimit({ key: `create-case:${user.id}`, ...RATE_LIMITS.API });
   if (!rateCheck.success) {
     return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
   }
@@ -113,12 +115,12 @@ export async function createCase(formData: FormData) {
 
     // If it's a unique violation, retry with next number
     if (error?.code === '23505') {
-      console.error(`[createCase] Code collision on attempt ${attempt + 1}, retrying`);
+      logger.warn('createCase', `Code collision on attempt ${attempt + 1}, retrying`);
       continue;
     }
 
     // Any other error, bail out
-    console.error(`[createCase] Failed for user ${user.id}: ${error.message} (code: ${error.code})`);
+    logger.error('createCase', 'Failed to create case', { userId: user.id, code: error.code });
     return { error: 'Errore nella creazione del caso. Riprova.' };
   }
 
@@ -126,6 +128,7 @@ export async function createCase(formData: FormData) {
     return { error: 'Errore nella creazione del caso. Riprova.' };
   }
 
+  revalidateCases(user.id);
   redirect(`/cases/${newCaseId}`);
 }
 
@@ -219,6 +222,7 @@ export async function updateCase(params: {
     metadata: { fields: Object.keys(updateFields) },
   });
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 
@@ -267,6 +271,7 @@ export async function updateCaseStatus(params: { caseId: string; newStatus: stri
     metadata: { previousStatus: currentStatus, newStatus },
   });
 
+  revalidateCase(params.caseId);
   return { success: true };
 }
 
@@ -332,5 +337,6 @@ export async function deleteCase(caseId: string) {
 
   if (error) return { error: 'Errore eliminazione caso' };
 
+  revalidateCases(user.id);
   return { success: true };
 }

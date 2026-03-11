@@ -10,6 +10,9 @@ import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import { validateCsrfToken } from '@/lib/csrf';
+import { checkFeatureAccess } from '@/lib/subscription';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 300; // synthesis can take several minutes
 
@@ -24,6 +27,10 @@ const requestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // CSRF validation
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const supabase = await createClient();
     const admin = createAdminClient();
 
@@ -32,8 +39,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
+    // Feature gate: check subscription allows processing
+    const gate = await checkFeatureAccess(user.id, 'processing');
+    if (!gate.allowed) {
+      return NextResponse.json(
+        { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
+        { status: 403 },
+      );
+    }
+
     // Rate limit: prevent repeated expensive LLM calls
-    const rateCheck = checkRateLimit({
+    const rateCheck = await checkRateLimit({
       key: `regenerate:${user.id}`,
       ...RATE_LIMITS.PROCESSING,
     });
@@ -199,7 +215,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[processing/regenerate] Error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('processing/regenerate', 'Report regeneration failed', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ success: false, error: 'Errore rigenerazione report.' }, { status: 500 });
   }
 }

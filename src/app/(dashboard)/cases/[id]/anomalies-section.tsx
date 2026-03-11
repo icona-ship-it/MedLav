@@ -1,15 +1,30 @@
 'use client';
 
-import { AlertTriangle, FileWarning } from 'lucide-react';
+import { useState, useCallback, useTransition } from 'react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { anomalyTypeLabels } from '@/lib/constants';
-import type { AnomalyRow, MissingDocRow } from './types';
+import { updateAnomaly, dismissAnomaly } from '../../actions';
+import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
 // --- Types ---
 
+interface InvolvedEvent {
+  orderNumber: number;
+  title: string;
+  date: string;
+}
+
 interface AnomaliesSectionProps {
+  caseId: string;
   anomalies: AnomalyRow[];
+  events?: EventRow[];
+  documents?: Document[];
+  onChanged?: (dismissedId?: string) => void;
 }
 
 interface MissingDocsSectionProps {
@@ -26,9 +41,216 @@ function severityVariant(severity: string): 'destructive' | 'warning' | 'seconda
   }
 }
 
+function parseInvolvedEvents(involvedEventsJson: string | null): InvolvedEvent[] {
+  if (!involvedEventsJson) return [];
+  try {
+    const parsed = JSON.parse(involvedEventsJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((e: Record<string, unknown>) => ({
+      orderNumber: typeof e.orderNumber === 'number' ? e.orderNumber : 0,
+      title: typeof e.title === 'string' ? e.title : '',
+      date: typeof e.date === 'string' ? e.date : '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function resolveEventReferences(
+  involvedEvents: InvolvedEvent[],
+  events?: EventRow[],
+  documents?: Document[],
+): string[] {
+  if (!events || involvedEvents.length === 0) return [];
+
+  return involvedEvents.map((ie) => {
+    const matchedEvent = events.find((e) => e.order_number === ie.orderNumber);
+    if (!matchedEvent) return `Evento #${ie.orderNumber}: ${ie.title}`;
+
+    const docName = matchedEvent.document_id && documents
+      ? documents.find((d) => d.id === matchedEvent.document_id)?.file_name
+      : null;
+
+    let sourcePages = '';
+    if (matchedEvent.source_pages) {
+      try {
+        const parsed = JSON.parse(matchedEvent.source_pages) as unknown;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const pageNumbers = parsed.filter((p): p is number => typeof p === 'number');
+          if (pageNumbers.length > 0) {
+            sourcePages = `, pag. ${pageNumbers.join(', ')}`;
+          }
+        }
+      } catch {
+        // Not JSON — use as plain string, stripping brackets if present
+        const clean = matchedEvent.source_pages.replace(/^\[|\]$/g, '').trim();
+        if (clean) {
+          sourcePages = `, pag. ${clean}`;
+        }
+      }
+    }
+
+    const docRef = docName ? ` — Doc: ${docName}${sourcePages}` : '';
+    return `Evento #${ie.orderNumber}: ${ie.title}${docRef}`;
+  });
+}
+
+// --- Anomaly Card ---
+
+function AnomalyCard({
+  anomaly,
+  events,
+  documents,
+  caseId,
+  onChanged,
+}: {
+  anomaly: AnomalyRow;
+  events?: EventRow[];
+  documents?: Document[];
+  caseId: string;
+  onChanged?: (dismissedId?: string) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDescription, setEditDescription] = useState(anomaly.description);
+  const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
+  const [isSaving, startSave] = useTransition();
+  const [isDismissing, startDismiss] = useTransition();
+
+  const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
+  const references = resolveEventReferences(involvedEvents, events, documents);
+
+  const handleSave = useCallback(() => {
+    startSave(async () => {
+      const result = await updateAnomaly({
+        anomalyId: anomaly.id,
+        caseId,
+        description: editDescription,
+        suggestion: editSuggestion.trim() || null,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Anomalia aggiornata');
+      setIsEditing(false);
+      onChanged?.();
+    });
+  }, [anomaly.id, caseId, editDescription, editSuggestion, onChanged]);
+
+  const [showDismissConfirm, setShowDismissConfirm] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    startDismiss(async () => {
+      const result = await dismissAnomaly({ anomalyId: anomaly.id, caseId });
+      if (result.error) {
+        toast.error(result.error);
+        setShowDismissConfirm(false);
+        return;
+      }
+      toast.success('Anomalia rimossa');
+      setShowDismissConfirm(false);
+      onChanged?.(anomaly.id);
+    });
+  }, [anomaly.id, caseId, onChanged]);
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
+          <span className="text-sm font-medium">{anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type}</span>
+        </div>
+        {!isEditing && (
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsEditing(true)}>
+              <Pencil className="mr-1 h-3 w-3" />Modifica
+            </Button>
+            {showDismissConfirm ? (
+              <>
+                <span className="text-xs text-muted-foreground">Confermi?</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleDismiss}
+                  disabled={isDismissing}
+                >
+                  {isDismissing ? 'Rimozione...' : 'Elimina'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setShowDismissConfirm(false)}
+                >
+                  No
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-green-700 hover:text-green-800 hover:bg-green-50"
+                onClick={() => setShowDismissConfirm(true)}
+              >
+                <CheckCircle2 className="mr-1 h-3 w-3" />Risolto
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-2">
+          <Textarea
+            className="text-sm"
+            rows={3}
+            value={editDescription}
+            onChange={(e) => setEditDescription(e.target.value)}
+            placeholder="Descrizione anomalia..."
+          />
+          <Textarea
+            className="text-sm"
+            rows={2}
+            value={editSuggestion}
+            onChange={(e) => setEditSuggestion(e.target.value)}
+            placeholder="Suggerimento (opzionale)..."
+          />
+          <div className="flex items-center gap-1">
+            <Button size="sm" onClick={handleSave} disabled={isSaving || !editDescription.trim()}>
+              <Save className="mr-1 h-3 w-3" />Salva
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setEditDescription(anomaly.description); setEditSuggestion(anomaly.suggestion ?? ''); }}>
+              <X className="mr-1 h-3 w-3" />Annulla
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm">{anomaly.description}</p>
+          {anomaly.suggestion && (
+            <p className="mt-2 text-sm text-muted-foreground italic">{anomaly.suggestion}</p>
+          )}
+        </>
+      )}
+
+      {/* Event/document references */}
+      {references.length > 0 && (
+        <div className="mt-2 space-y-0.5">
+          {references.map((ref) => (
+            <p key={ref} className="text-xs text-muted-foreground">
+              {ref}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Anomalies Component ---
 
-export function AnomaliesSection({ anomalies }: AnomaliesSectionProps) {
+export function AnomaliesSection({ anomalies, events, documents, caseId, onChanged }: AnomaliesSectionProps) {
   return (
     <Card>
       <CardHeader>
@@ -43,16 +265,14 @@ export function AnomaliesSection({ anomalies }: AnomaliesSectionProps) {
         ) : (
           <div className="space-y-3">
             {anomalies.map((a) => (
-              <div key={a.id} className="rounded-md border p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant={severityVariant(a.severity)}>{a.severity.toUpperCase()}</Badge>
-                  <span className="text-sm font-medium">{anomalyTypeLabels[a.anomaly_type] ?? a.anomaly_type}</span>
-                </div>
-                <p className="text-sm">{a.description}</p>
-                {a.suggestion && (
-                  <p className="mt-2 text-sm text-muted-foreground italic">{a.suggestion}</p>
-                )}
-              </div>
+              <AnomalyCard
+                key={a.id}
+                anomaly={a}
+                events={events}
+                documents={documents}
+                caseId={caseId}
+                onChanged={onChanged}
+              />
             ))}
           </div>
         )}

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DEMO_CASE, DEMO_EVENTS, DEMO_ANOMALIES, DEMO_MISSING_DOCS, DEMO_SYNTHESIS } from './demo-case-data';
+import { logger } from '@/lib/logger';
 
 /**
  * Create a demo case for a user.
@@ -39,7 +40,7 @@ export async function createDemoCase(userId: string): Promise<string | null> {
     .single();
 
   if (caseError || !caseData) {
-    console.error('[demo] Failed to create demo case:', caseError?.code);
+    logger.error('demo', 'Failed to create demo case', { code: caseError?.code });
     return null;
   }
 

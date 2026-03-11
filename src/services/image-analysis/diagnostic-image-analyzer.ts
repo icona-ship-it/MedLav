@@ -6,6 +6,7 @@
 
 import type { CaseType } from '@/types';
 import { getMistralClient, withMistralRetry, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { logger } from '@/lib/logger';
 
 export interface ImageAnalysisResult {
   pageNumber: number;
@@ -49,7 +50,7 @@ export async function analyzeDocumentImages(params: {
         results.push(result);
       }
     } catch (error) {
-      console.error(`[image-analysis] Failed for page ${image.pageNumber}: ${error instanceof Error ? error.message : 'unknown'}`);
+      logger.error('image-analysis', `Failed for page ${image.pageNumber}`, { error: error instanceof Error ? error.message : 'unknown' });
     }
   }
 

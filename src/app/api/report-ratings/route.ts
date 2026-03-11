@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 const ratingSchema = z.object({
   reportId: z.string().uuid(),
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (error) {
-      console.error('[report-ratings] Upsert error:', error.code);
+      logger.error('report-ratings', 'Upsert error', { code: error.code });
       return NextResponse.json({ success: false, error: 'Errore salvataggio' }, { status: 500 });
     }
 

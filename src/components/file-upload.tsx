@@ -216,7 +216,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
 
       {/* Upload progress */}
       {progress.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2" aria-live="polite">
           <p className="text-sm font-medium">
             {isUploading ? 'Caricamento in corso...' : `Completato: ${doneCount}/${progress.length}`}
           </p>

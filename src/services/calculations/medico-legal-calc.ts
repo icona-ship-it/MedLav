@@ -51,7 +51,9 @@ export function calculateMedicoLegalPeriods(
 
   // 7. Biological damage estimate with table reference
   if (caseType) {
-    const damageEstimate = estimateBiologicalDamage(events, caseType);
+    // Extract earliest event date as incident date approximation
+    const incidentDate = extractEarliestEventDate(events);
+    const damageEstimate = estimateBiologicalDamage(events, caseType, incidentDate);
     if (damageEstimate.lookupResult && damageEstimate.estimatedRange) {
       const lr = damageEstimate.lookupResult;
       calculations.push({
@@ -65,6 +67,48 @@ export function calculateMedicoLegalPeriods(
         notes: `${damageEstimate.reasoning} Confidenza: ${lr.confidence}.`,
         tableReference: lr.tableUsed,
       });
+
+      // 7a. Milano comparison for macropermanenti
+      if (damageEstimate.milanoComparison && damageEstimate.milanoComparison.estimatedAmount > 0) {
+        const mc = damageEstimate.milanoComparison;
+        calculations.push({
+          label: 'Confronto Tabelle Milano 2024 (indicativo)',
+          value: `€${mc.estimatedAmount.toLocaleString('it-IT')} (${mc.percentage}%, eta ${mc.ageUsed}, demolt. ${mc.ageDemoltiplicator})`,
+          days: null,
+          startDate: null,
+          endDate: null,
+          notes: `${mc.notes} Valore per punto: €${mc.perPointValue.toLocaleString('it-IT')}.`,
+          tableReference: mc.tableReference,
+        });
+      }
+
+      // 7b. Balthazard note for concurrent injuries
+      if (damageEstimate.balthazardNote) {
+        calculations.push({
+          label: 'Nota: formula di Balthazard',
+          value: 'Valutare concorso di lesioni',
+          days: null,
+          startDate: null,
+          endDate: null,
+          notes: damageEstimate.balthazardNote,
+          tableReference: 'Formula di Balthazard',
+        });
+      }
+
+      // 7c. Table selection note
+      if (damageEstimate.tableSelectionNote) {
+        calculations.push({
+          label: 'Nota: selezione tabella',
+          value: incidentDate
+            ? `Data sinistro: ${incidentDate}`
+            : 'Data sinistro non disponibile',
+          days: null,
+          startDate: null,
+          endDate: null,
+          notes: damageEstimate.tableSelectionNote,
+          tableReference: 'Criterio temporale DPR 12/2025',
+        });
+      }
     }
   }
 
@@ -223,6 +267,22 @@ function calculateITP(events: CalcEvent[]): MedicoLegalCalculation {
     endDate: null,
     notes: 'Dati insufficienti per stimare l\'ITP. Il perito deve definire il periodo manualmente.',
   };
+}
+
+/**
+ * Extract the earliest event date from events as an approximation
+ * of the incident date for table selection purposes.
+ * Returns undefined if no valid dates are found.
+ */
+function extractEarliestEventDate(events: CalcEvent[]): string | undefined {
+  if (events.length === 0) return undefined;
+
+  const validDates = events
+    .map((e) => e.event_date)
+    .filter((d) => d && !isNaN(new Date(d).getTime()))
+    .sort();
+
+  return validDates.length > 0 ? validDates[0] : undefined;
 }
 
 function daysDiff(dateA: string, dateB: string): number {

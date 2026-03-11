@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 const createShareSchema = z.object({
   label: z.string().max(100).optional(),
@@ -59,7 +60,7 @@ export async function POST(
       .single();
 
     if (error) {
-      console.error('[share] Insert error:', error.code);
+      logger.error('share', 'Insert error', { code: error.code });
       return NextResponse.json({ success: false, error: 'Errore creazione link' }, { status: 500 });
     }
 

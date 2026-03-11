@@ -1,3 +1,5 @@
+export const revalidate = 60;
+
 import Link from 'next/link';
 import { FolderPlus, FileText, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';

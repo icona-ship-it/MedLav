@@ -17,10 +17,19 @@ import { signOut } from '@/app/(auth)/actions';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 
-const navigation = [
+export const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
-];
+] as const;
+
+export const FOOTER_ITEMS = [
+  { name: 'Aiuto', href: '/help', icon: HelpCircle, adminOnly: false, className: '' },
+  { name: 'Admin', href: '/admin', icon: ShieldCheck, adminOnly: true, className: 'text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/20' },
+  { name: 'Impostazioni', href: '/settings', icon: Settings, adminOnly: false, className: '' },
+] as const;
+
+// Keep backward-compat local alias
+const navigation = NAV_ITEMS;
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
@@ -31,7 +40,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
     : pathname;
 
   return (
-    <aside role="navigation" className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <aside role="navigation" className="hidden lg:flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
         <Scale className="h-6 w-6 text-primary" />

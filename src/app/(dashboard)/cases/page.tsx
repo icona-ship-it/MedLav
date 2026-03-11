@@ -1,3 +1,5 @@
+export const revalidate = 30;
+
 import Link from 'next/link';
 import { Archive, FileText, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import { ingestGuideline, deleteGuideline } from '@/services/rag/ingestion-service';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { checkFeatureAccess } from '@/lib/subscription';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 120; // ingestion can take time
 
@@ -54,7 +56,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
-  const rateCheck = checkRateLimit({ key: `guidelines:${user.id}`, ...RATE_LIMITS.PROCESSING });
+  // Feature gate: guideline ingestion requires Pro
+  const gate = await checkFeatureAccess(user.id, 'rag_guidelines');
+  if (!gate.allowed) {
+    return NextResponse.json(
+      { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
+      { status: 403 },
+    );
+  }
+
+  const rateCheck = await checkRateLimit({ key: `guidelines:${user.id}`, ...RATE_LIMITS.PROCESSING });
   if (!rateCheck.success) {
     return NextResponse.json({ success: false, error: 'Troppi tentativi.' }, { status: 429 });
   }
@@ -88,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    console.error('[admin/guidelines] Ingestion error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('admin/guidelines', 'Ingestion failed', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ success: false, error: 'Errore durante l\'ingestione della linea guida.' }, { status: 500 });
   }
 }
@@ -123,7 +134,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[admin/guidelines] Delete error:', error instanceof Error ? error.message : 'unknown');
+    logger.error('admin/guidelines', 'Delete failed', { error: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ success: false, error: 'Errore eliminazione.' }, { status: 500 });
   }
 }

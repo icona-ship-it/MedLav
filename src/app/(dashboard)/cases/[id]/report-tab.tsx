@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown, AlertTriangle } from 'lucide-react';
 import { AnonymizeDialog } from '@/components/anonymize-dialog';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,24 +14,53 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { updateReportStatus, updateReportSynthesis, getCaseReportVersions } from '../../actions';
 import { MarkdownPreview } from '@/components/markdown-preview';
-import { VersionCompare } from '@/components/version-compare';
+const VersionCompare = dynamic(
+  () => import('@/components/version-compare').then((m) => ({ default: m.VersionCompare })),
+  { loading: () => null },
+);
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { parseSections } from '@/lib/section-parser-client';
+import { QualityGateDialog } from './quality-gate-dialog';
 import type { ReportRow, EventRow } from './types';
+
+// --- Truncation Detection ---
+
+function isTruncated(synthesis: string): boolean {
+  const trimmed = synthesis.trim();
+  if (trimmed.length === 0) return false;
+
+  // Check if report has a conclusions section
+  const hasConclusioni = /conclusioni|considerazioni\s+finali|in\s+definitiva/i.test(trimmed);
+  if (hasConclusioni) return false;
+
+  // Get last meaningful line (skip empty lines)
+  const lines = trimmed.split('\n').filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return false;
+  const lastLine = lines[lines.length - 1].trim();
+
+  // Headings, list items, and lines ending with punctuation are valid endings
+  if (/^#{1,6}\s/.test(lastLine)) return false;
+  const lastChar = lastLine[lastLine.length - 1];
+  return !['.', ')', '"', '»', '*', '-', ':', ';', '|'].includes(lastChar);
+}
 
 // --- Report Status Buttons ---
 
 function ReportStatusButtons({
-  caseId, report, onChanged,
+  caseId, report, anomalyCount, missingDocsCount, onChanged,
 }: {
   caseId: string;
   report: ReportRow;
+  anomalyCount: number;
+  missingDocsCount: number;
   onChanged: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
-  const currentStatus = report.report_status;
+  const [qualityGateOpen, setQualityGateOpen] = useState(false);
+  // Treat legacy "in_revisione" as "bozza"
+  const effectiveStatus = report.report_status === 'in_revisione' ? 'bozza' : report.report_status;
 
   const handleStatusChange = (newStatus: string) => {
     startTransition(async () => {
@@ -41,23 +71,29 @@ function ReportStatusButtons({
 
   return (
     <div className="flex items-center gap-1">
-      {currentStatus === 'bozza' && (
-        <Button variant="outline" size="sm" onClick={() => handleStatusChange('in_revisione')} disabled={isPending}>
-          In Revisione
-        </Button>
-      )}
-      {currentStatus === 'in_revisione' && (
+      {effectiveStatus === 'bozza' && (
         <>
-          <Button variant="outline" size="sm" onClick={() => handleStatusChange('bozza')} disabled={isPending}>
-            Bozza
+          <Button size="sm" onClick={() => setQualityGateOpen(true)} disabled={isPending}>
+            {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            Approva come Definitivo
           </Button>
-          <Button size="sm" onClick={() => handleStatusChange('definitivo')} disabled={isPending}>
-            Definitivo
-          </Button>
+          <QualityGateDialog
+            open={qualityGateOpen}
+            onOpenChange={setQualityGateOpen}
+            anomalyCount={anomalyCount}
+            missingDocsCount={missingDocsCount}
+            onConfirm={() => handleStatusChange('definitivo')}
+          />
         </>
       )}
-      {currentStatus === 'definitivo' && (
-        <Badge variant="success">Definitivo</Badge>
+      {effectiveStatus === 'definitivo' && (
+        <>
+          <Badge variant="success">Definitivo</Badge>
+          <Button variant="outline" size="sm" onClick={() => handleStatusChange('bozza')} disabled={isPending}>
+            {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            Riporta a Bozza
+          </Button>
+        </>
       )}
     </div>
   );
@@ -69,18 +105,18 @@ function SectionedReportView({
   caseId,
   synthesis,
   regeneratingSection,
-  onRegenerateStart,
   onRegenerated,
   events,
   onEventClick,
+  lastRegeneratedSection,
 }: {
   caseId: string;
   synthesis: string;
   regeneratingSection: string | null;
-  onRegenerateStart: (sectionId: string) => void;
   onRegenerated: () => void;
   events?: EventRow[];
   onEventClick?: (orderNumber: number) => void;
+  lastRegeneratedSection?: string | null;
 }) {
   const sections = parseSections(synthesis);
   const eventRefs = events?.map((e) => ({
@@ -92,7 +128,10 @@ function SectionedReportView({
   return (
     <div className="space-y-6">
       {sections.map((section) => (
-        <div key={section.id} className="group">
+        <div
+          key={section.id}
+          className={`group rounded-md ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}`}
+        >
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-semibold">{section.title}</h3>
             {section.id !== 'preamble' && section.id !== 'full_report' && (
@@ -124,6 +163,7 @@ function SectionedReportView({
 
 export function ReportTab({
   caseId, report, isRegenerating, onRegenerate, events, onEventClick,
+  anomalyCount = 0, missingDocsCount = 0,
 }: {
   caseId: string;
   report: ReportRow | null;
@@ -131,12 +171,15 @@ export function ReportTab({
   onRegenerate: () => void;
   events?: EventRow[];
   onEventClick?: (orderNumber: number) => void;
+  anomalyCount?: number;
+  missingDocsCount?: number;
 }) {
   const router = useRouter();
   const [isEditingReport, setIsEditingReport] = useState(false);
   const [editedSynthesis, setEditedSynthesis] = useState('');
   const [isSavingSynthesis, startSaveSynthesis] = useTransition();
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
+  const [lastRegeneratedSection, setLastRegeneratedSection] = useState<string | null>(null);
 
   // Rating state
   const [existingRating, setExistingRating] = useState<number | null>(null);
@@ -214,8 +257,13 @@ export function ReportTab({
     }
   }, [caseId, showVersionCompare]);
 
-  const handleSectionRegenerated = useCallback(() => {
+  const handleSectionRegenerated = useCallback((sectionId?: string) => {
     setRegeneratingSection(null);
+    if (sectionId) {
+      setLastRegeneratedSection(sectionId);
+      // Clear highlight after animation
+      setTimeout(() => setLastRegeneratedSection(null), 2000);
+    }
     router.refresh();
   }, [router]);
 
@@ -260,6 +308,8 @@ export function ReportTab({
                     <ReportStatusButtons
                       caseId={caseId}
                       report={report}
+                      anomalyCount={anomalyCount}
+                      missingDocsCount={missingDocsCount}
                       onChanged={() => router.refresh()}
                     />
                   </>
@@ -320,41 +370,61 @@ export function ReportTab({
         </div>
       </CardHeader>
       <CardContent>
+        {!isEditingReport && report?.synthesis && isTruncated(report.synthesis) && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Il report potrebbe essere stato troncato. Prova a rigenerarlo per ottenere una versione completa.</span>
+          </div>
+        )}
         {isEditingReport ? (
-          <Tabs defaultValue="edit">
-            <TabsList>
-              <TabsTrigger value="edit">Modifica</TabsTrigger>
-              <TabsTrigger value="preview">Anteprima</TabsTrigger>
-            </TabsList>
-            <TabsContent value="edit">
-              <Textarea
-                className="min-h-[400px] font-mono text-sm"
-                value={editedSynthesis}
-                onChange={(e) => setEditedSynthesis(e.target.value)}
-              />
-            </TabsContent>
-            <TabsContent value="preview">
-              <div className="min-h-[400px] rounded-md border p-4">
-                <MarkdownPreview content={editedSynthesis} />
-              </div>
-            </TabsContent>
-          </Tabs>
+          <div className="space-y-2">
+            <Tabs defaultValue="edit" className="w-full">
+              <TabsList>
+                <TabsTrigger value="edit">Modifica</TabsTrigger>
+                <TabsTrigger value="preview">Anteprima</TabsTrigger>
+              </TabsList>
+              <TabsContent value="edit">
+                <Textarea
+                  className="min-h-[400px] font-mono text-sm"
+                  value={editedSynthesis}
+                  onChange={(e) => setEditedSynthesis(e.target.value)}
+                  autoFocus
+                />
+              </TabsContent>
+              <TabsContent value="preview">
+                <div className="min-h-[400px] rounded-md border p-4">
+                  <MarkdownPreview content={editedSynthesis} />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
         ) : report?.synthesis ? (
           <SectionedReportView
             caseId={caseId}
             synthesis={report.synthesis}
             regeneratingSection={regeneratingSection}
-            onRegenerateStart={setRegeneratingSection}
             onRegenerated={handleSectionRegenerated}
             events={events}
             onEventClick={onEventClick}
+            lastRegeneratedSection={lastRegeneratedSection}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Nessuna sintesi generata. Avvia l&apos;elaborazione dei documenti.
-          </p>
+          <div className="py-8 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {events && events.length > 0
+                ? 'Il report non è ancora stato generato, ma gli eventi sono già disponibili nella tab Timeline.'
+                : 'Nessuna sintesi generata. Avvia l\'elaborazione dei documenti.'}
+            </p>
+            {events && events.length > 0 && (
+              <Button variant="outline" size="sm" onClick={onRegenerate} disabled={isRegenerating}>
+                {isRegenerating
+                  ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Generazione...</>
+                  : 'Genera Report'}
+              </Button>
+            )}
+          </div>
         )}
-        {!isEditingReport && report?.synthesis && report.report_status !== 'bozza' && (
+        {!isEditingReport && report?.synthesis && report.report_status === 'definitivo' && (
           <ReportRating
             reportId={report.id}
             existingRating={existingRating}

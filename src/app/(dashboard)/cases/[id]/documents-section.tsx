@@ -2,13 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCcw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileUpload } from '@/components/file-upload';
-import { deleteDocument } from '../../actions';
+import { deleteDocument, retryDocument } from '../../actions';
 import { formatFileSize, getFileIcon } from '@/lib/format';
 import type { Document } from './types';
 
@@ -19,7 +19,7 @@ interface DocumentsSectionProps {
   documents: Document[];
   processingLabels: Record<string, string>;
   hasUploadedDocs: boolean;
-  onProceedToProcessing: () => void;
+  onProceedToNext: () => void;
 }
 
 // --- Helpers ---
@@ -44,10 +44,28 @@ export function DocumentsSection({
   documents,
   processingLabels,
   hasUploadedDocs,
-  onProceedToProcessing,
+  onProceedToNext,
 }: DocumentsSectionProps) {
   const router = useRouter();
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
+
+  const handleRetryDocument = useCallback(async (docId: string) => {
+    setRetryingDocId(docId);
+    try {
+      const result = await retryDocument({ documentId: docId, caseId });
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success('Documento rimesso in coda');
+        router.refresh();
+      }
+    } catch {
+      toast.error('Errore durante il retry');
+    } finally {
+      setRetryingDocId(null);
+    }
+  }, [caseId, router]);
 
   const handleDeleteDocument = useCallback((docId: string, fileName: string) => {
     toast(`Eliminare "${fileName}"?`, {
@@ -122,6 +140,22 @@ export function DocumentsSection({
                         {doc.processing_status === 'errore' && doc.processing_error && (
                           <p className="mt-1 text-xs text-destructive max-w-[200px]">{doc.processing_error}</p>
                         )}
+                        {doc.processing_status === 'errore' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1 h-6 px-2 text-xs"
+                            onClick={() => handleRetryDocument(doc.id)}
+                            disabled={retryingDocId === doc.id}
+                          >
+                            {retryingDocId === doc.id ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="mr-1 h-3 w-3" />
+                            )}
+                            Riprova
+                          </Button>
+                        )}
                       </div>
                       {canDelete && (
                         <Button
@@ -150,9 +184,9 @@ export function DocumentsSection({
           <Button
             size="lg"
             className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
-            onClick={onProceedToProcessing}
+            onClick={onProceedToNext}
           >
-            Avvia Elaborazione
+            Prosegui
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>

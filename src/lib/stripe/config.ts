@@ -10,6 +10,9 @@ export const PLANS = {
     description: 'Casi illimitati, tutte le funzionalità',
     priceMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? '',
     priceYearly: process.env.STRIPE_PRICE_PRO_YEARLY ?? '',
+    monthlyPrice: 49,
+    yearlyPrice: 468,
+    yearlyMonthlyEquivalent: 39,
   },
   enterprise: {
     name: 'Enterprise',

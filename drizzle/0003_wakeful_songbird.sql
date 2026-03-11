@@ -1,5 +1,5 @@
--- Migration 0002b: Add new case types + case_types column
--- NOTE: guideline_chunks and guidelines tables are created in 0002_rag_guidelines.sql (manual migration)
+-- Migration 0003: Add new case types + case_types column
+-- NOTE: guideline_chunks and guidelines tables are created in 0002_rag_guidelines.sql
 -- with the correct vector(1024) type. Do NOT recreate them here.
 
 ALTER TYPE "public"."case_type" ADD VALUE 'rc_auto' BEFORE 'generica';--> statement-breakpoint
