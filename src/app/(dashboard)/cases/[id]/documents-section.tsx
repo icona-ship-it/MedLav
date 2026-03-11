@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -147,9 +147,13 @@ export function DocumentsSection({
 
       {hasUploadedDocs && (
         <div className="lg:col-span-2">
-          <Button className="w-full" size="lg" onClick={onProceedToProcessing}>
-            <Play className="mr-2 h-4 w-4" />
-            Procedi all&apos;elaborazione (Passaggio 2)
+          <Button
+            size="lg"
+            className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+            onClick={onProceedToProcessing}
+          >
+            Avvia Elaborazione
+            <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>
       )}

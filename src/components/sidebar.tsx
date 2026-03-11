@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
-  FolderPlus,
   FolderOpen,
-  Archive,
+  HelpCircle,
+  Plus,
   Settings,
   LogOut,
   Scale,
@@ -15,12 +15,11 @@ import {
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Button } from '@/components/ui/button';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
-  { name: 'Nuovo Caso', href: '/cases/new', icon: FolderPlus },
-  { name: 'Archivio', href: '/cases?status=archiviato', icon: Archive },
 ];
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -39,8 +38,18 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <span className="text-lg font-bold">MedLav</span>
       </div>
 
+      {/* New Case Button */}
+      <div className="px-3 pt-4 pb-2">
+        <Button asChild className="w-full">
+          <Link href="/cases/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Nuovo Caso
+          </Link>
+        </Button>
+      </div>
+
       {/* Navigation */}
-      <nav aria-label="Menu principale" className="flex-1 space-y-1 px-3 py-4">
+      <nav aria-label="Menu principale" className="flex-1 space-y-1 px-3 py-2">
         {navigation.map((item) => {
           const isActive = currentUrl === item.href;
           return (
@@ -68,6 +77,13 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           <span className="text-xs text-muted-foreground">Tema</span>
           <ThemeToggle />
         </div>
+        <Link
+          href="/help"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          <HelpCircle className="h-4 w-4" />
+          Aiuto
+        </Link>
         {isAdmin && (
           <Link
             href="/admin"

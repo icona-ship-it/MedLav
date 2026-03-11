@@ -127,9 +127,9 @@ export function ProcessingSection({
         <CardContent className="pt-6">
           {hasProcessingDocs ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Elaborazione in corso</p>
-                <Button variant="destructive" size="sm" onClick={handleCancel} disabled={isCancelling}>
+              <p className="text-sm font-medium text-center">Elaborazione in corso</p>
+              <div className="flex items-center justify-end">
+                <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={handleCancel} disabled={isCancelling}>
                   {isCancelling ? (
                     <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Annullamento...</>
                   ) : (
@@ -149,32 +149,40 @@ export function ProcessingSection({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  {hasUploadedDocs ? (
+              <div className="text-center">
+                {hasUploadedDocs ? (
+                  <>
                     <p className="text-sm text-muted-foreground">
                       {documents.filter((d) => d.processing_status === 'caricato').length} documenti pronti per l&apos;elaborazione.
                     </p>
-                  ) : documents.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Nessun documento caricato. Torna al passaggio 1 per caricare i documenti.
+                    <p className="mt-2 text-sm font-medium text-foreground">
+                      Tutto pronto! Clicca per avviare l&apos;analisi AI dei tuoi documenti.
                     </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Tutti i documenti sono già stati elaborati.
-                    </p>
-                  )}
-                  {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
-                </div>
-                <Button onClick={handleStartProcessing} disabled={isStartingProcessing || !hasUploadedDocs}>
-                  {isStartingProcessing ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Avvio...</>
-                  ) : (
-                    <><Play className="mr-2 h-4 w-4" />Avvia Elaborazione</>
-                  )}
-                </Button>
+                  </>
+                ) : documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nessun documento caricato. Torna al passaggio 1 per caricare i documenti.
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Tutti i documenti sono già stati elaborati.
+                  </p>
+                )}
+                {processingError && <p className="mt-1 text-sm text-destructive">{processingError}</p>}
               </div>
-              <p className="text-xs text-muted-foreground italic">
+              <Button
+                size="lg"
+                className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleStartProcessing}
+                disabled={isStartingProcessing || !hasUploadedDocs}
+              >
+                {isStartingProcessing ? (
+                  <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso...</>
+                ) : (
+                  <><Play className="mr-2 h-5 w-5" />Avvia Elaborazione</>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground italic text-center">
                 L&apos;analisi richiede in genere 2-5 minuti per documento.
               </p>
             </div>

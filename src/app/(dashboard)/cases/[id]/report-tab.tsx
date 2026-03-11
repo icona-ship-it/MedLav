@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode } from 'lucide-react';
+import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown } from 'lucide-react';
 import { AnonymizeDialog } from '@/components/anonymize-dialog';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { updateReportStatus, updateReportSynthesis, getCaseReportVersions } from '../../actions';
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { VersionCompare } from '@/components/version-compare';
@@ -271,36 +272,50 @@ export function ReportTab({
                 )}
               </>
             )}
-            {/* Export buttons */}
-            <Button variant="outline" size="sm" onClick={handlePdfExport}>
-              <Printer className="mr-1 h-3 w-3" aria-hidden="true" />PDF
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
-                <Download className="mr-1 h-3 w-3" aria-hidden="true" />HTML
-              </a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
-                <Download className="mr-1 h-3 w-3" aria-hidden="true" />CSV
-              </a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
-                <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
-              </a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download aria-label="Esporta HTML anonimizzato">
-                <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />Anonimizzato
-              </a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/cases/${caseId}/export/pct`} download aria-label="Esporta in formato PCT XML">
-                <FileCode className="mr-1 h-3 w-3" aria-hidden="true" />PCT
-              </a>
-            </Button>
-            <AnonymizeDialog caseId={caseId} />
+            {/* Export dropdown */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="mr-1 h-3 w-3" aria-hidden="true" />
+                  Esporta Report
+                  <ChevronDown className="ml-1 h-3 w-3" aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-52 p-2">
+                <div className="flex flex-col gap-1">
+                  <Button variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
+                      <Download className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Esporta HTML
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={`/api/cases/${caseId}/export/docx`} download aria-label="Esporta in formato DOCX">
+                      <Download className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Esporta DOCX
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={`/api/cases/${caseId}/export/csv`} download aria-label="Esporta in formato CSV">
+                      <Download className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Esporta CSV
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={`/api/cases/${caseId}/export/pct`} download aria-label="Esporta in formato PCT XML">
+                      <FileCode className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Esporta PCT
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start" onClick={handlePdfExport}>
+                    <Printer className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Stampa PDF
+                  </Button>
+                  <div className="my-1 h-px bg-border" />
+                  <Button variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download aria-label="Esporta HTML anonimizzato">
+                      <ShieldCheck className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Anonimizza
+                    </a>
+                  </Button>
+                  <AnonymizeDialog caseId={caseId} />
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </CardHeader>

@@ -226,7 +226,11 @@ export function CaseDetailClient({
             <div className="space-y-4">
             {report?.synthesis && (
               <>
-                <Button size="lg" className="w-full" onClick={() => setReportDialogOpen(true)}>
+                <Button
+                  size="lg"
+                  className="w-full text-base py-6 bg-primary hover:bg-primary/90 shadow-md"
+                  onClick={() => setReportDialogOpen(true)}
+                >
                   <FileText className="mr-2 h-5 w-5" />
                   Apri Report Completo
                 </Button>
@@ -241,14 +245,16 @@ export function CaseDetailClient({
             )}
             <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
               <TabsList>
-                <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
-                <TabsTrigger value="ocr">Testo OCR</TabsTrigger>
+                <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
+                <TabsTrigger value="ocr">OCR</TabsTrigger>
                 <TabsTrigger value="synthesis">Report</TabsTrigger>
-                <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
-                <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
-                <TabsTrigger value="perizia">
-                  <FileText className="mr-1 h-3 w-3" />Perizia
-                </TabsTrigger>
+                {anomalies.length > 0 && (
+                  <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
+                )}
+                {missingDocs.length > 0 && (
+                  <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
+                )}
+                <TabsTrigger value="perizia">Metadati</TabsTrigger>
               </TabsList>
 
               <TabsContent value="events">
