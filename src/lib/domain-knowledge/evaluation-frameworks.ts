@@ -4,7 +4,7 @@ export const EVALUATION_FRAMEWORKS: readonly EvaluationFramework[] = [
   {
     name: 'Barème SIMLA',
     description: 'Guida alla valutazione medico-legale del danno biologico permanente della Società Italiana di Medicina Legale e delle Assicurazioni. Tabella di riferimento principale per la quantificazione del danno biologico permanente in ambito civilistico.',
-    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'generica'],
+    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'perizia_assicurativa', 'opinione_prognostica', 'generica'],
     criteria: [
       'Danno biologico permanente (percentuale 0-100%)',
       'Menomazione dell\'integrità psicofisica della persona',
@@ -27,7 +27,7 @@ export const EVALUATION_FRAMEWORKS: readonly EvaluationFramework[] = [
   {
     name: 'Linee Guida ex L. 24/2017 (Gelli-Bianco)',
     description: 'La Legge 24/2017 stabilisce che il giudice, nel decidere sulla responsabilità sanitaria, deve tenere conto delle linee guida pubblicate nel Sistema Nazionale Linee Guida (SNLG) e delle buone pratiche clinico-assistenziali. L\'adesione alle linee guida è criterio di valutazione della condotta sanitaria.',
-    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'generica'],
+    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'perizia_assicurativa', 'analisi_spese_mediche', 'opinione_prognostica', 'generica'],
     criteria: [
       'Art. 5: obbligo di attenersi a raccomandazioni delle linee guida SNLG',
       'Art. 6: responsabilità penale esclusa se rispettate linee guida (salvo imperizia grave)',
@@ -40,7 +40,7 @@ export const EVALUATION_FRAMEWORKS: readonly EvaluationFramework[] = [
   {
     name: 'Tabelle Ronchi',
     description: 'Guida alla valutazione medico-legale dell\'invalidità permanente utilizzata come riferimento per la liquidazione del danno alla persona, specialmente per micropermanenti (fino al 9%).',
-    applicableCaseTypes: ['ortopedica', 'rc_auto', 'generica'],
+    applicableCaseTypes: ['ortopedica', 'rc_auto', 'perizia_assicurativa', 'opinione_prognostica', 'generica'],
     criteria: [
       'Valutazione micropermanenti (1-9%)',
       'Riferimento per RC Auto (art. 139 Codice Assicurazioni)',
@@ -51,7 +51,7 @@ export const EVALUATION_FRAMEWORKS: readonly EvaluationFramework[] = [
   {
     name: 'Invalidità Temporanea (ITT/ITP)',
     description: 'Periodi di invalidità temporanea totale (ITT: impossibilità completa di attendere alle ordinarie occupazioni) e parziale (ITP: riduzione parziale, espressa in percentuale). Calcolati sulla base dei periodi di ricovero, immobilizzazione e convalescenza documentati.',
-    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'generica'],
+    applicableCaseTypes: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'previdenziale', 'infortuni', 'perizia_assicurativa', 'opinione_prognostica', 'generica'],
     criteria: [
       'ITT: periodo di totale incapacità (ricovero, allettamento, immobilizzazione)',
       'ITP al 75%: convalescenza con limitazioni significative',

@@ -49,6 +49,24 @@ export const QUESITI_TEMPLATES: Record<CaseType, readonly string[]> = {
     'Quantifichi il CTU il danno biologico permanente e temporaneo, con riferimento alle tabelle INAIL, indicando il grado di menomazione dell\'integrità psicofisica.',
     'Dica il CTU se residui una riduzione permanente della capacità lavorativa specifica.',
   ],
+  perizia_assicurativa: [
+    'Descriva il perito le lesioni riportate dal danneggiato a seguito del sinistro in oggetto, verificando la compatibilità con la dinamica dichiarata.',
+    'Valuti il perito il nesso causale tra il sinistro e le lesioni riscontrate, con particolare attenzione a eventuali patologie preesistenti nella medesima sede anatomica.',
+    'Quantifichi il perito il danno biologico permanente e i periodi di invalidità temporanea (totale e parziale) con riferimento alle tabelle di legge applicabili.',
+    'Esprima il perito giudizio sulla congruità delle spese mediche documentate e sulla necessità delle cure effettuate.',
+  ],
+  analisi_spese_mediche: [
+    'Valuti il perito la congruità delle spese mediche documentate rispetto al quadro clinico del danneggiato, indicando per ciascuna voce se la spesa sia necessaria, pertinente e congrua nell\'importo.',
+    'Confronti il perito gli importi delle prestazioni con i tariffari regionali e nazionali di riferimento, segnalando eventuali scostamenti significativi.',
+    'Indichi il perito le spese mediche future ragionevolmente prevedibili in relazione all\'evoluzione attesa della patologia.',
+    'Esprima il perito un giudizio complessivo sulla rimborsabilità delle spese, indicando l\'importo totale ritenuto congruo.',
+  ],
+  opinione_prognostica: [
+    'Descriva il perito lo stato attuale delle lesioni del danneggiato e il grado di stabilizzazione raggiunto.',
+    'Esprima il perito una previsione sull\'evoluzione clinica delle lesioni, indicando la data probabile di stabilizzazione dei postumi.',
+    'Fornisca il perito una stima provvisoria del danno biologico permanente atteso, espressa come range percentuale con indicazione del livello di confidenza.',
+    'Stimi il perito le spese mediche future prevedibili e indichi la tempistica consigliata per la rivalutazione del caso.',
+  ],
   generica: [
     'Dica il CTU, esaminata la documentazione in atti e visitato il periziando, quale sia stata la condotta diagnostico-terapeutica tenuta dai sanitari.',
     'Dica il CTU se tale condotta sia stata conforme alle leges artis e alle linee guida vigenti al momento dei fatti.',

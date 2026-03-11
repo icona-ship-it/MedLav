@@ -12,6 +12,9 @@ export const caseTypeEnum = pgEnum('case_type', [
   'rc_auto',
   'previdenziale',
   'infortuni',
+  'perizia_assicurativa',
+  'analisi_spese_mediche',
+  'opinione_prognostica',
   'generica',
 ]);
 

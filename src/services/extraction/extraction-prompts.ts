@@ -103,6 +103,35 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 - Capacita lavorativa specifica e generica residua
 - Riferimenti alle tabelle INAIL per l'indennizzo del danno biologico`,
 
+  perizia_assicurativa: `FOCUS PERIZIA ASSICURATIVA — VALUTAZIONE PER COMPAGNIA: Presta particolare attenzione a:
+- Dinamica del sinistro e compatibilita biomeccanica con le lesioni
+- Tempistiche del primo accesso sanitario post-sinistro
+- Imaging post-trauma e referti diagnostici
+- Patologie preesistenti nella stessa sede anatomica delle lesioni
+- Periodi di inabilita temporanea (ITT/ITP) documentati
+- Spese mediche sostenute con relativi importi e prestazioni
+- Congruita delle cure e dei trattamenti con il quadro clinico
+- Postumi permanenti e loro quantificazione`,
+
+  analisi_spese_mediche: `FOCUS ANALISI SPESE MEDICHE — CONGRUITA E RIMBORSABILITA: Presta particolare attenzione a:
+- Tutte le prestazioni sanitarie documentate con date e importi
+- Prescrizioni mediche correlate alle prestazioni
+- Codici delle prestazioni (ICD, nomenclatore) se presenti
+- Tipo di prestazione (visita, esame, intervento, fisioterapia, farmaco, ausilio)
+- Struttura erogatrice (pubblica/privata/convenzionata)
+- Documentazione clinica che giustifica la necessita delle prestazioni
+- Eventuali prestazioni duplicate o ripetute`,
+
+  opinione_prognostica: `FOCUS OPINIONE PROGNOSTICA — PROGNOSI E RISERVA: Presta particolare attenzione a:
+- Stato attuale delle lesioni e grado di stabilizzazione raggiunto
+- Trattamenti effettuati e risposta clinica osservata
+- Trattamenti ancora in corso o programmati
+- Indicazioni per ulteriori interventi o terapie
+- Evoluzione clinica nel tempo (miglioramento, stazionarieta, peggioramento)
+- Documentazione piu recente disponibile
+- Complicanze in atto o potenziali
+- Patologie preesistenti che possono influire sulla prognosi`,
+
   generica: `ANALISI GENERICA: Estrai tutti gli eventi clinici senza filtri prioritari specifici. Presta attenzione a qualsiasi anomalia nella gestione clinica.`,
 };
 

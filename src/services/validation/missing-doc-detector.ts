@@ -83,6 +83,21 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
     { name: 'Referti dei controlli e certificati di continuazione', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare il decorso clinico e determinare la durata dell\'inabilita temporanea' },
     { name: 'Lettera di dimissione (se ricovero)', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per la diagnosi finale e le indicazioni terapeutiche alla dimissione post-infortunio' },
   ],
+  perizia_assicurativa: [
+    { name: 'Verbale di pronto soccorso', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per attestare le lesioni riportate e la tempestivita del primo accesso sanitario post-sinistro' },
+    { name: 'Imaging post-trauma (RX/TC/RM)', check: 'hasEsamiPreOp', reason: 'Essenziale per documentare oggettivamente le lesioni e la loro compatibilita con la dinamica del sinistro' },
+    { name: 'Referti visite specialistiche e follow-up', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare l\'evoluzione clinica e determinare i periodi di inabilita temporanea' },
+  ],
+  analisi_spese_mediche: [
+    { name: 'Fatture e ricevute delle prestazioni sanitarie', check: 'hasEsamiPreOp', reason: 'Documentazione essenziale per la valutazione di congruita delle spese mediche sostenute' },
+    { name: 'Prescrizioni mediche correlate alle spese', check: 'hasFollowUpPostOp', reason: 'Necessarie per verificare la necessita medica delle prestazioni e la loro pertinenza al quadro clinico' },
+    { name: 'Documentazione clinica del quadro patologico', check: 'hasDiarioClinico', reason: 'Fondamentale per valutare la coerenza delle spese con la patologia documentata' },
+  ],
+  opinione_prognostica: [
+    { name: 'Documentazione clinica recente', check: 'hasFollowUpPostOp', reason: 'Essenziale per valutare lo stato attuale delle lesioni e formulare la prognosi' },
+    { name: 'Imaging diagnostico recente', check: 'hasEsamiPreOp', reason: 'Necessario per oggettivare lo stato di evoluzione delle lesioni e stimare la stabilizzazione' },
+    { name: 'Documentazione dei trattamenti effettuati', check: 'hasDiarioClinico', reason: 'Fondamentale per valutare la risposta ai trattamenti e prevedere l\'evoluzione clinica' },
+  ],
   generica: [
     { name: 'Consenso informato', check: 'hasConsenso', reason: 'Obbligatorio per procedure invasive' },
     { name: 'Lettera di dimissione', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per ogni ricovero' },

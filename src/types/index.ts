@@ -9,6 +9,9 @@ export type CaseType =
   | 'rc_auto'
   | 'previdenziale'
   | 'infortuni'
+  | 'perizia_assicurativa'
+  | 'analisi_spese_mediche'
+  | 'opinione_prognostica'
   | 'generica';
 
 export type CaseRole = 'ctu' | 'ctp' | 'stragiudiziale';

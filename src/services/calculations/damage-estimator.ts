@@ -57,6 +57,16 @@ const CASE_TYPE_RANGES: Partial<Record<CaseType, { min: number; max: number; not
     max: 60,
     notes: 'Range ampio: dipende dalla patologia non diagnosticata e dal ritardo',
   },
+  perizia_assicurativa: {
+    min: 1,
+    max: 15,
+    notes: 'Range tipico perizia assicurativa RC auto: 1-9% micropermanenti, 10-15% fratture',
+  },
+  opinione_prognostica: {
+    min: 1,
+    max: 50,
+    notes: 'Range ampio (stima provvisoria): la quantificazione e necessariamente approssimativa in attesa della stabilizzazione dei postumi',
+  },
 };
 
 export interface DamageEstimate {

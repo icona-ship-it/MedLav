@@ -66,6 +66,22 @@ const REQUIREMENTS_BY_CASE_TYPE: Record<CaseType, CompletenessRequirement[]> = {
     { name: 'Denuncia infortunio', category: 'obbligatorio', searchKeywords: ['denuncia infortunio', 'denuncia di infortunio', 'rapporto infortunio'] },
     { name: 'Certificati continuazione', category: 'raccomandato', searchKeywords: ['continuazione', 'certificato continuazione', 'prosecuzione'] },
   ],
+  perizia_assicurativa: [
+    { name: 'Verbale Pronto Soccorso', category: 'obbligatorio', searchKeywords: ['pronto soccorso', 'ps', 'verbale ps', 'accesso ps'], eventTypes: ['visita', 'ricovero'] },
+    { name: 'Imaging post-trauma', category: 'obbligatorio', searchKeywords: ['rx', 'tac', 'rm', 'radiografia', 'imaging'], eventTypes: ['esame'] },
+    { name: 'Documentazione spese mediche', category: 'raccomandato', searchKeywords: ['fattura', 'ricevuta', 'spese mediche', 'nota spese', 'preventivo'] },
+    { name: 'Dinamica sinistro', category: 'raccomandato', searchKeywords: ['dinamica', 'sinistro', 'incidente', 'impatto', 'collisione'] },
+  ],
+  analisi_spese_mediche: [
+    { name: 'Fatture e ricevute delle prestazioni', category: 'obbligatorio', searchKeywords: ['fattura', 'ricevuta', 'nota spese', 'parcella', 'notula'] },
+    { name: 'Prescrizioni mediche correlate', category: 'obbligatorio', searchKeywords: ['prescrizione', 'ricetta', 'impegnativa', 'piano terapeutico'], eventTypes: ['prescrizione'] },
+    { name: 'Documentazione clinica del quadro patologico', category: 'obbligatorio', searchKeywords: ['referto', 'diagnosi', 'cartella clinica', 'visita'], eventTypes: ['diagnosi', 'visita'] },
+  ],
+  opinione_prognostica: [
+    { name: 'Documentazione clinica recente', category: 'obbligatorio', searchKeywords: ['referto', 'visita', 'controllo', 'follow-up'], eventTypes: ['visita', 'follow-up'] },
+    { name: 'Imaging diagnostico recente', category: 'obbligatorio', searchKeywords: ['rx', 'tac', 'rm', 'radiografia', 'imaging', 'ecografia'], eventTypes: ['esame'] },
+    { name: 'Documentazione trattamenti effettuati', category: 'obbligatorio', searchKeywords: ['terapia', 'fisioterapia', 'riabilitazione', 'intervento', 'trattamento'], eventTypes: ['terapia', 'intervento'] },
+  ],
   generica: [
     { name: 'Consenso informato', category: 'raccomandato', searchKeywords: ['consenso informato', 'consenso'], eventTypes: ['consenso'] },
     { name: 'Lettera di dimissione', category: 'raccomandato', searchKeywords: ['dimissione', 'lettera dimissione', 'lettera di dimissione'] },

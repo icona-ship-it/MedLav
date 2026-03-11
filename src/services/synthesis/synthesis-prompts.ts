@@ -19,6 +19,9 @@ const CASE_TYPE_LABELS: Record<CaseType, string> = {
   rc_auto: 'RC Auto — Lesioni da Sinistro Stradale',
   previdenziale: 'Invalidità Previdenziale',
   infortuni: 'Infortunio sul Lavoro / Malattia Professionale',
+  perizia_assicurativa: 'Perizia Assicurativa',
+  analisi_spese_mediche: 'Analisi Spese Mediche',
+  opinione_prognostica: 'Opinione Prognostica',
   generica: 'Responsabilità Professionale Generica',
 };
 

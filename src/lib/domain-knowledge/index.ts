@@ -15,6 +15,9 @@ import { ERRORE_DIAGNOSTICO_KNOWLEDGE } from './case-type/errore-diagnostico';
 import { RC_AUTO_KNOWLEDGE } from './case-type/rc-auto';
 import { PREVIDENZIALE_KNOWLEDGE } from './case-type/previdenziale';
 import { INFORTUNI_KNOWLEDGE } from './case-type/infortuni';
+import { PERIZIA_ASSICURATIVA_KNOWLEDGE } from './case-type/perizia-assicurativa';
+import { ANALISI_SPESE_MEDICHE_KNOWLEDGE } from './case-type/analisi-spese-mediche';
+import { OPINIONE_PROGNOSTICA_KNOWLEDGE } from './case-type/opinione-prognostica';
 import { GENERICA_KNOWLEDGE } from './case-type/generica';
 
 const CASE_TYPE_KNOWLEDGE: Record<CaseType, CaseTypeKnowledge> = {
@@ -27,6 +30,9 @@ const CASE_TYPE_KNOWLEDGE: Record<CaseType, CaseTypeKnowledge> = {
   rc_auto: RC_AUTO_KNOWLEDGE,
   previdenziale: PREVIDENZIALE_KNOWLEDGE,
   infortuni: INFORTUNI_KNOWLEDGE,
+  perizia_assicurativa: PERIZIA_ASSICURATIVA_KNOWLEDGE,
+  analisi_spese_mediche: ANALISI_SPESE_MEDICHE_KNOWLEDGE,
+  opinione_prognostica: OPINIONE_PROGNOSTICA_KNOWLEDGE,
   generica: GENERICA_KNOWLEDGE,
 };
 

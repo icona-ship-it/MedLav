@@ -15,6 +15,9 @@ export const CASE_TYPES = [
   { value: 'rc_auto', label: 'RC Auto — Responsabilità Civile Automobilistica' },
   { value: 'previdenziale', label: 'Previdenziale — Invalidità Civile / Pensionistica' },
   { value: 'infortuni', label: 'Infortuni — Infortuni sul Lavoro e Malattia Professionale' },
+  { value: 'perizia_assicurativa', label: 'Perizia Assicurativa — Valutazione Medico-Legale per Compagnia' },
+  { value: 'analisi_spese_mediche', label: 'Analisi Spese Mediche — Congruità e Rimborsabilità' },
+  { value: 'opinione_prognostica', label: 'Opinione Prognostica — Prognosi e Riserva Assicurativa' },
   { value: 'generica', label: 'Responsabilità Professionale Generica' },
 ] as const;
 
