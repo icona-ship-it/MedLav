@@ -39,11 +39,13 @@ describe('sequence-validator', () => {
         caseType: 'ortopedica',
       });
 
-      const diagnosisViolation = anomalies.find(
+      // Intervento without diagnosi triggers the sequence violation
+      const hasViolation = anomalies.some(
         (a) => a.description.includes('Diagnosi prima della terapia') || a.description.includes('terapia'),
       );
-      // Intervento without diagnosi triggers the sequence violation
       expect(anomalies.length).toBeGreaterThanOrEqual(0);
+      // If anomalies exist, at least one should be sequence-related
+      if (anomalies.length > 0) expect(hasViolation).toBe(true);
     });
 
     it('should not flag when sequence is correct', () => {

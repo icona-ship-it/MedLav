@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
  * Resets all data except user accounts.
  * Requires admin authentication.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function POST(_request: NextRequest) {
   try {
     const supabase = await createClient();
