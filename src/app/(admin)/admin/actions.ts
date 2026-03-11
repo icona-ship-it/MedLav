@@ -42,7 +42,7 @@ const INTERMEDIATE_STATUSES = [
   'validazione_in_corso',
 ];
 
-const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
+const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
 
 function formatDuration(startIso: string, endIso: string): string {
   const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();

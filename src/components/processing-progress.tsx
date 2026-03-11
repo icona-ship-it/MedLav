@@ -37,8 +37,6 @@ const STATUS_TO_STEP: Record<string, number> = {
   completato: 4,
 };
 
-const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-
 // "No events found" errors are warnings, not hard errors
 const WARNING_ERROR_PATTERNS = [
   'Nessun evento clinico',
@@ -81,17 +79,6 @@ function getProcessingStartTime(documents: ProcessingDocument[]): Date | null {
   if (processed.length === 0) return null;
   const dates = processed.map((d) => new Date(d.created_at).getTime());
   return new Date(Math.min(...dates));
-}
-
-function isStale(documents: ProcessingDocument[]): boolean {
-  const processing = documents.filter((d) => isStillProcessing(d.processing_status));
-  if (processing.length === 0) return false;
-
-  const now = Date.now();
-  return processing.every((d) => {
-    const updatedAt = d.updated_at ? new Date(d.updated_at).getTime() : new Date(d.created_at).getTime();
-    return now - updatedAt > STALE_THRESHOLD_MS;
-  });
 }
 
 // --- Components ---
@@ -146,7 +133,6 @@ function getOverallStepIndex(documents: ProcessingDocument[]): number {
 
 export function ProcessingProgress({ documents }: ProcessingProgressProps) {
   const [elapsed, setElapsed] = useState(0);
-  const stale = isStale(documents);
   const overallStep = getOverallStepIndex(documents);
 
   const someStillProcessing = documents.some((d) => isStillProcessing(d.processing_status));
@@ -221,21 +207,13 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
         })}
       </div>
 
-      {/* Status bar: elapsed + stale warning */}
-      <div className="flex items-center justify-between text-sm">
-        {startTimeMs !== null && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
-            <span>Tempo trascorso: {formatElapsed(elapsed)}</span>
-          </div>
-        )}
-        {stale && (
-          <Badge variant="warning" className="flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" />
-            Potenzialmente bloccato
-          </Badge>
-        )}
-      </div>
+      {/* Status bar: elapsed time */}
+      {startTimeMs !== null && (
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          <span>Tempo trascorso: {formatElapsed(elapsed)}</span>
+        </div>
+      )}
 
       {/* Per-document status */}
       <div className="space-y-1.5">

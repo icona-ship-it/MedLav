@@ -23,7 +23,7 @@ function formatElapsed(isoDate: string): string {
   return `${hours}h ${minutes % 60}m`;
 }
 
-const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
+const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
 
 export default function ProcessingPage() {
   const [documents, setDocuments] = useState<ProcessingDocument[]>([]);
@@ -128,7 +128,7 @@ export default function ProcessingPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        I documenti sono segnalati come &quot;potenzialmente bloccati&quot; se non ricevono aggiornamenti da oltre 5 minuti.
+        I documenti sono segnalati come &quot;potenzialmente bloccati&quot; se non ricevono aggiornamenti da oltre 30 minuti.
       </p>
     </div>
   );

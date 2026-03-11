@@ -21,14 +21,6 @@ interface ProcessingSectionProps {
   hasUploadedDocs: boolean;
 }
 
-// --- Helpers ---
-
-const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-
-function isDocProcessing(status: string): boolean {
-  return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
-}
-
 // --- Component ---
 
 export function ProcessingSection({
@@ -48,14 +40,6 @@ export function ProcessingSection({
     if (d.processing_status !== 'errore') return false;
     const err = (d.processing_error ?? '').toLowerCase();
     return !err.includes('nessun evento');
-  });
-
-  // Detect stale processing (all processing docs updated > 15min ago)
-  const processingDocs = documents.filter((d) => isDocProcessing(d.processing_status));
-  const now = Date.now();
-  const isStale = hasProcessingDocs && processingDocs.length > 0 && processingDocs.every((d) => {
-    const updatedAt = new Date(d.created_at).getTime(); // created_at as proxy; updated_at not in Document type
-    return (now - updatedAt) > STALE_THRESHOLD_MS;
   });
 
   const handleStartProcessing = useCallback(async () => {
@@ -135,24 +119,6 @@ export function ProcessingSection({
           {hasProcessingDocs ? (
             <div className="space-y-4">
               <p className="text-sm font-medium text-center">Elaborazione in corso</p>
-
-              {/* Stale warning */}
-              {isStale && (
-                <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>L&apos;elaborazione sembra bloccata (oltre 15 minuti).</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto shrink-0"
-                    onClick={handleCancel}
-                    disabled={isCancelling}
-                  >
-                    {isCancelling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XCircle className="mr-1 h-3 w-3" />}
-                    Annulla e riprova
-                  </Button>
-                </div>
-              )}
 
               <div className="flex items-center justify-end">
                 <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={handleCancel} disabled={isCancelling}>

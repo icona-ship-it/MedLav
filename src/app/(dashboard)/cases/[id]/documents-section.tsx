@@ -119,7 +119,7 @@ export function DocumentsSection({
               Nessun documento caricato.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className={`space-y-2 ${documents.length > 5 ? 'max-h-[400px] overflow-y-auto pr-1' : ''}`}>
               {documents.map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
@@ -180,15 +180,17 @@ export function DocumentsSection({
       </Card>
 
       {hasUploadedDocs && (
-        <div className="lg:col-span-2">
-          <Button
-            size="lg"
-            className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
-            onClick={onProceedToNext}
-          >
-            Prosegui
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur p-4 lg:left-64">
+          <div className="mx-auto max-w-7xl">
+            <Button
+              size="lg"
+              className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+              onClick={onProceedToNext}
+            >
+              Prosegui con {documents.filter(d => d.processing_status === 'caricato').length} documenti
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
