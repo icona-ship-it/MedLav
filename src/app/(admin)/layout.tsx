@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Activity,
   ScrollText,
+  Users,
   ArrowLeft,
   ShieldCheck,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils';
 const adminNavigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Pipeline', href: '/admin/processing', icon: Activity },
+  { name: 'Utenti', href: '/admin/users', icon: Users },
   { name: 'Audit Log', href: '/admin/audit', icon: ScrollText },
 ];
 

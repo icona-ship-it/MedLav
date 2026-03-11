@@ -1,6 +1,8 @@
-import type { AnomalyType, AnomalySeverity } from '@/types';
+import type { AnomalyType, AnomalySeverity, CaseType } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { formatDate } from '@/lib/format';
+import { detectCriticalClinicalValues } from './clinical-values-detector';
+import { validateEventSequences } from './sequence-validator';
 
 export interface DetectedAnomaly {
   anomalyType: AnomalyType;
@@ -31,7 +33,10 @@ const THRESHOLDS = {
  * Conservative: avoids false positives that overwhelm the user.
  * Only flags clear, actionable issues.
  */
-export function detectAnomalies(events: ConsolidatedEvent[]): DetectedAnomaly[] {
+export function detectAnomalies(
+  events: ConsolidatedEvent[],
+  options?: { caseType?: CaseType; caseTypes?: CaseType[] },
+): DetectedAnomaly[] {
   if (events.length < 2) return [];
 
   const anomalies: DetectedAnomaly[] = [];
@@ -52,6 +57,18 @@ export function detectAnomalies(events: ConsolidatedEvent[]): DetectedAnomaly[] 
   if (uniqueDocIds.size > 1) {
     anomalies.push(...detectConsensoNonDocumentato(events));
     anomalies.push(...detectTerapiaSenzaFollowup(events));
+  }
+
+  // M5: Clinical value validation
+  anomalies.push(...detectCriticalClinicalValues(events));
+
+  // M6: Sequence validation (requires case type)
+  if (options?.caseType) {
+    anomalies.push(...validateEventSequences({
+      events,
+      caseType: options.caseType,
+      caseTypes: options.caseTypes,
+    }));
   }
 
   // Deduplicate anomalies by type + description

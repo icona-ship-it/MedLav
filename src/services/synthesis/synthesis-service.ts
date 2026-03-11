@@ -17,8 +17,10 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
+import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-analyzer';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
+import { logger } from '@/lib/logger';
 
 export interface SynthesisResult {
   synthesis: string;
@@ -34,6 +36,7 @@ export interface SynthesisParams {
   anomalies: DetectedAnomaly[];
   missingDocuments: MissingDocument[];
   calculations?: MedicoLegalCalculation[];
+  imageAnalysis?: ImageAnalysisResult[];
   caseTypeLabel?: string;
   expertRole?: string;
   periziaMetadata?: PeriziaMetadata;
@@ -64,7 +67,7 @@ export function shouldSplitSynthesis(params: SynthesisParams): boolean {
 export async function generateSynthesis(params: SynthesisParams): Promise<SynthesisResult> {
   const {
     caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
-    patientInitials, calculations, periziaMetadata,
+    patientInitials, calculations, periziaMetadata, imageAnalysis,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -82,8 +85,8 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
 
   const guidelineContext = await fetchGuidelineContext(events, caseType, caseTypes);
 
-  console.log(
-    `[synthesis] Total prompt: ${totalPromptChars} chars, split: ${needsSplit}, ` +
+  logger.info('synthesis',
+    ` Total prompt: ${totalPromptChars} chars, split: ${needsSplit}, ` +
     `events: ${events.length}, role: ${caseRole}, type: ${caseType}`,
   );
 
@@ -109,6 +112,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
             calculations,
             caseTypes,
             periziaMetadata,
+            imageAnalysis,
           }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
         },
       ],
@@ -118,7 +122,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       label: 'synthesis:full',
     });
   } else {
-    console.log('[synthesis] Split mode: generating chronology...');
+    logger.info('synthesis', ' Split mode: generating chronology...');
 
     const chronology = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -140,7 +144,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       label: 'synthesis:chronology',
     });
 
-    console.log(`[synthesis] Chronology: ${chronology.length} chars. Generating summary...`);
+    logger.info('synthesis', ` Chronology: ${chronology.length} chars. Generating summary...`);
 
     const summaryAndAnalysis = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -169,7 +173,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       label: 'synthesis:summary',
     });
 
-    console.log(`[synthesis] Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
+    logger.info('synthesis', ` Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
     report = assembleSplitReport(summaryAndAnalysis, chronology);
   }
 
@@ -186,7 +190,7 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
   const expertRole = params.expertRole ?? caseRole;
   const eventsFormatted = formatEventsForPrompt(events);
 
-  console.log(`[synthesis] Split step 1: generating chronology (${events.length} events)...`);
+  logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events)...`);
 
   const chronology = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -208,7 +212,7 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
     label: 'synthesis:chronology',
   });
 
-  console.log(`[synthesis] Chronology done: ${chronology.length} chars`);
+  logger.info('synthesis', ` Chronology done: ${chronology.length} chars`);
   return chronology;
 }
 
@@ -231,7 +235,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
 
   const guidelineContext = await fetchGuidelineContext(events, caseType, caseTypes);
 
-  console.log(`[synthesis] Split step 2: generating summary from ${chronology.length} char chronology...`);
+  logger.info('synthesis', ` Split step 2: generating summary from ${chronology.length} char chronology...`);
 
   const summaryAndAnalysis = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -260,7 +264,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
     label: 'synthesis:summary',
   });
 
-  console.log(`[synthesis] Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
+  logger.info('synthesis', ` Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
   const report = assembleSplitReport(summaryAndAnalysis, chronology);
   return finalizeReport(report);
 }
@@ -279,11 +283,11 @@ async function fetchGuidelineContext(
       caseTypes,
     });
     if (ctx) {
-      console.log(`[synthesis] RAG: retrieved guideline context (${ctx.length} chars)`);
+      logger.info('synthesis', ` RAG: retrieved guideline context (${ctx.length} chars)`);
     }
     return ctx;
   } catch (ragError) {
-    console.warn(`[synthesis] RAG retrieval failed (non-blocking): ${ragError instanceof Error ? ragError.message : 'unknown'}`);
+    logger.warn('synthesis', ` RAG retrieval failed (non-blocking): ${ragError instanceof Error ? ragError.message : 'unknown'}`);
     return '';
   }
 }
@@ -291,11 +295,11 @@ async function fetchGuidelineContext(
 function finalizeReport(report: string): SynthesisResult {
   const validation = validateReportSections(report);
   if (!validation.valid) {
-    console.warn(`[synthesis] Missing sections: ${validation.missing.join(', ')}. Using as-is.`);
+    logger.warn('synthesis', ` Missing sections: ${validation.missing.join(', ')}. Using as-is.`);
   }
   const cleaned = stripSectionMarkers(report);
   const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
-  console.log(`[synthesis] Report: ${wordCount} words, valid: ${validation.valid}`);
+  logger.info('synthesis', ` Report: ${wordCount} words, valid: ${validation.valid}`);
   return { synthesis: cleaned, wordCount };
 }
 
@@ -365,7 +369,7 @@ function assembleSplitReport(summaryAndAnalysis: string, chronology: string): st
     const crono = cronologiaMatch[1].trim();
 
     if (riassunto.length > 50 && elementi.length > 50 && crono.length > 50) {
-      console.log('[synthesis] Assembly: marker-based (level 1)');
+      logger.info('synthesis', ' Assembly: marker-based (level 1)');
       return [riassunto, crono, elementi].join('\n\n');
     }
   }
@@ -385,13 +389,13 @@ function assembleSplitReport(summaryAndAnalysis: string, chronology: string): st
       const elements = summaryAndAnalysis.slice(match.index).trim();
 
       if (summary.length > 100 && elements.length > 100) {
-        console.log('[synthesis] Assembly: heading-based (level 2)');
+        logger.info('synthesis', ' Assembly: heading-based (level 2)');
         return [summary, chronology.trim(), elements].join('\n\n');
       }
     }
   }
 
-  console.log('[synthesis] Assembly: sequential fallback (level 3)');
+  logger.info('synthesis', ' Assembly: sequential fallback (level 3)');
   return [summaryAndAnalysis.trim(), chronology.trim()].join('\n\n');
 }
 

@@ -1,5 +1,6 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-types';
+import { logger } from '@/lib/logger';
 
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
 const SUPPORTED_PDF_TYPES = ['application/pdf'];
@@ -105,7 +106,7 @@ function mapOcrResponseToResult(params: {
 
     // Append non-repetitive header/footer as context
     if (page.headerText.length > 0) {
-      console.log(`[ocr] Page ${page.pageNumber}: header detected (${page.headerText.length} chars)`);
+      logger.debug('ocr', ` Page ${page.pageNumber}: header detected (${page.headerText.length} chars)`);
     }
 
     const handwritingInfo = detectHandwriting(text);
@@ -181,7 +182,7 @@ function filterRepetitiveHeadersFooters(
   // Remove headers appearing in >50% of pages
   for (const [header, count] of headerCounts) {
     if (count >= threshold) {
-      console.log(`[ocr] Filtering repetitive header (${count}/${pages.length} pages): "${header.slice(0, 50)}..."`);
+      logger.debug('ocr', ` Filtering repetitive header (${count}/${pages.length} pages): "${header.slice(0, 50)}..."`);
       for (const page of pages) {
         if (page.headerText.toLowerCase() === header) {
           page.headerText = '';
@@ -201,7 +202,7 @@ function filterRepetitiveHeadersFooters(
 
   for (const [footer, count] of footerCounts) {
     if (count >= threshold) {
-      console.log(`[ocr] Filtering repetitive footer (${count}/${pages.length} pages): "${footer.slice(0, 50)}..."`);
+      logger.debug('ocr', ` Filtering repetitive footer (${count}/${pages.length} pages): "${footer.slice(0, 50)}..."`);
       for (const page of pages) {
         if (page.footerText.toLowerCase() === footer) {
           page.footerText = '';

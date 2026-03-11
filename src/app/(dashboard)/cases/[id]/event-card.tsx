@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import {
-  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2,
+  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2, FileSearch,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +59,7 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
 export function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
   eventImages, onImageClick, onMoveUp, onMoveDown, isFirst, isLast,
+  isHighlighted, onViewInReport,
 }: {
   event: EventRow;
   caseId: string;
@@ -75,6 +76,8 @@ export function EventCard({
   onMoveDown?: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  isHighlighted?: boolean;
+  onViewInReport?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [editForm, setEditForm] = useState({
@@ -133,7 +136,10 @@ export function EventCard({
   const images = eventImages[event.id] ?? [];
 
   return (
-    <div className="rounded-md border p-3">
+    <div
+      className={`rounded-md border p-3 transition-colors ${isHighlighted ? 'border-primary bg-primary/5 ring-1 ring-primary' : ''}`}
+      id={`event-${event.order_number}`}
+    >
       {/* Header row - always visible */}
       <div className="flex items-start justify-between">
         <button type="button" className="flex flex-1 items-start text-left" onClick={onToggle}>
@@ -157,6 +163,11 @@ export function EventCard({
           {onMoveDown && !isLast && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveDown} title="Sposta giù" aria-label="Sposta evento giù">
               <ChevronDown className="h-3 w-3" />
+            </Button>
+          )}
+          {onViewInReport && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onViewInReport} title="Vedi nel report" aria-label="Vedi nel report">
+              <FileSearch className="h-3 w-3" />
             </Button>
           )}
           {!isEditing && (

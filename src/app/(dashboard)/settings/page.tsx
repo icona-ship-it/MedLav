@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { getProfile, updateProfile, changePassword, exportMyData, deleteMyAccount } from './actions';
 import type { ProfileData } from './actions';
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle, Download, CreditCard } from 'lucide-react';
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -213,6 +213,52 @@ export default function SettingsPage() {
               {passwordSaving ? 'Aggiornamento...' : 'Cambia password'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Subscription */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Abbonamento</CardTitle>
+          <CardDescription>Il tuo piano attuale e gestione abbonamento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div className="flex items-center gap-3">
+              <CreditCard className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">
+                  Piano: {profile?.subscriptionPlan === 'pro' ? 'Pro' : 'Trial'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {profile?.subscriptionStatus === 'active'
+                    ? 'Abbonamento attivo'
+                    : profile?.subscriptionStatus === 'past_due'
+                      ? 'Pagamento in ritardo'
+                      : 'Piano gratuito — 5 casi inclusi'}
+                </p>
+              </div>
+            </div>
+            {profile?.stripeCustomerId ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const res = await fetch('/api/stripe/portal', { method: 'POST' });
+                  const data = await res.json() as { success: boolean; data?: { url: string } };
+                  if (data.success && data.data?.url) {
+                    window.location.href = data.data.url;
+                  }
+                }}
+              >
+                Gestisci abbonamento
+              </Button>
+            ) : (
+              <Button size="sm" asChild>
+                <a href="/pricing">Passa a Pro</a>
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

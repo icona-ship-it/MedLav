@@ -16,6 +16,10 @@ export interface PeriziaMetadataUI {
   speseMediche?: string;
   esameObiettivo?: string;
   fondoSpese?: string;
+  esameObiettivoStrutturato?: {
+    districts: Array<{ id: string; label: string; examined: boolean; findings: string }>;
+    generalInfo?: { altezza?: string; peso?: string; deambulazione?: string; condizioni?: string };
+  };
 }
 
 export interface CaseData {

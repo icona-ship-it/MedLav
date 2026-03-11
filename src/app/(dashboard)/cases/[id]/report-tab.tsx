@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useTransition } from 'react';
+import { useState, useCallback, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Download, Pencil, X, Save, Printer, GitCompare } from 'lucide-react';
+import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode } from 'lucide-react';
+import { AnonymizeDialog } from '@/components/anonymize-dialog';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { updateReportStatus, updateReportSynthesis, getCaseReportVersions } from '../../actions';
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { VersionCompare } from '@/components/version-compare';
-import type { ReportRow } from './types';
+import { SectionRegenerateButton } from '@/components/section-regenerate-button';
+import { ReportRating } from '@/components/report-rating';
+import { LinkedReportViewer } from '@/components/linked-report-viewer';
+import { parseSections } from '@/lib/section-parser-client';
+import type { ReportRow, EventRow } from './types';
 
 // --- Report Status Buttons ---
 
@@ -57,20 +62,97 @@ function ReportStatusButtons({
   );
 }
 
+// --- Section-based Report Viewer ---
+
+function SectionedReportView({
+  caseId,
+  synthesis,
+  regeneratingSection,
+  onRegenerateStart,
+  onRegenerated,
+  events,
+  onEventClick,
+}: {
+  caseId: string;
+  synthesis: string;
+  regeneratingSection: string | null;
+  onRegenerateStart: (sectionId: string) => void;
+  onRegenerated: () => void;
+  events?: EventRow[];
+  onEventClick?: (orderNumber: number) => void;
+}) {
+  const sections = parseSections(synthesis);
+  const eventRefs = events?.map((e) => ({
+    orderNumber: e.order_number,
+    title: e.title,
+    eventDate: e.event_date,
+  }));
+
+  return (
+    <div className="space-y-6">
+      {sections.map((section) => (
+        <div key={section.id} className="group">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold">{section.title}</h3>
+            {section.id !== 'preamble' && section.id !== 'full_report' && (
+              <SectionRegenerateButton
+                caseId={caseId}
+                sectionId={section.id}
+                sectionTitle={section.title}
+                disabled={regeneratingSection !== null}
+                onRegenerated={onRegenerated}
+              />
+            )}
+          </div>
+          {eventRefs && eventRefs.length > 0 ? (
+            <LinkedReportViewer
+              content={section.content}
+              events={eventRefs}
+              onEventClick={onEventClick}
+            />
+          ) : (
+            <MarkdownPreview content={section.content} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // --- Report Tab ---
 
 export function ReportTab({
-  caseId, report, isRegenerating, onRegenerate,
+  caseId, report, isRegenerating, onRegenerate, events, onEventClick,
 }: {
   caseId: string;
   report: ReportRow | null;
   isRegenerating: boolean;
   onRegenerate: () => void;
+  events?: EventRow[];
+  onEventClick?: (orderNumber: number) => void;
 }) {
   const router = useRouter();
   const [isEditingReport, setIsEditingReport] = useState(false);
   const [editedSynthesis, setEditedSynthesis] = useState('');
   const [isSavingSynthesis, startSaveSynthesis] = useTransition();
+  const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
+
+  // Rating state
+  const [existingRating, setExistingRating] = useState<number | null>(null);
+  const [existingComment, setExistingComment] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!report?.id) return;
+    fetch(`/api/report-ratings?reportId=${report.id}`)
+      .then((r) => r.json())
+      .then((result: { success: boolean; data?: { rating: number; comment: string | null } | null }) => {
+        if (result.success && result.data) {
+          setExistingRating(result.data.rating);
+          setExistingComment(result.data.comment);
+        }
+      })
+      .catch(() => { /* ignore */ });
+  }, [report?.id]);
 
   // Version compare state
   const [showVersionCompare, setShowVersionCompare] = useState(false);
@@ -130,6 +212,11 @@ export function ReportTab({
       setIsLoadingVersions(false);
     }
   }, [caseId, showVersionCompare]);
+
+  const handleSectionRegenerated = useCallback(() => {
+    setRegeneratingSection(null);
+    router.refresh();
+  }, [router]);
 
   return (
     <Card>
@@ -203,6 +290,17 @@ export function ReportTab({
                 <Download className="mr-1 h-3 w-3" aria-hidden="true" />DOCX
               </a>
             </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download aria-label="Esporta HTML anonimizzato">
+                <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />Anonimizzato
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/cases/${caseId}/export/pct`} download aria-label="Esporta in formato PCT XML">
+                <FileCode className="mr-1 h-3 w-3" aria-hidden="true" />PCT
+              </a>
+            </Button>
+            <AnonymizeDialog caseId={caseId} />
           </div>
         </div>
       </CardHeader>
@@ -227,11 +325,27 @@ export function ReportTab({
             </TabsContent>
           </Tabs>
         ) : report?.synthesis ? (
-          <MarkdownPreview content={report.synthesis} />
+          <SectionedReportView
+            caseId={caseId}
+            synthesis={report.synthesis}
+            regeneratingSection={regeneratingSection}
+            onRegenerateStart={setRegeneratingSection}
+            onRegenerated={handleSectionRegenerated}
+            events={events}
+            onEventClick={onEventClick}
+          />
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Nessuna sintesi generata. Avvia l&apos;elaborazione dei documenti.
           </p>
+        )}
+        {!isEditingReport && report?.synthesis && report.report_status !== 'bozza' && (
+          <ReportRating
+            reportId={report.id}
+            existingRating={existingRating}
+            existingComment={existingComment}
+            onRated={() => router.refresh()}
+          />
         )}
         {showVersionCompare && versions.length > 1 && report && (
           <div className="mt-6 border-t pt-6">

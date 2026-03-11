@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 
 export const maxDuration = 30;
-import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages } from '../../actions';
+import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages, getCaseDocumentPages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { CaseDetailClient } from './client';
 import { processingLabels } from '@/lib/constants';
@@ -18,13 +18,14 @@ export default async function CaseDetailPage({
     notFound();
   }
 
-  const [documents, events, anomalies, missingDocs, report, eventImagesMap] = await Promise.all([
+  const [documents, events, anomalies, missingDocs, report, eventImagesMap, documentPages] = await Promise.all([
     getCaseDocuments(id),
     getCaseEvents(id),
     getCaseAnomalies(id),
     getCaseMissingDocs(id),
     getCaseReport(id),
     getCaseEventImages(id),
+    getCaseDocumentPages(id),
   ]);
 
   // Generate signed URLs for event images (parallel)
@@ -62,6 +63,7 @@ export default async function CaseDetailPage({
         report={report}
         processingLabels={processingLabels}
         eventImages={eventImages}
+        documentPages={documentPages}
       />
     </div>
   );

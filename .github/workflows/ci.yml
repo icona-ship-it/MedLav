@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+        env:
+          # Stub env vars for build/test (no real secrets)
+          NEXT_PUBLIC_SUPABASE_URL: https://stub.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: stub-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: stub-service-role-key
+          MISTRAL_API_KEY: stub-mistral-key
+          INNGEST_EVENT_KEY: stub-inngest-key
+          INNGEST_SIGNING_KEY: stub-inngest-signing
+
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://stub.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: stub-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: stub-service-role-key
+          MISTRAL_API_KEY: stub-mistral-key
+          INNGEST_EVENT_KEY: stub-inngest-key
+          INNGEST_SIGNING_KEY: stub-inngest-signing
+          SENTRY_AUTH_TOKEN: stub-sentry-token

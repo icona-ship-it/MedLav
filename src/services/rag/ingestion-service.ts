@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { chunkGuidelineText } from './chunking-service';
 import { generateEmbeddings } from './embedding-service';
+import { logger } from '@/lib/logger';
 
 export interface IngestGuidelineParams {
   title: string;
@@ -24,11 +25,11 @@ export async function ingestGuideline(params: IngestGuidelineParams): Promise<In
   const { title, source, year, caseTypes, text } = params;
   const supabase = createAdminClient();
 
-  console.log(`[rag:ingest] Starting ingestion: "${title}" (${text.length} chars)`);
+  logger.info('rag:ingest', ` Starting ingestion: "${title}" (${text.length} chars)`);
 
   // 1. Chunk the text
   const chunks = chunkGuidelineText(text);
-  console.log(`[rag:ingest] Created ${chunks.length} chunks`);
+  logger.info('rag:ingest', ` Created ${chunks.length} chunks`);
 
   if (chunks.length === 0) {
     throw new Error('No chunks created from guideline text');
@@ -37,7 +38,7 @@ export async function ingestGuideline(params: IngestGuidelineParams): Promise<In
   // 2. Generate embeddings for all chunks
   const chunkTexts = chunks.map((c) => c.content);
   const embeddings = await generateEmbeddings(chunkTexts);
-  console.log(`[rag:ingest] Generated ${embeddings.length} embeddings`);
+  logger.info('rag:ingest', ` Generated ${embeddings.length} embeddings`);
 
   // 3. Create guideline metadata record
   const { data: guideline, error: guidelineError } = await supabase
@@ -84,7 +85,7 @@ export async function ingestGuideline(params: IngestGuidelineParams): Promise<In
   }
 
   const totalTokens = chunks.reduce((sum, c) => sum + c.estimatedTokens, 0);
-  console.log(`[rag:ingest] Complete: ${chunks.length} chunks, ~${totalTokens} tokens`);
+  logger.info('rag:ingest', ` Complete: ${chunks.length} chunks, ~${totalTokens} tokens`);
 
   return { guidelineId, chunksCreated: chunks.length, totalTokens };
 }
@@ -104,5 +105,5 @@ export async function deleteGuideline(guidelineId: string): Promise<void> {
     throw new Error(`Failed to delete guideline: ${error.message}`);
   }
 
-  console.log(`[rag:ingest] Deleted guideline ${guidelineId}`);
+  logger.info('rag:ingest', ` Deleted guideline ${guidelineId}`);
 }

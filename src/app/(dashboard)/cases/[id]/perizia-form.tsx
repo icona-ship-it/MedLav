@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { updateCase } from '../../actions';
 import { QUESITI_TEMPLATES } from '@/lib/quesiti-templates';
+import { EsameObiettivoForm, type EsameObiettivoStructured } from '@/components/esame-obiettivo-form';
 import type { CaseData, PeriziaMetadataUI } from './types';
 import type { CaseType } from '@/types';
 
@@ -44,6 +45,9 @@ export function PeriziaMetadataForm({
   });
 
   const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? ['']);
+  const [esameStrutturato, setEsameStrutturato] = useState<EsameObiettivoStructured | null>(
+    existing.esameObiettivoStrutturato ?? null,
+  );
 
   const handleSave = () => {
     startTransition(async () => {
@@ -64,6 +68,7 @@ export function PeriziaMetadataForm({
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
         ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
+        ...(esameStrutturato ? { esameObiettivoStrutturato: esameStrutturato } : {}),
         ...(form.speseMediche ? { speseMediche: form.speseMediche } : {}),
         ...(filteredQuesiti.length > 0 ? { quesiti: filteredQuesiti } : {}),
       };
@@ -260,11 +265,14 @@ export function PeriziaMetadataForm({
           <CardDescription>Dati della visita medico-legale del paziente</CardDescription>
         </CardHeader>
         <CardContent>
-          <Textarea
-            rows={6}
-            value={form.esameObiettivo}
-            onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
-            placeholder="Inserisci i dati dell'esame obiettivo..."
+          <EsameObiettivoForm
+            value={esameStrutturato}
+            freeText={form.esameObiettivo}
+            onChange={(structured, formattedText) => {
+              setEsameStrutturato(structured);
+              setForm({ ...form, esameObiettivo: formattedText });
+            }}
+            onFreeTextChange={(text) => setForm({ ...form, esameObiettivo: text })}
           />
         </CardContent>
       </Card>

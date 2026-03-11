@@ -9,6 +9,8 @@ export const anomalyTypeEnum = pgEnum('anomaly_type', [
   'consenso_non_documentato',
   'diagnosi_contraddittoria',
   'terapia_senza_followup',
+  'valore_clinico_critico',
+  'sequenza_temporale_violata',
 ]);
 
 export const anomalySeverityEnum = pgEnum('anomaly_severity', [

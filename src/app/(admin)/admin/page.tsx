@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import {
   getSystemStats,
   getProcessingDocuments,
   getRecentErrors,
   getRecentCompletions,
+  getAverageRating,
 } from './actions';
 
 const statusLabels: Record<string, string> = {
@@ -16,11 +18,12 @@ const statusLabels: Record<string, string> = {
 };
 
 export default async function AdminDashboardPage() {
-  const [stats, processing, errors, completions] = await Promise.all([
+  const [stats, processing, errors, completions, ratingStats] = await Promise.all([
     getSystemStats(),
     getProcessingDocuments(),
     getRecentErrors(),
     getRecentCompletions(),
+    getAverageRating(),
   ]);
 
   return (
@@ -33,6 +36,18 @@ export default async function AdminDashboardPage() {
         <StatCard label="Casi" value={stats.totalCases} />
         <StatCard label="Documenti" value={stats.totalDocuments} />
         <StatCard label="Eventi estratti" value={stats.totalEvents} />
+        <StatCard
+          label="Rating medio report"
+          value={ratingStats.avg !== null ? Number(ratingStats.avg.toFixed(1)) : 0}
+          suffix={ratingStats.count > 0 ? `(${ratingStats.count} valutazioni)` : 'N/D'}
+        />
+      </div>
+
+      {/* Link to analytics */}
+      <div>
+        <Link href="/admin/analytics" className="text-sm text-primary hover:underline">
+          Vedi analytics completi &rarr;
+        </Link>
       </div>
 
       {/* Processing in corso */}
@@ -151,11 +166,12 @@ export default async function AdminDashboardPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, suffix }: { label: string; value: number; suffix?: string }) {
   return (
     <div className="rounded-lg border p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 text-3xl font-bold">{value.toLocaleString('it-IT')}</p>
+      {suffix && <p className="text-xs text-muted-foreground">{suffix}</p>}
     </div>
   );
 }

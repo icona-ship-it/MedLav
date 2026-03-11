@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
+import { anonymizeText } from '@/services/anonymization/anonymizer';
+import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
   _request: NextRequest,
@@ -28,38 +30,52 @@ export async function GET(
 
   const pm = data.periziaMetadata as Record<string, unknown> | null;
   const useProfessional = pm && (pm.tribunale || pm.ctuName);
+  const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
+
+  // If anonymizing, anonymize the synthesis text before generating DOCX
+  let synthesis = data.report?.synthesis as string | null ?? null;
+  if (shouldAnonymize && synthesis) {
+    const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+    const result = anonymizeText({ text: synthesis, periziaMetadata });
+    synthesis = result.anonymizedText;
+  }
+
+  const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
 
   const buffer = useProfessional
     ? await generateProfessionalDocxReport({
       caseCode: data.caseData.code as string,
       caseType: data.caseData.case_type as string,
       caseRole: data.caseData.case_role as string,
-      patientInitials: data.caseData.patient_initials as string | null,
-      synthesis: data.report?.synthesis as string | null ?? null,
+      patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+      synthesis,
       events: data.events,
       anomalies: data.anomalies,
       missingDocs: data.missingDocs,
       calculations: data.calculations,
       periziaMetadata: pm,
       documentsWithPages: data.documentsWithPages,
+      reportStatus,
     })
     : await generateDocxReport({
       caseCode: data.caseData.code as string,
       caseType: data.caseData.case_type as string,
       caseRole: data.caseData.case_role as string,
-      patientInitials: data.caseData.patient_initials as string | null,
-      synthesis: data.report?.synthesis as string | null ?? null,
+      patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+      synthesis,
       events: data.events,
       anomalies: data.anomalies,
       missingDocs: data.missingDocs,
       calculations: data.calculations,
       periziaMetadata: data.periziaMetadata,
+      reportStatus,
     });
 
+  const suffix = shouldAnonymize ? '-anonimizzato' : '';
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="report-${data.caseData.code}.docx"`,
+      'Content-Disposition': `attachment; filename="report-${data.caseData.code}${suffix}.docx"`,
     },
   });
 }

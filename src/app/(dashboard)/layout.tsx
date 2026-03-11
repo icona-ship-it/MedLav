@@ -18,7 +18,7 @@ export default async function DashboardLayout({
       <Suspense>
         <Sidebar isAdmin={isAdmin} />
       </Suspense>
-      <main className="flex-1 overflow-auto">
+      <main id="main-content" className="flex-1 overflow-auto">
         <div className="mx-auto max-w-7xl p-6">
           {children}
         </div>

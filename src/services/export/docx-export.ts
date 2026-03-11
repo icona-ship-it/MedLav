@@ -76,6 +76,37 @@ interface DocxExportParams {
   missingDocs: DocxMissingDoc[];
   calculations?: MedicoLegalCalculation[];
   periziaMetadata?: PeriziaMetadataExport | null;
+  reportStatus?: string;
+}
+
+/**
+ * Determine the watermark text based on report status.
+ */
+function getDocxWatermarkText(reportStatus?: string): string {
+  if (reportStatus === 'bozza') return 'RISERVATO — BOZZA';
+  return 'CONFIDENZIALE';
+}
+
+/**
+ * Build a DOCX Header containing the watermark text.
+ */
+function buildWatermarkHeader(reportStatus?: string): Header {
+  const watermarkText = getDocxWatermarkText(reportStatus);
+  return new Header({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: watermarkText,
+            color: 'C0C0C0',
+            size: 18,
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+      }),
+    ],
+  });
 }
 
 /**
@@ -83,7 +114,7 @@ interface DocxExportParams {
  * Returns a Buffer ready for download.
  */
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -359,6 +390,9 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   const doc = new Document({
     sections: [{
       properties: {},
+      headers: {
+        default: buildWatermarkHeader(reportStatus),
+      },
       children,
     }],
   });
@@ -381,6 +415,7 @@ interface ProfessionalDocxExportParams {
   calculations?: MedicoLegalCalculation[];
   periziaMetadata: PeriziaMetadataExport;
   documentsWithPages: DocumentWithPages[];
+  reportStatus?: string;
 }
 
 /**
@@ -607,7 +642,7 @@ function buildDocxHeaderContent(
  * full OCR documentation, and assembled sections.
  */
 export async function generateProfessionalDocxReport(params: ProfessionalDocxExportParams): Promise<Buffer> {
-  const { caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations } = params;
+  const { caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus } = params;
 
   const pm = periziaMetadata as AssemblerPeriziaMetadata;
   const assembled = assembleFullReport({
@@ -618,6 +653,17 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
     anomalies,
     missingDocs,
     calculations,
+    events: (params.events ?? []).map((e) => ({
+      event_date: e.event_date,
+      event_type: e.event_type,
+      title: e.title,
+      description: e.description,
+      source_type: e.source_type,
+      source_text: (e as unknown as Record<string, unknown>).source_text as string | null ?? null,
+      diagnosis: e.diagnosis ?? null,
+      doctor: e.doctor ?? null,
+      facility: e.facility ?? null,
+    })),
   });
 
   const patientInfo = patientInitials ?? '';
@@ -723,7 +769,20 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
       properties: {},
       headers: {
         default: new Header({
-          children: buildDocxHeaderContent(pm, hasCollaboratore),
+          children: [
+            ...buildDocxHeaderContent(pm, hasCollaboratore),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: getDocxWatermarkText(reportStatus),
+                  color: 'C0C0C0',
+                  size: 18,
+                  italics: true,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
         }),
       },
       footers: {

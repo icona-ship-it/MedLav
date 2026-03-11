@@ -1,4 +1,5 @@
 import { getMistralClient, withMistralRetry } from '@/lib/mistral/client';
+import { logger } from '@/lib/logger';
 
 const EMBEDDING_MODEL = 'mistral-embed';
 const MAX_BATCH_SIZE = 16; // Mistral embed API batch limit
@@ -33,7 +34,7 @@ export async function generateEmbeddings(
     }
 
     if (i + MAX_BATCH_SIZE < texts.length) {
-      console.log(`[embedding] Batch ${Math.floor(i / MAX_BATCH_SIZE) + 1}/${Math.ceil(texts.length / MAX_BATCH_SIZE)} complete`);
+      logger.info('embedding', `Batch ${Math.floor(i / MAX_BATCH_SIZE) + 1}/${Math.ceil(texts.length / MAX_BATCH_SIZE)} complete`);
     }
   }
 

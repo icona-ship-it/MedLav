@@ -4,6 +4,7 @@ import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extrac
 import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 import { jsonrepair } from 'jsonrepair';
+import { logger } from '@/lib/logger';
 
 // Smaller chunks = faster per-chunk extraction + less risk of truncation
 const MAX_CHUNK_CHARS = 15_000;
@@ -28,7 +29,7 @@ export function prepareExtractionChunks(params: ExtractionParams): {
 
   const { annotatedText, tableCount } = annotateTablesInText(documentText);
   if (tableCount > 0) {
-    console.log(`[extraction] Annotated ${tableCount} tables in document`);
+    logger.info('extraction', ` Annotated ${tableCount} tables in document`);
   }
 
   const processedParams = { ...params, documentText: annotatedText };
@@ -38,7 +39,7 @@ export function prepareExtractionChunks(params: ExtractionParams): {
   }
 
   const chunks = splitTextIntoChunks(annotatedText, MAX_CHUNK_CHARS);
-  console.log(`[extraction] Split ${annotatedText.length} chars into ${chunks.length} chunks`);
+  logger.info('extraction', ` Split ${annotatedText.length} chars into ${chunks.length} chunks`);
   return { chunks, params: processedParams };
 }
 
@@ -63,7 +64,7 @@ export async function extractEventsFromChunk(params: {
   } = params;
 
   const startMs = Date.now();
-  console.log(`[extraction] Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
+  logger.info('extraction', ` Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
 
   const content = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -93,7 +94,7 @@ export async function extractEventsFromChunk(params: {
   });
 
   const elapsedMs = Date.now() - startMs;
-  console.log(`[extraction] Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
+  logger.info('extraction', ` Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
 
   return parseExtractionResponse(content, chunkLabel);
 }
@@ -275,7 +276,7 @@ function safeJsonParse(raw: string, label: string): unknown {
   // Level 2: Automatic repair (close brackets, fix quotes, etc.)
   try {
     const repaired = jsonrepair(raw);
-    console.warn(`[${label}] JSON repaired (${raw.length} -> ${repaired.length} chars)`);
+    logger.warn('extraction', `[${label}] JSON repaired (${raw.length} -> ${repaired.length} chars)`);
     return JSON.parse(repaired);
   } catch {
     // continue
@@ -291,14 +292,14 @@ function safeJsonParse(raw: string, label: string): unknown {
         const partial = '{' + fromEvents.substring(0, lastCloseBrace + 1) + ']}';
         const result = JSON.parse(partial) as Record<string, unknown>;
         const count = Array.isArray(result.events) ? result.events.length : 0;
-        console.warn(`[${label}] Recovered ${count} events from truncated JSON (${raw.length} chars total)`);
+        logger.warn('extraction', `[${label}] Recovered ${count} events from truncated JSON (${raw.length} chars total)`);
         return result;
       } catch { /* give up */ }
     }
   }
 
   // All levels failed
-  console.error(
+  logger.error('extraction',
     `[${label}] JSON irrecoverable (${raw.length} chars). First 500: ${raw.slice(0, 500)}`,
   );
   return { events: [] };
@@ -327,7 +328,7 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
         const first = value[0] as Record<string, unknown>;
         if ('eventDate' in first || 'title' in first || 'description' in first) {
           rawEvents = value as unknown[];
-          console.log(`[extraction] Found events under key "${key}"`);
+          logger.info('extraction', ` Found events under key "${key}"`);
           break;
         }
       }
@@ -335,8 +336,8 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
   }
 
   if (!rawEvents || rawEvents.length === 0) {
-    console.error(`[extraction] No events found. Keys: ${Object.keys(raw).join(', ')}`);
-    console.error(`[extraction] Preview: ${content.slice(0, 500)}`);
+    logger.error('extraction', `No events found. Keys: ${Object.keys(raw).join(', ')}`);
+    logger.error('extraction', `Preview: ${content.slice(0, 500)}`);
     return { events: [] };
   }
 
@@ -366,7 +367,7 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
   }
 
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
-  console.log(`[extraction] Parsed ${validEvents.length}/${rawEvents.length} events`);
+  logger.info('extraction', ` Parsed ${validEvents.length}/${rawEvents.length} events`);
   return { events: validEvents, abbreviations };
 }
 
@@ -421,8 +422,8 @@ function deduplicateWithinDocument(allChunkEvents: ExtractedEvent[]): ExtractedE
 
   const removed = allChunkEvents.length - result.length;
   if (removed > 0) {
-    console.log(
-      `[extraction] Deduplicated within document: ${allChunkEvents.length} -> ${result.length} events ` +
+    logger.info('extraction',
+      `Deduplicated within document: ${allChunkEvents.length} -> ${result.length} events ` +
       `(${removed} duplicates removed via Jaccard similarity)`,
     );
   }

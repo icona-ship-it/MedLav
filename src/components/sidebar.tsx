@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -31,7 +32,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
     : pathname;
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <aside role="navigation" className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
         <Scale className="h-6 w-6 text-primary" />
@@ -46,6 +47,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
             <Link
               key={item.name}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
@@ -62,6 +64,10 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
       {/* Footer */}
       <div className="border-t p-3">
+        <div className="flex items-center justify-between px-3 py-1">
+          <span className="text-xs text-muted-foreground">Tema</span>
+          <ThemeToggle />
+        </div>
         {isAdmin && (
           <Link
             href="/admin"

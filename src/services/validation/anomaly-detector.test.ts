@@ -34,6 +34,34 @@ describe('detectAnomalies', () => {
     expect(detectAnomalies(events)).toEqual([]);
   });
 
+  it('should handle empty events array', () => {
+    // Arrange
+    const events: ConsolidatedEvent[] = [];
+
+    // Act
+    const anomalies = detectAnomalies(events);
+
+    // Assert
+    expect(anomalies).toEqual([]);
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it('should return empty array for well-ordered events without anomalies', () => {
+    // Arrange — regular follow-ups, no gaps, proper sequencing
+    const events = [
+      makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'visita', title: 'Prima visita' }),
+      makeEvent({ orderNumber: 2, eventDate: '2024-01-15', eventType: 'diagnosi', title: 'Diagnosi' }),
+      makeEvent({ orderNumber: 3, eventDate: '2024-01-20', eventType: 'terapia', title: 'Terapia prescritta' }),
+      makeEvent({ orderNumber: 4, eventDate: '2024-02-01', eventType: 'follow-up', title: 'Controllo' }),
+    ];
+
+    // Act
+    const anomalies = detectAnomalies(events);
+
+    // Assert
+    expect(anomalies).toEqual([]);
+  });
+
   describe('ritardo_diagnostico', () => {
     it('should detect delay >90 days between visit and diagnosis', () => {
       const events = [

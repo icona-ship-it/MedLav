@@ -47,7 +47,9 @@ export type AnomalyType =
   | 'complicanza_non_gestita'
   | 'consenso_non_documentato'
   | 'diagnosi_contraddittoria'
-  | 'terapia_senza_followup';
+  | 'terapia_senza_followup'
+  | 'valore_clinico_critico'
+  | 'sequenza_temporale_violata';
 
 export type AnomalySeverity = 'critica' | 'alta' | 'media' | 'bassa';
 

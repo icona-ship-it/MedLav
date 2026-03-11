@@ -67,6 +67,7 @@ interface HtmlExportParams {
   missingDocs: ExportMissingDoc[];
   calculations?: MedicoLegalCalculation[];
   periziaMetadata?: PeriziaMetadataExport | null;
+  reportStatus?: string;
 }
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -87,6 +88,50 @@ function confidenceClass(confidence: number): string {
   if (confidence >= 80) return 'confidence-high';
   if (confidence >= 50) return 'confidence-medium';
   return 'confidence-low';
+}
+
+/**
+ * Determine the watermark text based on report status.
+ */
+function getWatermarkText(reportStatus?: string): string {
+  if (reportStatus === 'bozza') return 'RISERVATO — BOZZA';
+  return 'CONFIDENZIALE';
+}
+
+/**
+ * Generate CSS for a diagonal watermark overlay.
+ */
+function buildWatermarkCss(reportStatus?: string): string {
+  const text = getWatermarkText(reportStatus);
+  return `
+  .watermark-wrapper { position: relative; }
+  .watermark-wrapper::after {
+    content: '${text}';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 80px;
+    font-weight: bold;
+    color: rgba(180, 180, 180, 0.25);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+  }
+  @media print {
+    .watermark-wrapper::after {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 80px;
+      color: rgba(180, 180, 180, 0.20);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }`;
 }
 
 /**
@@ -140,7 +185,7 @@ function buildFormalHeader(pm: PeriziaMetadataExport, caseRole: string, patientI
 }
 
 export function generateHtmlReport(params: HtmlExportParams): string {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata } = params;
+  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -202,9 +247,11 @@ export function generateHtmlReport(params: HtmlExportParams): string {
     a { color: #000; text-decoration: none; }
     .synthesis { background: none !important; border: 1px solid #ddd; }
   }
+  ${buildWatermarkCss(reportStatus)}
 </style>
 </head>
 <body>
+<div class="watermark-wrapper">
 ${periziaMetadata ? buildFormalHeader(periziaMetadata, caseRole, patientInitials) : ''}
 <h1>Report Medico-Legale</h1>
 <div class="header-info">
@@ -280,6 +327,7 @@ ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' 
 <footer style="margin-top:40px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#94a3b8;text-align:center">
   Report generato da MedLav il ${now}
 </footer>
+</div>
 </body>
 </html>`;
 }
@@ -298,6 +346,7 @@ interface ProfessionalHtmlExportParams {
   calculations?: MedicoLegalCalculation[];
   periziaMetadata: PeriziaMetadataExport;
   documentsWithPages: DocumentWithPages[];
+  reportStatus?: string;
 }
 
 function escapeHtmlPro(text: string): string {
@@ -325,7 +374,7 @@ function renderSectionContent(content: string, isMarkdown: boolean): string {
  * Uses assembled sections with full OCR documentation, print-optimized CSS.
  */
 export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportParams): string {
-  const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations } = params;
+  const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus } = params;
 
   const pm = periziaMetadata as AssemblerPeriziaMetadata;
   const assembled = assembleFullReport({
@@ -336,6 +385,17 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
     anomalies,
     missingDocs,
     calculations,
+    events: (params.events ?? []).map((e) => ({
+      event_date: e.event_date,
+      event_type: e.event_type,
+      title: e.title,
+      description: e.description,
+      source_type: e.source_type,
+      source_text: (e as unknown as Record<string, unknown>).source_text as string | null ?? null,
+      diagnosis: e.diagnosis,
+      doctor: e.doctor,
+      facility: e.facility,
+    })),
   });
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -553,9 +613,11 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
     .ocr-table { page-break-inside: avoid; }
     a { color: #000; text-decoration: none; }
   }
+  ${buildWatermarkCss(reportStatus)}
 </style>
 </head>
 <body>
+<div class="watermark-wrapper">
 <!-- Print-only fixed header (2 columns, benchmark style) -->
 <div class="print-header">
   <div class="rh-col rh-col-left">
@@ -619,6 +681,7 @@ ${sectionsHtml}
 <footer class="screen-footer">
   Report generato da MedLav il ${now}
 </footer>
+</div>
 </body>
 </html>`;
 }

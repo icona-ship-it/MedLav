@@ -157,11 +157,14 @@ function AddEventDialog({
 
 export function EventsTab({
   caseId, events, eventImages, onImageClick,
+  highlightedEventOrderNumber, onViewInReport,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
+  highlightedEventOrderNumber?: number | null;
+  onViewInReport?: (orderNumber: number) => void;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
@@ -289,6 +292,8 @@ export function EventsTab({
               onMoveDown={() => handleMoveEvent(event.id, 'down')}
               isFirst={index === 0}
               isLast={index === filteredEvents.length - 1}
+              isHighlighted={highlightedEventOrderNumber === event.order_number}
+              onViewInReport={onViewInReport ? () => onViewInReport(event.order_number) : undefined}
             />
           ))}
           {events.length === 0 && (

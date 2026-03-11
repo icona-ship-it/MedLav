@@ -14,6 +14,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - api/inngest (Inngest webhook - needs to be public)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/inngest|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/inngest|api/health|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

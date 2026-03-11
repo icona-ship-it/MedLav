@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Disallow: /api/
+Disallow: /admin/
+Disallow: /cases/
+Disallow: /settings/
+
+Sitemap: https://medlav.it/sitemap.xml

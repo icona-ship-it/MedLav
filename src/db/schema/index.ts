@@ -7,3 +7,5 @@ export * from './anomalies';
 export * from './reports';
 export * from './audit';
 export * from './guidelines';
+export * from './report-ratings';
+export * from './case-shares';

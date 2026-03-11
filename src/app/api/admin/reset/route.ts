@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminUser } from '@/lib/admin';
+import { logger } from '@/lib/logger';
 
 /**
  * POST /api/admin/reset
@@ -32,7 +33,7 @@ export async function POST(_request: NextRequest) {
       results[table] = error ? `errore: ${error.message}` : 'pulito';
     }
 
-    console.log(`[admin] Reset all data by user ${user.id}`);
+    logger.info('admin', `Reset all data by user ${user.id}`);
 
     return NextResponse.json({
       success: true,

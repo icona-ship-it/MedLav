@@ -7,6 +7,7 @@ import { formatDate } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
 import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
+import { getSourceReliabilityScore, getReliabilityLabel } from '../consolidation/source-reliability';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -38,12 +39,16 @@ const CHRONOLOGY_SOURCES_GUIDE = `Le categorie delle fonti sono:
 const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - NON omettere NESSUN evento dalla cronologia
 - Riportare i dati FEDELMENTE come dal documento, non sintetizzare
-- NON citare numeri di pagina
 - NON inventare dati non presenti negli eventi
 - Linguaggio medico-legale formale
 - Scrivi in italiano
 - Usa intestazioni markdown (## per parti, ### per sotto-sezioni)
-- La cronologia deve essere COMPLETA — ogni evento fornito deve comparire`;
+- La cronologia deve essere COMPLETA — ogni evento fornito deve comparire
+- Scrivi SEMPRE in prosa discorsiva, MAI elenchi puntati per la narrazione clinica
+- Lo stile deve essere quello di una perizia depositabile in tribunale: formale, giuridico, con periodi complessi e subordinate
+- Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
+- Quando due fonti discordano, privilegia la fonte con affidabilità maggiore (punteggio più alto)
+- Quando citi un evento specifico dalla cronologia, includi il riferimento [Ev.N] dove N è il numero dell'evento (orderNumber). Questo è FONDAMENTALE per la tracciabilità in ambito giudiziario`;
 
 // ── Full-report mode (single call) ──
 
@@ -84,10 +89,18 @@ Descrizione del metodo di lavoro adottato: esame della documentazione, eventuale
 Elenco dettagliato di TUTTA la documentazione analizzata con data e tipo di ciascun documento.
 
 ### RIASSUNTO DEL CASO
-Sintesi narrativa della vicenda clinica completa.
+Narrazione sintetica ma COMPLETA della vicenda clinica in forma di paragrafi discorsivi.
+Scrivi come se stessi redigendo la sezione FATTO di una perizia medico-legale. Integra le posizioni
+delle parti (ricorrente e resistente) se disponibili dai dati della perizia.
 
 ### CRONOLOGIA MEDICO-LEGALE
-Elenco cronologico completo con fonti (A/B/C/D).
+Narrazione cronologica fluida della vicenda clinica. Per ogni episodio scrivi un PARAGRAFO
+discorsivo che integri data, struttura, diagnosi, esami, terapie e decorso. NON usare elenchi puntati.
+Stile: prosa giuridica formale come in una perizia depositata in tribunale.
+Esempio di stile: "In data 30.09.2021 il sig. Rossi si recava presso il Pronto Soccorso del P.O.
+ove veniva ricoverato. A seguito delle indagini eseguite, si accertava una frattura e, in data
+01.10.2021, il paziente veniva sottoposto ad intervento di riduzione e osteosintesi con placca e viti."
+Indica la categoria della fonte (A/B/C/D) tra parentesi alla fine di ogni paragrafo.
 
 ### [SEZIONI SPECIALIZZATE PER TIPO CASO]
 Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Complicanze, Timeline diagnostica).
@@ -96,38 +109,42 @@ ${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
 Riporta i dati dell'esame obiettivo forniti.
 
 ` : ''}### CONSIDERAZIONI MEDICO-LEGALI / ELEMENTI DI RILIEVO
-Analisi critica punto per punto dei profili di responsabilità. Per OGNI criticità individuata, struttura la trattazione come segue:
-- **RILIEVO**: Descrizione oggettiva dell'elemento critico emerso dalla documentazione
-- **POSSIBILE CRITICITÀ**: Analisi del profilo di responsabilità professionale
-- **CONTRODEDUZIONI**: Argomentazioni a difesa dell'operato sanitario (se applicabili al ruolo)
-- **VALUTAZIONE**: Giudizio medico-legale motivato con riferimenti alla letteratura e alle linee guida
+Analisi critica dei profili di responsabilità. Scrivi in forma di paragrafi argomentativi, NON elenchi puntati.
+Ogni profilo di responsabilità va sviluppato come argomentazione discorsiva con citazioni dalla documentazione.
+Per OGNI criticità individuata, sviluppa nel paragrafo: il rilievo oggettivo emerso dalla documentazione,
+l'analisi del profilo di responsabilità professionale, le eventuali controdeduzioni (se applicabili al ruolo),
+e il giudizio medico-legale motivato con riferimenti alla letteratura e alle linee guida.
+Per CTU: struttura ogni profilo come TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO CTU.
 
 ### NESSO CAUSALE
 Analisi del nesso di causalità con i criteri giuridici (più probabile che non, ragionevole certezza medico-legale).
+Collegare esplicitamente ogni anomalia alla conseguenza clinica con formula "il [anomalia] ha verosimilmente determinato [danno]".
 
 ### VALUTAZIONE DEL DANNO BIOLOGICO
-Quantificazione esplicita:
-- Danno biologico permanente: percentuale (%) con criteri tabellari utilizzati
-- ITT (Invalidità Temporanea Totale): periodo esatto con date
-- ITP (Invalidità Temporanea Parziale): periodo esatto con date e percentuale
-- Danno morale/esistenziale: se applicabile, con motivazione
-- Spese mediche future prevedibili: se documentabili
+Quantificazione esplicita in forma discorsiva. Indica nel paragrafo: il danno biologico permanente
+con percentuale e criteri tabellari utilizzati, i periodi di ITT e ITP con date esatte e percentuali,
+il danno morale/esistenziale se applicabile con motivazione, e le spese mediche future prevedibili
+se documentabili.
+Per ogni voce di danno, indicare quale anomalia ne è la causa.
+Utilizza i riferimenti tabellari forniti (DM 2024, Tabelle Milano) per motivare la quantificazione.
 
 ${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### RISPOSTA AI QUESITI
 Risposta punto per punto a CIASCUN quesito del Giudice, NUMERATA corrispondentemente. Ogni risposta deve essere:
 - Argomentata con riferimenti specifici alla documentazione esaminata
 - Completa e autonomamente comprensibile
 - Conclusiva (esprimere un giudizio motivato, non lasciare la risposta aperta)
+- Per CTU: ogni risposta con TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO
 
 ` : ''}${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE
 Analisi delle spese mediche documentate.
 
 ` : ''}### CONCLUSIONI
-Sintesi finale con:
-- Formula di rito appropriata al ruolo (CTU: "A parere di questo CTU...", CTP: "Risulta evidente che...", Stragiudiziale: "Il caso presenta fondatezza per...")
-- Riepilogo quantitativo del danno biologico (% permanente, periodi ITT/ITP)
-- Giudizio complessivo sul nesso causale
-- Eventuali riserve o necessità di approfondimento`;
+Scrivi le conclusioni come paragrafo unico discorsivo con formula di rito, NON come elenco puntato.
+Stile: "A parere di questo CTU, alla luce di quanto sopra esposto e dedotto, si ritiene che..."
+Includi nel paragrafo: formula di rito appropriata al ruolo (CTU: "A parere di questo CTU...",
+CTP: "Risulta evidente che...", Stragiudiziale: "Il caso presenta fondatezza per..."),
+riepilogo quantitativo del danno biologico (% permanente, periodi ITT/ITP),
+giudizio complessivo sul nesso causale, ed eventuali riserve o necessità di approfondimento.`;
 
   return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
 
@@ -148,10 +165,10 @@ ${causalNexus}
 
 ## FORMATO CRONOLOGIA
 
-Per ogni voce cronologica riporta:
-- **Data** (formato DD/MM/YYYY)
-- **Categoria fonte** tra parentesi: (A), (B), (C) o (D)
-- **Contenuto** copiato fedelmente dal documento originale
+Per ogni episodio cronologico scrivi un PARAGRAFO NARRATIVO che integri:
+- La data (formato DD.MM.YYYY) nel testo
+- La categoria della fonte tra parentesi (A), (B), (C) o (D) alla fine del paragrafo
+- Il contenuto fedelmente dal documento originale, in prosa discorsiva
 
 ${CHRONOLOGY_SOURCES_GUIDE}
 
@@ -171,8 +188,9 @@ export function buildSynthesisUserPrompt(params: {
   calculations?: MedicoLegalCalculation[];
   caseTypes?: CaseType[];
   periziaMetadata?: PeriziaMetadata;
+  imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number }>;
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata, imageAnalysis } = params;
 
   const eventsText = formatEventsForPrompt(events);
   const anomaliesText = formatAnomaliesForPrompt(anomalies);
@@ -209,10 +227,10 @@ ${anomaliesText}
 
 ${missingDocsText}
 ${calculationsText}
----
+${formatImageAnalysisForPrompt(imageAnalysis)}---
 
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
-IMPORTANTE: La cronologia deve riportare OGNI evento fornito sopra, fedelmente, senza omissioni. Non citare numeri di pagina.
+IMPORTANTE: La cronologia deve riportare OGNI evento fornito sopra, fedelmente, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati.
 Adatta tono e prospettiva al RUOLO indicato (${roleLabel}).`;
 }
 
@@ -224,28 +242,34 @@ Adatta tono e prospettiva al RUOLO indicato (${roleLabel}).`;
 export function buildChronologySystemPrompt(): string {
   return `Sei un medico legale esperto incaricato di redigere la sezione "CRONOLOGIA MEDICO-LEGALE" di un report peritale.
 
-COMPITO: Genera ESCLUSIVAMENTE la cronologia. NON generare riassunti, analisi, o elementi di rilievo.
+COMPITO: Genera ESCLUSIVAMENTE la cronologia in forma NARRATIVA. NON generare riassunti, analisi, o elementi di rilievo.
 
-FORMATO OBBLIGATORIO PER OGNI VOCE:
-- Data in formato DD/MM/YYYY
-- Categoria della fonte tra parentesi: (A), (B), (C) o (D)
+STILE: Prosa giuridica formale come in una perizia depositata in tribunale. Per ogni episodio scrivi un PARAGRAFO
+discorsivo che integri data, struttura, diagnosi, esami, terapie e decorso. NON usare elenchi puntati.
+Esempio: "In data 30.09.2021 il sig. Rossi si recava presso il Pronto Soccorso del P.O. ove veniva ricoverato.
+A seguito delle indagini eseguite, si accertava una frattura e, in data 01.10.2021, il paziente veniva sottoposto
+ad intervento di riduzione e osteosintesi con placca e viti. (A)"
+
+FORMATO: Indica la categoria della fonte (A), (B), (C) o (D) tra parentesi alla fine di ogni paragrafo.
 
 ${CHRONOLOGY_SOURCES_GUIDE}
 
 REGOLE:
 - Ordine rigorosamente cronologico
-- Il contenuto di ogni voce deve essere COPIATO FEDELMENTE dalla documentazione, non parafrasato
+- Il contenuto deve essere FEDELE alla documentazione
 - Includi TUTTI gli eventi forniti, nessuno deve essere escluso
 - Descrizioni DETTAGLIATE e COMPLETE: riporta valori, misure, dosaggi, nomi farmaci
 - Se la data è incerta, indica la migliore approssimazione disponibile
+- Scrivi in PROSA NARRATIVA, MAI elenchi puntati
 
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
 <!-- SECTION:CRONOLOGIA -->
 ## CRONOLOGIA MEDICO-LEGALE
 
-DD/MM/YYYY — (X) Titolo evento
-Descrizione completa e fedele copiata dalla documentazione...
+In data DD.MM.YYYY il paziente... [paragrafo narrativo completo]. (X)
+
+In data DD.MM.YYYY presso... [paragrafo narrativo completo]. (X)
 <!-- END:CRONOLOGIA -->`;
 }
 
@@ -373,10 +397,12 @@ function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     const date = formatDate(e.eventDate);
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
+    const reliabilityScore = getSourceReliabilityScore(e.sourceType);
+    const reliabilityLabel = getReliabilityLabel(reliabilityScore);
     const diagnosis = e.diagnosis ? `\n   Diagnosi: ${e.diagnosis}` : '';
     const doctor = e.doctor ? `\n   Medico: ${e.doctor}` : '';
     const facility = e.facility ? `\n   Struttura: ${e.facility}` : '';
-    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} | TIPO: ${e.eventType.toUpperCase()}
+    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}
    TITOLO: ${e.title}
    DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}`;
   }).join('\n\n');
@@ -386,7 +412,7 @@ function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
   if (anomalies.length === 0) return 'Nessuna anomalia rilevata.';
   return anomalies.map((a) => {
     const involvedDates = a.involvedEvents.map((e) => `${formatDate(e.date)} - ${e.title}`).join(', ');
-    return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})`;
+    return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})\n  COLLEGA AL DANNO: specifica la conseguenza clinica e la quantificazione del danno correlato a questa anomalia.`;
   }).join('\n');
 }
 
@@ -397,9 +423,11 @@ function formatMissingDocsForPrompt(missingDocuments: MissingDocument[]): string
 
 function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): string {
   if (!calculations || calculations.length === 0) return '';
-  const lines = calculations.map((c) =>
-    `- ${c.label}: ${c.value}${c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : ''}\n  ${c.notes}`,
-  );
+  const lines = calculations.map((c) => {
+    const dateRange = c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : '';
+    const tableRef = c.tableReference ? `\n  Rif. tabellare: ${c.tableReference}` : '';
+    return `- ${c.label}: ${c.value}${dateRange}\n  ${c.notes}${tableRef}`;
+  });
   return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)\n\n${lines.join('\n')}\n\nNOTA: Integra questi periodi nella valutazione del danno biologico. Sono stime automatiche da confermare.`;
 }
 
@@ -446,6 +474,16 @@ function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): stri
   if (lines.length === 0) return '';
 
   return `\n## DATI PERIZIA FORMALE\n\n${lines.join('\n')}\n`;
+}
+
+function formatImageAnalysisForPrompt(
+  imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number }>,
+): string {
+  if (!imageAnalysis || imageAnalysis.length === 0) return '';
+  const lines = imageAnalysis.map((img) =>
+    `- Pagina ${img.pageNumber} (${img.imageType}): ${img.description}`,
+  );
+  return `\n## ANALISI IMMAGINI DIAGNOSTICHE\n\nLe seguenti immagini sono state identificate e descritte automaticamente. Integra queste osservazioni nel report quando pertinenti.\n\n${lines.join('\n')}\n\n`;
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

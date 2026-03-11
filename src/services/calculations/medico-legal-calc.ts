@@ -1,4 +1,6 @@
 import { formatDate } from '@/lib/format';
+import type { CaseType } from '@/types';
+import { estimateBiologicalDamage } from './damage-estimator';
 
 interface CalcEvent {
   event_date: string;
@@ -14,13 +16,17 @@ export interface MedicoLegalCalculation {
   startDate: string | null;
   endDate: string | null;
   notes: string;
+  tableReference?: string;
 }
 
 /**
  * Calculate medico-legal periods from timeline events.
  * These are proposed values — the expert can modify them.
  */
-export function calculateMedicoLegalPeriods(events: CalcEvent[]): MedicoLegalCalculation[] {
+export function calculateMedicoLegalPeriods(
+  events: CalcEvent[],
+  caseType?: CaseType,
+): MedicoLegalCalculation[] {
   if (events.length === 0) return [];
 
   const calculations: MedicoLegalCalculation[] = [];
@@ -43,7 +49,26 @@ export function calculateMedicoLegalPeriods(events: CalcEvent[]): MedicoLegalCal
   // 6. ITP estimate
   calculations.push(calculateITP(events));
 
-  return calculations.filter((c) => c.days !== null && c.days > 0);
+  // 7. Biological damage estimate with table reference
+  if (caseType) {
+    const damageEstimate = estimateBiologicalDamage(events, caseType);
+    if (damageEstimate.lookupResult && damageEstimate.estimatedRange) {
+      const lr = damageEstimate.lookupResult;
+      calculations.push({
+        label: 'Stima danno biologico (indicativa)',
+        value: lr.estimatedAmount
+          ? `${damageEstimate.estimatedRange.min}-${damageEstimate.estimatedRange.max}% (€${lr.estimatedAmount.toLocaleString('it-IT')} al punto medio ${damageEstimate.midpointPercentage}%)`
+          : `${damageEstimate.estimatedRange.min}-${damageEstimate.estimatedRange.max}%`,
+        days: null,
+        startDate: null,
+        endDate: null,
+        notes: `${damageEstimate.reasoning} Confidenza: ${lr.confidence}.`,
+        tableReference: lr.tableUsed,
+      });
+    }
+  }
+
+  return calculations.filter((c) => c.days !== null || c.tableReference != null);
 }
 
 function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {

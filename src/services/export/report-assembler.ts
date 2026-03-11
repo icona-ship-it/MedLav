@@ -121,6 +121,18 @@ function buildDocumentazioneSanitaria(docs: DocumentWithPages[]): string {
  * Assemble a full professional report combining programmatic and LLM sections.
  * Produces a structured report suitable for court-quality HTML/DOCX export.
  */
+interface ExportEvent {
+  event_date: string;
+  event_type: string;
+  title: string;
+  description: string;
+  source_type: string;
+  source_text: string | null;
+  diagnosis: string | null;
+  doctor: string | null;
+  facility: string | null;
+}
+
 export function assembleFullReport(params: {
   periziaMetadata: PeriziaMetadataExport;
   caseRole: string;
@@ -129,8 +141,9 @@ export function assembleFullReport(params: {
   anomalies: ExportAnomaly[];
   missingDocs: ExportMissingDoc[];
   calculations?: MedicoLegalCalculation[];
+  events?: ExportEvent[];
 }): AssembledReport {
-  const { periziaMetadata: pm, caseRole, documentsWithPages, synthesis, anomalies, missingDocs, calculations } = params;
+  const { periziaMetadata: pm, caseRole, documentsWithPages, synthesis, anomalies, missingDocs, calculations, events } = params;
   const sections: ReportSection[] = [];
   let sectionNum = 0;
 
@@ -188,6 +201,12 @@ export function assembleFullReport(params: {
 
   const cronologia = extractSynthesisSection(synthText, /^##\s*CRONOLOGIA/i);
   if (cronologia) addSection('cronologia', 'CRONOLOGIA MEDICO-LEGALE', cronologia);
+
+  // EVIDENZE CLINICHE — fatti medici raggruppati per tipo fonte (A/B/C/D)
+  if (events && events.length > 0) {
+    const evidenzeContent = buildEvidenzeCliniche(events);
+    addSection('evidenze-cliniche', 'EVIDENZE CLINICHE', evidenzeContent);
+  }
 
   // Specialized sections (between CRONOLOGIA and CONSIDERAZIONI/ELEMENTI)
   const specializedSections = extractSpecializedSections(synthText);
@@ -316,6 +335,86 @@ function extractSpecializedSections(synthesis: string): Array<{ id: string; titl
   }
 
   return results;
+}
+
+/**
+ * Build EVIDENZE CLINICHE section: chronological facts grouped by source type.
+ *
+ * A - CARTELLA CLINICA: diagnosi ingresso, peso/altezza, esami, anamnesi, terapie,
+ *     descrizione chirurgica, cartella anestesiologica, diario medico/infermieristico,
+ *     lettera di dimissione
+ * B - REFERTI CONTROLLI MEDICI
+ * C - REFERTI RADIOLOGICI ED ESAMI STRUMENTALI
+ * D - ESAMI EMATOCHIMICI
+ */
+function buildEvidenzeCliniche(events: ExportEvent[]): string {
+  const SOURCE_CATEGORY_ORDER = [
+    'cartella_clinica',
+    'referto_controllo',
+    'esame_strumentale',
+    'esame_ematochimico',
+    'altro',
+  ];
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    cartella_clinica: 'A — CARTELLA CLINICA',
+    referto_controllo: 'B — REFERTI CONTROLLI MEDICI',
+    esame_strumentale: 'C — REFERTI RADIOLOGICI ED ESAMI STRUMENTALI',
+    esame_ematochimico: 'D — ESAMI EMATOCHIMICI',
+    altro: 'ALTRI DOCUMENTI',
+  };
+
+  const CATEGORY_DESC: Record<string, string> = {
+    cartella_clinica: 'Diagnosi di ingresso, parametri antropometrici, esami ematochimici, anamnesi, terapie effettuate, descrizione intervento chirurgico e tempi operatori, cartella anestesiologica, diario medico e infermieristico, lettera di dimissione.',
+    referto_controllo: 'Visite specialistiche, follow-up, certificati medici.',
+    esame_strumentale: 'Radiografie, TAC, risonanze magnetiche, ECG, ecografie e altri esami strumentali.',
+    esame_ematochimico: 'Emocromo, biochimica clinica, coagulazione, markers tumorali e altri esami di laboratorio.',
+    altro: 'Documentazione non classificata nelle categorie precedenti.',
+  };
+
+  // Group events by source_type
+  const grouped = new Map<string, ExportEvent[]>();
+  for (const cat of SOURCE_CATEGORY_ORDER) {
+    grouped.set(cat, []);
+  }
+  for (const ev of events) {
+    const cat = SOURCE_CATEGORY_ORDER.includes(ev.source_type) ? ev.source_type : 'altro';
+    grouped.get(cat)!.push(ev);
+  }
+
+  const parts: string[] = [];
+
+  for (const cat of SOURCE_CATEGORY_ORDER) {
+    const catEvents = grouped.get(cat) ?? [];
+    if (catEvents.length === 0) continue;
+
+    // Sort by date within each category
+    catEvents.sort((a, b) => a.event_date.localeCompare(b.event_date));
+
+    const label = CATEGORY_LABELS[cat];
+    const desc = CATEGORY_DESC[cat];
+    parts.push(`### ${label}\n*${desc}*\n`);
+
+    for (const ev of catEvents) {
+      const date = formatDate(ev.event_date);
+      const facility = ev.facility ? ` — ${ev.facility}` : '';
+      const doctor = ev.doctor ? ` (${ev.doctor})` : '';
+      const diagnosis = ev.diagnosis ? `\n**Diagnosi:** ${ev.diagnosis}` : '';
+
+      // Prefer sourceText (verbatim from document), fallback to description
+      const content = ev.source_text && ev.source_text.trim().length > 20
+        ? ev.source_text.trim()
+        : ev.description;
+
+      parts.push(`**${date}${facility}${doctor}** — ${ev.title}${diagnosis}\n${content}\n`);
+    }
+  }
+
+  if (parts.length === 0) {
+    return 'Nessuna evidenza clinica disponibile.';
+  }
+
+  return parts.join('\n');
 }
 
 function formatCalculationsText(calculations?: MedicoLegalCalculation[]): string | null {

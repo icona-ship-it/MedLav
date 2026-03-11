@@ -3,9 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/export/html-export';
+import { anonymizeText } from '@/services/anonymization/anonymizer';
+import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
@@ -29,6 +31,8 @@ export async function GET(
   const pm = data.periziaMetadata as Record<string, unknown> | null;
   const useProfessional = pm && (pm.tribunale || pm.ctuName);
 
+  const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
+
   const html = useProfessional
     ? generateProfessionalHtmlReport({
       caseCode: data.caseData.code as string,
@@ -42,6 +46,7 @@ export async function GET(
       calculations: data.calculations,
       periziaMetadata: pm,
       documentsWithPages: data.documentsWithPages,
+      reportStatus,
     })
     : generateHtmlReport({
       caseCode: data.caseData.code as string,
@@ -54,12 +59,26 @@ export async function GET(
       missingDocs: data.missingDocs,
       calculations: data.calculations,
       periziaMetadata: data.periziaMetadata,
+      reportStatus,
     });
 
-  return new NextResponse(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Disposition': `attachment; filename="report-${data.caseData.code}.html"`,
-    },
-  });
+  const isInline = request.nextUrl.searchParams.get('inline') === 'true';
+  const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+
+  let finalHtml = html;
+  if (shouldAnonymize) {
+    const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+    const result = anonymizeText({ text: html, periziaMetadata });
+    finalHtml = result.anonymizedText;
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'text/html; charset=utf-8',
+  };
+  const suffix = shouldAnonymize ? '-anonimizzato' : '';
+  if (!isInline) {
+    headers['Content-Disposition'] = `attachment; filename="report-${data.caseData.code}${suffix}.html"`;
+  }
+
+  return new NextResponse(finalHtml, { headers });
 }

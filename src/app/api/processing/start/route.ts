@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { getPlanLimits } from '@/lib/stripe/config';
 
 export const maxDuration = 30;
 
@@ -50,6 +51,38 @@ export async function POST(request: NextRequest) {
     }
 
     const { caseId } = parsed.data;
+
+    // Check subscription plan limits
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_status, subscription_plan')
+      .eq('id', user.id)
+      .single();
+
+    const plan = (profile?.subscription_plan as string) ?? 'trial';
+    const status = (profile?.subscription_status as string) ?? 'trial';
+
+    if (status === 'canceled' || status === 'past_due') {
+      return NextResponse.json(
+        { success: false, error: 'Abbonamento non attivo. Aggiorna il tuo piano per continuare.' },
+        { status: 403 },
+      );
+    }
+
+    const { casesLimit } = getPlanLimits(plan);
+    if (casesLimit !== Infinity) {
+      const { count: totalCases } = await supabase
+        .from('cases')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      if (totalCases && totalCases >= casesLimit) {
+        return NextResponse.json(
+          { success: false, error: `Hai raggiunto il limite di ${casesLimit} casi del piano ${plan}. Passa al piano Pro per casi illimitati.` },
+          { status: 403 },
+        );
+      }
+    }
 
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase

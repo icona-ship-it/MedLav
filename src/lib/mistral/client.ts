@@ -1,4 +1,5 @@
 import { Mistral, HTTPClient } from '@mistralai/mistralai';
+import { logger } from '@/lib/logger';
 
 // ── Timeout per tipo di operazione ──
 // Vercel Pro maxDuration = 800s per Inngest step.
@@ -90,7 +91,7 @@ class CircuitBreaker {
     if (this.state === 'open') {
       if (Date.now() - this.lastFailure > this.resetMs) {
         this.state = 'half-open';
-        console.log(`[circuit-breaker] Half-open: allowing probe request (${label})`);
+        logger.info('circuit-breaker', ` Half-open: allowing probe request (${label})`);
       } else {
         throw new Error(
           `[circuit-breaker] Circuit OPEN — Mistral API appears down. ` +
@@ -103,7 +104,7 @@ class CircuitBreaker {
 
   recordSuccess(): void {
     if (this.failures > 0) {
-      console.log(`[circuit-breaker] Success after ${this.failures} failures — circuit closed`);
+      logger.info('circuit-breaker', ` Success after ${this.failures} failures — circuit closed`);
     }
     this.failures = 0;
     this.state = 'closed';
@@ -114,7 +115,7 @@ class CircuitBreaker {
     this.lastFailure = Date.now();
     if (this.failures >= this.threshold) {
       this.state = 'open';
-      console.error(`[circuit-breaker] Circuit OPEN after ${this.failures} consecutive failures`);
+      logger.error('circuit-breaker', ` Circuit OPEN after ${this.failures} consecutive failures`);
     }
   }
 }
@@ -184,7 +185,7 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
 
       if (!isTransientError(error) || isLast) {
         mistralCircuitBreaker.recordFailure();
-        console.error(
+        logger.error('mistral-retry',
           `[retry:${label}] Final failure after ${attempt + 1} attempts: ${message.slice(0, 200)}`,
         );
         throw error;
@@ -199,14 +200,14 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
 
       if (retryAfter) {
         delayMs = (parseInt(String(retryAfter), 10) || 5) * 1000;
-        console.log(`[retry:${label}] Using Retry-After header: ${retryAfter}s`);
+        logger.info('mistral-retry', `[retry:${label}] Using Retry-After header: ${retryAfter}s`);
       } else {
         const baseDelay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
         const jitter = baseDelay * (0.7 + Math.random() * 0.6);
         delayMs = Math.round(jitter);
       }
 
-      console.log(
+      logger.info('mistral-retry',
         `[retry:${label}] Attempt ${attempt + 1}/${MAX_RETRIES} failed, ` +
         `retry in ${delayMs}ms: ${message.slice(0, 100)}`,
       );
@@ -254,7 +255,7 @@ async function _streamWithFallback(params: {
       message.includes('content is empty');
 
     if (isStreamSpecificError) {
-      console.warn(
+      logger.warn('mistral',
         `[mistral:${label}] Stream-specific failure, falling back to chat.complete(): ${message.slice(0, 100)}`,
       );
       return await _completeMistralChatFallback(params);
@@ -308,7 +309,7 @@ async function _streamMistralChatInternal(params: {
         );
       }
       if (content.length - lastLogAt >= 2000) {
-        console.log(
+        logger.debug('mistral',
           `[mistral:${label}] Streaming... ${content.length} chars (${Date.now() - startMs}ms)`,
         );
         lastLogAt = content.length;
@@ -319,7 +320,7 @@ async function _streamMistralChatInternal(params: {
       throw new Error(`[mistral:${label}] Stream completed but content is empty`);
     }
 
-    console.log(
+    logger.info('mistral',
       `[mistral:${label}] Stream complete: ${content.length} chars in ${Date.now() - startMs}ms`,
     );
     return content;
@@ -342,7 +343,7 @@ async function _completeMistralChatFallback(params: {
     const client = getMistralClient();
     const startMs = Date.now();
 
-    console.log(`[mistral:${label}] Using chat.complete() fallback (timeout: ${timeoutMs}ms)`);
+    logger.info('mistral', `[mistral:${label}] Using chat.complete() fallback (timeout: ${timeoutMs}ms)`);
 
     const response = await client.chat.complete(
       {
@@ -361,7 +362,7 @@ async function _completeMistralChatFallback(params: {
       throw new Error(`[mistral:${label}] chat.complete() returned empty content`);
     }
 
-    console.log(
+    logger.info('mistral',
       `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms`,
     );
     return content;

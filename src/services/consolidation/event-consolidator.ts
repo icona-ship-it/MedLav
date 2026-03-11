@@ -1,4 +1,5 @@
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
+import { getSourceReliabilityScore, getReliabilityLabel } from './source-reliability';
 
 export interface ConsolidatedEvent extends ExtractedEvent {
   orderNumber: number;
@@ -98,8 +99,12 @@ function findDiscrepancy(
     ) {
       // Check for specific discrepancies
       if (event.diagnosis && other.diagnosis && event.diagnosis !== other.diagnosis) {
+        const eventScore = getSourceReliabilityScore(event.sourceType);
+        const otherScore = getSourceReliabilityScore(other.sourceType);
+        const preferredSource = eventScore >= otherScore ? event.sourceType : other.sourceType;
+        const preferredLabel = getReliabilityLabel(Math.max(eventScore, otherScore));
         discrepancies.push(
-          `Diagnosi discordante tra fonti: "${event.diagnosis}" vs "${other.diagnosis}"`,
+          `Diagnosi discordante tra fonti: "${event.diagnosis}" vs "${other.diagnosis}". Fonte preferita: ${preferredSource} (affidabilità ${preferredLabel}, ${Math.max(eventScore, otherScore)}/100)`,
         );
       }
 

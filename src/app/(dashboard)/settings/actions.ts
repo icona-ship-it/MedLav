@@ -23,6 +23,9 @@ export interface ProfileData {
   fullName: string;
   studio: string;
   email: string;
+  subscriptionStatus: string | null;
+  subscriptionPlan: string | null;
+  stripeCustomerId: string | null;
 }
 
 export async function getProfile(): Promise<ProfileData> {
@@ -35,7 +38,7 @@ export async function getProfile(): Promise<ProfileData> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, studio, email')
+    .select('full_name, studio, email, subscription_status, subscription_plan, stripe_customer_id')
     .eq('id', user.id)
     .single();
 
@@ -43,6 +46,9 @@ export async function getProfile(): Promise<ProfileData> {
     fullName: profile?.full_name ?? user.user_metadata?.full_name ?? '',
     studio: profile?.studio ?? '',
     email: profile?.email ?? user.email ?? '',
+    subscriptionStatus: (profile?.subscription_status as string) ?? null,
+    subscriptionPlan: (profile?.subscription_plan as string) ?? null,
+    stripeCustomerId: (profile?.stripe_customer_id as string) ?? null,
   };
 }
 

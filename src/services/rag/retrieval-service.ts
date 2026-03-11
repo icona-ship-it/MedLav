@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateQueryEmbedding } from './embedding-service';
 import type { CaseType } from '@/types';
+import { logger } from '@/lib/logger';
 
 const DEFAULT_TOP_K = 5;
 const MIN_SIMILARITY = 0.3; // cosine similarity threshold
@@ -10,6 +11,7 @@ export interface RetrievedChunk {
   sectionTitle: string | null;
   guidelineTitle: string;
   guidelineSource: string;
+  guidelineYear: number | null;
   similarity: number;
 }
 
@@ -40,7 +42,7 @@ export async function retrieveRelevantGuidelines(params: {
   });
 
   if (error) {
-    console.error(`[rag:retrieval] Search failed: ${error.message}`);
+    logger.error('rag:retrieval', `Search failed: ${error.message}`);
     return [];
   }
 
@@ -49,16 +51,18 @@ export async function retrieveRelevantGuidelines(params: {
     section_title: string | null;
     guideline_title: string;
     guideline_source: string;
+    guideline_year: number | null;
     similarity: number;
   }>;
 
-  console.log(`[rag:retrieval] Found ${results.length} relevant chunks (query: "${query.slice(0, 60)}...")`);
+  logger.info('rag:retrieval', `Found ${results.length} relevant chunks (query: "${query.slice(0, 60)}...")`);
 
   return results.map((r) => ({
     content: r.content,
     sectionTitle: r.section_title,
     guidelineTitle: r.guideline_title,
     guidelineSource: r.guideline_source,
+    guidelineYear: r.guideline_year ?? null,
     similarity: r.similarity,
   }));
 }
@@ -116,14 +120,17 @@ export async function buildGuidelineContext(params: {
 
   if (topChunks.length === 0) return '';
 
-  const contextLines = topChunks.map((c) =>
-    `### ${c.guidelineTitle} (${c.guidelineSource})${c.sectionTitle ? ` — ${c.sectionTitle}` : ''}\n${c.content}`,
-  );
+  const contextLines = topChunks.map((c) => {
+    const yearLabel = c.guidelineYear ? `, ${c.guidelineYear}` : ', n.d.';
+    return `### ${c.guidelineTitle} [${c.guidelineSource}${yearLabel}]${c.sectionTitle ? ` — ${c.sectionTitle}` : ''}\n${c.content}`;
+  });
 
   return `## LINEE GUIDA CLINICHE RILEVANTI (recuperate automaticamente)
 
 Le seguenti linee guida sono state identificate come rilevanti per questo caso.
-Citale nel report quando pertinenti, indicando fonte e anno.
+OBBLIGO: Quando utilizzi informazioni da queste linee guida, cita SEMPRE con formato:
+"Secondo le Linee Guida [Fonte, Anno], ..."
+NON utilizzare linee guida senza citazione esplicita della fonte e dell'anno.
 
 ${contextLines.join('\n\n')}`;
 }

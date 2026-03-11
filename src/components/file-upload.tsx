@@ -135,7 +135,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
       <div
         role="button"
         tabIndex={0}
-        aria-label="Trascina o seleziona documenti da caricare"
+        aria-label="Carica documenti"
         onDrop={handleDrop}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
@@ -167,6 +167,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
           type="file"
           multiple
           accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.doc,.docx,.xls,.xlsx"
+          aria-label="Carica documenti"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) addFiles(e.target.files);

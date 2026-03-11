@@ -267,17 +267,23 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t bg-muted/20 px-6 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-muted-foreground sm:flex-row">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-sm text-muted-foreground sm:flex-row">
           <div className="flex items-center gap-2">
             <Scale className="h-4 w-4" />
             <span className="font-medium">MedLav</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+            <Link href="/terms" className="hover:text-foreground transition-colors">Termini di Servizio</Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            <Link href="/security" className="hover:text-foreground transition-colors">Sicurezza</Link>
+            <Link href="/pricing" className="hover:text-foreground transition-colors">Prezzi</Link>
+            <Link href="/help" className="hover:text-foreground transition-colors">Aiuto</Link>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1">
               <Shield className="h-3 w-3" />
               Conforme GDPR Art. 9
             </span>
-            <span>Dati protetti in Europa (Francoforte)</span>
           </div>
         </div>
       </footer>

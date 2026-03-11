@@ -91,6 +91,8 @@ export const anomalyTypeLabels: Record<string, string> = {
   consenso_non_documentato: 'Consenso Non Documentato',
   diagnosi_contraddittoria: 'Diagnosi Contraddittoria',
   terapia_senza_followup: 'Terapia Senza Follow-up',
+  valore_clinico_critico: 'Valore Clinico Critico',
+  sequenza_temporale_violata: 'Sequenza Temporale Violata',
 };
 
 // --- Processing Status ---

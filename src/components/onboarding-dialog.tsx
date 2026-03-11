@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Scale, FileUp, Brain, FileText, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Scale, FileUp, Brain, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -56,8 +58,10 @@ const STEPS = [
 ];
 
 export function OnboardingDialog() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isCreatingDemo, setIsCreatingDemo] = useState(false);
 
   useEffect(() => {
     // Show only if onboarding not completed
@@ -69,11 +73,29 @@ export function OnboardingDialog() {
     }
   }, []);
 
+  const handleCreateDemo = useCallback(async () => {
+    setIsCreatingDemo(true);
+    try {
+      const response = await fetch('/api/demo', { method: 'POST' });
+      const result = await response.json() as { success: boolean; data?: { caseId: string } };
+      if (result.success) {
+        toast.success('Caso demo creato! Esploralo nella dashboard.');
+      }
+    } catch {
+      // Non-blocking — demo creation failure shouldn't block onboarding
+    } finally {
+      setIsCreatingDemo(false);
+      localStorage.setItem(ONBOARDING_KEY, 'true');
+      setOpen(false);
+      router.refresh();
+    }
+  }, [router]);
+
   function handleNext() {
     if (step < STEPS.length - 1) {
       setStep(step + 1);
     } else {
-      handleClose();
+      handleCreateDemo();
     }
   }
 
@@ -124,9 +146,14 @@ export function OnboardingDialog() {
           <Button variant="ghost" size="sm" onClick={handleClose}>
             Salta
           </Button>
-          <Button size="sm" onClick={handleNext}>
-            {isLast ? 'Inizia' : 'Avanti'}
-            <ArrowRight className="ml-1 h-3 w-3" />
+          <Button size="sm" onClick={handleNext} disabled={isCreatingDemo}>
+            {isCreatingDemo ? (
+              <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Creazione demo...</>
+            ) : isLast ? (
+              <>Inizia<ArrowRight className="ml-1 h-3 w-3" /></>
+            ) : (
+              <>Avanti<ArrowRight className="ml-1 h-3 w-3" /></>
+            )}
           </Button>
         </div>
       </DialogContent>
