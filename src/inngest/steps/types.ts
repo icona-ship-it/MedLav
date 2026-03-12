@@ -41,3 +41,11 @@ export interface SynthesisStepResult {
   reportVersion: number;
   wordCount: number;
 }
+
+export interface ClassificationStepResult {
+  documentId: string;
+  oldType: string;
+  newType: string;
+  confidence: number;
+  reasoning: string;
+}
