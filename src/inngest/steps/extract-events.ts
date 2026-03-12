@@ -40,6 +40,13 @@ const EVENT_TYPE_ALIASES: Record<string, string> = {
   'spesa': 'spesa_medica', 'parcella': 'spesa_medica',
   'comunicazione': 'documento_amministrativo', 'modulo': 'documento_amministrativo',
   'lettera': 'documento_amministrativo', 'amministrativo': 'documento_amministrativo',
+  'memoria': 'documento_amministrativo', 'memoria_difensiva': 'documento_amministrativo',
+  'ricorso': 'documento_amministrativo', 'atto_giudiziario': 'documento_amministrativo',
+  'perizia': 'documento_amministrativo', 'ctu': 'documento_amministrativo',
+  'ctp': 'documento_amministrativo', 'relazione_peritale': 'documento_amministrativo',
+  'conclusioni': 'documento_amministrativo', 'comparsa': 'documento_amministrativo',
+  'spese': 'spesa_medica', 'elenco_spese': 'spesa_medica', 'documentazione_spese': 'spesa_medica',
+  'riepilogo_spese': 'spesa_medica', 'prospetto_spese': 'spesa_medica',
   'followup': 'follow-up', 'follow_up': 'follow-up', 'controllo': 'follow-up',
   'rivalutazione': 'follow-up',
   'prescription': 'prescrizione', 'richiesta': 'prescrizione',
@@ -153,7 +160,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     if (result.events.length === 0 && chunkText.length > 200) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: 0 events from ${chunkText.length} chars — retrying with simplified extraction`);
       const retryResult = await extractEventsFromChunk({
-        chunkText: `Analizza questo documento medico ed estrai TUTTI gli eventi, dati clinici e informazioni rilevanti:\n\n${chunkText}`,
+        chunkText: `IMPORTANTE: Questo documento contiene informazioni rilevanti per una perizia medico-legale. Può essere un documento clinico, legale (memoria difensiva, ricorso, perizia), amministrativo, o di spese mediche. Estrai TUTTI gli eventi, fatti clinici, date, interventi, diagnosi, spese e informazioni menzionate. Anche se è un atto giudiziario, estrai i fatti clinici citati al suo interno. NON restituire un array vuoto — ogni documento ha contenuto estraibile.\n\n${chunkText}`,
         chunkLabel: `${chunkLabel} [retry]`,
         documentType: ocrResult.documentType,
         caseType: caseTypes.length > 1 ? caseTypes : caseType,
