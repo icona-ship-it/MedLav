@@ -124,7 +124,10 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       .lte('page_number', range.end)
       .order('page_number', { ascending: true });
 
-    if (!pages || pages.length === 0) return { count: 0 };
+    if (!pages || pages.length === 0) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: no pages found in DB for doc ${ocrResult.documentId} range ${range.start}-${range.end}`);
+      return { count: 0 };
+    }
 
     const chunkText = pages.map((p) =>
       `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
@@ -146,7 +149,10 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       pageRange: `pag ${range.start}-${range.end}`,
     });
 
-    if (result.events.length === 0) return { count: 0 };
+    if (result.events.length === 0) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: Mistral returned 0 events for doc ${ocrResult.documentId} (${chunkText.length} chars of text sent)`);
+      return { count: 0 };
+    }
 
     // Save events directly to DB with enum normalization
     const eventRows = result.events.map((e, idx) => ({
