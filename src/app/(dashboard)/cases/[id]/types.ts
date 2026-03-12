@@ -40,6 +40,7 @@ export interface Document {
   file_name: string;
   file_type: string;
   file_size: number;
+  document_type: string | null;
   processing_status: string;
   processing_error: string | null;
   created_at: string;

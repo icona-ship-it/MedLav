@@ -3,9 +3,11 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
 import { getFileIcon, formatFileSize } from '@/lib/format';
+import { DOCUMENT_TYPES } from '@/lib/constants';
 
 interface FileUploadProps {
   caseId: string;
@@ -20,6 +22,7 @@ interface UploadProgress {
 
 export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
+  const [fileTypes, setFileTypes] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -36,6 +39,11 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
   }, []);
 
   const removeFile = (index: number) => {
+    const removed = files[index];
+    if (removed) {
+      const key = `${removed.name}-${removed.size}`;
+      setFileTypes((ft) => Object.fromEntries(Object.entries(ft).filter(([k]) => k !== key)));
+    }
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -95,13 +103,14 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
       newProgress[i] = { ...newProgress[i], status: 'saving' };
       setProgress([...newProgress]);
 
+      const fileKey = `${file.name}-${file.size}`;
       const result = await saveDocumentMetadata({
         caseId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
         storagePath,
-        documentType: 'altro',
+        documentType: fileTypes[fileKey] || 'altro',
       });
 
       if (result?.error) {
@@ -119,6 +128,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
     if (successCount > 0) {
       await updateCaseDocumentCount(caseId);
       setFiles([]);
+      setFileTypes({});
       onUploadComplete?.();
     }
 
@@ -182,18 +192,36 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
           <p className="text-sm font-medium">{files.length} file selezionati</p>
           {files.map((file, index) => {
             const Icon = getFileIcon(file.type);
+            const fileKey = `${file.name}-${file.size}`;
             return (
               <div
-                key={`${file.name}-${file.size}`}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
+                key={fileKey}
+                className="flex items-center gap-2 rounded-md border px-3 py-2"
               >
-                <div className="flex items-center gap-2 overflow-hidden">
+                <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
                   <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-sm">{file.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatFileSize(file.size)}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate text-sm block">{file.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatFileSize(file.size)}
+                    </span>
+                  </div>
                 </div>
+                <Select
+                  value={fileTypes[fileKey] || 'altro'}
+                  onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
+                >
+                  <SelectTrigger className="w-[180px] h-8 text-xs shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENT_TYPES.map((dt) => (
+                      <SelectItem key={dt.value} value={dt.value} className="text-xs">
+                        {dt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="ghost"
                   size="icon"

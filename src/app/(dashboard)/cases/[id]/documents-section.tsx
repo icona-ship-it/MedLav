@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { FileUpload } from '@/components/file-upload';
 import { deleteDocument, retryDocument } from '../../actions';
 import { formatFileSize, getFileIcon } from '@/lib/format';
+import { documentTypeLabels } from '@/lib/constants';
 import type { Document } from './types';
 
 // --- Types ---
@@ -150,7 +151,14 @@ export function DocumentsSection({
                         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{doc.file_name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-medium">{doc.file_name}</p>
+                          {doc.document_type && doc.document_type !== 'altro' && (
+                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
+                              {documentTypeLabels[doc.document_type] ?? doc.document_type}
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
                       </div>
                     </div>
