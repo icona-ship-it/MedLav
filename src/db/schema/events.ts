@@ -41,6 +41,7 @@ export const extractionPassEnum = pgEnum('extraction_pass', [
   'both',
   'pass1_only',
   'pass2_only',
+  'retry',
 ]);
 
 export const events = pgTable('events', {

@@ -42,6 +42,27 @@ export const statusConfig: Record<string, { label: string; variant: 'secondary' 
   archiviato: { label: 'Archiviato', variant: 'outline' },
 };
 
+// --- Document Types ---
+
+export const DOCUMENT_TYPES = [
+  { value: 'cartella_clinica', label: 'Cartella Clinica' },
+  { value: 'referto_specialistico', label: 'Referto Specialistico' },
+  { value: 'esame_strumentale', label: 'Esame Strumentale' },
+  { value: 'esame_laboratorio', label: 'Esame di Laboratorio' },
+  { value: 'lettera_dimissione', label: 'Lettera di Dimissione' },
+  { value: 'certificato', label: 'Certificato Medico' },
+  { value: 'perizia_precedente', label: 'Perizia Precedente' },
+  { value: 'spese_mediche', label: 'Spese Mediche' },
+  { value: 'memoria_difensiva', label: 'Memoria Difensiva' },
+  { value: 'perizia_ctp', label: 'Perizia CTP' },
+  { value: 'perizia_ctu', label: 'Perizia CTU' },
+  { value: 'altro', label: 'Altro' },
+] as const;
+
+export const documentTypeLabels: Record<string, string> = Object.fromEntries(
+  DOCUMENT_TYPES.map((t) => [t.value, t.label]),
+);
+
 // --- Event Types ---
 
 export const EVENT_TYPES = [

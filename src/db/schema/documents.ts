@@ -9,6 +9,10 @@ export const documentTypeEnum = pgEnum('document_type', [
   'lettera_dimissione',
   'certificato',
   'perizia_precedente',
+  'spese_mediche',
+  'memoria_difensiva',
+  'perizia_ctp',
+  'perizia_ctu',
   'altro',
 ]);
 
