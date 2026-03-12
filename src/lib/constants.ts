@@ -56,6 +56,9 @@ export const EVENT_TYPES = [
   { value: 'prescrizione', label: 'Prescrizione' },
   { value: 'consenso', label: 'Consenso' },
   { value: 'complicanza', label: 'Complicanza' },
+  { value: 'spesa_medica', label: 'Spesa Medica' },
+  { value: 'documento_amministrativo', label: 'Documento Amministrativo' },
+  { value: 'certificato', label: 'Certificato' },
   { value: 'altro', label: 'Altro' },
 ] as const;
 

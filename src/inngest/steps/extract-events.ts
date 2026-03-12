@@ -9,7 +9,8 @@ export const PAGES_PER_CHUNK = 10;
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
   'visita', 'esame', 'diagnosi', 'intervento', 'terapia', 'ricovero',
-  'follow-up', 'referto', 'prescrizione', 'consenso', 'complicanza', 'altro',
+  'follow-up', 'referto', 'prescrizione', 'consenso', 'complicanza',
+  'spesa_medica', 'documento_amministrativo', 'certificato', 'altro',
 ]);
 
 const VALID_SOURCE_TYPES = new Set([
@@ -32,7 +33,13 @@ const EVENT_TYPE_ALIASES: Record<string, string> = {
   'farmacologica': 'terapia', 'trasfusione': 'terapia', 'fisioterapia': 'terapia',
   'hospitalization': 'ricovero', 'admission': 'ricovero', 'accettazione': 'ricovero',
   'dimissione': 'referto', 'lettera_dimissione': 'referto', 'report': 'referto',
-  'certificato': 'referto', 'relazione': 'referto',
+  'relazione': 'referto',
+  'certificato': 'certificato', 'certificato_medico': 'certificato', 'certificato_inail': 'certificato',
+  'invalidita': 'certificato', 'idoneita': 'certificato',
+  'fattura': 'spesa_medica', 'ricevuta': 'spesa_medica', 'nota_spese': 'spesa_medica',
+  'spesa': 'spesa_medica', 'parcella': 'spesa_medica',
+  'comunicazione': 'documento_amministrativo', 'modulo': 'documento_amministrativo',
+  'lettera': 'documento_amministrativo', 'amministrativo': 'documento_amministrativo',
   'followup': 'follow-up', 'follow_up': 'follow-up', 'controllo': 'follow-up',
   'rivalutazione': 'follow-up',
   'prescription': 'prescrizione', 'richiesta': 'prescrizione',
@@ -132,7 +139,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       chunkLabel,
       documentType: ocrResult.documentType,
       caseType: caseTypes.length > 1 ? caseTypes : caseType,
-      temperature: 0.2,
+      temperature: 0,
       chunkIndex,
       totalChunks,
       documentName: ocrResult.fileName,
@@ -178,19 +185,30 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
 }
 
 /**
- * Mark a document as errore when no events were extracted.
+ * Mark a document when no events were extracted.
+ * - pageCount === 0: true error (corrupt/empty file)
+ * - pageCount > 0 but 0 events: completed with warning (OCR text still available)
  */
 export async function markDocumentExtractionError(
   documentId: string,
   pageCount: number,
 ): Promise<void> {
   const supabase = createAdminClient();
-  const reason = pageCount === 0
-    ? 'Il documento non contiene testo leggibile (0 pagine estratte dall\'OCR). Verificare che il file non sia corrotto o protetto.'
-    : `Nessun evento clinico individuato nelle ${pageCount} pagine analizzate. Il documento potrebbe non contenere dati clinici strutturati (es. documento amministrativo, modulo vuoto, copertina) oppure il testo potrebbe essere di qualità insufficiente.`;
-  await supabase.from('documents').update({
-    processing_status: 'errore',
-    processing_error: reason,
-    updated_at: new Date().toISOString(),
-  }).eq('id', documentId);
+
+  if (pageCount === 0) {
+    // Truly empty/corrupt document — mark as error
+    await supabase.from('documents').update({
+      processing_status: 'errore',
+      processing_error: 'Il documento non contiene testo leggibile (0 pagine estratte dall\'OCR). Verificare che il file non sia corrotto o protetto.',
+      updated_at: new Date().toISOString(),
+    }).eq('id', documentId);
+  } else {
+    // Document has text but no structured events — mark as completed with warning
+    // The OCR text is still available for the user to review
+    await supabase.from('documents').update({
+      processing_status: 'completato',
+      processing_error: `Documento analizzato ma nessun evento strutturato individuato nelle ${pageCount} pagine. Il testo OCR è comunque disponibile.`,
+      updated_at: new Date().toISOString(),
+    }).eq('id', documentId);
+  }
 }

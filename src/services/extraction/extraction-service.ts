@@ -60,7 +60,7 @@ export async function extractEventsFromChunk(params: {
 }): Promise<ExtractionResponse> {
   const {
     chunkText, chunkLabel, documentType, caseType,
-    temperature = 0.2, chunkIndex, totalChunks, documentName, pageRange,
+    temperature = 0, chunkIndex, totalChunks, documentName, pageRange,
   } = params;
 
   const startMs = Date.now();

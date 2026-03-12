@@ -16,6 +16,9 @@ export const eventTypeEnum = pgEnum('event_type', [
   'prescrizione',
   'consenso',
   'complicanza',
+  'spesa_medica',
+  'documento_amministrativo',
+  'certificato',
   'altro',
 ]);
 

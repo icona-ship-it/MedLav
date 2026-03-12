@@ -31,6 +31,9 @@ export type EventType =
   | 'prescrizione'
   | 'consenso'
   | 'complicanza'
+  | 'spesa_medica'
+  | 'documento_amministrativo'
+  | 'certificato'
   | 'altro';
 
 export type DatePrecision = 'giorno' | 'mese' | 'anno' | 'sconosciuta';

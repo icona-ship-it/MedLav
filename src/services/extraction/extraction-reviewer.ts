@@ -233,7 +233,8 @@ function validateEventType(value: string): ExtractedEvent['eventType'] {
   const valid = [
     'visita', 'esame', 'diagnosi', 'intervento', 'terapia',
     'ricovero', 'follow-up', 'referto', 'prescrizione',
-    'consenso', 'complicanza', 'altro',
+    'consenso', 'complicanza', 'spesa_medica',
+    'documento_amministrativo', 'certificato', 'altro',
   ] as const;
   return valid.includes(value as typeof valid[number])
     ? (value as ExtractedEvent['eventType'])

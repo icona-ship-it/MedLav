@@ -37,10 +37,11 @@ const STATUS_TO_STEP: Record<string, number> = {
   completato: 4,
 };
 
-// "No events found" errors are warnings, not hard errors
+// Patterns that indicate a warning (not a hard error)
 const WARNING_ERROR_PATTERNS = [
   'Nessun evento clinico',
   'non contenere dati clinici',
+  'nessun evento strutturato individuato',
 ];
 
 // --- Helpers ---
@@ -58,8 +59,16 @@ function formatElapsed(ms: number): string {
 }
 
 function isWarningError(doc: ProcessingDocument): boolean {
-  if (doc.processing_status !== 'errore' || !doc.processing_error) return false;
-  return WARNING_ERROR_PATTERNS.some((p) => doc.processing_error!.includes(p));
+  if (!doc.processing_error) return false;
+  // Warning if status is 'errore' with a warning-pattern message,
+  // OR status is 'completato' but has a processing_error (soft warning)
+  if (doc.processing_status === 'errore') {
+    return WARNING_ERROR_PATTERNS.some((p) => doc.processing_error!.includes(p));
+  }
+  if (doc.processing_status === 'completato') {
+    return WARNING_ERROR_PATTERNS.some((p) => doc.processing_error!.includes(p));
+  }
+  return false;
 }
 
 function isHardError(doc: ProcessingDocument): boolean {

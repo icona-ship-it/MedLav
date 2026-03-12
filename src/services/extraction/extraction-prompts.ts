@@ -154,6 +154,12 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
+8. **DOCUMENTI NON CLINICI**: Fatture, ricevute, note spese, comunicazioni, lettere, moduli assicurativi e documenti amministrativi DEVONO generare almeno un evento. Usa:
+   - eventType: "spesa_medica" per fatture/ricevute (includi importo, prestazione, struttura)
+   - eventType: "documento_amministrativo" per lettere, comunicazioni, moduli
+   - eventType: "certificato" per certificati medici, INAIL, invalidità
+   NON segnare questi documenti come "nessun evento". Ogni documento caricato ha un valore informativo.
+
 7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
    - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
    - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
@@ -188,6 +194,9 @@ Cerca con particolare cura:
 - "prescrizione" — prescrizioni farmacologiche, richieste esami, impegnative
 - "consenso" — consensi informati, informative al paziente
 - "complicanza" — complicanze post-operatorie, eventi avversi, reazioni, infezioni
+- "spesa_medica" — fatture, ricevute, note spese mediche (includi importo, prestazione, struttura)
+- "documento_amministrativo" — lettere, comunicazioni, moduli assicurativi, documenti amministrativi
+- "certificato" — certificati medici, INAIL, invalidità civile, idoneità
 - "altro" — SOLO se nessuna delle categorie sopra è applicabile
 
 IMPORTANTE: Classifica SEMPRE l'evento nella categoria più specifica possibile. "altro" deve essere l'eccezione, NON la regola.
