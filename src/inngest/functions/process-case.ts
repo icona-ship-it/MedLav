@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
 import { ocrSingleDocument } from '../steps/ocr-document';
-import { classifyDocumentsStep } from '../steps/classify-documents';
+import { classifyDocumentsStep, applyClassifications } from '../steps/classify-documents';
 import { planChunks, extractChunkEvents, markDocumentExtractionError } from '../steps/extract-events';
 import { consolidateEventsStep } from '../steps/consolidate-events';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
@@ -64,7 +64,9 @@ export const processCaseDocuments = inngest.createFunction(
     }
 
     // Step 2.5: Auto-classify documents with type 'altro'
-    await step.run('classify-documents', () => classifyDocumentsStep(ocrResults));
+    // Classifications are applied outside step.run() so they survive Inngest memoization on retries.
+    const classifications = await step.run('classify-documents', () => classifyDocumentsStep(ocrResults));
+    applyClassifications(ocrResults, classifications);
 
     // Step 3: Extract events per document (chunks in parallel)
     const extractionResults: ExtractionResult[] = [];

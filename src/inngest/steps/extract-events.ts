@@ -123,7 +123,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     logger.info('pipeline', ` Starting extraction for pages ${range.start}-${range.end} of doc ${ocrResult.documentId}`);
 
     // Read pages from DB (no large data from Inngest)
-    const { data: pages } = await supabase
+    let { data: pages } = await supabase
       .from('pages')
       .select('page_number, ocr_text')
       .eq('document_id', ocrResult.documentId)
@@ -132,11 +132,33 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       .order('page_number', { ascending: true });
 
     if (!pages || pages.length === 0) {
-      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: no pages found in DB for doc ${ocrResult.documentId} range ${range.start}-${range.end}`);
-      return { count: 0 };
+      // Bug #2: Pages may not be committed yet — retry once after 2s
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: no pages found in DB for doc ${ocrResult.documentId} range ${range.start}-${range.end}, retrying after 2s`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const { data: retryPages } = await supabase
+        .from('pages')
+        .select('page_number, ocr_text')
+        .eq('document_id', ocrResult.documentId)
+        .gte('page_number', range.start)
+        .lte('page_number', range.end)
+        .order('page_number', { ascending: true });
+      if (!retryPages || retryPages.length === 0) {
+        throw new Error(`Pages not found for doc ${ocrResult.documentId} range ${range.start}-${range.end} after retry — will be retried by Inngest`);
+      }
+      pages = retryPages;
     }
 
-    const chunkText = pages.map((p) =>
+    // Bug #10: Filter out pages with empty/null OCR text before sending to Mistral
+    const nonEmptyPages = pages.filter((p) => p.ocr_text && p.ocr_text.trim().length > 0);
+    if (nonEmptyPages.length === 0) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: all ${pages.length} pages have empty OCR text for doc ${ocrResult.documentId}`);
+      return { count: 0 };
+    }
+    if (nonEmptyPages.length < pages.length) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: ${pages.length - nonEmptyPages.length} pages with empty OCR text filtered out`);
+    }
+
+    const chunkText = nonEmptyPages.map((p) =>
       `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
     ).join('\n\n');
 
@@ -157,7 +179,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     });
 
     // If Mistral returned 0 events but the text has substantial content, retry with a simpler prompt
-    if (result.events.length === 0 && chunkText.length > 200) {
+    if (result.events.length === 0 && chunkText.length > 50) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: 0 events from ${chunkText.length} chars — retrying with simplified extraction`);
       const retryResult = await extractEventsFromChunk({
         chunkText: `IMPORTANTE: Questo documento contiene informazioni rilevanti per una perizia medico-legale. Può essere un documento clinico, legale (memoria difensiva, ricorso, perizia), amministrativo, o di spese mediche. Estrai TUTTI gli eventi, fatti clinici, date, interventi, diagnosi, spese e informazioni menzionate. Anche se è un atto giudiziario, estrai i fatti clinici citati al suo interno. NON restituire un array vuoto — ogni documento ha contenuto estraibile.\n\n${chunkText}`,
@@ -195,6 +217,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
+          return { count: 0 };
         }
         return { count: retryRows.length };
       }
@@ -238,6 +261,15 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);
+
+    // Bug #6: Rethrow transient errors so Inngest retries the step
+    const lowerMsg = message.toLowerCase();
+    const isTransient = ['timeout', 'fetch failed', 'econnreset', 'socket hang up', 'enotfound'].some((t) => lowerMsg.includes(t))
+      || /\b(502|503|429)\b/.test(message);
+    if (isTransient) {
+      throw error;
+    }
+
     return { count: 0 };
   }
 }

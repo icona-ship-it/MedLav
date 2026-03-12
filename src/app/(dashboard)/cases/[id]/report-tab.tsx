@@ -24,7 +24,7 @@ import { ReportRating } from '@/components/report-rating';
 import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { parseSections } from '@/lib/section-parser-client';
 import { QualityGateDialog } from './quality-gate-dialog';
-import type { ReportRow, EventRow, AnomalyRow, MissingDocRow } from './types';
+import type { ReportRow, EventRow, AnomalyRow, MissingDocRow, Document } from './types';
 
 // --- Truncation Detection ---
 
@@ -44,7 +44,7 @@ function isTruncated(synthesis: string): boolean {
   // Headings, list items, and lines ending with punctuation are valid endings
   if (/^#{1,6}\s/.test(lastLine)) return false;
   const lastChar = lastLine[lastLine.length - 1];
-  return !['.', ')', '"', '»', '*', '-', ':', ';', '|'].includes(lastChar);
+  return !['.', ')', '"', '»', '*', '-', ':', ';', '|', '%', '!'].includes(lastChar);
 }
 
 // --- Report Status Buttons ---
@@ -262,12 +262,35 @@ function AnomalySummaryAlert({
   );
 }
 
+// --- Incomplete Data Warning ---
+
+function IncompleteDataWarning({ documents, events }: { documents: Document[]; events?: EventRow[] }) {
+  const docIds = new Set(events?.map((e) => e.document_id).filter(Boolean) ?? []);
+  const completedWithoutEvents = documents.filter(
+    (d) => d.processing_status === 'completato' && !docIds.has(d.id),
+  );
+  if (completedWithoutEvents.length === 0) return null;
+
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-medium">Report basato su dati incompleti</p>
+        <p className="mt-0.5">
+          {completedWithoutEvents.length} {completedWithoutEvents.length === 1 ? 'documento non ha prodotto' : 'documenti non hanno prodotto'} eventi:{' '}
+          {completedWithoutEvents.map((d) => d.file_name).join(', ')}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // --- Report Tab ---
 
 export function ReportTab({
   caseId, report, isRegenerating, onRegenerate, events, onEventClick,
   anomalyCount = 0, missingDocsCount = 0,
-  anomalies, missingDocs, onSwitchToAnomalies,
+  anomalies, missingDocs, documents, onSwitchToAnomalies,
 }: {
   caseId: string;
   report: ReportRow | null;
@@ -279,6 +302,7 @@ export function ReportTab({
   missingDocsCount?: number;
   anomalies?: AnomalyRow[];
   missingDocs?: MissingDocRow[];
+  documents?: Document[];
   onSwitchToAnomalies?: () => void;
 }) {
   const router = useRouter();
@@ -490,6 +514,9 @@ export function ReportTab({
             onSwitchToAnomalies={onSwitchToAnomalies}
           />
         )}
+        {!isEditingReport && report?.synthesis && documents && (
+          <IncompleteDataWarning documents={documents} events={events} />
+        )}
         {isEditingReport ? (
           <div className="space-y-2">
             <Tabs defaultValue="edit" className="w-full">
@@ -536,6 +563,18 @@ export function ReportTab({
                   : 'Genera Report'}
               </Button>
             )}
+          </div>
+        )}
+        {!isEditingReport && report?.synthesis && report.report_status !== 'definitivo' && (
+          <div className="mt-6 rounded-md border bg-muted/30 p-4">
+            <h4 className="text-sm font-semibold mb-2">Prossimi Passi</h4>
+            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+              <li>Rivedi il report e verifica la correttezza dei dati estratti</li>
+              <li>Controlla eventuali anomalie e documenti mancanti nella tab Problemi</li>
+              <li>Modifica il testo se necessario con il pulsante &quot;Modifica&quot;</li>
+              <li>Approva il report come definitivo quando soddisfatto</li>
+              <li>Esporta in DOCX, HTML o PDF per la consegna</li>
+            </ol>
           </div>
         )}
         {!isEditingReport && report?.synthesis && report.report_status === 'definitivo' && (

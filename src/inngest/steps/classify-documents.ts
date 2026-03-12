@@ -14,7 +14,9 @@ export interface DocumentClassification {
 /**
  * Step 2.5: Auto-classify documents that have type 'altro' (not manually set by user).
  * Skips documents where the user already chose a specific type.
- * Updates both the ocrResults array (for downstream steps) and the DB.
+ * Updates the DB and returns classifications. The pipeline must apply
+ * the returned classifications to ocrResults (in-place mutations don't survive
+ * Inngest step memoization on retries).
  */
 export async function classifyDocumentsStep(
   ocrResults: OcrResult[],
@@ -36,9 +38,7 @@ export async function classifyDocumentsStep(
       const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
 
       if (result.documentType !== 'altro' && result.confidence >= 30) {
-        // Update the ocrResult in-place so downstream steps use the new type
         const oldType = ocrResult.documentType;
-        ocrResult.documentType = result.documentType;
 
         // Update the DB
         await supabase
@@ -74,4 +74,21 @@ export async function classifyDocumentsStep(
 
   logger.info('pipeline', `Step 2.5: Classification complete — ${classifications.length} documents reclassified`);
   return classifications;
+}
+
+/**
+ * Apply classification results to ocrResults array.
+ * Must be called OUTSIDE step.run() so it always executes, even on retries.
+ */
+export function applyClassifications(
+  ocrResults: OcrResult[],
+  classifications: DocumentClassification[],
+): void {
+  const classMap = new Map(classifications.map((c) => [c.documentId, c.newType]));
+  for (const ocrResult of ocrResults) {
+    const newType = classMap.get(ocrResult.documentId);
+    if (newType) {
+      ocrResult.documentType = newType;
+    }
+  }
 }

@@ -36,6 +36,7 @@ const AnonymizationTool = dynamic(
   { loading: () => null },
 );
 import { QualitySummaryCard } from './quality-summary-card';
+import { DocumentCoverageCard } from './document-coverage-card';
 import { WizardStepBar } from './wizard-step-bar';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
@@ -278,7 +279,12 @@ export function CaseDetailClient({
                 />
               </>
             )}
-            {/* Quality Summary Card (B1) */}
+            {/* Document Coverage Card */}
+            <DocumentCoverageCard
+              documents={initialDocuments}
+              events={events}
+            />
+            {/* Quality Summary Card */}
             <QualitySummaryCard
               events={events}
               anomalies={localAnomalies}
@@ -288,7 +294,6 @@ export function CaseDetailClient({
             <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
               <TabsList className="overflow-x-auto scrollbar-hide flex-nowrap">
                 <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
-                <TabsTrigger value="ocr">OCR</TabsTrigger>
                 <TabsTrigger value="synthesis" className="relative">
                   Report
                   {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length > 0 && (
@@ -297,13 +302,12 @@ export function CaseDetailClient({
                     </Badge>
                   )}
                 </TabsTrigger>
-                {localAnomalies.length > 0 && (
-                  <TabsTrigger value="anomalies">Anomalie ({localAnomalies.length})</TabsTrigger>
+                <TabsTrigger value="ocr">OCR</TabsTrigger>
+                {(localAnomalies.length > 0 || missingDocs.length > 0) && (
+                  <TabsTrigger value="problems">
+                    Problemi ({localAnomalies.length + missingDocs.length})
+                  </TabsTrigger>
                 )}
-                {missingDocs.length > 0 && (
-                  <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
-                )}
-                <TabsTrigger value="perizia">Info Perizia</TabsTrigger>
                 {report?.synthesis && (
                   <TabsTrigger value="anonymization">Anonimizzazione</TabsTrigger>
                 )}
@@ -323,14 +327,6 @@ export function CaseDetailClient({
                 />
               </TabsContent>
 
-              <TabsContent value="ocr">
-                <OcrPreviewTab
-                  caseId={caseId}
-                  documents={initialDocuments}
-                  documentPages={documentPages}
-                />
-              </TabsContent>
-
               <TabsContent value="synthesis">
                 <ReportTab
                   caseId={caseId}
@@ -342,7 +338,8 @@ export function CaseDetailClient({
                   missingDocsCount={missingDocs.length}
                   anomalies={localAnomalies}
                   missingDocs={missingDocs}
-                  onSwitchToAnomalies={() => setActiveResultTab('anomalies')}
+                  documents={initialDocuments}
+                  onSwitchToAnomalies={() => setActiveResultTab('problems')}
                   onEventClick={(orderNumber) => {
                     setHighlightedEventId(orderNumber);
                     setActiveResultTab('events');
@@ -350,31 +347,38 @@ export function CaseDetailClient({
                 />
               </TabsContent>
 
-              <TabsContent value="anomalies">
-                <AnomaliesSection
-                  anomalies={localAnomalies}
-                  events={events}
+              <TabsContent value="ocr">
+                <OcrPreviewTab
+                  caseId={caseId}
                   documents={initialDocuments}
-                  caseId={caseId}
-                  onChanged={(dismissedId) => {
-                    if (dismissedId) {
-                      setLocalAnomalies((prev) => prev.filter((a) => a.id !== dismissedId));
-                    }
-                    router.refresh();
-                  }}
+                  documentPages={documentPages}
                 />
               </TabsContent>
 
-              <TabsContent value="missing">
-                <MissingDocsSection
-                  missingDocs={missingDocs}
-                  caseId={caseId}
-                  onUploadComplete={() => router.refresh()}
-                />
-              </TabsContent>
-
-              <TabsContent value="perizia">
-                <PeriziaMetadataForm caseId={caseId} caseData={caseData} onSaved={() => router.refresh()} />
+              <TabsContent value="problems">
+                <div className="space-y-4">
+                  {localAnomalies.length > 0 && (
+                    <AnomaliesSection
+                      anomalies={localAnomalies}
+                      events={events}
+                      documents={initialDocuments}
+                      caseId={caseId}
+                      onChanged={(dismissedId) => {
+                        if (dismissedId) {
+                          setLocalAnomalies((prev) => prev.filter((a) => a.id !== dismissedId));
+                        }
+                        router.refresh();
+                      }}
+                    />
+                  )}
+                  {missingDocs.length > 0 && (
+                    <MissingDocsSection
+                      missingDocs={missingDocs}
+                      caseId={caseId}
+                      onUploadComplete={() => router.refresh()}
+                    />
+                  )}
+                </div>
               </TabsContent>
 
               {report?.synthesis && (
