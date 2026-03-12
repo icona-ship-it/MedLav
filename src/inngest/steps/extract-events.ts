@@ -149,8 +149,53 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       pageRange: `pag ${range.start}-${range.end}`,
     });
 
+    // If Mistral returned 0 events but the text has substantial content, retry with a simpler prompt
+    if (result.events.length === 0 && chunkText.length > 200) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: 0 events from ${chunkText.length} chars — retrying with simplified extraction`);
+      const retryResult = await extractEventsFromChunk({
+        chunkText: `Analizza questo documento medico ed estrai TUTTI gli eventi, dati clinici e informazioni rilevanti:\n\n${chunkText}`,
+        chunkLabel: `${chunkLabel} [retry]`,
+        documentType: ocrResult.documentType,
+        caseType: caseTypes.length > 1 ? caseTypes : caseType,
+        temperature: 0,
+        chunkIndex,
+        totalChunks,
+        documentName: ocrResult.fileName,
+        pageRange: `pag ${range.start}-${range.end}`,
+      });
+      if (retryResult.events.length > 0) {
+        logger.info('pipeline', ` Retry succeeded: ${retryResult.events.length} events recovered`);
+        const retryRows = retryResult.events.map((e, idx) => ({
+          case_id: caseId,
+          document_id: ocrResult.documentId,
+          order_number: (range.start - 1) * 100 + idx + 1,
+          event_date: e.eventDate,
+          date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
+          event_type: normalizeEventType(e.eventType),
+          title: e.title,
+          description: e.description,
+          source_type: normalizeSourceType(e.sourceType),
+          diagnosis: e.diagnosis ?? null,
+          doctor: e.doctor ?? null,
+          facility: e.facility ?? null,
+          confidence: e.confidence,
+          requires_verification: e.requiresVerification,
+          reliability_notes: e.reliabilityNotes ?? null,
+          source_text: e.sourceText ?? null,
+          source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
+          extraction_pass: 'retry',
+        }));
+        const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
+        if (retryInsertError) {
+          logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
+        }
+        return { count: retryRows.length };
+      }
+      logger.warn('pipeline', ` Retry also returned 0 events for doc ${ocrResult.documentId}`);
+      return { count: 0 };
+    }
+
     if (result.events.length === 0) {
-      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: Mistral returned 0 events for doc ${ocrResult.documentId} (${chunkText.length} chars of text sent)`);
       return { count: 0 };
     }
 
