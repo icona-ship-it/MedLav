@@ -118,6 +118,8 @@ Devi trovare:
 - Per le correzioni, modifica SOLO questi campi: diagnosis, doctor, facility, eventDate, datePrecision
 - NON duplicare eventi già presenti — se un evento è già estratto, non aggiungerlo come mancante
 - Se non trovi nulla da aggiungere o correggere, restituisci arrays vuoti
+- DIVIETO DI INVENZIONE: ogni evento mancante che aggiungi DEVE avere un sourceText verificabile nel testo OCR. NON inventare eventi, date, diagnosi, nomi di medici o strutture. Se un dato non è presente nel testo, NON aggiungerlo.
+- Le correzioni devono basarsi ESCLUSIVAMENTE su quanto scritto nel testo OCR, NON sulla tua conoscenza medica.
 
 ## GUIDA SPECIFICA
 ${CASE_TYPE_GUIDANCE[caseType]}

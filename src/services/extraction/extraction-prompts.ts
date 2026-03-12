@@ -154,6 +154,14 @@ Analizza il testo OCR di un documento medico ed estrai TUTTI gli eventi clinici 
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
+
+## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
+- NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.
+- Se un dato non è leggibile o non è presente nel testo, usa NULL per quel campo. NON indovinare.
+- NON completare informazioni parziali con dati di tua conoscenza medica. Riporta SOLO ciò che il documento dice.
+- L'esempio JSON sotto è FITTIZIO e serve solo a mostrare il formato. NON copiare nomi, date, diagnosi o strutture dall'esempio.
+- Ogni campo deve avere un ancoraggio diretto nel testo OCR fornito. Se non riesci a trovare il dato nel testo, lascia il campo a NULL.
+
 8. **DOCUMENTI NON CLINICI**: Fatture, ricevute, note spese, comunicazioni, lettere, moduli assicurativi e documenti amministrativi DEVONO generare almeno un evento. Usa:
    - eventType: "spesa_medica" per fatture/ricevute (includi importo, prestazione, struttura)
    - eventType: "documento_amministrativo" per lettere, comunicazioni, moduli

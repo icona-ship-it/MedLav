@@ -233,9 +233,11 @@ export function assembleFullReport(params: {
   const dannoContent = [danno, calcText].filter(Boolean).join('\n\n');
   if (dannoContent) addSection('danno-biologico', 'VALUTAZIONE DEL DANNO BIOLOGICO', dannoContent);
 
-  // 12. SPESE MEDICHE
-  if (pm.speseMediche) {
-    addSection('spese-mediche', 'SPESE MEDICHE', pm.speseMediche);
+  // 12. SPESE MEDICHE (from synthesis LLM output or perizia metadata)
+  const speseMedicheFromSynthesis = extractSynthesisSection(synthText, /^##\s*SPESE\s*MEDICHE\s*(DOCUMENTATE)?/i);
+  const speseMedicheContent = [speseMedicheFromSynthesis, pm.speseMediche].filter(Boolean).join('\n\n');
+  if (speseMedicheContent) {
+    addSection('spese-mediche', 'SPESE MEDICHE DOCUMENTATE', speseMedicheContent);
   }
 
   // 13. RISPOSTA AI QUESITI

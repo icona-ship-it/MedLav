@@ -53,7 +53,19 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Lo stile deve essere quello di una perizia depositabile in tribunale: formale, giuridico, con periodi complessi e subordinate
 - Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
 - Quando due fonti discordano, privilegia la fonte con affidabilità maggiore (punteggio più alto)
-- Quando citi un evento specifico dalla cronologia, includi il riferimento [Ev.N] dove N è il numero dell'evento (orderNumber). Questo è FONDAMENTALE per la tracciabilità in ambito giudiziario`;
+- Quando citi un evento specifico dalla cronologia, includi il riferimento [Ev.N] dove N è il numero dell'evento (orderNumber). Questo è FONDAMENTALE per la tracciabilità in ambito giudiziario
+
+## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
+- Basa il report ESCLUSIVAMENTE sugli eventi forniti nella sezione "TUTTI GLI EVENTI CLINICI IN ORDINE CRONOLOGICO". NON aggiungere fatti, diagnosi, nomi di medici, strutture o date che non compaiono negli eventi.
+- NON inventare referenze bibliografiche o citazioni di studi scientifici. Cita SOLO linee guida effettivamente fornite nella sezione RAG o framework valutativi indicati nelle istruzioni di sistema.
+- NON inventare nomi di pazienti, medici o strutture. Usa SOLO quelli presenti negli eventi. Se mancano, usa "[struttura non indicata]", "[medico non indicato]".
+- NON aggiungere dettagli clinici dalla tua conoscenza medica. Se la documentazione non riporta un dato (es. dosaggio farmaco, parametro vitale), NON inventarlo.
+- Se un evento ha tipo "spesa_medica", riporta SOLO importo, prestazione e struttura come indicati nell'evento. NON inventare tariffari o confronti non documentati.
+- È preferibile un report più breve ma accurato rispetto a un report lungo con informazioni inventate.
+
+## EVENTI NON CLINICI NEL REPORT
+- Se tra gli eventi ci sono voci di tipo "spesa_medica", dedicare una sezione "## SPESE MEDICHE DOCUMENTATE" che elenca ogni voce con: data, importo, prestazione, struttura, e una valutazione di congruità/necessità rispetto al quadro clinico documentato. Se il tipo caso NON è "analisi_spese_mediche" o "perizia_assicurativa", la sezione può essere sintetica.
+- Se ci sono eventi di tipo "documento_amministrativo" o "certificato", menzionarli nella sezione più appropriata del report (cronologia per la data, documentazione esaminata per il contenuto). I certificati medici e INAIL vanno integrati nella narrazione clinica.`;
 
 // ── Full-report mode (single call) ──
 
@@ -266,6 +278,8 @@ REGOLE:
 - Descrizioni DETTAGLIATE e COMPLETE: riporta valori, misure, dosaggi, nomi farmaci
 - Se la data è incerta, indica la migliore approssimazione disponibile
 - Scrivi in PROSA NARRATIVA, MAI elenchi puntati
+- DIVIETO DI INVENZIONE: NON aggiungere fatti, diagnosi, date, nomi o dettagli clinici non presenti negli eventi forniti
+- Gli eventi di tipo "spesa_medica", "documento_amministrativo" e "certificato" vanno inclusi nella cronologia nella posizione temporale corretta
 
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
@@ -339,6 +353,15 @@ ${nonChronoSections}
 ## CRITERI PER LA VALUTAZIONE DEL NESSO CAUSALE
 
 ${causalNexus}
+
+## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
+- Basa le sezioni ESCLUSIVAMENTE sulla cronologia e sugli eventi forniti. NON aggiungere fatti, diagnosi, nomi di medici, strutture o date non presenti.
+- NON inventare referenze bibliografiche o citazioni di studi scientifici. Cita SOLO linee guida fornite nella sezione RAG o framework valutativi indicati nelle istruzioni.
+- Se un dato manca dalla documentazione, segnalalo come lacuna — NON inventarlo.
+
+## EVENTI NON CLINICI
+- Se nella cronologia ci sono eventi di tipo "spesa_medica", genera una sezione "## SPESE MEDICHE DOCUMENTATE" con data, importo, prestazione, struttura e valutazione di congruità.
+- Se ci sono eventi "documento_amministrativo" o "certificato", integrali nelle sezioni pertinenti.
 
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
