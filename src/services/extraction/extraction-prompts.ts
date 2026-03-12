@@ -157,13 +157,9 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
 
-## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
-- NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.
-- Se un dato non è leggibile o non è presente nel testo, usa NULL per quel campo. NON indovinare.
-- NON completare informazioni parziali con dati di tua conoscenza medica. Riporta SOLO ciò che il documento dice.
-- L'esempio JSON sotto è FITTIZIO e serve solo a mostrare il formato. NON copiare nomi, date, diagnosi o strutture dall'esempio.
-- Ogni campo deve avere un ancoraggio diretto nel testo OCR fornito. Se non riesci a trovare il dato nel testo, lascia il campo a NULL.
-
+7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
+   - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
+   - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
 8. **DOCUMENTI NON CLINICI**: Fatture, ricevute, note spese, comunicazioni, lettere, moduli assicurativi, documenti amministrativi, atti giudiziari, memorie difensive, perizie avversarie, ricorsi — TUTTI devono generare eventi. Usa:
    - eventType: "spesa_medica" per fatture/ricevute (includi importo, prestazione, struttura)
    - eventType: "documento_amministrativo" per lettere, comunicazioni, moduli, atti giudiziari, memorie difensive, ricorsi, conclusioni
@@ -171,9 +167,12 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
    ATTENZIONE: Da memorie difensive, perizie CTP/CTU avversarie e atti giudiziari, estrai ANCHE tutti i fatti clinici citati (interventi, ricoveri, diagnosi, date) come eventi clinici normali (visita, intervento, diagnosi, ricovero, etc.). Un fatto clinico resta un fatto clinico indipendentemente dal documento che lo cita.
    NON segnare NESSUN documento come "nessun evento". Ogni documento caricato ha un valore informativo.
 
-7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
-   - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
-   - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
+## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
+- NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.
+- Se un dato non è leggibile o non è presente nel testo, usa NULL per quel campo. NON indovinare.
+- NON completare informazioni parziali con dati di tua conoscenza medica. Riporta SOLO ciò che il documento dice.
+- L'esempio JSON sotto è FITTIZIO e serve solo a mostrare il formato. NON copiare nomi, date, diagnosi o strutture dall'esempio.
+- Ogni campo deve avere un ancoraggio diretto nel testo OCR fornito. Se non riesci a trovare il dato nel testo, lascia il campo a NULL.
 
 ${SOURCE_RULES}
 
@@ -304,6 +303,20 @@ const DOCUMENT_TYPE_HINTS: Record<string, string> = {
   esame_laboratorio: `ISTRUZIONI SPECIFICHE PER ESAMI DI LABORATORIO: Riporta TUTTI i valori con unità di misura. Evidenzia valori fuori range. Data prelievo obbligatoria.`,
 
   certificato: `ISTRUZIONI SPECIFICHE PER CERTIFICATO: Estrai tipo certificato, data, ente emittente, contenuto, eventuali percentuali di invalidità o periodi di inabilità.`,
+
+  lettera_dimissione: `ISTRUZIONI SPECIFICHE PER LETTERA DI DIMISSIONE: Estrai TUTTI i dati chiave:
+- Data ricovero e data dimissione
+- Diagnosi di ingresso e diagnosi di dimissione (INTEGRALI)
+- Interventi eseguiti durante il ricovero
+- Decorso clinico significativo e complicanze
+- Terapia alla dimissione (farmaco, dosaggio, via, frequenza)
+- Indicazioni per il follow-up e prognosi`,
+
+  perizia_precedente: `ISTRUZIONI SPECIFICHE PER PERIZIA PRECEDENTE: Questa è una perizia medico-legale da analizzare. Devi:
+- Estrarre i fatti clinici accertati dal perito come eventi clinici normali
+- Estrarre le valutazioni di danno biologico (%, ITT/ITP) come eventi separati
+- Estrarre ogni riferimento a documentazione esaminata
+- Estrarre le conclusioni del perito come evento "documento_amministrativo"`,
 };
 
 /**

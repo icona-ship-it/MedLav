@@ -17,19 +17,27 @@ const VALID_DOCUMENT_TYPES = new Set([
 ]);
 
 const CLASSIFICATION_SYSTEM_PROMPT = `Sei un sistema di classificazione documentale medico-legale italiano.
-Analizza il testo e classifica il documento in UNA delle seguenti categorie:
-- cartella_clinica: Cartella clinica ospedaliera, diario medico, scheda infermieristica
-- referto_specialistico: Referto di visita specialistica, consulenza medica
-- esame_strumentale: RX, TAC, RM, ecografia, ECG, EMG e altri esami diagnostici per immagini
-- esame_laboratorio: Esami del sangue, urine, markers tumorali, colturali
-- lettera_dimissione: Lettera di dimissione ospedaliera
-- certificato: Certificato medico, INAIL, invalidità, idoneità
-- perizia_precedente: Perizia medico-legale precedente (non CTU/CTP specifico)
-- spese_mediche: Fatture, ricevute, note spese per prestazioni sanitarie
-- memoria_difensiva: Atto legale difensivo, conclusioni, comparsa
-- perizia_ctp: Consulenza tecnica di parte (CTP)
-- perizia_ctu: Consulenza tecnica d'ufficio (CTU)
-- altro: Solo se nessuna categoria sopra è applicabile
+
+Analizza il NOME FILE e il TESTO del documento per classificarlo in UNA delle seguenti categorie:
+
+- cartella_clinica: Cartella clinica ospedaliera, diario medico, scheda infermieristica, SDO, verbale di pronto soccorso
+- referto_specialistico: Referto di visita specialistica (ortopedica, neurologica, cardiologica, etc.), consulenza medica ambulatoriale
+- esame_strumentale: Referti di RX, TAC/TC, RM/RMN, ecografia, ECG, EMG, scintigrafia, PET, angiografia, endoscopia
+- esame_laboratorio: Esami del sangue, urine, markers tumorali, colturali, antibiogramma, emocromo
+- lettera_dimissione: Lettera di dimissione ospedaliera, relazione di dimissione, epicrisi
+- certificato: Certificato medico, certificato INAIL, certificato di invalidità, certificato di idoneità, certificato di malattia
+- perizia_precedente: Perizia medico-legale generica precedente, relazione medico-legale (non specificamente CTP o CTU)
+- spese_mediche: Fatture sanitarie, ricevute mediche, note spese per prestazioni, ticket, parcelle
+- memoria_difensiva: Atto legale difensivo, conclusioni di parte, comparsa, ricorso, memoria autorizzata
+- perizia_ctp: Consulenza tecnica di parte (CTP) — contiene la dicitura "consulente tecnico di parte" o è firmata da un CTP
+- perizia_ctu: Consulenza tecnica d'ufficio (CTU) — contiene la dicitura "consulente tecnico d'ufficio", quesiti del giudice, o è depositata in tribunale
+- altro: Solo se NESSUNA categoria sopra è applicabile
+
+SEGNALI DA USARE:
+- Nome file: spesso contiene indicazioni (es. "fattura", "CTU", "RM_ginocchio", "dimissione")
+- Intestazione: le prime righe spesso identificano il tipo (es. "REFERTO DI RISONANZA MAGNETICA", "LETTERA DI DIMISSIONE")
+- Struttura: tabelle con valori numerici → esame_laboratorio; immagini diagnostiche → esame_strumentale
+- Linguaggio: termini giuridici → memoria_difensiva/perizia; termini clinici → cartella/referto
 
 Rispondi SOLO in JSON con questo formato esatto:
 { "documentType": "categoria", "confidence": 0-100, "reasoning": "breve motivazione in italiano" }`;

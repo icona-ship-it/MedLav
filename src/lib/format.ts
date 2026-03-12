@@ -9,6 +9,7 @@ import { FileText, Image, FileSpreadsheet, File } from 'lucide-react';
  */
 export function formatDate(isoDate: string): string {
   if (!isoDate || isoDate === '') return 'Data non disponibile';
+  if (isoDate === '1900-01-01') return 'Data non documentata';
   const parts = isoDate.split('-');
   if (parts.length !== 3) return isoDate;
   const [year, month, day] = parts;
