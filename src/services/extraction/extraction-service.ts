@@ -349,10 +349,11 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     if (!('title' in e) && !('description' in e)) continue;
 
     // Handle missing/invalid dates — never invent dates
+    // Use '1900-01-01' sentinel for missing dates (DB column is NOT NULL)
     const rawDate = e.eventDate ?? e.event_date;
     const dateStr = rawDate != null ? String(rawDate) : '';
     const isDateMissing = !dateStr || dateStr === '1900-01-01' || dateStr === 'null' || dateStr === 'undefined';
-    const eventDate = isDateMissing ? '' : dateStr;
+    const eventDate = isDateMissing ? '1900-01-01' : dateStr;
     const datePrecision = isDateMissing
       ? 'sconosciuta'
       : String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');

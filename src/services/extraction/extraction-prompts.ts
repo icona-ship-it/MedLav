@@ -268,6 +268,51 @@ Rispondi con un JSON valido. La struttura ESATTA deve essere:
 IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere tutti i campi mostrati sopra.`;
 }
 
+// --- Document Type Hints ---
+
+const DOCUMENT_TYPE_HINTS: Record<string, string> = {
+  spese_mediche: `ISTRUZIONI SPECIFICHE PER SPESE MEDICHE: Per OGNI voce di spesa estrai un evento separato con:
+- eventType: "spesa_medica"
+- Data della prestazione/fattura
+- Descrizione: prestazione, importo esatto, struttura erogatrice, codice prestazione se presente
+- Raggruppa per data se più voci nella stessa fattura, ma mantieni il dettaglio degli importi`,
+
+  memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA: Questo è un atto legale. Devi:
+- Estrarre TUTTI i fatti clinici citati (interventi, ricoveri, diagnosi, date) come eventi clinici normali
+- Estrarre i punti legali e le contestazioni come eventi "documento_amministrativo"
+- Le date citate nella memoria sono fatti clinici da estrarre come timeline
+- NON ignorare nulla: ogni affermazione fattuale è rilevante per la perizia`,
+
+  perizia_ctp: `ISTRUZIONI SPECIFICHE PER PERIZIA CTP: Questa è una consulenza tecnica di parte. Devi:
+- Estrarre i fatti accertati dal CTP come eventi clinici (visita, diagnosi, intervento, etc.)
+- Estrarre le conclusioni e quantificazioni come eventi separati
+- Estrarre valutazioni di danno biologico, ITT/ITP se presenti
+- Ogni riferimento a documentazione clinica citata va estratto come evento`,
+
+  perizia_ctu: `ISTRUZIONI SPECIFICHE PER PERIZIA CTU: Questa è una consulenza tecnica d'ufficio. Devi:
+- Estrarre i fatti accertati dal CTU come eventi clinici
+- Estrarre i quesiti e le risposte come eventi "documento_amministrativo"
+- Estrarre le conclusioni, quantificazioni e valutazioni di danno
+- Ogni riferimento a documentazione esaminata va estratto come evento`,
+
+  cartella_clinica: `ISTRUZIONI SPECIFICHE PER CARTELLA CLINICA: Segui attentamente le regole FONTE A. Estrai TUTTO: dati ingresso, esami, diario clinico (solo eventi avversi), descrizione operatoria INTEGRALE, lettera dimissione.`,
+
+  referto_specialistico: `ISTRUZIONI SPECIFICHE PER REFERTO SPECIALISTICO: Riporta INTEGRALMENTE il contenuto del referto. Data, specialista, contenuto completo, conclusioni diagnostiche.`,
+
+  esame_strumentale: `ISTRUZIONI SPECIFICHE PER ESAME STRUMENTALE: Riporta INTEGRALMENTE. Data, tipo esame, distretto, descrizione completa, conclusioni diagnostiche.`,
+
+  esame_laboratorio: `ISTRUZIONI SPECIFICHE PER ESAMI DI LABORATORIO: Riporta TUTTI i valori con unità di misura. Evidenzia valori fuori range. Data prelievo obbligatoria.`,
+
+  certificato: `ISTRUZIONI SPECIFICHE PER CERTIFICATO: Estrai tipo certificato, data, ente emittente, contenuto, eventuali percentuali di invalidità o periodi di inabilità.`,
+};
+
+/**
+ * Get document-type specific hints for extraction.
+ */
+export function getDocumentTypeHint(documentType: string): string {
+  return DOCUMENT_TYPE_HINTS[documentType] ?? '';
+}
+
 /**
  * Build the user prompt for a specific document text.
  * Supports chunk context for multi-chunk documents.
@@ -296,11 +341,14 @@ export function buildExtractionUserPrompt(params: {
     chunkContext += '[FINE CONTESTO]\n\n';
   }
 
+  const typeHint = getDocumentTypeHint(documentType);
+  const typeHintBlock = typeHint ? `\n${typeHint}\n` : '';
+
   return `${chunkContext}Analizza il seguente documento medico ed estrai TUTTI gli eventi clinici.
 
 DOCUMENTO: ${fileName}
 TIPO DOCUMENTO: ${documentType}
-
+${typeHintBlock}
 NOTA: Il testo contiene marker [PAGE_START:N] e [PAGE_END:N] che delimitano le pagine del documento.
 Usa questi marker per determinare i numeri di pagina (sourcePages) di ciascun evento.
 Per sourceText, riporta una frase chiave (max 200 caratteri) dal testo OCR che ancora l'evento.
