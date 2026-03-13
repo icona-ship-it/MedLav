@@ -12,13 +12,18 @@ export async function getCaseReport(caseId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('reports')
     .select('*')
     .eq('case_id', caseId)
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (error) {
+    console.error(`[getCaseReport] Query failed for case ${caseId}:`, error.message, error.code);
+    return null;
+  }
 
   return data;
 }

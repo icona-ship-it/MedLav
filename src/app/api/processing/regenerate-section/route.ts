@@ -161,12 +161,20 @@ export async function POST(request: NextRequest) {
     // Save as new version
     const newVersion = ((currentReport.version as number) ?? 0) + 1;
 
-    await admin.from('reports').insert({
+    const { error: insertError } = await admin.from('reports').insert({
       case_id: caseId,
       version: newVersion,
       report_status: 'bozza',
       synthesis: updatedSynthesis,
     });
+
+    if (insertError) {
+      logger.error('processing/regenerate-section', `Report INSERT failed for case ${caseId}`, {
+        error: insertError.message,
+        code: insertError.code,
+      });
+      return NextResponse.json({ success: false, error: 'Errore salvataggio report.' }, { status: 500 });
+    }
 
     // Audit log
     await admin.from('audit_log').insert({
