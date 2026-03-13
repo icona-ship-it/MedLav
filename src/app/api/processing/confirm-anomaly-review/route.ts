@@ -71,11 +71,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if ((caseData.processing_stage as string) !== 'revisione_anomalie') {
+    const stage = caseData.processing_stage as string;
+    // Allow both 'revisione_anomalie' (normal flow) and 'idle' (legacy cases)
+    if (stage !== 'revisione_anomalie' && stage !== 'idle') {
       return NextResponse.json(
         { success: false, error: 'Il caso non è in fase di revisione anomalie' },
         { status: 400 },
       );
+    }
+
+    // For legacy cases, update the stage so the pipeline can track it
+    if (stage === 'idle') {
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
     }
 
     // Send Inngest event to resume pipeline

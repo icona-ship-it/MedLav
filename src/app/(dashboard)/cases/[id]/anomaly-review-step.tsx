@@ -3,10 +3,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CheckCircle2, Loader2, ChevronDown, ChevronRight, Play,
+  CheckCircle2, Loader2, ChevronDown, ChevronRight, Play, PauseCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { csrfHeaders } from '@/lib/csrf-client';
@@ -24,6 +25,7 @@ interface AnomalyReviewStepProps {
   events: EventRow[];
   documents: Document[];
   documentPages: DocumentPage[];
+  processingStage: string;
   onAnomaliesChanged: (updatedAnomalies: AnomalyRow[]) => void;
 }
 
@@ -42,6 +44,7 @@ export function AnomalyReviewStep({
   events,
   documents,
   documentPages,
+  processingStage,
   onAnomaliesChanged,
 }: AnomalyReviewStepProps) {
   const router = useRouter();
@@ -61,6 +64,9 @@ export function AnomalyReviewStep({
   const totalIssues = anomalies.length + missingDocs.length;
   const hasNoIssues = totalIssues === 0;
   const progressPercent = totalIssues > 0 ? Math.round((reviewedCount / totalIssues) * 100) : 100;
+
+  // The pipeline is paused and waiting for user action
+  const isPaused = processingStage === 'revisione_anomalie';
 
   const handleConfirmReview = useCallback(async () => {
     setIsConfirming(true);
@@ -88,6 +94,21 @@ export function AnomalyReviewStep({
   if (hasNoIssues) {
     return (
       <div className="space-y-4">
+        {/* Paused banner */}
+        {isPaused && (
+          <div className="flex items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/30">
+            <PauseCircle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Elaborazione in pausa — in attesa della tua conferma
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                Il report non verra generato finche non confermi.
+              </p>
+            </div>
+          </div>
+        )}
+
         <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/10">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4 py-6">
@@ -102,7 +123,7 @@ export function AnomalyReviewStep({
               </div>
               <Button
                 size="lg"
-                className="mt-2 text-base py-6 px-8"
+                className="mt-2 text-base py-6 px-8 bg-green-600 hover:bg-green-700 text-white shadow-md"
                 onClick={handleConfirmReview}
                 disabled={isConfirming}
               >
@@ -122,6 +143,24 @@ export function AnomalyReviewStep({
 
   return (
     <div className="space-y-4">
+      {/* Paused banner — visually prominent */}
+      {isPaused && (
+        <div className="flex items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950/30">
+          <PauseCircle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              Elaborazione in pausa — in attesa della tua revisione
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Rivedi le segnalazioni qui sotto, poi clicca &quot;Genera Report&quot; per continuare.
+            </p>
+          </div>
+          <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400 shrink-0">
+            In pausa
+          </Badge>
+        </div>
+      )}
+
       {/* Quality Summary */}
       <QualitySummaryCard
         events={events}
@@ -205,27 +244,29 @@ export function AnomalyReviewStep({
         </Card>
       )}
 
-      {/* Generate Report button */}
-      <div className="flex justify-center pt-2">
-        <Button
-          size="lg"
-          className="text-base py-6 px-8 w-full sm:w-auto"
-          onClick={handleConfirmReview}
-          disabled={isConfirming}
-        >
-          {isConfirming ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-5 w-5" />
-          )}
-          Genera Report
-        </Button>
-      </div>
-
-      {/* Hint */}
-      <p className="text-center text-xs text-muted-foreground">
-        Non è necessario revisionare ogni anomalia. Le anomalie non archiviate saranno segnalate nel report.
-      </p>
+      {/* Generate Report button — prominent and always visible */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="pt-6 pb-6">
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-muted-foreground text-center">
+              Non e necessario revisionare ogni anomalia. Le anomalie non archiviate saranno segnalate nel report.
+            </p>
+            <Button
+              size="lg"
+              className="text-base py-6 px-12 bg-green-600 hover:bg-green-700 text-white shadow-md"
+              onClick={handleConfirmReview}
+              disabled={isConfirming}
+            >
+              {isConfirming ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-5 w-5" />
+              )}
+              Genera Report
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

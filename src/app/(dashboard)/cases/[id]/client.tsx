@@ -81,7 +81,7 @@ function computeAutoStep(
 ): number {
   // Stage-based routing (new pipeline)
   if (processingStage === 'completato') return 5;
-  if (processingStage === 'generazione_report') return 3; // show spinner during report gen
+  if (processingStage === 'generazione_report') return 5; // step 5 with spinner
   if (processingStage === 'revisione_anomalie') return 4;
   if (processingStage === 'elaborazione') return 3;
 
@@ -207,15 +207,15 @@ export function CaseDetailClient({
                 ? 'Revisione classificazione'
                 : hasProcessingDocs || processingStage === 'elaborazione'
                 ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
-                : processingStage === 'generazione_report'
-                ? 'Generazione report...'
                 : 'Pronto')
             : step.number === 4 ? (processingStage === 'revisione_anomalie'
-                ? `${localAnomalies.length + missingDocs.length} segnalazioni`
+                ? `${localAnomalies.length + missingDocs.length} da revisionare`
                 : localAnomalies.length > 0 || missingDocs.length > 0
                 ? `${localAnomalies.length + missingDocs.length} segnalazioni`
                 : 'Nessuna anomalia')
-            : hasReport ? 'Report pronto' : 'In attesa',
+            : processingStage === 'generazione_report'
+                ? 'Generazione in corso...'
+                : hasReport ? 'Report pronto' : 'In attesa',
         }))}
         activeStep={activeStep}
         autoStep={autoStep}
@@ -264,7 +264,7 @@ export function CaseDetailClient({
       {/* === STEP 4: Revisione Anomalie === */}
       {activeStep === 4 && (
         <div key="step-4" className="animate-step-in">
-          {processingStage === 'revisione_anomalie' || (hasEvents && !hasReport && processingStage === 'idle') ? (
+          {processingStage === 'revisione_anomalie' || hasEvents || localAnomalies.length > 0 ? (
             <AnomalyReviewStep
               caseId={caseId}
               anomalies={localAnomalies}
@@ -272,19 +272,9 @@ export function CaseDetailClient({
               events={events}
               documents={initialDocuments}
               documentPages={documentPages}
+              processingStage={processingStage}
               onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
             />
-          ) : processingStage === 'generazione_report' ? (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 py-8 justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Generazione report in corso...
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
           ) : (
             <Card>
               <CardContent className="pt-6">
@@ -391,13 +381,21 @@ export function CaseDetailClient({
             </Tabs>
             </div>
           ) : processingStage === 'generazione_report' ? (
-            <Card>
+            <Card className="border-primary/30">
               <CardContent className="pt-6">
-                <div className="flex items-center gap-3 py-8 justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Generazione report in corso...
-                  </p>
+                <div className="flex flex-col items-center gap-4 py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <div className="text-center">
+                    <p className="text-base font-semibold">
+                      Generazione report in corso...
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      L&apos;AI sta analizzando {events.length} eventi e generando il report medico-legale.
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground italic">
+                      Questa operazione richiede 1-3 minuti. La pagina si aggiorna automaticamente.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
