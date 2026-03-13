@@ -77,6 +77,50 @@ export async function updateAnomaly(params: {
 }
 
 /**
+ * Confirm an anomaly — marks as user_confirmed (stays in report as a flagged issue).
+ */
+export async function confirmAnomaly(params: {
+  anomalyId: string;
+  caseId: string;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { error } = await supabase
+    .from('anomalies')
+    .update({
+      status: 'user_confirmed',
+    })
+    .eq('id', params.anomalyId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore conferma anomalia' };
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'anomaly.confirmed',
+    entity_type: 'anomaly',
+    entity_id: params.anomalyId,
+    metadata: { caseId: params.caseId },
+  });
+
+  return { success: true };
+}
+
+/**
  * Dismiss (soft-delete) an anomaly — marks as user_dismissed instead of deleting.
  */
 export async function dismissAnomaly(params: {

@@ -43,6 +43,17 @@ export const processCaseDocuments = inngest.createFunction(
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
+    // Step 0: Mark processing stage as 'elaborazione'
+    await step.run('mark-elaborazione', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+      logger.info('pipeline', `Step 0: Marked case ${caseId} as elaborazione`);
+    });
+
     // Step 1: Fetch case metadata and documents list
     const caseData = await step.run('fetch-case-metadata', () => fetchCaseMetadata(caseId, userId));
     const { metadata, documents } = caseData;
@@ -176,7 +187,7 @@ export const processCaseDocuments = inngest.createFunction(
     );
 
     // Step 5.5: LLM Anomaly Resolution — verify anomalies against source OCR pages
-    const anomalies = await step.run(
+    let anomalies = await step.run(
       'resolve-anomalies',
       () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
     );
@@ -192,6 +203,64 @@ export const processCaseDocuments = inngest.createFunction(
       'calculate-periods',
       () => calculatePeriodsStep(consolidationResult.allEvents, metadata.caseType),
     );
+
+    // Step 7a.5: Anomaly review gate — pause if anomalies or missing docs exist
+    const hasIssues = anomalies.length > 0 || missingDocs.length > 0;
+    if (hasIssues) {
+      // Mark case as waiting for anomaly review
+      await step.run('mark-revisione-anomalie', async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        await supabase
+          .from('cases')
+          .update({ processing_stage: 'revisione_anomalie', updated_at: new Date().toISOString() })
+          .eq('id', caseId);
+        logger.info('pipeline', `Step 7a.5: Pausing for anomaly review (${anomalies.length} anomalies, ${missingDocs.length} missing docs)`);
+      });
+
+      // Wait for user to confirm anomaly review (up to 7 days)
+      const anomalyConfirmEvent = await step.waitForEvent(
+        'wait-for-anomaly-review',
+        {
+          event: 'case/anomaly-review.confirmed',
+          match: 'data.caseId',
+          timeout: '7d',
+        },
+      );
+      if (!anomalyConfirmEvent) {
+        throw new Error('Anomaly review timed out after 7 days');
+      }
+
+      // Refresh anomalies from DB (user may have archived some)
+      anomalies = await step.run('refresh-anomalies-after-review', async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const { data } = await supabase
+          .from('anomalies')
+          .select('*')
+          .eq('case_id', caseId)
+          .not('status', 'eq', 'user_dismissed');
+        // Map to DetectedAnomaly shape
+        return (data ?? []).map((row) => ({
+          anomalyType: row.anomaly_type,
+          severity: row.severity as 'critica' | 'alta' | 'media' | 'bassa',
+          description: row.description as string,
+          involvedEvents: row.involved_events ? JSON.parse(row.involved_events as string) as Array<{ eventId: string | null; orderNumber: number; date: string; title: string }> : [],
+          suggestion: (row.suggestion as string) ?? '',
+        }));
+      });
+    }
+
+    // Mark case as generating report
+    await step.run('mark-generazione-report', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+      logger.info('pipeline', `Marked case ${caseId} as generazione_report`);
+    });
 
     // Build shared synthesis params
     const synthesisParams = buildSynthesisParams(

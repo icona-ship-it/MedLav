@@ -19,7 +19,6 @@ import { csrfHeaders } from '@/lib/csrf-client';
 import { CaseHeader } from './case-header';
 import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
-import { AnomaliesSection, MissingDocsSection } from './anomalies-section';
 import { EventsTab } from './events-tab';
 import { ReportTab } from './report-tab';
 import { PeriziaMetadataForm } from './perizia-form';
@@ -34,6 +33,7 @@ const OcrPreviewTab = dynamic(
 import { QualitySummaryCard } from './quality-summary-card';
 import { DocumentCoverageCard } from './document-coverage-card';
 import { WizardStepBar } from './wizard-step-bar';
+import { AnomalyReviewStep } from './anomaly-review-step';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
 } from './types';
@@ -62,7 +62,8 @@ const WIZARD_STEPS = [
   { number: 1, label: 'Documenti' },
   { number: 2, label: 'Info Perizia' },
   { number: 3, label: 'Elaborazione' },
-  { number: 4, label: 'Risultati' },
+  { number: 4, label: 'Revisione' },
+  { number: 5, label: 'Report' },
 ] as const;
 
 // --- Helpers ---
@@ -71,8 +72,22 @@ function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
-function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean, hasClassificationReview: boolean): number {
-  if (hasResults && !hasProcessingDocs) return 4;
+function computeAutoStep(
+  processingStage: string,
+  hasProcessingDocs: boolean,
+  hasClassificationReview: boolean,
+  hasReport: boolean,
+  hasEvents: boolean,
+): number {
+  // Stage-based routing (new pipeline)
+  if (processingStage === 'completato') return 5;
+  if (processingStage === 'generazione_report') return 3; // show spinner during report gen
+  if (processingStage === 'revisione_anomalie') return 4;
+  if (processingStage === 'elaborazione') return 3;
+
+  // Fallback for legacy cases (processing_stage = 'idle')
+  if (hasReport) return 5;
+  if (hasEvents) return 4;
   if (hasProcessingDocs || hasClassificationReview) return 3;
   return 1;
 }
@@ -108,9 +123,12 @@ export function CaseDetailClient({
   const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
   const hasClassificationReview = initialDocuments.some((d) => d.processing_status === 'classificazione_completata');
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
-  const hasResults = events.length > 0 || localAnomalies.length > 0 || !!report;
+  const hasReport = !!report;
+  const hasEvents = events.length > 0;
+  const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
+  const processingStage = caseData.processing_stage ?? 'idle';
 
-  const autoStep = computeAutoStep(hasResults, hasProcessingDocs, hasClassificationReview);
+  const autoStep = computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
@@ -139,11 +157,12 @@ export function CaseDetailClient({
     }
   }, [autoStep]);
 
+  const needsPolling = hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione';
   useEffect(() => {
-    if (!hasProcessingDocs) return;
+    if (!needsPolling) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [hasProcessingDocs, router]);
+  }, [needsPolling, router]);
 
   const handleRegenerate = useCallback(async () => {
     setIsRegenerating(true);
@@ -186,10 +205,17 @@ export function CaseDetailClient({
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
             : step.number === 3 ? (hasClassificationReview
                 ? 'Revisione classificazione'
-                : hasProcessingDocs
+                : hasProcessingDocs || processingStage === 'elaborazione'
                 ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
+                : processingStage === 'generazione_report'
+                ? 'Generazione report...'
                 : 'Pronto')
-            : hasResults ? `${events.length} eventi` : 'In attesa',
+            : step.number === 4 ? (processingStage === 'revisione_anomalie'
+                ? `${localAnomalies.length + missingDocs.length} segnalazioni`
+                : localAnomalies.length > 0 || missingDocs.length > 0
+                ? `${localAnomalies.length + missingDocs.length} segnalazioni`
+                : 'Nessuna anomalia')
+            : hasReport ? 'Report pronto' : 'In attesa',
         }))}
         activeStep={activeStep}
         autoStep={autoStep}
@@ -235,30 +261,47 @@ export function CaseDetailClient({
         </div>
       )}
 
-      {/* === STEP 4: Risultati === */}
-      {activeStep === 4 && hasProcessingDocs && !hasResults && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3 py-8 justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Elaborazione in corso... I risultati saranno disponibili al completamento di tutti i documenti.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {activeStep === 4 && (hasResults || hasProcessingDocs) && !(hasProcessingDocs && !hasResults) && (
+      {/* === STEP 4: Revisione Anomalie === */}
+      {activeStep === 4 && (
         <div key="step-4" className="animate-step-in">
-          {hasResults ? (
+          {processingStage === 'revisione_anomalie' || (hasEvents && !hasReport && processingStage === 'idle') ? (
+            <AnomalyReviewStep
+              caseId={caseId}
+              anomalies={localAnomalies}
+              missingDocs={missingDocs}
+              events={events}
+              documents={initialDocuments}
+              documentPages={documentPages}
+              onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
+            />
+          ) : processingStage === 'generazione_report' ? (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3 py-8 justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Generazione report in corso...
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  In attesa dell&apos;elaborazione. Carica i documenti e avvia l&apos;elaborazione.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* === STEP 5: Report === */}
+      {activeStep === 5 && (
+        <div key="step-5" className="animate-step-in">
+          {hasReport ? (
             <div className="space-y-4">
-            {/* Processing indicator when partial results are visible */}
-            {hasProcessingDocs && (
-              <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                <span>Elaborazione ancora in corso. I risultati parziali sono già visibili.</span>
-              </div>
-            )}
             {report?.synthesis && (
               <>
                 <Button
@@ -302,11 +345,6 @@ export function CaseDetailClient({
                 </TabsTrigger>
                 <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
                 <TabsTrigger value="ocr">OCR</TabsTrigger>
-                {(localAnomalies.length > 0 || missingDocs.length > 0) && (
-                  <TabsTrigger value="problems">
-                    Problemi ({localAnomalies.length + missingDocs.length})
-                  </TabsTrigger>
-                )}
               </TabsList>
 
               <TabsContent value="events">
@@ -335,7 +373,7 @@ export function CaseDetailClient({
                   anomalies={localAnomalies}
                   missingDocs={missingDocs}
                   documents={initialDocuments}
-                  onSwitchToAnomalies={() => setActiveResultTab('problems')}
+                  onSwitchToAnomalies={() => handleSetStep(4)}
                   onEventClick={(orderNumber) => {
                     setHighlightedEventId(orderNumber);
                     setActiveResultTab('events');
@@ -350,60 +388,29 @@ export function CaseDetailClient({
                   documentPages={documentPages}
                 />
               </TabsContent>
-
-              <TabsContent value="problems">
-                <div className="space-y-4">
-                  {localAnomalies.length > 0 && (
-                    <AnomaliesSection
-                      anomalies={localAnomalies}
-                      events={events}
-                      documents={initialDocuments}
-                      caseId={caseId}
-                      onChanged={(dismissedId) => {
-                        if (dismissedId) {
-                          setLocalAnomalies((prev) => {
-                            const updated = prev.filter((a) => a.id !== dismissedId);
-                            if (updated.length === 0 && missingDocs.length === 0) {
-                              setActiveResultTab('synthesis');
-                            }
-                            return updated;
-                          });
-                        }
-                        router.refresh();
-                      }}
-                    />
-                  )}
-                  {missingDocs.length > 0 && (
-                    <MissingDocsSection
-                      missingDocs={missingDocs}
-                      caseId={caseId}
-                      onUploadComplete={() => router.refresh()}
-                    />
-                  )}
-                </div>
-              </TabsContent>
-
             </Tabs>
             </div>
+          ) : processingStage === 'generazione_report' ? (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3 py-8 justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Generazione report in corso...
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="pt-6">
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nessun risultato disponibile. Carica i documenti e avvia l&apos;elaborazione.
+                  Nessun report disponibile. Carica i documenti e avvia l&apos;elaborazione.
                 </p>
               </CardContent>
             </Card>
           )}
         </div>
-      )}
-      {activeStep === 4 && !hasProcessingDocs && !hasResults && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Nessun risultato disponibile. Carica i documenti e avvia l&apos;elaborazione.
-            </p>
-          </CardContent>
-        </Card>
       )}
       </div>
 

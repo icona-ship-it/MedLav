@@ -32,6 +32,7 @@ export interface CaseData {
   practice_reference: string | null;
   notes: string | null;
   status: string;
+  processing_stage: string;
   perizia_metadata?: PeriziaMetadataUI | null;
 }
 

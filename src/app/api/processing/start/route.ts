@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mark documents as in_coda
+    // Mark documents as in_coda and set processing stage
     await supabase
       .from('documents')
       .update({
@@ -143,6 +143,14 @@ export async function POST(request: NextRequest) {
       })
       .eq('case_id', caseId)
       .eq('processing_status', 'caricato');
+
+    await supabase
+      .from('cases')
+      .update({
+        processing_stage: 'elaborazione',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', caseId);
 
     // Send Inngest event to trigger processing
     await inngest.send({

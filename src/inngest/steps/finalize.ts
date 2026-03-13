@@ -45,10 +45,10 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
       .eq('id', docResult.documentId);
   }
 
-  // Update case status
+  // Update case status and processing stage
   await supabase
     .from('cases')
-    .update({ updated_at: new Date().toISOString() })
+    .update({ processing_stage: 'completato', updated_at: new Date().toISOString() })
     .eq('id', caseId);
 
   // Audit log (no sensitive data)

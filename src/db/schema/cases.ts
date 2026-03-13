@@ -43,6 +43,7 @@ export const cases = pgTable('cases', {
   status: caseStatusEnum('status').notNull().default('bozza'),
   notes: text('notes'),
   periziaMetadata: jsonb('perizia_metadata').$type<PeriziaMetadata>(),
+  processingStage: text('processing_stage').notNull().default('idle'),
   documentCount: integer('document_count').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
