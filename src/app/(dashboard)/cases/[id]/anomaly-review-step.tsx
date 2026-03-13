@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CheckCircle2, AlertTriangle, Loader2, ChevronDown, ChevronRight, Play,
+  CheckCircle2, Loader2, ChevronDown, ChevronRight, Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
