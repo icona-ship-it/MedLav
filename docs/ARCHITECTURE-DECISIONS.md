@@ -3,7 +3,7 @@
 ## ADR-001: Stack Tecnologico
 - **Data**: 2026-02-25
 - **Contesto**: Definizione dello stack per una web app medico-legale con elaborazione documenti AI, requisiti GDPR stringenti per dati sanitari, e target 20-100 utenti.
-- **Decisione**: Next.js 16 (App Router) + React 19 + TypeScript 5.9 strict + Supabase (EU) + Mistral API (EU) + Inngest + Vercel
+- **Decisione**: Next.js 15 (App Router) + React 19 + TypeScript 5.9 strict + Supabase (EU) + Mistral API (EU) + Inngest + Vercel
 - **Alternative considerate**:
   - Nuxt 4 (Vue) — scartato per ecosistema componenti piu limitato per app complesse
   - SvelteKit — scartato per ecosistema UI componenti meno maturo
@@ -15,7 +15,7 @@
 ## ADR-002: Mistral come unico provider AI
 - **Data**: 2026-02-25
 - **Contesto**: I dati sanitari sotto GDPR Art. 9 non possono transitare fuori dall'EU. Serve un LLM con capacita vision (OCR) e analisi testuale.
-- **Decisione**: Usare esclusivamente Mistral API (azienda francese, dati processati in EU). Pixtral Large per OCR/vision, Mistral Large per analisi testuale e generazione report.
+- **Decisione**: Usare esclusivamente Mistral API (azienda francese, dati processati in EU). Pixtral Large per vision/immagini diagnostiche, Mistral OCR per estrazione testo documenti, Mistral Large per estrazione strutturata, classificazione documenti, sintesi e generazione report.
 - **Alternative considerate**:
   - Claude API (Anthropic) — ottime capacita ma data residency EU non garantita al 100%
   - Azure OpenAI (EU region) — possibile ma Mistral e piu semplice per compliance EU-native
@@ -74,7 +74,7 @@
 ## ADR-007: Pipeline elaborazione documenti con Inngest a step
 - **Data**: 2026-02-25
 - **Contesto**: Implementazione della pipeline core dell'app: upload → OCR → estrazione eventi → consolidamento → anomalie → doc mancanti → sintesi.
-- **Decisione**: Una singola funzione Inngest per caso (`processCaseDocuments`) con 8 step sequenziali. Ogni step e atomico e retryable. OCR con `mistral-ocr-latest` (API dedicata), estrazione e sintesi con `mistral-large-latest`.
+- **Decisione**: Una singola funzione Inngest per caso (`processCaseDocuments`) con 13 step logici (molti più step atomici). Ogni step e atomico e retryable. OCR con `mistral-ocr-latest`, classificazione con `mistral-large-latest`, estrazione con `mistral-large-latest` (streaming), sintesi con `mistral-large-latest`, analisi immagini con `pixtral-large-latest`.
 - **Alternative considerate**:
   - 1 funzione Inngest per documento — piu parallelismo ma consolidamento richiede tutti i doc, coordinazione piu complessa
   - Step separati per ogni documento (OCR-doc-1, OCR-doc-2) — vantaggi di retry granulare ma complessita di orchestrazione

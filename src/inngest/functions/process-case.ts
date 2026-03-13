@@ -50,14 +50,15 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2: OCR each document
-    const ocrResults: OcrResult[] = [];
-    for (const doc of documents) {
-      const ocrResult = await step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc));
-      if (ocrResult) {
-        ocrResults.push(ocrResult);
-      }
-    }
+    // Step 2: OCR all documents in parallel
+    const ocrSettled = await Promise.all(
+      documents.map((doc) =>
+        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
+      ),
+    );
+    const ocrResults: OcrResult[] = ocrSettled.filter(
+      (r): r is OcrResult => r !== null,
+    );
 
     if (ocrResults.length === 0) {
       throw new Error('All documents failed OCR processing');

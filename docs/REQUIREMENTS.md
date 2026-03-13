@@ -2,8 +2,8 @@
 
 ## Documento di Specifica Funzionale
 
-**Versione:** 1.4
-**Data:** 24 Febbraio 2026
+**Versione:** 1.5
+**Data:** 13 Marzo 2026
 **Scopo:** Definire COSA deve fare l'applicazione, indipendentemente dalla tecnologia utilizzata per svilupparla.
 
 ---
@@ -64,9 +64,15 @@ Alla creazione del caso, il perito seleziona la **tipologia**. Questo permette a
 | **Errore anestesiologico** | Cartella anestesiologica, parametri vitali intraop, farmaci somministrati, complicanze | Cartella anestesiologica, monitoraggi, consenso |
 | **Infezione nosocomiale** | Esami colturali, antibioticoterapia, date insorgenza, profilassi | Esami microbiologici, diario clinico, terapie |
 | **Errore diagnostico** | Sequenza esami, referti, diagnosi formulate, tempi | Referti, imaging, esami lab, visite specialistiche |
+| **RC Auto** | Dinamica sinistro, lesioni riportate, nesso causale con incidente | Verbale CID, PS, referti, imaging |
+| **Previdenziale** | Patologie invalidanti, capacità lavorativa residua, percentuali | Certificati, visite collegiali, referti |
+| **Infortuni sul lavoro** | Dinamica infortunio, nesso con mansione, malattia professionale | Denuncia INAIL, cartella clinica, certificati |
+| **Perizia assicurativa** | Valutazione danno per compagnia, congruità spese | Documentazione clinica, fatture, preventivi |
+| **Analisi spese mediche** | Congruità e rimborsabilità prestazioni | Fatture, ricevute, tariffari |
+| **Opinione prognostica** | Prognosi, riserva assicurativa, evoluzione attesa | Documentazione clinica recente, follow-up |
 | **Responsabilita professionale generica** | Analisi completa senza filtri prioritari | Tutta la documentazione disponibile |
 
-Il perito puo sempre selezionare "generica" se il caso non rientra nelle categorie o se preferisce un'analisi senza filtri.
+Il perito puo sempre selezionare "generica" se il caso non rientra nelle categorie o se preferisce un'analisi senza filtri. È possibile selezionare **più tipologie** per casi che coinvolgono aspetti di più categorie (es. ortopedica + errore diagnostico).
 
 ---
 
@@ -79,7 +85,7 @@ CARICAMENTO DOCUMENTI → LETTURA/OCR → ESTRAZIONE DATI → VALIDAZIONE → RE
 ### 2.1 Caricamento Documenti
 - L'utente carica **uno o piu file** relativi allo stesso caso
 - Viene assegnato un **codice caso** (es. `CASO-2026-001`)
-- Ogni documento viene classificato per tipo di fonte (cartella clinica, referto specialistico, esame strumentale, etc.)
+- Ogni documento viene classificato per tipo di fonte. Se il perito non seleziona un tipo, il sistema lo classifica automaticamente dopo l'OCR (vedi 2.2b). Tipi supportati: cartella_clinica, referto_specialistico, esame_strumentale, esame_laboratorio, lettera_dimissione, certificato, perizia_precedente, spese_mediche, memoria_difensiva, perizia_ctp, perizia_ctu, altro
 
 **Formati di input supportati:**
 
@@ -94,12 +100,19 @@ CARICAMENTO DOCUMENTI → LETTURA/OCR → ESTRAZIONE DATI → VALIDAZIONE → RE
 La documentazione medica nella realta arriva in formati eterogenei: PDF digitali, scansioni, foto scattate col telefono, documenti Word, fogli Excel con esami di laboratorio. Il sistema deve accettare tutto e ricavarne il testo.
 
 ### 2.2 Lettura del Documento (OCR)
-- I documenti vengono convertiti in testo leggibile
+- I documenti vengono convertiti in testo leggibile tramite Mistral OCR (`mistral-ocr-latest`)
 - I documenti scansionati e le immagini vengono processati con OCR (riconoscimento ottico)
-- **Testo manoscritto**: le cartelle cliniche contengono frequentemente parti scritte a mano (diario medico, prescrizioni, annotazioni infermieristiche, firme). Il sistema deve gestire specificamente il riconoscimento della scrittura a mano (HTR - Handwritten Text Recognition), segnalando le parti manoscritte e il livello di confidenza della lettura
+- **Testo manoscritto**: il modello OCR gestisce anche testo manoscritto con confidenza variabile. Il sistema segnala la qualità OCR complessiva per documento
 - Le immagini mediche (radiografie, TAC, etc.) vengono identificate e conservate
 - Ogni pagina viene processata individualmente
-- Viene assegnato un **punteggio di qualita OCR** per segnalare documenti poco leggibili (con distinzione tra testo stampato e manoscritto)
+- Viene assegnato un **punteggio di qualita OCR** per segnalare documenti poco leggibili
+
+### 2.2b Classificazione Automatica Documenti
+- I documenti caricati come tipo "altro" (default) vengono **auto-classificati** dal sistema dopo l'OCR
+- La classificazione usa Mistral Large (`mistral-large-latest`) analizzando nome file e prime 3000 caratteri del testo OCR
+- Soglia di confidenza minima: **50%** — sotto questa soglia il documento resta "altro"
+- 12 tipi documento supportati: cartella_clinica, referto_specialistico, esame_strumentale, esame_laboratorio, lettera_dimissione, certificato, perizia_precedente, spese_mediche, memoria_difensiva, perizia_ctp, perizia_ctu, altro
+- Il perito puo sempre sovrascrivere manualmente la classificazione — documenti gia classificati dall'utente non vengono riclassificati
 
 ### 2.3 Estrazione Dati Strutturati
 - Dal testo estratto vengono identificati e classificati tutti gli **eventi clinici**
@@ -342,6 +355,9 @@ Il sistema deve riconoscere e classificare questi tipi di evento:
 | `prescrizione` | Prescrizioni farmacologiche |
 | `consenso` | Consenso informato (acquisito o mancante) |
 | `complicanza` | Complicanze ed eventi avversi |
+| `spesa_medica` | Fatture, ricevute, ticket sanitari con importi |
+| `documento_amministrativo` | Documenti amministrativi (denunce INAIL, pratiche, verbali) |
+| `certificato` | Certificati medici, INAIL, di malattia, di idoneità |
 | `altro` | Eventi non classificabili nelle categorie precedenti |
 
 ---
@@ -405,6 +421,14 @@ Ogni evento estratto deve contenere:
   - Associate all'evento clinico corrispondente
   - Incluse nel report HTML con didascalia
 - Parole chiave per identificazione: RX, radiografia, TC, TAC, RM, risonanza, eco, ecografia, ECG, PET, scintigrafia, angiografia, biopsia, istologia, citologia
+
+### 8.1 Analisi Automatica Immagini Diagnostiche
+- Le immagini mediche vengono analizzate automaticamente con Pixtral Large (`pixtral-large-latest`) per:
+  - Identificare il tipo di immagine (RX, TAC, RM, ecografia, foto clinica, etc.)
+  - Generare una descrizione del contenuto visibile
+  - Assegnare un livello di confidenza all'analisi
+- I risultati dell'analisi vengono integrati nel prompt di sintesi per arricchire il report
+- L'analisi e puramente descrittiva — il sistema NON formula diagnosi
 
 ---
 

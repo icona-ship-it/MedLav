@@ -34,10 +34,15 @@ export async function classifyDocumentsStep(
   const classifications: DocumentClassification[] = [];
 
   for (const ocrResult of docsToClassify) {
+    if (ocrResult.fullText.trim().length === 0) {
+      logger.info('pipeline', `Step 2.5: Doc ${ocrResult.documentId} has empty OCR text, skipping classification`);
+      continue;
+    }
+
     try {
       const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
 
-      if (result.documentType !== 'altro' && result.confidence >= 30) {
+      if (result.documentType !== 'altro' && result.confidence >= 50) {
         const oldType = ocrResult.documentType;
 
         // Update the DB

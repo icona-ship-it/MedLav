@@ -53,18 +53,19 @@ export interface ClassificationResult {
 
 /**
  * Classify a document using its OCR text and file name.
- * Uses Mistral Small for fast, cheap classification (~€0.001/doc).
+ * Uses Mistral Large for high-quality classification.
  */
 export async function classifyDocument(
   text: string,
   fileName: string,
 ): Promise<ClassificationResult> {
   const truncatedText = text.slice(0, MAX_CLASSIFICATION_CHARS);
+  const safeFileName = fileName.replace(/[\n\r]/g, ' ').slice(0, 100);
 
-  const userMessage = `Nome file: ${fileName}\n\nTesto documento (prime ${truncatedText.length} caratteri):\n${truncatedText}`;
+  const userMessage = `Nome file: ${safeFileName}\n\nTesto documento (prime ${truncatedText.length} caratteri):\n${truncatedText}`;
 
   const raw = await streamMistralChat({
-    model: MISTRAL_MODELS.MISTRAL_SMALL,
+    model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: CLASSIFICATION_SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
@@ -72,7 +73,7 @@ export async function classifyDocument(
     temperature: 0,
     maxTokens: 256,
     responseFormat: { type: 'json_object' },
-    label: `classify-${fileName.slice(0, 30)}`,
+    label: `classify-${safeFileName.slice(0, 30)}`,
   });
 
   return parseClassificationResponse(raw, fileName);

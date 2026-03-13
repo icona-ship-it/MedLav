@@ -365,7 +365,13 @@ export function CaseDetailClient({
                       caseId={caseId}
                       onChanged={(dismissedId) => {
                         if (dismissedId) {
-                          setLocalAnomalies((prev) => prev.filter((a) => a.id !== dismissedId));
+                          setLocalAnomalies((prev) => {
+                            const updated = prev.filter((a) => a.id !== dismissedId);
+                            if (updated.length === 0 && missingDocs.length === 0) {
+                              setActiveResultTab('synthesis');
+                            }
+                            return updated;
+                          });
                         }
                         router.refresh();
                       }}

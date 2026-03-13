@@ -64,6 +64,12 @@
 - Inngest per background jobs
 - Vitest per unit/integration test
 - Playwright per E2E test
+- Stripe per pagamenti e subscriptions
+- Resend per email transazionali (notifiche completamento, verifica email)
+- @upstash/ratelimit + @upstash/redis per rate limiting API
+- @sentry/nextjs per error tracking e monitoring in produzione
+- sonner per toast notifications UI
+- react-markdown + remark-gfm per rendering markdown nel report
 
 ## Performance
 

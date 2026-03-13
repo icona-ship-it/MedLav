@@ -20,6 +20,7 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-analyzer';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
+import { validateReport } from './report-validator';
 import { logger } from '@/lib/logger';
 
 export interface SynthesisResult {
@@ -177,7 +178,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     report = assembleSplitReport(summaryAndAnalysis, chronology);
   }
 
-  return finalizeReport(report);
+  return finalizeReport(report, events.length);
 }
 
 /**
@@ -266,7 +267,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
 
   logger.info('synthesis', ` Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
   const report = assembleSplitReport(summaryAndAnalysis, chronology);
-  return finalizeReport(report);
+  return finalizeReport(report, events.length);
 }
 
 // ── Shared helpers ──
@@ -292,14 +293,25 @@ async function fetchGuidelineContext(
   }
 }
 
-function finalizeReport(report: string): SynthesisResult {
-  const validation = validateReportSections(report);
-  if (!validation.valid) {
-    logger.warn('synthesis', ` Missing sections: ${validation.missing.join(', ')}. Using as-is.`);
-  }
+function finalizeReport(report: string, eventCount?: number): SynthesisResult {
   const cleaned = stripSectionMarkers(report);
   const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
-  logger.info('synthesis', ` Report: ${wordCount} words, valid: ${validation.valid}`);
+
+  const validation = validateReport(cleaned, eventCount ?? 0);
+  if (validation.issues.length > 0) {
+    const errors = validation.issues.filter((i) => i.severity === 'error');
+    const warnings = validation.issues.filter((i) => i.severity === 'warning');
+    if (errors.length > 0) {
+      logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}. Using as-is.`);
+    }
+    if (warnings.length > 0) {
+      logger.info('synthesis', ` Validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
+    }
+  }
+
+  logger.info('synthesis',
+    ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%`,
+  );
   return { synthesis: cleaned, wordCount };
 }
 
@@ -397,25 +409,6 @@ function assembleSplitReport(summaryAndAnalysis: string, chronology: string): st
 
   logger.info('synthesis', ' Assembly: sequential fallback (level 3)');
   return [summaryAndAnalysis.trim(), chronology.trim()].join('\n\n');
-}
-
-// ── Validation ──
-
-function validateReportSections(report: string): { valid: boolean; missing: string[] } {
-  const requiredSections = [
-    { name: 'Riassunto del caso', pattern: /riassunto\s+(del\s+)?caso/i },
-    { name: 'Cronologia medico-legale', pattern: /cronologia\s+medico/i },
-    {
-      name: 'Elementi di rilievo',
-      pattern: /elementi\s+di\s+rilievo|aspetti\s+(critici|rilevanti)|osservazioni\s+medico|profili\s+di\s+responsabilit|valutazione\s+di\s+merito/i,
-    },
-  ];
-
-  const missing = requiredSections
-    .filter((s) => !s.pattern.test(report))
-    .map((s) => s.name);
-
-  return { valid: missing.length === 0, missing };
 }
 
 function stripSectionMarkers(report: string): string {
