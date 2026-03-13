@@ -25,6 +25,7 @@ export const anomalyStatusEnum = pgEnum('anomaly_status', [
   'llm_resolved',
   'llm_confirmed',
   'user_dismissed',
+  'user_confirmed',
 ]);
 
 export const anomalies = pgTable('anomalies', {

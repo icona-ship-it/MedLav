@@ -31,8 +31,14 @@ interface AnomalyReviewStepProps {
 
 // --- Helpers ---
 
-function isReviewed(status: string | null): boolean {
-  return status === 'user_dismissed' || status === 'llm_resolved' || status === 'user_confirmed';
+/** An anomaly requires user action (confirm or dismiss) */
+function needsUserAction(status: string | null): boolean {
+  return status === 'detected' || status === 'llm_confirmed';
+}
+
+/** User has already acted on this anomaly */
+function isUserActioned(status: string | null): boolean {
+  return status === 'user_dismissed' || status === 'user_confirmed';
 }
 
 // --- Component ---
@@ -56,14 +62,21 @@ export function AnomalyReviewStep({
     [anomalies],
   );
 
-  const reviewedCount = useMemo(
-    () => anomalies.filter((a) => isReviewed(a.status)).length,
+  // Only count anomalies that require user action (not auto-resolved by AI)
+  const userActionableCount = useMemo(
+    () => anomalies.filter((a) => needsUserAction(a.status)).length,
     [anomalies],
   );
 
+  const userActionedCount = useMemo(
+    () => anomalies.filter((a) => isUserActioned(a.status)).length,
+    [anomalies],
+  );
+
+  const totalActionable = userActionableCount + userActionedCount;
   const totalIssues = anomalies.length + missingDocs.length;
   const hasNoIssues = totalIssues === 0;
-  const progressPercent = totalIssues > 0 ? Math.round((reviewedCount / totalIssues) * 100) : 100;
+  const progressPercent = totalActionable > 0 ? Math.round((userActionedCount / totalActionable) * 100) : 100;
 
   // The pipeline is paused and waiting for user action
   const isPaused = processingStage === 'revisione_anomalie';
@@ -174,13 +187,13 @@ export function AnomalyReviewStep({
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">
-              {reviewedCount} di {totalIssues} revisionate
+              {userActionedCount} di {totalActionable} revisionate
             </span>
             <span className="text-xs text-muted-foreground">{progressPercent}%</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
           <p className="mt-2 text-xs text-muted-foreground">
-            Puoi archiviare le anomalie non rilevanti. Quelle non archiviate saranno incluse nel report come segnalazioni.
+            Puoi confermare (includi nel report) o ignorare (escludi) le anomalie. Le anomalie risolte dall&apos;analisi automatica non richiedono azione.
           </p>
         </CardContent>
       </Card>

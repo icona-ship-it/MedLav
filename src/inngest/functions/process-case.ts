@@ -298,7 +298,7 @@ export const processCaseDocuments = inngest.createFunction(
           .from('anomalies')
           .select('*')
           .eq('case_id', caseId)
-          .not('status', 'eq', 'user_dismissed');
+          .in('status', ['detected', 'llm_confirmed', 'user_confirmed']);
         // Map to DetectedAnomaly shape
         return (data ?? []).map((row) => ({
           anomalyType: row.anomaly_type,

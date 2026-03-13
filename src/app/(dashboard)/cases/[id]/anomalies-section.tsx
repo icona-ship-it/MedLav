@@ -145,20 +145,28 @@ function isResolved(status: string | null): boolean {
 }
 
 function StatusBadge({ status }: { status: string | null }) {
-  if (!status || status === 'detected') return null;
+  if (!status) return null;
+
+  if (status === 'detected') {
+    return (
+      <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30">
+        <AlertTriangle className="mr-1 h-3 w-3" />Da revisionare
+      </Badge>
+    );
+  }
 
   if (status === 'llm_resolved') {
     return (
       <Badge variant="outline" className="text-xs border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
-        <ShieldCheck className="mr-1 h-3 w-3" />Risolta IA
+        <ShieldCheck className="mr-1 h-3 w-3" />Risolta automaticamente
       </Badge>
     );
   }
 
   if (status === 'llm_confirmed') {
     return (
-      <Badge variant="outline" className="text-xs border-blue-500 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30">
-        <ShieldAlert className="mr-1 h-3 w-3" />Confermata
+      <Badge variant="outline" className="text-xs border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30">
+        <ShieldAlert className="mr-1 h-3 w-3" />Verificata IA — da revisionare
       </Badge>
     );
   }
@@ -388,16 +396,24 @@ function AnomalyCard({
 // --- Anomalies Component ---
 
 export function AnomaliesSection({ anomalies, events, documents, caseId, onChanged }: AnomaliesSectionProps) {
-  const [showResolved, setShowResolved] = useState(false);
+  const [showAutoResolved, setShowAutoResolved] = useState(false);
 
-  const resolvedCount = useMemo(
-    () => anomalies.filter((a) => isResolved(a.status)).length,
+  // Anomalies that need user action (detected + llm_confirmed)
+  const actionable = useMemo(
+    () => anomalies.filter((a) => a.status === 'detected' || a.status === 'llm_confirmed'),
     [anomalies],
   );
 
-  const visibleAnomalies = useMemo(
-    () => showResolved ? anomalies : anomalies.filter((a) => !isResolved(a.status)),
-    [anomalies, showResolved],
+  // Anomalies already acted on by user (confirmed or dismissed)
+  const userActioned = useMemo(
+    () => anomalies.filter((a) => a.status === 'user_confirmed' || a.status === 'user_dismissed'),
+    [anomalies],
+  );
+
+  // Auto-resolved by AI (no user action needed)
+  const autoResolved = useMemo(
+    () => anomalies.filter((a) => a.status === 'llm_resolved'),
+    [anomalies],
   );
 
   return (
@@ -407,31 +423,21 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-500" />
             Anomalie Rilevate
+            {actionable.length > 0 && (
+              <Badge variant="warning" className="text-xs ml-1">
+                {actionable.length} da revisionare
+              </Badge>
+            )}
           </CardTitle>
-          {resolvedCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setShowResolved(!showResolved)}
-            >
-              {showResolved ? (
-                <><EyeOff className="mr-1 h-3 w-3" />Nascondi risolte ({resolvedCount})</>
-              ) : (
-                <><Eye className="mr-1 h-3 w-3" />Mostra risolte ({resolvedCount})</>
-              )}
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>
-        {visibleAnomalies.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {anomalies.length > 0 ? 'Tutte le anomalie sono state risolte.' : 'Nessuna anomalia rilevata.'}
-          </p>
+        {anomalies.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Nessuna anomalia rilevata.</p>
         ) : (
           <div className="space-y-3">
-            {visibleAnomalies.map((a) => (
+            {/* Actionable anomalies first */}
+            {actionable.map((a) => (
               <AnomalyCard
                 key={a.id}
                 anomaly={a}
@@ -441,6 +447,56 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
                 onChanged={onChanged}
               />
             ))}
+
+            {/* User-actioned anomalies */}
+            {userActioned.map((a) => (
+              <AnomalyCard
+                key={a.id}
+                anomaly={a}
+                events={events}
+                documents={documents}
+                caseId={caseId}
+                onChanged={onChanged}
+              />
+            ))}
+
+            {/* Auto-resolved section (collapsed by default) */}
+            {autoResolved.length > 0 && (
+              <div className="pt-2 border-t">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground w-full"
+                  onClick={() => setShowAutoResolved(!showAutoResolved)}
+                >
+                  {showAutoResolved ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  {showAutoResolved ? (
+                    <><EyeOff className="mr-0.5 h-3 w-3" />Nascondi risolte automaticamente ({autoResolved.length})</>
+                  ) : (
+                    <><Eye className="mr-0.5 h-3 w-3" />Mostra risolte automaticamente ({autoResolved.length})</>
+                  )}
+                </button>
+                {showAutoResolved && (
+                  <div className="mt-2 space-y-3">
+                    {autoResolved.map((a) => (
+                      <AnomalyCard
+                        key={a.id}
+                        anomaly={a}
+                        events={events}
+                        documents={documents}
+                        caseId={caseId}
+                        onChanged={onChanged}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {actionable.length === 0 && userActioned.length === 0 && autoResolved.length > 0 && !showAutoResolved && (
+              <p className="text-center text-sm text-muted-foreground py-4">
+                Tutte le anomalie sono state risolte automaticamente.
+              </p>
+            )}
           </div>
         )}
       </CardContent>
