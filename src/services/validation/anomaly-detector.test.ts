@@ -244,6 +244,77 @@ describe('detectAnomalies', () => {
     });
   });
 
+  describe('sentinel date filtering', () => {
+    it('should not flag ritardo_diagnostico for events with sentinel date 1900-01-01', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'visita', title: 'Visita senza data' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-06-15', eventType: 'diagnosi', title: 'Diagnosi' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const ritardo = anomalies.filter((a) => a.anomalyType === 'ritardo_diagnostico');
+      expect(ritardo.length).toBe(0);
+    });
+
+    it('should not flag gap_post_chirurgico for events with sentinel date', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'intervento', title: 'Intervento senza data' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-06-15', eventType: 'visita', title: 'Visita' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const gaps = anomalies.filter((a) => a.anomalyType === 'gap_post_chirurgico');
+      expect(gaps.length).toBe(0);
+    });
+
+    it('should not flag gap_documentale for events with sentinel date', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'visita', title: 'V1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-01-10', eventType: 'esame', title: 'E1' }),
+        makeEvent({ orderNumber: 3, eventDate: '2024-02-10', eventType: 'terapia', title: 'T1' }),
+        makeEvent({ orderNumber: 4, eventDate: '2024-03-10', eventType: 'visita', title: 'V2' }),
+        makeEvent({ orderNumber: 5, eventDate: '2024-04-10', eventType: 'visita', title: 'V3' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const gaps = anomalies.filter((a) => a.anomalyType === 'gap_documentale');
+      expect(gaps.length).toBe(0);
+    });
+
+    it('should not flag complicanza_non_gestita for events with sentinel date', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'complicanza', title: 'Complicanza senza data' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-06-15', eventType: 'visita', title: 'Visita' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const complicanza = anomalies.filter((a) => a.anomalyType === 'complicanza_non_gestita');
+      expect(complicanza.length).toBe(0);
+    });
+
+    it('should not flag diagnosi_contraddittoria for events with sentinel date', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'diagnosi', title: 'D1', diagnosis: 'Frattura femore destro composta' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-01-15', eventType: 'diagnosi', title: 'D2', diagnosis: 'Lussazione anca sinistra post traumatica' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const contradictions = anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria');
+      expect(contradictions.length).toBe(0);
+    });
+
+    it('should not flag terapia_senza_followup for events with sentinel date', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'terapia', title: 'Terapia senza data', documentId: 'doc-1' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-06-15', eventType: 'visita', title: 'Visita', documentId: 'doc-2' }),
+      ];
+
+      const anomalies = detectAnomalies(events);
+      const noFollowup = anomalies.filter((a) => a.anomalyType === 'terapia_senza_followup');
+      expect(noFollowup.length).toBe(0);
+    });
+  });
+
   describe('terapia_senza_followup', () => {
     it('should detect therapy without follow-up when multiple doc sources', () => {
       const events = [

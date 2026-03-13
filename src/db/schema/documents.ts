@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, pgEnum, real } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, pgEnum, real, jsonb } from 'drizzle-orm/pg-core';
 import { cases } from './cases';
 
 export const documentTypeEnum = pgEnum('document_type', [
@@ -20,6 +20,7 @@ export const processingStatusEnum = pgEnum('processing_status', [
   'caricato',
   'in_coda',
   'ocr_in_corso',
+  'classificazione_completata',
   'estrazione_in_corso',
   'validazione_in_corso',
   'completato',
@@ -36,6 +37,11 @@ export const documents = pgTable('documents', {
   documentType: documentTypeEnum('document_type').default('altro'),
   processingStatus: processingStatusEnum('processing_status').notNull().default('caricato'),
   processingError: text('processing_error'),
+  classificationMetadata: jsonb('classification_metadata').$type<{
+    aiSuggestedType: string;
+    confidence: number;
+    reasoning: string;
+  } | null>(),
   pageCount: integer('page_count'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

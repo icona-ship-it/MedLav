@@ -8,6 +8,65 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
+import { z } from 'zod';
+
+// --- Zod Schemas ---
+
+const validCaseTypes = CASE_TYPES.map((t) => t.value);
+
+const caseTypeSchema = z.enum(validCaseTypes as [string, ...string[]]);
+const caseRoleSchema = z.enum(['ctu', 'ctp', 'stragiudiziale']);
+const caseStatusSchema = z.enum(['bozza', 'in_revisione', 'definitivo', 'archiviato']);
+
+const periziaMetadataSchema = z.object({
+  tribunale: z.string().max(200).optional(),
+  sezione: z.string().max(200).optional(),
+  rgNumber: z.string().max(50).optional(),
+  judgeName: z.string().max(100).optional(),
+  ctuName: z.string().max(100).optional(),
+  ctuTitle: z.string().max(200).optional(),
+  collaboratoreName: z.string().max(100).optional(),
+  collaboratoreTitle: z.string().max(200).optional(),
+  ctpRicorrente: z.string().max(100).optional(),
+  ctpResistente: z.string().max(100).optional(),
+  parteRicorrente: z.string().max(200).optional(),
+  parteResistente: z.string().max(200).optional(),
+  dataIncarico: z.string().max(20).optional(),
+  dataOperazioni: z.string().max(20).optional(),
+  dataDeposito: z.string().max(20).optional(),
+  quesiti: z.array(z.string().max(2000)).max(20).optional(),
+  speseMediche: z.string().max(5000).optional(),
+  esameObiettivo: z.string().max(10000).optional(),
+  fondoSpese: z.string().max(100).optional(),
+}).strict().nullable().optional();
+
+const createCaseSchema = z.object({
+  caseType: caseTypeSchema,
+  caseRole: caseRoleSchema,
+  caseTypes: z.array(caseTypeSchema).min(1).max(7).optional(),
+  patientInitials: z.string().max(10).optional(),
+  practiceReference: z.string().max(100).optional(),
+  notes: z.string().max(5000).optional(),
+  periziaMetadata: periziaMetadataSchema,
+});
+
+const updateCaseSchema = z.object({
+  caseId: z.string().uuid(),
+  caseType: caseTypeSchema.optional(),
+  caseTypes: z.array(caseTypeSchema).min(1).max(7).optional(),
+  caseRole: caseRoleSchema.optional(),
+  patientInitials: z.string().max(10).nullable().optional(),
+  practiceReference: z.string().max(100).nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
+  periziaMetadata: periziaMetadataSchema,
+});
+
+const updateCaseStatusSchema = z.object({
+  caseId: z.string().uuid(),
+  newStatus: caseStatusSchema,
+});
+
+const deleteCaseSchema = z.string().uuid();
 
 export async function createCase(formData: FormData) {
   const supabase = await createClient();
@@ -22,47 +81,39 @@ export async function createCase(formData: FormData) {
     return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
   }
 
-  const caseType = formData.get('caseType') as CaseType;
-  const caseRole = formData.get('caseRole') as CaseRole;
-  const caseTypesRaw = formData.get('caseTypes') as string;
-  const patientInitials = formData.get('patientInitials') as string;
-  const practiceReference = formData.get('practiceReference') as string;
-  const notes = formData.get('notes') as string;
-  const periziaMetadataRaw = formData.get('periziaMetadata') as string;
-
-  if (!caseType || !caseRole) {
-    return { error: 'Tipo caso e tipo incarico sono obbligatori' };
+  // Parse and validate all form inputs with Zod
+  let parsedCaseTypes: string[] | undefined;
+  try {
+    const raw = formData.get('caseTypes') as string | null;
+    parsedCaseTypes = raw ? (JSON.parse(raw) as unknown as string[]) : undefined;
+  } catch {
+    // Fallback — validated below
   }
 
-  // Parse and validate caseTypes (multi-select, 1-3 valid types)
-  const validCaseTypeValues: Set<string> = new Set(CASE_TYPES.map((t) => t.value));
-  let caseTypes: string[] = [caseType];
-  if (caseTypesRaw) {
-    try {
-      const parsed = JSON.parse(caseTypesRaw) as unknown;
-      if (Array.isArray(parsed) && parsed.length >= 1 && parsed.length <= 3) {
-        const allValid = parsed.every((v): v is string => typeof v === 'string' && validCaseTypeValues.has(v));
-        if (allValid) {
-          caseTypes = parsed;
-        }
-      }
-    } catch {
-      // Fallback to single caseType
-    }
+  let parsedPeriziaMetadata: PeriziaMetadata | null | undefined;
+  try {
+    const raw = formData.get('periziaMetadata') as string | null;
+    parsedPeriziaMetadata = raw ? (JSON.parse(raw) as unknown as PeriziaMetadata) : undefined;
+  } catch {
+    // Ignore invalid JSON
   }
 
-  // Parse optional perizia metadata
-  let periziaMetadata: PeriziaMetadata | null = null;
-  if (periziaMetadataRaw) {
-    try {
-      const parsed = JSON.parse(periziaMetadataRaw) as unknown;
-      if (parsed && typeof parsed === 'object') {
-        periziaMetadata = parsed as PeriziaMetadata;
-      }
-    } catch {
-      // Ignore invalid JSON
-    }
+  const validated = createCaseSchema.safeParse({
+    caseType: formData.get('caseType'),
+    caseRole: formData.get('caseRole'),
+    caseTypes: parsedCaseTypes,
+    patientInitials: formData.get('patientInitials') || undefined,
+    practiceReference: formData.get('practiceReference') || undefined,
+    notes: formData.get('notes') || undefined,
+    periziaMetadata: parsedPeriziaMetadata,
+  });
+
+  if (!validated.success) {
+    return { error: 'Dati non validi. Verifica tipo caso e tipo incarico.' };
   }
+
+  const { caseType, caseRole, patientInitials, practiceReference, notes, periziaMetadata } = validated.data;
+  const caseTypes: string[] = validated.data.caseTypes ?? [caseType];
 
   // Generate unique case code with retry on collision
   const year = new Date().getFullYear();
@@ -178,6 +229,9 @@ export async function updateCase(params: {
   notes?: string | null;
   periziaMetadata?: PeriziaMetadata | null;
 }) {
+  const validated = updateCaseSchema.safeParse(params);
+  if (!validated.success) return { error: 'Dati non validi' };
+
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -227,6 +281,9 @@ export async function updateCase(params: {
 }
 
 export async function updateCaseStatus(params: { caseId: string; newStatus: string }) {
+  const validated = updateCaseStatusSchema.safeParse(params);
+  if (!validated.success) return { error: 'Dati non validi' };
+
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -276,6 +333,9 @@ export async function updateCaseStatus(params: { caseId: string; newStatus: stri
 }
 
 export async function deleteCase(caseId: string) {
+  const validatedId = deleteCaseSchema.safeParse(caseId);
+  if (!validatedId.success) return { error: 'ID caso non valido' };
+
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -296,7 +356,7 @@ export async function deleteCase(caseId: string) {
     .from('documents')
     .select('id')
     .eq('case_id', caseId)
-    .in('processing_status', ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso']);
+    .in('processing_status', ['in_coda', 'ocr_in_corso', 'classificazione_completata', 'estrazione_in_corso', 'validazione_in_corso']);
 
   if (processingDocs && processingDocs.length > 0) {
     return { error: 'Impossibile eliminare: alcuni documenti sono in elaborazione' };

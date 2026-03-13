@@ -69,6 +69,51 @@ export const processCaseDocuments = inngest.createFunction(
     const classifications = await step.run('classify-documents', () => classifyDocumentsStep(ocrResults));
     applyClassifications(ocrResults, classifications);
 
+    // Step 2.6: Mark documents as ready for classification review
+    await step.run('mark-classification-ready', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      const docIds = ocrResults.map((r) => r.documentId);
+      await supabase
+        .from('documents')
+        .update({
+          processing_status: 'classificazione_completata',
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', docIds);
+      logger.info('pipeline', `Step 2.6: Marked ${docIds.length} documents for classification review`);
+    });
+
+    // Step 2.7: Wait for user to review and confirm classification (up to 7 days)
+    const confirmEvent = await step.waitForEvent(
+      'wait-for-classification-review',
+      {
+        event: 'case/classification.confirmed',
+        match: 'data.caseId',
+        timeout: '7d',
+      },
+    );
+    if (!confirmEvent) {
+      throw new Error('Classification review timed out after 7 days');
+    }
+
+    // Step 2.8: Refresh document types from DB (user may have changed them)
+    const updatedTypes = await step.run('refresh-doc-types', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('id, document_type')
+        .in('id', ocrResults.map((r) => r.documentId));
+      return docs ?? [];
+    });
+    for (const ocrResult of ocrResults) {
+      const updated = updatedTypes.find((d) => d.id === ocrResult.documentId);
+      if (updated) {
+        ocrResult.documentType = updated.document_type as string;
+      }
+    }
+
     // Step 3: Extract events per document (chunks in parallel)
     const extractionResults: ExtractionResult[] = [];
 

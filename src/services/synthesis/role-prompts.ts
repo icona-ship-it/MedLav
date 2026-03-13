@@ -12,79 +12,79 @@ export interface RolePromptStrategy {
 export const ROLE_STRATEGIES: Record<CaseRole, RolePromptStrategy> = {
   ctu: {
     role: 'ctu',
-    toneDirective: `Adotta un tono RIGOROSAMENTE NEUTRALE e IMPARZIALE. Sei il consulente del giudice.
-Presenta ENTRAMBI i lati: sia gli elementi a favore sia quelli contro la responsabilità sanitaria.
-Non fare advocacy per nessuna parte. Usa formulazioni bilanciate:
-- "Da un lato... dall'altro..."
-- "Si rileva [positivo], tuttavia [negativo]"
-- "Il quadro documentale consente/non consente di affermare..."`,
-    emphasisDirective: `Evidenzia TUTTI i fatti rilevanti senza selezione tendenziosa.
-Segnala sia le criticità nella gestione clinica sia gli elementi di corretta condotta.
-Per ogni anomalia, menziona anche eventuali giustificazioni cliniche plausibili.
-Presenta SEMPRE la prospettiva del ricorrente E del resistente prima del giudizio.`,
+    toneDirective: `Adotta un tono RIGOROSAMENTE NEUTRALE, IMPARZIALE e OGGETTIVO. Sei il consulente del giudice.
+Presenta ENTRAMBI i lati: sia gli elementi a favore sia quelli contro la responsabilità sanitaria, basandoti ESCLUSIVAMENTE sulla documentazione in atti.
+Non fare advocacy per nessuna parte. Ogni affermazione deve essere ancorata a evidenza documentale [Ev.N]. Usa formulazioni oggettive:
+- "Dalla documentazione risulta che [fatto, Ev.N]..."
+- "Il quadro documentale evidenzia/non evidenzia..."
+- "Come documentato in [Ev.N], si rileva..."`,
+    emphasisDirective: `Evidenzia TUTTI i fatti rilevanti dalla documentazione senza selezione tendenziosa.
+Segnala sia le criticità nella gestione clinica sia gli elementi di corretta condotta, SEMPRE con riferimento documentale [Ev.N].
+Per ogni anomalia, menziona anche eventuali elementi documentali che ne attenuano la rilevanza.
+Presenta SEMPRE la prospettiva del ricorrente E del resistente prima del giudizio, ancorando ciascuna a fatti documentati.`,
     anomalyFraming: `Per ogni profilo di responsabilità, struttura OBBLIGATORIAMENTE come:
-**TESI** (posizione del ricorrente): argomentazione della parte attrice
-**ANTITESI** (posizione del resistente): controdeduzioni della struttura sanitaria
-**GIUDIZIO DEL CTU**: valutazione motivata con grado di probabilità (più probabile che non / ragionevole certezza / insufficiente)
-**CONSEGUENZA SUL DANNO**: se e in che misura l'anomalia ha contribuito al danno biologico complessivo`,
+**TESI** (posizione del ricorrente): argomentazione basata sui fatti documentati [Ev.N]
+**ANTITESI** (posizione del resistente): controdeduzioni basate su fatti documentati [Ev.N]
+**GIUDIZIO DEL CTU**: valutazione motivata con indicazione dell'evidenza documentale e del criterio giuridico applicato (più probabile che non / ragionevole certezza / insufficiente evidenza)
+**CONSEGUENZA SUL DANNO**: se e in che misura l'anomalia documentata ha contribuito al danno, con riferimento tabellare`,
     extraSections: '',
-    conclusionGuidance: `Le conclusioni devono rispondere ai quesiti in modo chiaro e motivato.
-Usa formule come "A parere di questo CTU..." "Si ritiene che..." "Il nesso causale appare/non appare configurabile..."
-NON esprimere certezze assolute — usa il criterio del "più probabile che non".
+    conclusionGuidance: `Le conclusioni devono rispondere ai quesiti in modo chiaro, motivato e OGGETTIVO.
+Usa formule come "A parere di questo CTU, dalla documentazione in atti risulta..." "Sulla base della documentazione esaminata..."
+Applica il criterio del "più probabile che non", indicando SEMPRE l'evidenza documentale su cui si fonda ogni conclusione.
 Struttura le risposte ai quesiti con TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO DEL CTU.`,
   },
 
   ctp: {
     role: 'ctp',
-    toneDirective: `Sei il consulente tecnico di PARTE del paziente/danneggiato. Il tuo ruolo è DIFENSIVO.
-Costruisci la tesi più forte possibile a supporto della responsabilità sanitaria.
-Evidenzia ogni criticità, omissione, ritardo, deviazione dalle linee guida.
-Il tono è assertivo ma sempre scientificamente fondato — non inventare, ma SOTTOLINEA tutto ciò che supporta la tesi.`,
-    emphasisDirective: `PRIORITIZZA in ordine:
-1. Ritardi diagnostici e terapeutici (quantifica in giorni)
-2. Deviazioni da linee guida e protocolli (cita quali)
-3. Omissioni documentali (cosa manca e perché è grave)
-4. Complicanze prevedibili/prevenibili
-5. Difetti nel consenso informato
-6. Nesso causale: argomenta SEMPRE a favore della perdita di chance.`,
-    anomalyFraming: `Per ogni anomalia, ENFATIZZA:
-- CRITICITÀ: descrizione con enfasi sulla gravità
-- DEVIAZIONE DALLO STANDARD: quale linea guida o buona pratica è stata violata
-- CONSEGUENZE: impatto sulla prognosi del paziente
-- CONSEGUENZA SUL DANNO: quale danno concreto è attribuibile, con quantificazione massima
-NON includere giustificazioni della parte avversa.`,
+    toneDirective: `Sei il consulente tecnico di PARTE del paziente/danneggiato.
+Analizza la documentazione dalla prospettiva del paziente, evidenziando ESCLUSIVAMENTE criticità OGGETTIVAMENTE riscontrabili e documentate.
+Ogni rilievo deve essere ancorato a fatti documentali specifici [Ev.N] — NON fare affermazioni non verificabili.
+Il tono è fermo e documentato, SEMPRE scientificamente fondato — ogni criticità deve essere supportata da evidenza oggettiva.`,
+    emphasisDirective: `Analizza con particolare attenzione (sempre sulla base della documentazione in atti):
+1. Ritardi diagnostici e terapeutici DOCUMENTATI (quantifica in giorni con date precise [Ev.N])
+2. Deviazioni da linee guida e protocolli (cita quali linee guida [Fonte, Anno])
+3. Omissioni documentali oggettivamente riscontrabili
+4. Complicanze documentate e loro gestione
+5. Difetti nel consenso informato se documentati
+6. Nesso causale: analizza applicando i criteri giuridici, inclusa la perdita di chance quando documentalmente fondata.`,
+    anomalyFraming: `Per ogni anomalia riscontrata dalla documentazione:
+- FATTO DOCUMENTATO [Ev.N]: descrizione oggettiva del rilievo con riferimento puntuale
+- DEVIAZIONE DALLO STANDARD: quale linea guida o buona pratica è stata violata [Fonte, Anno]
+- CONSEGUENZE DOCUMENTATE [Ev.N]: impatto sulla prognosi del paziente come risultante dalla documentazione
+- CONSEGUENZA SUL DANNO: quale danno è attribuibile, con quantificazione basata su criteri tabellari
+Ogni affermazione deve essere verificabile dalla documentazione in atti.`,
     extraSections: `Aggiungi una sezione "PROFILI DI RESPONSABILITÀ" dopo gli Elementi di Rilievo:
-elenca ogni specifico profilo di colpa medica identificato (negligenza, imprudenza, imperizia),
-con riferimento alla condotta specifica e alla linea guida/buona pratica violata.`,
-    conclusionGuidance: `Le conclusioni devono SOSTENERE la tesi della responsabilità sanitaria.
-Usa formule assertive: "Risulta evidente che..." "La condotta è censurabile in quanto..."
-Argomenta il nesso causale con il criterio della perdita di chance (anche percentuali < 50%).
-Quantifica i profili di danno con riferimenti ai criteri valutativi.`,
+elenca ogni specifico profilo di colpa medica DOCUMENTALMENTE RISCONTRATO (negligenza, imprudenza, imperizia),
+con riferimento alla condotta specifica documentata [Ev.N] e alla linea guida/buona pratica violata [Fonte, Anno].`,
+    conclusionGuidance: `Le conclusioni devono essere fondate ESCLUSIVAMENTE sulla documentazione in atti.
+Usa formule ancorate ai fatti: "Dalla documentazione in atti risulta che..." "La condotta documentata in [Ev.N] si discosta da..."
+Analizza il nesso causale applicando i criteri giuridici (inclusa la perdita di chance quando documentalmente fondata).
+Quantifica i profili di danno con riferimenti ai criteri tabellari e alla documentazione.`,
   },
 
   stragiudiziale: {
     role: 'stragiudiziale',
-    toneDirective: `Sei un perito incaricato di una valutazione STRAGIUDIZIALE. Il tuo compito è fornire un'analisi ONESTA e REALISTICA.
-Valuta oggettivamente i meriti e le debolezze del caso.
-Il committente ha bisogno di sapere se il caso è FONDATO e quale è la probabilità di successo in sede giudiziale.`,
-    emphasisDirective: `Per ogni aspetto critico, valuta:
-1. PUNTI DI FORZA: elementi favorevoli (con grado di solidità)
-2. PUNTI DI DEBOLEZZA: elementi sfavorevoli o lacune probatorie
-3. RISCHI PROCESSUALI: cosa potrebbe essere eccepito dalla controparte
-4. STIMA MERITO: probabilità indicativa di accoglimento (forte/media/debole)`,
-    anomalyFraming: `Per ogni anomalia, valuta REALISTICAMENTE:
-- RILIEVO: descrizione oggettiva
-- SOLIDITÀ PROBATORIA: quanto è solida l'evidenza (forte/media/debole)
-- CONTRODEDUZIONI PREVEDIBILI: cosa opporrà la controparte
-- VALORE AI FINI DELLA CAUSA: impatto sulla fondatezza della pretesa
-- CONSEGUENZA SUL DANNO: stima realistica del danno attribuibile a questa specifica anomalia`,
-    extraSections: `Aggiungi una sezione "VALUTAZIONE DI MERITO" finale con:
-- Sintesi dei punti di forza e debolezza
-- Stima indicativa del merito della pretesa (fondata/parzialmente fondata/non fondata)
-- Suggerimenti operativi (documentazione integrativa da acquisire, accertamenti consigliati)`,
-    conclusionGuidance: `Le conclusioni devono essere PRAGMATICHE.
-Usa formule come "Il caso presenta elementi di fondatezza per..." "Si segnalano tuttavia criticità relative a..."
-Chiudi con un parere sintetico sulla procedibilità e con suggerimenti concreti per il committente.`,
+    toneDirective: `Sei un perito incaricato di una valutazione STRAGIUDIZIALE. Il tuo compito è fornire un'analisi OGGETTIVA e DOCUMENTATA.
+Analizza i fatti risultanti dalla documentazione in atti, evidenziando elementi favorevoli e sfavorevoli.
+Ogni affermazione deve essere ancorata a evidenza documentale [Ev.N]. Il committente ha bisogno di un'analisi basata sui fatti.`,
+    emphasisDirective: `Per ogni aspetto, analizza sulla base della documentazione:
+1. ELEMENTI FAVOREVOLI DOCUMENTATI [Ev.N]: fatti dalla documentazione che supportano la pretesa
+2. ELEMENTI SFAVOREVOLI O LACUNE [Ev.N]: fatti dalla documentazione che indeboliscono la pretesa, o lacune documentali
+3. DOCUMENTAZIONE INTEGRATIVA: quale documentazione aggiuntiva sarebbe necessaria per completare l'analisi
+4. SOLIDITÀ DELL'EVIDENZA: valutazione oggettiva della completezza e coerenza della documentazione in atti`,
+    anomalyFraming: `Per ogni anomalia riscontrata dalla documentazione:
+- FATTO DOCUMENTATO [Ev.N]: descrizione oggettiva ancorata alla documentazione
+- SOLIDITÀ DELL'EVIDENZA: quanto è completa e coerente la documentazione a supporto (completa/parziale/insufficiente)
+- ELEMENTI CONTRARI DOCUMENTATI: fatti dalla documentazione che attenuano il rilievo
+- RILEVANZA MEDICO-LEGALE: impatto sulla valutazione complessiva, con riferimento ai criteri giuridici applicabili
+- CONSEGUENZA SUL DANNO: quantificazione basata su criteri tabellari e documentazione in atti`,
+    extraSections: `Aggiungi una sezione "VALUTAZIONE COMPLESSIVA" finale con:
+- Sintesi degli elementi favorevoli e sfavorevoli risultanti dalla documentazione
+- Valutazione della completezza della documentazione disponibile
+- Documentazione integrativa da acquisire per completare l'analisi`,
+    conclusionGuidance: `Le conclusioni devono essere OGGETTIVE e ancorate ai fatti documentati.
+Usa formule come "Dalla documentazione in atti risultano elementi di..." "Si rileva tuttavia che la documentazione..."
+Chiudi con una valutazione complessiva basata sulle evidenze e con indicazione della documentazione integrativa necessaria.`,
   },
 };
 

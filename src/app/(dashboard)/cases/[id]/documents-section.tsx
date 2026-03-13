@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,7 @@ function processingVariant(status: string): 'secondary' | 'warning' | 'success' 
 }
 
 function isDocProcessing(status: string): boolean {
-  return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
+  return ['in_coda', 'ocr_in_corso', 'classificazione_completata', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
 // --- Component ---
@@ -50,6 +50,7 @@ export function DocumentsSection({
   const router = useRouter();
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
+  const [showAllDocs, setShowAllDocs] = useState(false);
 
   const handleRetryDocument = useCallback(async (docId: string) => {
     setRetryingDocId(docId);
@@ -131,8 +132,8 @@ export function DocumentsSection({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`space-y-2 ${documents.length > 6 ? 'max-h-[400px] overflow-y-auto pr-1' : ''}`}>
-              {documents.map((doc) => {
+            <div className="space-y-2">
+              {(showAllDocs ? documents : documents.slice(0, 5)).map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
                 const isUploaded = doc.processing_status === 'caricato';
@@ -209,6 +210,27 @@ export function DocumentsSection({
                   </div>
                 );
               })}
+              {!showAllDocs && documents.length > 5 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setShowAllDocs(true)}
+                >
+                  <ChevronDown className="mr-1 h-3.5 w-3.5" />
+                  Mostra tutti ({documents.length} documenti)
+                </Button>
+              )}
+              {showAllDocs && documents.length > 5 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setShowAllDocs(false)}
+                >
+                  Mostra meno
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

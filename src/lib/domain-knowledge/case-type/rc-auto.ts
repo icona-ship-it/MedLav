@@ -8,7 +8,7 @@ export const RC_AUTO_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Riassunto del Caso',
       description: 'Sintesi dei fatti principali: dinamica del sinistro, lesioni riportate, iter diagnostico-terapeutico e conclusioni peritali essenziali.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 300, max: 500 },
+      wordRange: { min: 500, max: 1000 },
     },
     {
       id: 'cronologia',
@@ -29,21 +29,21 @@ export const RC_AUTO_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Valutazione del Danno Biologico',
       description: 'Quantificazione del danno biologico: periodi di invalidita temporanea totale (ITT) e parziale (ITP), danno biologico permanente secondo le tabelle di legge (Art. 138-139 CdA) e il Bareme SIMLA. Distinzione tra micropermanenti (fino al 9%) e macropermanenti.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 150, max: 300 },
+      wordRange: { min: 200, max: 500 },
     },
     {
       id: 'nesso_causale',
       title: 'Nesso Causale',
       description: 'Analisi del nesso di causalita tra il sinistro stradale e le lesioni documentate, valutazione delle concause preesistenti e sopravvenute, compatibilita temporale tra evento e sintomatologia.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 150, max: 300 },
+      wordRange: { min: 300, max: 600 },
     },
     {
       id: 'elementi_rilievo',
       title: 'Elementi di Rilievo Medico-Legale',
       description: 'Evidenziazione degli elementi significativi ai fini della valutazione medico-legale: congruita lesioni-dinamica, adeguatezza delle cure, tempestivita del primo soccorso, completezza della documentazione.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [

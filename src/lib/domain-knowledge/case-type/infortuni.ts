@@ -8,7 +8,7 @@ export const INFORTUNI_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Riassunto del Caso',
       description: 'Sintesi dei fatti principali: dinamica dell\'infortunio o dell\'esposizione professionale, lesioni o patologie documentate, iter diagnostico-terapeutico e conclusioni peritali.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 300, max: 500 },
+      wordRange: { min: 500, max: 1000 },
     },
     {
       id: 'cronologia',
@@ -29,21 +29,21 @@ export const INFORTUNI_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Nesso Causale con Attivita Lavorativa',
       description: 'Analisi del nesso di causalita tra l\'attivita lavorativa (infortunio o esposizione professionale) e le lesioni o patologie documentate. Valutazione del rischio lavorativo specifico, della durata e dell\'intensita dell\'esposizione, della compatibilita eziologica.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 300, max: 600 },
     },
     {
       id: 'danno_biologico',
       title: 'Valutazione del Danno Biologico',
       description: 'Quantificazione del danno biologico: periodi di invalidita temporanea totale e parziale, danno biologico permanente secondo le tabelle INAIL. Calcolo del danno differenziale rispetto all\'indennizzo INAIL, ove applicabile.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 150, max: 300 },
+      wordRange: { min: 200, max: 500 },
     },
     {
       id: 'elementi_rilievo',
       title: 'Elementi di Rilievo Medico-Legale',
       description: 'Evidenziazione degli elementi significativi: adeguatezza delle misure di prevenzione, rispetto della normativa sulla sicurezza sul lavoro (D.Lgs. 81/2008), eventuale responsabilita datoriale, completezza della documentazione INAIL.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [

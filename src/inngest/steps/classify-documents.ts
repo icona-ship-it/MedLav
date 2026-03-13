@@ -42,10 +42,23 @@ export async function classifyDocumentsStep(
     try {
       const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
 
+      // Always save AI classification metadata (even below threshold)
+      await supabase
+        .from('documents')
+        .update({
+          classification_metadata: {
+            aiSuggestedType: result.documentType,
+            confidence: result.confidence,
+            reasoning: result.reasoning,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', ocrResult.documentId);
+
       if (result.documentType !== 'altro' && result.confidence >= 50) {
         const oldType = ocrResult.documentType;
 
-        // Update the DB
+        // Update the document type in DB
         await supabase
           .from('documents')
           .update({

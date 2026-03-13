@@ -128,6 +128,7 @@ export const processingLabels: Record<string, string> = {
   caricato: 'Caricato',
   in_coda: 'In attesa',
   ocr_in_corso: 'Lettura documenti',
+  classificazione_completata: 'In attesa di revisione',
   estrazione_in_corso: 'Analisi contenuto',
   validazione_in_corso: 'Controllo qualità',
   completato: 'Completato',

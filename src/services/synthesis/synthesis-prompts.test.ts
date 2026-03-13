@@ -60,8 +60,8 @@ describe('synthesis-prompts', () => {
         caseRole: 'ctp',
       });
 
-      expect(prompt).toContain('DIFENSIVO');
-      expect(prompt).toContain('Risulta evidente');
+      expect(prompt).toContain('consulente tecnico di PARTE');
+      expect(prompt).toContain('OGGETTIVAMENTE');
     });
 
     it('should contain stragiudiziale role directive', () => {
@@ -71,7 +71,7 @@ describe('synthesis-prompts', () => {
       });
 
       expect(prompt).toContain('STRAGIUDIZIALE');
-      expect(prompt).toContain('REALISTICAMENTE');
+      expect(prompt).toContain('OGGETTIVA');
     });
 
     it('should contain mandatory section headings', () => {
@@ -80,9 +80,10 @@ describe('synthesis-prompts', () => {
         caseRole: 'ctu',
       });
 
-      expect(prompt).toContain('CRONOLOGIA MEDICO-LEGALE');
+      expect(prompt).toContain('DATI DELLA DOCUMENTAZIONE SANITARIA');
       expect(prompt).toContain('RIASSUNTO DEL CASO');
-      expect(prompt).toContain('CONSIDERAZIONI MEDICO-LEGALI');
+      expect(prompt).toContain('PARERE MEDICO-LEGALE');
+      expect(prompt).toContain('Considerazioni medico-legali');
       expect(prompt).toContain('CONCLUSIONI');
     });
 

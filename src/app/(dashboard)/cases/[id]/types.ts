@@ -43,6 +43,11 @@ export interface Document {
   document_type: string | null;
   processing_status: string;
   processing_error: string | null;
+  classification_metadata: {
+    aiSuggestedType: string;
+    confidence: number;
+    reasoning: string;
+  } | null;
   created_at: string;
 }
 

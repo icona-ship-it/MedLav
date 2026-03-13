@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ProcessingProgress } from '@/components/processing-progress';
+import { ClassificationReview } from './classification-review';
 import { csrfHeaders } from '@/lib/csrf-client';
 import type { Document } from './types';
 
@@ -41,6 +42,12 @@ export function ProcessingSection({
     const err = (d.processing_error ?? '').toLowerCase();
     return !err.includes('nessun evento');
   });
+
+  // Documents waiting for classification review
+  const classificationDocs = documents.filter(
+    (d) => d.processing_status === 'classificazione_completata',
+  );
+  const hasClassificationReview = classificationDocs.length > 0;
 
   const handleStartProcessing = useCallback(async () => {
     setIsStartingProcessing(true);
@@ -111,6 +118,15 @@ export function ProcessingSection({
       setIsRetrying(false);
     }
   }, [caseId, router]);
+
+  // Show classification review when pipeline is paused
+  if (hasClassificationReview) {
+    return (
+      <div className="space-y-4">
+        <ClassificationReview caseId={caseId} documents={classificationDocs} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

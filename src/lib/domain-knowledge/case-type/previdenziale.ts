@@ -8,7 +8,7 @@ export const PREVIDENZIALE_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Riassunto del Caso',
       description: 'Sintesi dei fatti principali: patologie documentate, iter previdenziale, quesito peritale e conclusioni essenziali sulla capacita lavorativa.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 300, max: 500 },
+      wordRange: { min: 500, max: 1000 },
     },
     {
       id: 'cronologia',
@@ -36,7 +36,7 @@ export const PREVIDENZIALE_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Elementi di Rilievo Medico-Legale',
       description: 'Evidenziazione degli elementi significativi per la valutazione previdenziale: evoluzione delle patologie, risposta alle terapie, prognosi, limitazioni funzionali oggettivabili, impatto sulla vita quotidiana e sulla capacita lavorativa.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [

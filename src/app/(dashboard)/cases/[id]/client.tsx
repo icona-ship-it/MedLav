@@ -31,10 +31,6 @@ const OcrPreviewTab = dynamic(
   () => import('./ocr-preview-tab').then((m) => ({ default: m.OcrPreviewTab })),
   { loading: () => null },
 );
-const AnonymizationTool = dynamic(
-  () => import('./anonymization-tool').then((m) => ({ default: m.AnonymizationTool })),
-  { loading: () => null },
-);
 import { QualitySummaryCard } from './quality-summary-card';
 import { DocumentCoverageCard } from './document-coverage-card';
 import { WizardStepBar } from './wizard-step-bar';
@@ -75,9 +71,9 @@ function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
-function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean): number {
+function computeAutoStep(hasResults: boolean, hasProcessingDocs: boolean, hasClassificationReview: boolean): number {
   if (hasResults && !hasProcessingDocs) return 4;
-  if (hasProcessingDocs) return 3;
+  if (hasProcessingDocs || hasClassificationReview) return 3;
   return 1;
 }
 
@@ -100,7 +96,7 @@ export function CaseDetailClient({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState('events');
+  const [activeResultTab, setActiveResultTab] = useState(report?.synthesis ? 'synthesis' : 'events');
   const [localAnomalies, setLocalAnomalies] = useState(anomalies);
 
   // Sync with server data on refresh
@@ -110,10 +106,11 @@ export function CaseDetailClient({
 
   // Wizard step
   const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
+  const hasClassificationReview = initialDocuments.some((d) => d.processing_status === 'classificazione_completata');
   const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
   const hasResults = events.length > 0 || localAnomalies.length > 0 || !!report;
 
-  const autoStep = computeAutoStep(hasResults, hasProcessingDocs);
+  const autoStep = computeAutoStep(hasResults, hasProcessingDocs, hasClassificationReview);
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
@@ -187,7 +184,9 @@ export function CaseDetailClient({
           subtitle:
             step.number === 1 ? `${initialDocuments.length} documenti`
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
-            : step.number === 3 ? (hasProcessingDocs
+            : step.number === 3 ? (hasClassificationReview
+                ? 'Revisione classificazione'
+                : hasProcessingDocs
                 ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
                 : 'Pronto')
             : hasResults ? `${events.length} eventi` : 'In attesa',
@@ -292,8 +291,7 @@ export function CaseDetailClient({
               documentPages={documentPages}
             />
             <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
-              <TabsList className="overflow-x-auto scrollbar-hide flex-nowrap">
-                <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
+              <TabsList className="sticky top-[72px] z-20 bg-background/95 backdrop-blur-sm overflow-x-auto scrollbar-hide flex-nowrap">
                 <TabsTrigger value="synthesis" className="relative">
                   Report
                   {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length > 0 && (
@@ -302,14 +300,12 @@ export function CaseDetailClient({
                     </Badge>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
                 <TabsTrigger value="ocr">OCR</TabsTrigger>
                 {(localAnomalies.length > 0 || missingDocs.length > 0) && (
                   <TabsTrigger value="problems">
                     Problemi ({localAnomalies.length + missingDocs.length})
                   </TabsTrigger>
-                )}
-                {report?.synthesis && (
-                  <TabsTrigger value="anonymization">Anonimizzazione</TabsTrigger>
                 )}
               </TabsList>
 
@@ -387,16 +383,6 @@ export function CaseDetailClient({
                 </div>
               </TabsContent>
 
-              {report?.synthesis && (
-                <TabsContent value="anonymization">
-                  <AnonymizationTool
-                    caseId={caseId}
-                    caseData={caseData}
-                    report={report}
-                    events={events}
-                  />
-                </TabsContent>
-              )}
             </Tabs>
             </div>
           ) : (

@@ -78,7 +78,7 @@ export const OPINIONE_PROGNOSTICA_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Conclusioni',
       description: 'Riepilogo conclusivo dell\'opinione prognostica: data stimata di stabilizzazione, range di danno biologico permanente atteso, periodi ITT/ITP provvisori, spese future prevedibili, raccomandazione sulla tempistica di rivalutazione. Indicare il livello di confidenza complessivo dell\'opinione.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [

@@ -47,7 +47,7 @@ export default function NewCasePage() {
       if (prev.includes(value)) {
         return prev.filter(v => v !== value);
       }
-      if (prev.length >= 3) return prev;
+      if (prev.length >= 7) return prev;
       return [...prev, value];
     });
   }
@@ -143,14 +143,14 @@ export default function NewCasePage() {
                 <h2 className="text-lg font-semibold">Tipologia caso</h2>
                 <span className="text-xs text-muted-foreground">
                   {selectedTypes.length === 0
-                    ? 'Seleziona almeno 1 (max 3)'
-                    : `${selectedTypes.length}/3 selezionati`}
+                    ? 'Seleziona almeno 1 (max 7)'
+                    : `${selectedTypes.length}/7 selezionati`}
                 </span>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {caseTypes.map((type) => {
                   const isChecked = selectedTypes.includes(type.value);
-                  const isDisabled = !isChecked && selectedTypes.length >= 3;
+                  const isDisabled = !isChecked && selectedTypes.length >= 7;
                   return (
                     <label
                       key={type.value}

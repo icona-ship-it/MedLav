@@ -169,7 +169,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
         },
       ],
       temperature: 0.1,
-      maxTokens: 8192,
+      maxTokens: 16384,
       timeoutMs: TIMEOUT_SYNTHESIS,
       label: 'synthesis:summary',
     });
@@ -260,7 +260,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
       },
     ],
     temperature: 0.3,
-    maxTokens: 8192,
+    maxTokens: 16384,
     timeoutMs: TIMEOUT_SYNTHESIS,
     label: 'synthesis:summary',
   });

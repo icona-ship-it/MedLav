@@ -43,14 +43,14 @@ export const PERIZIA_ASSICURATIVA_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Valutazione del Nesso Causale',
       description: 'Analisi della compatibilita tra la dinamica del sinistro e le lesioni documentate. Valutazione biomeccanica, compatibilita temporale, esclusione di concause preesistenti o sopravvenute. Utilizzo del criterio del "piu probabile che non".',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 300, max: 600 },
     },
     {
       id: 'danno_biologico',
       title: 'Quantificazione del Danno Biologico',
       description: 'Quantificazione del danno biologico permanente con riferimento alle tabelle di legge (Art. 138-139 CdA, TUN, Bareme SIMLA). Distinzione micropermanenti/macropermanenti. Indicazione della voce tabellare di riferimento.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 150, max: 300 },
+      wordRange: { min: 200, max: 500 },
     },
     {
       id: 'invalidita_temporanea',
@@ -78,7 +78,7 @@ export const PERIZIA_ASSICURATIVA_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Conclusioni e Proposta Risarcitoria',
       description: 'Riepilogo quantitativo del danno biologico (permanente e temporaneo), proposta di quantificazione per la compagnia mandante con riferimenti tabellari, indicazione delle spese mediche rimborsabili, suggerimenti per la gestione del sinistro.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [

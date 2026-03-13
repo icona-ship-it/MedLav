@@ -64,7 +64,7 @@ export const ANALISI_SPESE_MEDICHE_KNOWLEDGE: CaseTypeKnowledge = {
       title: 'Conclusioni sulla Rimborsabilita',
       description: 'Giudizio conclusivo sulla rimborsabilita complessiva delle spese mediche documentate. Indicare l\'importo totale ritenuto congruo e rimborsabile, le voci escluse con motivazione, le raccomandazioni per la gestione del caso.',
       requiredForRoles: ['ctu', 'ctp', 'stragiudiziale'],
-      wordRange: { min: 200, max: 400 },
+      wordRange: { min: 400, max: 800 },
     },
   ],
   standardTimelines: [],

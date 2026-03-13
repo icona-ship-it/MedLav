@@ -178,6 +178,7 @@ export function EventsTab({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [, startReorder] = useTransition();
 
   const toggleEvent = useCallback((eventId: string) => {
@@ -249,9 +250,14 @@ export function EventsTab({
           <div>
             <CardTitle>Eventi Clinici</CardTitle>
             <CardDescription>
-              {events.length} eventi estratti
+              {filteredEvents.length < events.length
+                ? `${filteredEvents.length} di ${events.length} eventi`
+                : `${events.length} eventi estratti`}
               {verificationEvents.length > 0 && (
                 <span className="text-yellow-600"> ({verificationEvents.length} da verificare)</span>
+              )}
+              {displayNormal.length + displayVerification.length > visibleCount && (
+                <span className="text-muted-foreground"> — mostrando {Math.min(visibleCount, displayNormal.length + displayVerification.length)}</span>
               )}
             </CardDescription>
           </div>
@@ -317,11 +323,11 @@ export function EventsTab({
           </div>
         )}
         <div className="space-y-2">
-          {/* Normal events */}
-          {displayNormal.map((event, index) => renderEventCard(event, index, displayNormal))}
+          {/* Normal events (lazy-loaded) */}
+          {displayNormal.slice(0, visibleCount).map((event, index) => renderEventCard(event, index, displayNormal))}
 
           {/* Verification events separator */}
-          {displayVerification.length > 0 && displayNormal.length > 0 && (
+          {displayVerification.length > 0 && displayNormal.length > 0 && visibleCount >= displayNormal.length && (
             <div className="flex items-center gap-2 py-3 mt-2">
               <div className="h-px flex-1 bg-yellow-300" />
               <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
@@ -332,8 +338,24 @@ export function EventsTab({
             </div>
           )}
 
-          {/* Verification events */}
-          {displayVerification.map((event, index) => renderEventCard(event, index, displayVerification))}
+          {/* Verification events (shown after all normal are visible) */}
+          {visibleCount >= displayNormal.length && (
+            displayVerification.slice(0, Math.max(0, visibleCount - displayNormal.length)).map((event, index) =>
+              renderEventCard(event, index, displayVerification)
+            )
+          )}
+
+          {/* Show more button */}
+          {visibleCount < displayNormal.length + displayVerification.length && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setVisibleCount((prev) => prev + 20)}
+            >
+              Mostra altri 20 ({displayNormal.length + displayVerification.length - visibleCount} rimanenti)
+            </Button>
+          )}
 
           {events.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">

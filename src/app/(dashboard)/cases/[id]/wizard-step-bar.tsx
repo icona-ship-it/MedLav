@@ -24,7 +24,7 @@ export function WizardStepBar({
   onSetStep,
 }: WizardStepBarProps) {
   return (
-    <nav aria-label="Passaggi caso" className="flex items-center gap-2">
+    <nav aria-label="Passaggi caso" className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm py-2 flex items-center gap-2">
       {steps.map((step, index) => {
         const isActive = activeStep === step.number;
         const isCompleted = autoStep > step.number;

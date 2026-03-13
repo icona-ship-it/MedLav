@@ -28,6 +28,11 @@ const THRESHOLDS = {
   MIN_EVENTS_FOR_GAP: 5, // Don't flag gaps if fewer than 5 events (insufficient data)
 } as const;
 
+/** Check if a date is a sentinel/placeholder (1900-*) */
+function isSentinelDate(dateStr: string): boolean {
+  return dateStr.startsWith('1900-');
+}
+
 /**
  * Detect medico-legal anomalies from consolidated events.
  * Conservative: avoids false positives that overwhelm the user.
@@ -87,8 +92,8 @@ export function detectAnomalies(
  */
 function detectRitardoDiagnostico(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
-  const visits = events.filter((e) => e.eventType === 'visita');
-  const diagnoses = events.filter((e) => e.eventType === 'diagnosi');
+  const visits = events.filter((e) => e.eventType === 'visita' && !isSentinelDate(e.eventDate));
+  const diagnoses = events.filter((e) => e.eventType === 'diagnosi' && !isSentinelDate(e.eventDate));
 
   if (visits.length === 0 || diagnoses.length === 0) return [];
 
@@ -119,11 +124,12 @@ function detectRitardoDiagnostico(events: ConsolidatedEvent[]): DetectedAnomaly[
  */
 function detectGapPostChirurgico(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
-  const surgeries = events.filter((e) => e.eventType === 'intervento');
+  const surgeries = events.filter((e) => e.eventType === 'intervento' && !isSentinelDate(e.eventDate));
 
   for (const surgery of surgeries) {
     const followUp = events.find(
       (e) =>
+        !isSentinelDate(e.eventDate) &&
         e.eventDate > surgery.eventDate &&
         ['follow-up', 'visita', 'esame'].includes(e.eventType),
     );
@@ -168,6 +174,7 @@ function detectGapDocumentale(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   for (let i = 0; i < events.length - 1; i++) {
     const current = events[i];
     const next = events[i + 1];
+    if (isSentinelDate(current.eventDate) || isSentinelDate(next.eventDate)) continue;
     const daysBetween = daysDiff(current.eventDate, next.eventDate);
 
     if (daysBetween > THRESHOLDS.GAP_DOCUMENTALE_WARNING) {
@@ -192,7 +199,7 @@ function detectGapDocumentale(events: ConsolidatedEvent[]): DetectedAnomaly[] {
  */
 function detectComplicanzaNonGestita(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
-  const complications = events.filter((e) => e.eventType === 'complicanza');
+  const complications = events.filter((e) => e.eventType === 'complicanza' && !isSentinelDate(e.eventDate));
 
   for (const complication of complications) {
     const treatment = events.find(
@@ -250,7 +257,7 @@ function detectConsensoNonDocumentato(events: ConsolidatedEvent[]): DetectedAnom
  */
 function detectDiagnosiContraddittoria(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
-  const eventsWithDiagnosis = events.filter((e) => e.diagnosis && e.diagnosis.length > 10);
+  const eventsWithDiagnosis = events.filter((e) => e.diagnosis && e.diagnosis.length > 10 && !isSentinelDate(e.eventDate));
 
   // Limit to avoid O(n²) explosion
   const maxToCheck = Math.min(eventsWithDiagnosis.length, 20);
@@ -286,7 +293,7 @@ function detectDiagnosiContraddittoria(events: ConsolidatedEvent[]): DetectedAno
  */
 function detectTerapiaSenzaFollowup(events: ConsolidatedEvent[]): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
-  const therapies = events.filter((e) => e.eventType === 'terapia');
+  const therapies = events.filter((e) => e.eventType === 'terapia' && !isSentinelDate(e.eventDate));
 
   for (const therapy of therapies) {
     const followUp = events.find(

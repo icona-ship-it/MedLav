@@ -3,7 +3,7 @@
 import { useState, useCallback, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown, ChevronRight, AlertTriangle, FileWarning } from 'lucide-react';
+import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown, AlertTriangle } from 'lucide-react';
 import { AnonymizeDialog } from '@/components/anonymize-dialog';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { updateReportStatus, updateReportSynthesis, getCaseReportVersions } from '../../actions';
 import { MarkdownPreview } from '@/components/markdown-preview';
 const VersionCompare = dynamic(
@@ -128,9 +127,27 @@ function SectionedReportView({
 
   return (
     <div className="space-y-6">
+      {/* Mini-TOC */}
+      {sections.length > 2 && (
+        <nav className="flex flex-wrap gap-1.5 pb-2 border-b" aria-label="Indice sezioni report">
+          {sections.filter((s) => s.id !== 'preamble').map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+              onClick={() => {
+                document.getElementById(`section-${section.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              {section.title}
+            </button>
+          ))}
+        </nav>
+      )}
       {sections.map((section) => (
         <div
           key={section.id}
+          id={`section-${section.id}`}
           className={`group rounded-md ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}`}
         >
           <div className="flex items-center justify-between mb-2">
@@ -160,19 +177,9 @@ function SectionedReportView({
   );
 }
 
-// --- Severity helpers ---
+// --- Compact Warning Bar ---
 
-function severityVariant(severity: string): 'destructive' | 'warning' | 'secondary' {
-  switch (severity) {
-    case 'critica': case 'alta': return 'destructive';
-    case 'media': return 'warning';
-    default: return 'secondary';
-  }
-}
-
-// --- Collapsible Anomaly Summary ---
-
-function AnomalySummaryAlert({
+function CompactWarningBar({
   anomalies,
   missingDocs,
   onSwitchToAnomalies,
@@ -182,81 +189,34 @@ function AnomalySummaryAlert({
   onSwitchToAnomalies?: () => void;
 }) {
   const highSeverity = anomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta');
-  const [anomaliesOpen, setAnomaliesOpen] = useState(false);
-  const [missingOpen, setMissingOpen] = useState(false);
 
   if (highSeverity.length === 0 && missingDocs.length === 0) return null;
 
   return (
-    <div className="mb-4 space-y-3">
-      {highSeverity.length > 0 && (
-        <Collapsible open={anomaliesOpen} onOpenChange={setAnomaliesOpen}>
-          <div className="rounded-md border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 p-3 text-left text-sm text-orange-800 dark:text-orange-300 hover:bg-orange-100/50 dark:hover:bg-orange-950/50 transition-colors rounded-md"
-              >
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="flex-1 font-medium">
-                  {highSeverity.length} {highSeverity.length === 1 ? 'anomalia' : 'anomalie'} da verificare prima dell&apos;approvazione
-                </span>
-                <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${anomaliesOpen ? 'rotate-90' : ''}`} />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="border-t border-orange-200 dark:border-orange-800 px-3 pb-3 pt-2 space-y-2">
-                {highSeverity.map((a) => (
-                  <div key={a.id} className="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-300">
-                    <Badge variant={severityVariant(a.severity)} className="shrink-0 text-[10px] mt-0.5">
-                      {a.severity.toUpperCase()}
-                    </Badge>
-                    <span>{a.description}</span>
-                  </div>
-                ))}
-                {onSwitchToAnomalies && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-1 h-7 px-2 text-xs text-orange-700 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-200"
-                    onClick={onSwitchToAnomalies}
-                  >
-                    Vai alla tab Anomalie
-                  </Button>
-                )}
-              </div>
-            </CollapsibleContent>
-          </div>
-        </Collapsible>
-      )}
-
-      {missingDocs.length > 0 && (
-        <Collapsible open={missingOpen} onOpenChange={setMissingOpen}>
-          <div className="rounded-md border border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 p-3 text-left text-sm text-red-800 dark:text-red-300 hover:bg-red-100/50 dark:hover:bg-red-950/50 transition-colors rounded-md"
-              >
-                <FileWarning className="h-4 w-4 shrink-0" />
-                <span className="flex-1 font-medium">
-                  {missingDocs.length} {missingDocs.length === 1 ? 'documento mancante segnalato' : 'documenti mancanti segnalati'}
-                </span>
-                <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${missingOpen ? 'rotate-90' : ''}`} />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="border-t border-red-200 dark:border-red-800 px-3 pb-3 pt-2 space-y-2">
-                {missingDocs.map((d) => (
-                  <div key={d.id} className="text-sm text-red-800 dark:text-red-300">
-                    <span className="font-medium">{d.document_name}</span>
-                    {d.reason && <span className="text-red-600 dark:text-red-400"> &mdash; {d.reason}</span>}
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </div>
-        </Collapsible>
+    <div className="mb-4 flex items-center gap-3 rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm dark:border-orange-700 dark:bg-orange-950/30">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
+      <div className="flex flex-1 items-center gap-2 flex-wrap">
+        {highSeverity.length > 0 && (
+          <Badge variant="destructive" className="text-[10px]">
+            {highSeverity.length} {highSeverity.length === 1 ? 'anomalia' : 'anomalie'}
+          </Badge>
+        )}
+        {missingDocs.length > 0 && (
+          <Badge variant="warning" className="text-[10px]">
+            {missingDocs.length} doc. {missingDocs.length === 1 ? 'mancante' : 'mancanti'}
+          </Badge>
+        )}
+        <span className="text-xs text-muted-foreground">da verificare</span>
+      </div>
+      {onSwitchToAnomalies && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs shrink-0"
+          onClick={onSwitchToAnomalies}
+        >
+          Vedi dettagli
+        </Button>
       )}
     </div>
   );
@@ -400,7 +360,7 @@ export function ReportTab({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="sticky top-[72px] z-10 bg-card border-b">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle>Report Medico-Legale</CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
@@ -508,7 +468,7 @@ export function ReportTab({
           </div>
         )}
         {!isEditingReport && report?.synthesis && (anomalies || missingDocs) && (
-          <AnomalySummaryAlert
+          <CompactWarningBar
             anomalies={anomalies ?? []}
             missingDocs={missingDocs ?? []}
             onSwitchToAnomalies={onSwitchToAnomalies}
@@ -563,18 +523,6 @@ export function ReportTab({
                   : 'Genera Report'}
               </Button>
             )}
-          </div>
-        )}
-        {!isEditingReport && report?.synthesis && report.report_status !== 'definitivo' && (
-          <div className="mt-6 rounded-md border bg-muted/30 p-4">
-            <h4 className="text-sm font-semibold mb-2">Prossimi Passi</h4>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Rivedi il report e verifica la correttezza dei dati estratti</li>
-              <li>Controlla eventuali anomalie e documenti mancanti nella tab Problemi</li>
-              <li>Modifica il testo se necessario con il pulsante &quot;Modifica&quot;</li>
-              <li>Approva il report come definitivo quando soddisfatto</li>
-              <li>Esporta in DOCX, HTML o PDF per la consegna</li>
-            </ol>
           </div>
         )}
         {!isEditingReport && report?.synthesis && report.report_status === 'definitivo' && (
