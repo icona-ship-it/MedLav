@@ -60,10 +60,9 @@ MedLav è una web application per **medici legali** (CTU, CTP, stragiudiziale) c
 - Polling automatico ogni 5 secondi per aggiornamenti
 
 #### Step 3 — Risultati
-- **Tab Eventi**: cronologia eventi clinici estratti, modificabili
-- **Tab Report**: report medico-legale con export (HTML, CSV, DOCX)
-- **Tab Anomalie**: problemi rilevati nella gestione clinica
-- **Tab Doc. Mancanti**: documentazione assente ma necessaria
+- **Tab Eventi**: cronologia eventi clinici estratti con copertura per documento (DocumentCoverageCard), modificabili
+- **Tab Report**: report medico-legale con export (HTML, CSV, DOCX) + avviso dati incompleti + checklist "Prossimi Passi"
+- **Tab Problemi**: anomalie rilevate + documentazione mancante (tab unificato)
 
 ---
 
@@ -97,9 +96,14 @@ src/
 │   │   └── missing-doc-detector.ts  (182 righe) — Documenti mancanti
 │   ├── consolidation/
 │   │   └── event-consolidator.ts    (246 righe) — Consolidamento eventi
+│   ├── classification/
+│   │   └── document-classifier.ts  (109 righe) — Auto-classificazione tipo doc (Mistral Large)
 │   └── synthesis/
-│       ├── synthesis-service.ts     (63 righe)  — Generazione report
-│       └── synthesis-prompts.ts     (158 righe) — Prompt report
+│       ├── synthesis-service.ts     (426 righe) — Generazione report (single + split mode)
+│       ├── synthesis-prompts.ts     (518 righe) — Prompt report (role-adaptive)
+│       ├── report-validator.ts      (113 righe) — Validazione qualità post-generazione
+│       ├── role-prompts.ts          (121 righe) — Prompt per ruolo (CTU/CTP/stragiudiziale)
+│       └── case-type-templates.ts                — Template per tipo caso
 ```
 
 ---
@@ -109,10 +113,11 @@ src/
 ### Configurazione
 ```
 Modelli disponibili:
-  PIXTRAL_LARGE  = 'pixtral-large-latest'    → Vision (riservato uso futuro)
-  MISTRAL_LARGE  = 'mistral-large-latest'     → Estrazione + Sintesi (56 token/s output)
-  MISTRAL_SMALL  = 'mistral-small-latest'     → Estrazione veloce (~150 token/s, non usato attualmente)
+  PIXTRAL_LARGE  = 'pixtral-large-latest'    → Vision + Analisi immagini diagnostiche
+  MISTRAL_LARGE  = 'mistral-large-latest'     → Estrazione + Classificazione + Sintesi
+  MISTRAL_SMALL  = 'mistral-small-latest'     → Non usato attualmente
   OCR            = 'mistral-ocr-latest'       → OCR dedicato
+  EMBED          = 'mistral-embed'            → Embedding per RAG linee guida
 
 Timeout singola chiamata API: 120.000 ms (2 minuti)
 ```
@@ -259,6 +264,65 @@ Esempio:
   Riga "Glucosio 95 mg/dL" → pattern "WNW" (parola, numero, parola)
   Se 4+ righe hanno lo stesso pattern "WNW" → tabella rilevata
 ```
+
+---
+
+## 3b. Classificazione Documenti (`services/classification/document-classifier.ts`)
+
+### Scopo
+Auto-classifica i documenti caricati come tipo "altro" (default) analizzando nome file e testo OCR.
+
+### Modello e Parametri
+```
+Modello: mistral-large-latest (upgrade da mistral-small per maggiore accuratezza)
+Temperatura: 0 (deterministica)
+Max token output: 256
+Formato risposta: json_object
+Max testo analizzato: 3.000 caratteri (prime righe del documento)
+```
+
+### Prompt di Classificazione
+Il prompt analizza:
+1. **Nome file** — spesso contiene indicazioni (es. "fattura", "CTU", "RM_ginocchio")
+2. **Intestazione** — le prime righe identificano il tipo (es. "REFERTO DI RISONANZA MAGNETICA")
+3. **Struttura** — tabelle con valori numerici → esame_laboratorio; immagini → esame_strumentale
+4. **Linguaggio** — termini giuridici → memoria_difensiva/perizia; termini clinici → cartella/referto
+
+### 12 Tipi Documento Supportati
+```
+cartella_clinica, referto_specialistico, esame_strumentale,
+esame_laboratorio, lettera_dimissione, certificato,
+perizia_precedente, spese_mediche, memoria_difensiva,
+perizia_ctp, perizia_ctu, altro
+```
+
+### Soglia di Confidenza
+- Confidence >= 50% → classificazione accettata, DB aggiornato
+- Confidence < 50% → documento resta "altro"
+- Tipo non in lista → fallback "altro"
+- JSON malformato → fallback "altro", confidence 0
+
+### Sicurezza Input
+- Newline nel nome file → rimossi, troncato a 100 chars
+- Testo OCR → troncato a 3000 chars
+- Errore Mistral → documento resta "altro", pipeline non bloccata
+
+---
+
+## 3c. Resilienza Pipeline Estrazione
+
+### Fix Implementati (Marzo 2026)
+
+| Fix | Problema | Soluzione |
+|-----|----------|-----------|
+| Race condition pagine | Query pagine ritorna vuoto per timing | Retry dopo 2s delay |
+| Pagine OCR vuote | Pagine senza testo inviate a Mistral | Filtro pre-invio |
+| Errori transienti | Errori Mistral non riprovati da Inngest | Rethrow per retry automatico |
+| 0 eventi da testo valido | Mistral restituisce JSON vuoto | Retry con prompt semplificato |
+| Memoizzazione classificazione | Classificazioni perse su retry Inngest | Apply fuori da step.run() |
+| Date sentinel | '1900-01-01' leakato come '01/01/1900' nel report | formatDate() → "Data non documentata" |
+| Prompt classificazione | Descrizioni categorie troppo generiche | Arricchite con segnali (nome file, intestazione, struttura) |
+| Prompt estrazione | Numerazione regole incoerente + tipi mancanti | Rinumerazione + hint per lettera_dimissione, perizia_precedente |
 
 ---
 
@@ -686,9 +750,24 @@ Per ogni documento atteso:
 ### Chiamata LLM
 ```
 Modello: mistral-large-latest (ragionamento complesso)
-Temperatura: 0.3 (bilanciamento creatività/determinismo)
+Temperatura: 0.1 (single mode) / 0.3 (split mode)
 Max token output: 16.384 (report lungo con cronologia completa)
+Split mode: casi con >40.000 chars di prompt → 2 chiamate (cronologia + riassunto/analisi)
 ```
+
+### Validazione Qualità Post-Generazione (`report-validator.ts`)
+Dopo la generazione, il report viene validato prima del salvataggio:
+
+| Controllo | Tipo | Severità |
+|-----------|------|----------|
+| Report vuoto | `synthesis.trim().length === 0` | error |
+| Troppo corto | `< 200 parole` | error |
+| Sezione mancante | Regex per cronologia, riassunto, elementi di rilievo | error |
+| Date sentinel | `01/01/1900`, `1900-01-01`, `"Data non documentata"` nel testo | warning |
+| Copertura eventi bassa | `< 50%` riferimenti `[Ev.N]` vs totale eventi | warning |
+
+La validazione logga errori/warning ma NON blocca il salvataggio (meglio un report imperfetto che niente).
+I log includono `eventCoverage %` per monitoring qualità nel tempo.
 
 ### Struttura Prompt di Sintesi
 

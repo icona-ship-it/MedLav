@@ -30,7 +30,9 @@ Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RA
 | 2.4 | Calibrazione su perizie reali | IN ATTESA | Quando avrai perizie reali da medici legali |
 | 2.5 | Barème SIMLA digitalizzato | OPZIONALE | Libro + data entry |
 | 2.6 | Report quality guardrails | FATTO | Validatore post-generazione: sezioni mancanti, date sentinel, copertura eventi |
-| 2.7 | Classificazione doc con Mistral Large | FATTO | Upgrade da Small a Large per maggiore accuratezza |
+| 2.7 | Classificazione doc con Mistral Large | FATTO | Upgrade da Small a Large + prompt arricchito con segnali (nome file, intestazione, struttura) |
+| 2.8 | Fix date sentinel in synthesis | FATTO | formatDate('1900-01-01') → "Data non documentata" |
+| 2.9 | Fix prompt estrazione | FATTO | Numerazione regole, hint tipi mancanti (lettera_dimissione, perizia_precedente) |
 
 ## FASE 3 — UX PROFESSIONALE
 
@@ -49,6 +51,8 @@ Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RA
 | 4.1 | Test E2E Playwright | FATTO |
 | 4.1b | Test suite unit (355 test, 36 file) | FATTO | Classificazione, prompt, validatore, pipeline |
 | 4.1c | OCR parallelo in pipeline | FATTO | Promise.all su step.run, tempo ridotto da N*T a max(T) |
+| 4.1d | Resilienza pipeline estrazione | FATTO | Race condition fix, retry 0-eventi, filtro pagine vuote, rethrow transienti |
+| 4.1e | UX diagnostica | FATTO | DocumentCoverageCard, tab Problemi unificato, checklist prossimi passi |
 | 4.2 | Health check endpoint (/api/health) | FATTO |
 | 4.3 | Sentry + error boundaries | FATTO |
 | 4.4 | Cookie consent GDPR | FATTO |
