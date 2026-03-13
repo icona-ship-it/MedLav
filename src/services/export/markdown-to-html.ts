@@ -134,12 +134,14 @@ export function markdownToHtml(markdown: string): string {
       continue;
     }
 
-    // Image: ![alt](url)
+    // Image: ![alt](url) — only allow safe URL schemes
     const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/);
     if (imgMatch) {
       closeList();
       const alt = escapeHtml(imgMatch[1]);
-      const src = imgMatch[2];
+      const rawSrc = imgMatch[2];
+      const isSafeUrl = /^(https?:\/\/|data:image\/|\/api\/|ocr-image:)/.test(rawSrc);
+      const src = isSafeUrl ? escapeHtml(rawSrc) : '#';
       output.push(`<figure class="report-image"><img src="${src}" alt="${alt}" style="max-width:100%;height:auto"><figcaption>${alt}</figcaption></figure>`);
       i++;
       continue;

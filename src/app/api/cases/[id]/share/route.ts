@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateCsrfToken } from '@/lib/csrf';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
@@ -17,6 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const { id: caseId } = await params;
     const supabase = await createClient();
 
@@ -112,6 +116,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const { id: caseId } = await params;
     const supabase = await createClient();
 

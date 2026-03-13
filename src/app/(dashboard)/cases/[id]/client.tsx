@@ -56,7 +56,7 @@ interface CaseDetailClientProps {
 
 // --- Constants ---
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 10000;
 
 const WIZARD_STEPS = [
   { number: 1, label: 'Documenti' },
@@ -83,7 +83,13 @@ function computeAutoStep(
   if (processingStage === 'completato') return 5;
   if (processingStage === 'generazione_report') return 5; // step 5 with spinner
   if (processingStage === 'revisione_anomalie') return 4;
+  if (processingStage === 'revisione_classificazione') return 3;
   if (processingStage === 'elaborazione') return 3;
+  if (processingStage === 'errore') {
+    if (hasReport) return 5;  // Report saved before failure (e.g. finalize failed)
+    if (hasEvents) return 4;  // Partial results available
+    return 3;                 // Early failure — step 3 shows retry button
+  }
 
   // Fallback for legacy cases (processing_stage = 'idle')
   if (hasReport) return 5;
@@ -157,7 +163,7 @@ export function CaseDetailClient({
     }
   }, [autoStep]);
 
-  const needsPolling = hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione';
+  const needsPolling = processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione');
   useEffect(() => {
     if (!needsPolling) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
@@ -203,7 +209,7 @@ export function CaseDetailClient({
           subtitle:
             step.number === 1 ? `${initialDocuments.length} documenti`
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
-            : step.number === 3 ? (hasClassificationReview
+            : step.number === 3 ? (processingStage === 'revisione_classificazione' || hasClassificationReview
                 ? 'Revisione classificazione'
                 : hasProcessingDocs || processingStage === 'elaborazione'
                 ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`

@@ -1,13 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateCsrfToken } from '@/lib/csrf';
 import { createDemoCase } from '@/services/demo/create-demo-case';
 
 /**
  * POST /api/demo
  * Create a demo case for the authenticated user.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

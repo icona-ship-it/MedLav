@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages, getCaseDocumentPages } from '../../actions';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { createClient } from '@/lib/supabase/server';
@@ -31,36 +31,44 @@ export default async function CaseDetailPage({
     entityId: id,
   });
 
+  // Skip heavy queries (event images, document pages, signed URLs) only during
+  // active pipeline stages. Keep them for user-facing stages (revisione_anomalie
+  // needs documentPages, errore needs full data for debugging).
+  const activelyProcessingStages = ['elaborazione', 'revisione_classificazione', 'generazione_report'];
+  const isActivelyProcessing = activelyProcessingStages.includes(caseData.processing_stage as string);
+
   const [documents, events, anomalies, missingDocs, report, eventImagesMap, documentPages] = await Promise.all([
     getCaseDocuments(id),
     getCaseEvents(id),
     getCaseAnomalies(id),
     getCaseMissingDocs(id),
     getCaseReport(id),
-    getCaseEventImages(id),
-    getCaseDocumentPages(id),
+    isActivelyProcessing ? Promise.resolve({} as Record<string, string[]>) : getCaseEventImages(id),
+    isActivelyProcessing ? Promise.resolve([] as Awaited<ReturnType<typeof getCaseDocumentPages>>) : getCaseDocumentPages(id),
   ]);
 
-  // Generate signed URLs for event images (parallel)
+  // Generate signed URLs for event images (skip during processing)
   const eventImages: Record<string, string[]> = {};
   const entries = Object.entries(eventImagesMap);
-  const urlResults = await Promise.all(
-    entries.map(async ([eventId, paths]) => {
-      const urls = await Promise.all(
-        paths.map(async (path) => {
-          try {
-            return await getSignedUrl(path);
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return { eventId, urls: urls.filter((u): u is string => u !== null) };
-    }),
-  );
-  for (const { eventId, urls } of urlResults) {
-    if (urls.length > 0) {
-      eventImages[eventId] = urls;
+  if (entries.length > 0) {
+    const urlResults = await Promise.all(
+      entries.map(async ([eventId, paths]) => {
+        const urls = await Promise.all(
+          paths.map(async (path) => {
+            try {
+              return await getSignedUrl(path);
+            } catch {
+              return null;
+            }
+          }),
+        );
+        return { eventId, urls: urls.filter((u): u is string => u !== null) };
+      }),
+    );
+    for (const { eventId, urls } of urlResults) {
+      if (urls.length > 0) {
+        eventImages[eventId] = urls;
+      }
     }
   }
 

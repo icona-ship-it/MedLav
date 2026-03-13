@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateCsrfToken } from '@/lib/csrf';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
@@ -15,6 +16,9 @@ const ratingSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();

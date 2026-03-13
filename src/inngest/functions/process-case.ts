@@ -38,6 +38,39 @@ export const processCaseDocuments = inngest.createFunction(
     cancelOn: [
       { event: 'case/process.cancelled', match: 'data.caseId' },
     ],
+    onFailure: async ({ event }) => {
+      try {
+        const failureData = event.data as { event: { data: { caseId: string } }; error: unknown };
+        const { caseId } = failureData.event.data;
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+
+        // Guard: don't overwrite 'idle' (user cancelled) or 'completato'
+        const { data: current, error: queryError } = await supabase
+          .from('cases')
+          .select('processing_stage')
+          .eq('id', caseId)
+          .single();
+        if (queryError) {
+          logger.error('pipeline', `onFailure: failed to read case ${caseId} stage`, { error: queryError.message });
+        }
+        const stage = (current?.processing_stage as string) ?? '';
+        if (stage === 'idle' || stage === 'completato') {
+          logger.info('pipeline', `Skipping errore for case ${caseId} (already ${stage})`);
+          return;
+        }
+
+        await supabase
+          .from('cases')
+          .update({ processing_stage: 'errore', updated_at: new Date().toISOString() })
+          .eq('id', caseId);
+        logger.error('pipeline', `Pipeline failed permanently for case ${caseId}`);
+      } catch (err) {
+        logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+    },
   },
   { event: 'case/process.requested' },
   async ({ event, step }) => {
@@ -96,6 +129,17 @@ export const processCaseDocuments = inngest.createFunction(
       logger.info('pipeline', `Step 2.6: Marked ${docIds.length} documents for classification review`);
     });
 
+    // Step 2.6.5: Mark case as waiting for classification review
+    await step.run('mark-revisione-classificazione', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'revisione_classificazione', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+      logger.info('pipeline', `Step 2.6.5: Marked case ${caseId} as revisione_classificazione`);
+    });
+
     // Step 2.7: Wait for user to review and confirm classification (up to 7 days)
     const confirmEvent = await step.waitForEvent(
       'wait-for-classification-review',
@@ -108,6 +152,21 @@ export const processCaseDocuments = inngest.createFunction(
     if (!confirmEvent) {
       throw new Error('Classification review timed out after 7 days');
     }
+
+    // Resume active processing after classification review
+    // Guard: only update if still in revisione_classificazione (user may have cancelled)
+    await step.run('mark-elaborazione-post-classification', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      const { count } = await supabase
+        .from('cases')
+        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+        .eq('id', caseId)
+        .eq('processing_stage', 'revisione_classificazione');
+      if (count === 0) {
+        logger.info('pipeline', `Case ${caseId} no longer in revisione_classificazione, skipping`);
+      }
+    });
 
     // Step 2.8: Refresh document types from DB (user may have changed them)
     const updatedTypes = await step.run('refresh-doc-types', async () => {
@@ -252,14 +311,18 @@ export const processCaseDocuments = inngest.createFunction(
     }
 
     // Mark case as generating report
+    // Guard: only update if not cancelled (stage could be 'idle' if user cancelled)
     await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-      await supabase
+      const { count } = await supabase
         .from('cases')
         .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
-        .eq('id', caseId);
-      logger.info('pipeline', `Marked case ${caseId} as generazione_report`);
+        .eq('id', caseId)
+        .not('processing_stage', 'eq', 'idle');
+      if (count === 0) {
+        logger.info('pipeline', `Case ${caseId} was cancelled, skipping generazione_report`);
+      }
     });
 
     // Build shared synthesis params

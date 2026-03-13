@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
 import { z } from 'zod';
@@ -61,6 +62,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const csrfError = validateCsrfToken(request);
+    if (csrfError) return csrfError;
+
     const { id: caseId } = await params;
     const supabase = await createClient();
 

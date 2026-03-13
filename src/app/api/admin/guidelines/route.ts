@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { validateCsrfToken } from '@/lib/csrf';
 import { z } from 'zod';
 import { ingestGuideline, deleteGuideline } from '@/services/rag/ingestion-service';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -50,6 +51,9 @@ export async function GET() {
  * The text should be the full guideline content, pre-extracted from PDF.
  */
 export async function POST(request: NextRequest) {
+  const csrfError = validateCsrfToken(request);
+  if (csrfError) return csrfError;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -109,6 +113,9 @@ export async function POST(request: NextRequest) {
  * Body: { guidelineId }
  */
 export async function DELETE(request: NextRequest) {
+  const csrfError = validateCsrfToken(request);
+  if (csrfError) return csrfError;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

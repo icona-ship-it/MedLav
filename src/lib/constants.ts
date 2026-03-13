@@ -122,6 +122,18 @@ export const anomalyTypeLabels: Readonly<Record<string, string>> = {
   sequenza_temporale_violata: 'Sequenza Temporale Violata',
 };
 
+// --- Processing Stage (case-level pipeline status) ---
+
+export const processingStageConfig: Record<string, { label: string; variant: 'default' | 'warning' | 'destructive'; show: boolean }> = {
+  idle: { label: '', variant: 'default', show: false },
+  completato: { label: '', variant: 'default', show: false },
+  elaborazione: { label: 'In lavorazione', variant: 'default', show: true },
+  revisione_classificazione: { label: 'Attesa revisione', variant: 'warning', show: true },
+  revisione_anomalie: { label: 'Attesa revisione', variant: 'warning', show: true },
+  generazione_report: { label: 'Generazione report', variant: 'default', show: true },
+  errore: { label: 'Errore elaborazione', variant: 'destructive', show: true },
+};
+
 // --- Processing Status ---
 
 export const processingLabels: Record<string, string> = {

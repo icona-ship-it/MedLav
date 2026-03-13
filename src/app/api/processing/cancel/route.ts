@@ -82,6 +82,13 @@ export async function POST(request: NextRequest) {
       .eq('case_id', caseId)
       .in('processing_status', processingStatuses);
 
+    // Reset processing stage to idle
+    await supabase
+      .from('cases')
+      .update({ processing_stage: 'idle', updated_at: new Date().toISOString() })
+      .eq('id', caseId)
+      .eq('user_id', user.id);
+
     // Send Inngest cancel event
     await inngest.send({
       name: 'case/process.cancelled',

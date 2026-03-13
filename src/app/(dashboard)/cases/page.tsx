@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
-import { statusConfig, caseTypeLabels } from '@/lib/constants';
+import { statusConfig, caseTypeLabels, processingStageConfig } from '@/lib/constants';
 
 const VALID_STATUSES = ['bozza', 'in_revisione', 'definitivo', 'archiviato'];
 
@@ -100,6 +100,14 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                         <Badge variant={status.variant}>
                           {status.label}
                         </Badge>
+                        {(() => {
+                          const stage = processingStageConfig[caseItem.processing_stage as string];
+                          return stage?.show ? (
+                            <Badge variant={stage.variant}>
+                              {stage.label}
+                            </Badge>
+                          ) : null;
+                        })()}
                         <Badge variant="outline">
                           {(caseItem.case_role as string).toUpperCase()}
                         </Badge>

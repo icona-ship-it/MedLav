@@ -20,7 +20,7 @@ export async function GET(
   const { id: caseId } = await params;
   const imagePath = request.nextUrl.searchParams.get('path');
 
-  if (!imagePath || !imagePath.startsWith('ocr-images/')) {
+  if (!imagePath || !imagePath.startsWith('ocr-images/') || imagePath.includes('..')) {
     return NextResponse.json({ error: 'Percorso immagine non valido' }, { status: 400 });
   }
 

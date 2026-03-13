@@ -110,6 +110,13 @@ export async function POST(request: NextRequest) {
       })
       .in('id', retryIds);
 
+    // Reset processing stage so UI reflects retry in progress
+    await supabase
+      .from('cases')
+      .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+      .eq('id', caseId)
+      .eq('user_id', user.id);
+
     // Trigger Inngest
     await inngest.send({
       name: 'case/process.requested',
