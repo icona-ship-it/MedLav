@@ -75,6 +75,22 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Ogni conclusione deve essere la conseguenza logica DIRETTA di fatti documentati, MAI di inferenze o deduzioni personali non verificabili
 - Il report è materiale legale: ogni parola deve poter essere difesa in sede giudiziaria con riferimento a evidenze documentali concrete
 
+## FORMATO IMMAGINI NEL REPORT
+- Se sono disponibili immagini diagnostiche nella sezione IMMAGINI DIAGNOSTICHE DISPONIBILI, includile nel report usando la sintassi: ![Didascalia](ocr-image:percorso)
+- Posiziona le immagini nel punto cronologico appropriato della documentazione sanitaria, subito dopo il paragrafo che descrive l'esame/referto corrispondente
+- Usa didascalie formali: "Fig. N — Descrizione dell'immagine"
+- Le immagini di referti radiologici (RX, TAC, RM) vanno nella documentazione sanitaria
+- Le foto cliniche (esame obiettivo) vanno nella sezione ESAME OBIETTIVO se presente
+
+## FORMATO DATI TABULARI
+- Quando riporti DATI TABULARI (esami di laboratorio, parametri vitali, spese mediche, scale di valutazione), usa SEMPRE il formato tabella markdown pipe:
+  | Analita | Valore | Riferimento |
+  |---------|--------|-------------|
+  | Emoglobina | 9.7 g/dL | 13.0-17.0 |
+  NON descrivere i valori uno per uno come testo discorsivo. La tabella è più chiara e leggibile.
+- Per gli esami ematochimici: includi SOLO i valori clinicamente rilevanti o fuori range, a meno che il quadro complessivo non sia pertinente al caso. Raggruppa per data di esecuzione.
+- Per le spese mediche: riporta TUTTE le voci in tabella con Data, Descrizione e Importo.
+
 ## EVENTI NON CLINICI NEL REPORT
 - Se tra gli eventi ci sono voci di tipo "spesa_medica", dedicare una sezione "## SPESE MEDICHE DOCUMENTATE" che elenca ogni voce con: data, importo, prestazione, struttura, e una valutazione di congruità/necessità rispetto al quadro clinico documentato. Se il tipo caso NON è "analisi_spese_mediche" o "perizia_assicurativa", la sezione può essere sintetica.
 - Se ci sono eventi di tipo "documento_amministrativo" o "certificato", menzionarli nella sezione più appropriata del report (cronologia per la data, documentazione esaminata per il contenuto). I certificati medici e INAIL vanno integrati nella narrazione clinica.`;
@@ -562,13 +578,29 @@ function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): stri
 }
 
 function formatImageAnalysisForPrompt(
-  imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number }>,
+  imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number; storagePath?: string }>,
 ): string {
   if (!imageAnalysis || imageAnalysis.length === 0) return '';
-  const lines = imageAnalysis.map((img) =>
-    `- Pagina ${img.pageNumber} (${img.imageType}): ${img.description}`,
-  );
-  return `\n## ANALISI IMMAGINI DIAGNOSTICHE\n\nLe seguenti immagini sono state identificate e descritte automaticamente. Integra queste osservazioni nel report quando pertinenti.\n\n${lines.join('\n')}\n\n`;
+  const lines = imageAnalysis.map((img) => {
+    const pathRef = img.storagePath
+      ? `\n  Per includere questa immagine nel report: ![${img.imageType} pagina ${img.pageNumber}](ocr-image:${img.storagePath})`
+      : '';
+    return `- Pagina ${img.pageNumber} (${img.imageType}): ${img.description}${pathRef}`;
+  });
+  return `\n## IMMAGINI DIAGNOSTICHE DISPONIBILI
+
+Le seguenti immagini sono state estratte dalla documentazione e analizzate automaticamente.
+Per INCLUDERE un'immagine nel report, usa la sintassi markdown: ![Didascalia descrittiva](ocr-image:percorso)
+
+REGOLE PER LE IMMAGINI:
+- Includi le immagini diagnostiche RILEVANTI nella sezione DATI DELLA DOCUMENTAZIONE SANITARIA, nel punto cronologico appropriato
+- Includi le foto cliniche nella sezione ESAME OBIETTIVO se presente
+- La didascalia deve essere descrittiva e formale: "Fig. 1 — Radiografia ginocchio destro in proiezione AP"
+- NON includere immagini non pertinenti al caso
+
+${lines.join('\n')}
+
+`;
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

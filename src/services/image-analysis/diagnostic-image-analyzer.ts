@@ -13,6 +13,7 @@ export interface ImageAnalysisResult {
   imageType: string;
   description: string;
   confidence: number;
+  storagePath?: string;
 }
 
 const IMAGE_TYPE_KEYWORDS: Record<string, string[]> = {

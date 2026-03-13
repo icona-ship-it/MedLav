@@ -231,7 +231,17 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   .severity.media { background: #f59e0b; }
   .severity.bassa { background: #6b7280; }
   .missing-doc { border: 1px solid #fecaca; background: #fef2f2; padding: 12px; margin-bottom: 8px; border-radius: 8px; }
-  .synthesis { background: #f8fafc; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.8; }
+  .synthesis { background: #f8fafc; padding: 20px; border-radius: 8px; line-height: 1.8; }
+  .synthesis h2 { font-size: 18px; color: #1e40af; margin: 20px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  .synthesis h3 { font-size: 15px; margin: 14px 0 6px; }
+  .synthesis p { margin-bottom: 8px; }
+  .synthesis .ocr-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .synthesis .ocr-table th, .synthesis .ocr-table td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+  .synthesis .ocr-table th { background: #e2e8f0; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .synthesis .ocr-table tr:nth-child(even) td { background: #f8fafc; }
+  .synthesis .report-image { margin: 16px 0; text-align: center; page-break-inside: avoid; }
+  .synthesis .report-image img { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 4px; }
+  .synthesis .report-image figcaption { font-size: 12px; color: #64748b; margin-top: 6px; font-style: italic; }
   .expert-note { background: #eff6ff; border-left: 3px solid #2563eb; padding: 8px 12px; margin-top: 6px; font-size: 13px; }
   @media print {
     @page { margin: 2cm; }
@@ -277,7 +287,7 @@ ${periziaMetadata ? buildFormalHeader(periziaMetadata, caseRole, patientInitials
 </div>
 
 <h2 id="synthesis">1. Sintesi Medico-Legale</h2>
-${synthesis ? `<div class="synthesis">${escapeHtml(synthesis)}</div>` : '<p>Sintesi non ancora generata.</p>'}
+${synthesis ? `<div class="synthesis">${markdownToHtml(synthesis)}</div>` : '<p>Sintesi non ancora generata.</p>'}
 
 <h2 id="timeline">2. Cronologia Eventi Clinici</h2>
 ${events.map((e) => `<div class="event">
@@ -868,6 +878,24 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
   }
   .ocr-table tr:nth-child(even) td {
     background: #fafafa;
+  }
+
+  /* ── Report images ── */
+  .report-image {
+    margin: 18px 0;
+    text-align: center;
+    page-break-inside: avoid;
+  }
+  .report-image img {
+    max-width: 90%;
+    height: auto;
+    border: 1px solid #333;
+  }
+  .report-image figcaption {
+    font-size: 10pt;
+    font-style: italic;
+    color: #444;
+    margin-top: 6px;
   }
 
   /* ── Horizontal rule ── */

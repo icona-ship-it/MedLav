@@ -4,6 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import type { PeriziaMetadata } from '@/types';
@@ -51,8 +52,16 @@ export async function GET(
   const useProfessional = pm && (pm.tribunale || pm.ctuName);
   const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
 
-  // If anonymizing, anonymize the synthesis text before generating DOCX
+  // Resolve ocr-image: placeholders to base64 data URIs
   let synthesis = data.report?.synthesis as string | null ?? null;
+  if (synthesis) {
+    const images = await resolveOcrImages(synthesis);
+    if (images.size > 0) {
+      synthesis = replaceWithDataUris(synthesis, images);
+    }
+  }
+
+  // If anonymizing, anonymize the synthesis text before generating DOCX
   if (shouldAnonymize && synthesis) {
     const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
     const result = anonymizeText({ text: synthesis, periziaMetadata });

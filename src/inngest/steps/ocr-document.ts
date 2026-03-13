@@ -1,11 +1,58 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getSignedUrl } from '@/lib/supabase/storage';
+import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
+import type { OcrImageResult } from '@/services/ocr/ocr-types';
 import type { DocumentInfo, OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
 /**
- * Step 2: OCR a single document — text only, no base64 images (fast, light response).
+ * Upload OCR-extracted images to Supabase Storage and update pages.image_path.
+ * Groups images by page, uploads each to ocr-images/{docId}/p{N}-f{M}.png,
+ * then updates the page row with semicolon-separated storage paths.
+ */
+async function saveOcrImagesToStorage(
+  supabase: ReturnType<typeof createAdminClient>,
+  documentId: string,
+  images: OcrImageResult[],
+): Promise<void> {
+  // Group images by page number
+  const byPage = new Map<number, OcrImageResult[]>();
+  for (const img of images) {
+    const existing = byPage.get(img.pageNumber) ?? [];
+    existing.push(img);
+    byPage.set(img.pageNumber, existing);
+  }
+
+  for (const [pageNumber, pageImages] of byPage) {
+    const storagePaths: string[] = [];
+
+    for (const img of pageImages) {
+      const storagePath = `ocr-images/${documentId}/p${pageNumber}-f${img.figureIndex}.png`;
+      try {
+        await uploadBase64Image({
+          base64Data: img.imageBase64,
+          storagePath,
+        });
+        storagePaths.push(storagePath);
+      } catch (err) {
+        logger.warn('pipeline', `Failed to upload image p${pageNumber}-f${img.figureIndex} for doc ${documentId}: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
+    }
+
+    if (storagePaths.length > 0) {
+      await supabase
+        .from('pages')
+        .update({ image_path: storagePaths.join(';') })
+        .eq('document_id', documentId)
+        .eq('page_number', pageNumber);
+    }
+  }
+
+  logger.info('pipeline', ` Step 2: Saved ${images.length} images to storage for doc ${documentId}`);
+}
+
+/**
+ * Step 2: OCR a single document.
  * Saves OCR pages to database and updates document status.
  * Returns null if OCR fails (error is logged and document marked as errore).
  */
@@ -30,7 +77,7 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       signedUrl,
     });
 
-    // Save OCR pages to database (text only)
+    // Save OCR pages to database
     if (result.pages.length > 0) {
       const pageRows = result.pages.map((p) => ({
         document_id: doc.id,
@@ -42,6 +89,11 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       }));
 
       await supabase.from('pages').insert(pageRows);
+
+      // Upload extracted images to Supabase Storage and update pages.image_path
+      if (result.images.length > 0) {
+        await saveOcrImagesToStorage(supabase, doc.id, result.images);
+      }
     }
 
     await supabase

@@ -2,6 +2,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, ShadingType,
   Header, Footer, PageNumber, Table, TableRow, TableCell, WidthType, BorderStyle,
+  ImageRun,
 } from 'docx';
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
@@ -163,7 +164,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  const children: Paragraph[] = [];
+  const children: (Paragraph | Table)[] = [];
 
   // Formal perizia header (if metadata present)
   if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName)) {
@@ -257,18 +258,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   );
 
   if (synthesis) {
-    const paragraphs = synthesis.split('\n').filter((l) => l.trim());
-    for (const para of paragraphs) {
-      const isHeading = para.startsWith('##');
-      if (isHeading) {
-        children.push(new Paragraph({
-          text: para.replace(/^#+\s*/, ''),
-          heading: HeadingLevel.HEADING_2,
-        }));
-      } else {
-        children.push(new Paragraph({ text: para }));
-      }
-    }
+    children.push(...markdownToDocxParagraphs(synthesis));
   } else {
     children.push(new Paragraph({ text: 'Sintesi non ancora generata.' }));
   }
@@ -524,6 +514,41 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
         children: [new TextRun({ text: '————————————————————', color: '999999', size: 18 })],
         spacing: { before: 100, after: 100 },
       }));
+      i++;
+      continue;
+    }
+
+    // Image: ![alt](data:mime;base64,...) or ![alt](url)
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)\s*$/);
+    if (imgMatch) {
+      const alt = imgMatch[1];
+      const base64Data = imgMatch[3];
+      try {
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+        result.push(new Paragraph({
+          children: [
+            new ImageRun({
+              data: imageBuffer,
+              transformation: { width: 450, height: 350 },
+              type: 'png',
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 200, after: 100 },
+        }));
+        if (alt) {
+          result.push(new Paragraph({
+            children: [new TextRun({ text: alt, italics: true, size: 20, color: '555555' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          }));
+        }
+      } catch {
+        // If image parsing fails, add text placeholder
+        result.push(new Paragraph({
+          children: [new TextRun({ text: `[Immagine: ${alt}]`, italics: true, color: '999999' })],
+        }));
+      }
       i++;
       continue;
     }

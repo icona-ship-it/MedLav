@@ -134,6 +134,17 @@ export function markdownToHtml(markdown: string): string {
       continue;
     }
 
+    // Image: ![alt](url)
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/);
+    if (imgMatch) {
+      closeList();
+      const alt = escapeHtml(imgMatch[1]);
+      const src = imgMatch[2];
+      output.push(`<figure class="report-image"><img src="${src}" alt="${alt}" style="max-width:100%;height:auto"><figcaption>${alt}</figcaption></figure>`);
+      i++;
+      continue;
+    }
+
     // Regular paragraph
     closeList();
     output.push(`<p>${convertInlineFormatting(line)}</p>`);

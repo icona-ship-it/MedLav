@@ -118,17 +118,18 @@ export async function analyzeDiagnosticImagesStep(
     return [];
   }
 
-  // Fetch image data from storage
-  const images: Array<{ base64: string; pageNumber: number }> = [];
+  // Fetch image data from storage (use first path if semicolon-separated)
+  const images: Array<{ base64: string; pageNumber: number; storagePath: string }> = [];
   for (const page of pagesWithImages) {
+    const firstPath = (page.image_path as string).split(';')[0];
     try {
       const { data: imageData } = await supabase.storage
         .from('documents')
-        .download(page.image_path as string);
+        .download(firstPath);
       if (imageData) {
         const buffer = await imageData.arrayBuffer();
         const base64 = Buffer.from(buffer).toString('base64');
-        images.push({ base64, pageNumber: page.page_number as number });
+        images.push({ base64, pageNumber: page.page_number as number, storagePath: firstPath });
       }
     } catch {
       // Skip images that fail to download
@@ -142,6 +143,15 @@ export async function analyzeDiagnosticImagesStep(
     images,
     caseType,
   });
+
+  // Attach storage paths to results
+  for (const result of results) {
+    const match = images.find((img) => img.pageNumber === result.pageNumber);
+    if (match) {
+      result.storagePath = match.storagePath;
+    }
+  }
+
   logger.info('pipeline', ` Step 4.6: Got ${results.length} image descriptions`);
   return results;
 }

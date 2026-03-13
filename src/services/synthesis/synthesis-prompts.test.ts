@@ -249,7 +249,7 @@ describe('synthesis-prompts', () => {
         }],
       });
 
-      expect(prompt).toContain('ANALISI IMMAGINI DIAGNOSTICHE');
+      expect(prompt).toContain('IMMAGINI DIAGNOSTICHE DISPONIBILI');
       expect(prompt).toContain('Frattura del femore distale');
       expect(prompt).toContain('Pagina 5');
     });

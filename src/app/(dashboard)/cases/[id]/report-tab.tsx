@@ -166,9 +166,10 @@ function SectionedReportView({
               content={section.content}
               events={eventRefs}
               onEventClick={onEventClick}
+              caseId={caseId}
             />
           ) : (
-            <MarkdownPreview content={section.content} />
+            <MarkdownPreview content={section.content} caseId={caseId} />
           )}
         </div>
       ))}
@@ -499,7 +500,7 @@ export function ReportTab({
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Anteprima</p>
               <div className="min-h-[500px] max-h-[70vh] overflow-y-auto rounded-md border p-4">
-                <MarkdownPreview content={editedSynthesis} />
+                <MarkdownPreview content={editedSynthesis} caseId={caseId} />
               </div>
             </div>
           </div>

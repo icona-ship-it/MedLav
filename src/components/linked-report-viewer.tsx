@@ -14,13 +14,14 @@ interface LinkedReportViewerProps {
   content: string;
   events: EventRef[];
   onEventClick?: (orderNumber: number) => void;
+  caseId?: string;
 }
 
 /**
  * Enhanced markdown viewer that makes [Ev.N] references clickable.
  * Falls back to standard MarkdownPreview for sections without references.
  */
-export function LinkedReportViewer({ content, events, onEventClick }: LinkedReportViewerProps) {
+export function LinkedReportViewer({ content, events, onEventClick, caseId }: LinkedReportViewerProps) {
   const eventMap = useMemo(() => {
     const map = new Map<number, EventRef>();
     for (const event of events) {
@@ -36,7 +37,7 @@ export function LinkedReportViewer({ content, events, onEventClick }: LinkedRepo
   }, [onEventClick]);
 
   if (!hasReferences) {
-    return <MarkdownPreview content={content} />;
+    return <MarkdownPreview content={content} caseId={caseId} />;
   }
 
   // Split content by [Ev.N] references and render with clickable badges
@@ -61,7 +62,7 @@ export function LinkedReportViewer({ content, events, onEventClick }: LinkedRepo
         }
         // Render regular markdown content
         if (part.trim()) {
-          return <MarkdownPreview key={i} content={part} />;
+          return <MarkdownPreview key={i} content={part} caseId={caseId} />;
         }
         return null;
       })}

@@ -4,6 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/export/html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { logAccess } from '@/lib/audit';
 import type { PeriziaMetadata } from '@/types';
 
@@ -42,13 +43,22 @@ export async function GET(
 
   const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
 
+  // Resolve ocr-image: placeholders to base64 data URIs for self-contained HTML
+  let synthesis = data.report?.synthesis as string | null ?? null;
+  if (synthesis) {
+    const images = await resolveOcrImages(synthesis);
+    if (images.size > 0) {
+      synthesis = replaceWithDataUris(synthesis, images);
+    }
+  }
+
   const html = useProfessional
     ? generateProfessionalHtmlReport({
       caseCode: data.caseData.code as string,
       caseType: data.caseData.case_type as string,
       caseRole: data.caseData.case_role as string,
       patientInitials: data.caseData.patient_initials as string | null,
-      synthesis: data.report?.synthesis as string | null ?? null,
+      synthesis,
       events: data.events,
       anomalies: data.anomalies,
       missingDocs: data.missingDocs,
@@ -62,7 +72,7 @@ export async function GET(
       caseType: data.caseData.case_type as string,
       caseRole: data.caseData.case_role as string,
       patientInitials: data.caseData.patient_initials as string | null,
-      synthesis: data.report?.synthesis as string | null ?? null,
+      synthesis,
       events: data.events,
       anomalies: data.anomalies,
       missingDocs: data.missingDocs,
