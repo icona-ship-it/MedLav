@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, pgEnum, jsonb } from 'drizzle-orm/pg-core';
 import { cases } from './cases';
 
 export const reportStatusEnum = pgEnum('report_status', [
@@ -13,6 +13,7 @@ export const reports = pgTable('reports', {
   version: integer('version').notNull().default(1),
   status: reportStatusEnum('report_status').notNull().default('bozza'),
   synthesis: text('synthesis'), // sintesi medico-legale HTML
+  generationMetadata: jsonb('generation_metadata').$type<{ promptVersion?: string }>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
+import { Upload, X, Loader2, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
@@ -207,21 +207,24 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
                     </span>
                   </div>
                 </div>
-                <Select
-                  value={fileTypes[fileKey] || 'altro'}
-                  onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
-                >
-                  <SelectTrigger className="w-[180px] h-8 text-xs shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_TYPES.map((dt) => (
-                      <SelectItem key={dt.value} value={dt.value} className="text-xs">
-                        {dt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="shrink-0">
+                  <label className="text-xs text-muted-foreground mb-1 block">Tipo documento</label>
+                  <Select
+                    value={fileTypes[fileKey] || 'altro'}
+                    onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
+                  >
+                    <SelectTrigger className="w-[220px] h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOCUMENT_TYPES.map((dt) => (
+                        <SelectItem key={dt.value} value={dt.value}>
+                          {dt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -234,6 +237,16 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
               </div>
             );
           })}
+
+          {files.length > 0 && files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
+            <div className="flex items-start gap-2 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Consiglio: seleziona il tipo di documento per un&apos;analisi più precisa.
+                L&apos;AI proverà comunque a classificarli automaticamente.
+              </span>
+            </div>
+          )}
 
           <Button onClick={handleUpload} className="w-full" size="lg">
             <Upload className="h-4 w-4" />

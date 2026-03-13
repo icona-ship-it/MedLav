@@ -20,6 +20,13 @@ export const anomalySeverityEnum = pgEnum('anomaly_severity', [
   'bassa',
 ]);
 
+export const anomalyStatusEnum = pgEnum('anomaly_status', [
+  'detected',
+  'llm_resolved',
+  'llm_confirmed',
+  'user_dismissed',
+]);
+
 export const anomalies = pgTable('anomalies', {
   id: uuid('id').defaultRandom().primaryKey(),
   caseId: uuid('case_id').references(() => cases.id, { onDelete: 'cascade' }).notNull(),
@@ -28,6 +35,9 @@ export const anomalies = pgTable('anomalies', {
   description: text('description').notNull(),
   involvedEvents: text('involved_events'), // JSON array of event IDs and descriptions
   suggestion: text('suggestion'), // suggerimento per il perito
+  status: anomalyStatusEnum('status').notNull().default('detected'),
+  resolutionNote: text('resolution_note'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

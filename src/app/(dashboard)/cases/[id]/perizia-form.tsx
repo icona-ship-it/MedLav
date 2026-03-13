@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import {
-  Loader2, Save, Info,
+  Loader2, Save, Info, X, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { updateCase } from '../../actions';
 import type { CaseData, PeriziaMetadataUI } from './types';
 
@@ -38,6 +39,19 @@ export function PeriziaMetadataForm({
     dataDeposito: existing.dataDeposito ?? '',
     fondoSpese: existing.fondoSpese ?? '',
   });
+  const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? []);
+  const [newQuesito, setNewQuesito] = useState('');
+
+  const addQuesito = () => {
+    const trimmed = newQuesito.trim();
+    if (!trimmed) return;
+    setQuesiti([...quesiti, trimmed]);
+    setNewQuesito('');
+  };
+
+  const removeQuesito = (index: number) => {
+    setQuesiti(quesiti.filter((_, i) => i !== index));
+  };
 
   const handleSave = (proceed?: boolean) => {
     startTransition(async () => {
@@ -56,6 +70,7 @@ export function PeriziaMetadataForm({
         ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
+        ...(quesiti.length > 0 ? { quesiti } : {}),
       };
 
       const hasAnyValue = Object.keys(metadata).length > 0;
@@ -107,6 +122,7 @@ export function PeriziaMetadataForm({
             <div>
               <Label>Tribunale</Label>
               <Input value={form.tribunale} onChange={(e) => setForm({ ...form, tribunale: e.target.value })} placeholder="es. Tribunale Ordinario di Brescia" />
+              <p className="text-xs text-muted-foreground mt-1">Il tribunale che ha conferito l&apos;incarico</p>
             </div>
             <div>
               <Label>Sezione</Label>
@@ -115,6 +131,7 @@ export function PeriziaMetadataForm({
             <div>
               <Label>Numero RG</Label>
               <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 10965/2025" />
+              <p className="text-xs text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -125,6 +142,7 @@ export function PeriziaMetadataForm({
             <div>
               <Label>Fondo spese</Label>
               <Input value={form.fondoSpese} onChange={(e) => setForm({ ...form, fondoSpese: e.target.value })} placeholder="es. Euro 1.800,00" />
+              <p className="text-xs text-muted-foreground mt-1">Importo stanziato dal giudice per le spese peritali</p>
             </div>
           </div>
         </CardContent>
@@ -141,10 +159,12 @@ export function PeriziaMetadataForm({
             <div>
               <Label>CTU (nome)</Label>
               <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Nicola Pigaiani" />
+              <p className="text-xs text-muted-foreground mt-1">Nome completo del Consulente Tecnico d&apos;Ufficio</p>
             </div>
             <div>
               <Label>Qualifica CTU</Label>
               <Input value={form.ctuTitle} onChange={(e) => setForm({ ...form, ctuTitle: e.target.value })} placeholder="es. medico legale presso..." />
+              <p className="text-xs text-muted-foreground mt-1">Specializzazione e affiliazione professionale</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -190,6 +210,42 @@ export function PeriziaMetadataForm({
               <Label>Termine deposito</Label>
               <Input value={form.dataDeposito} onChange={(e) => setForm({ ...form, dataDeposito: e.target.value })} placeholder="es. 20/05/2025" />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quesiti del Giudice */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quesiti del Giudice</CardTitle>
+          <CardDescription>I quesiti formulati dal giudice a cui il report deve rispondere punto per punto</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {quesiti.map((q, i) => (
+            <div key={i} className="flex items-start gap-2 rounded-md border p-3">
+              <span className="text-sm font-medium text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
+              <p className="text-sm flex-1">{q}</p>
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removeQuesito(i)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+          <div className="space-y-2">
+            <Textarea
+              value={newQuesito}
+              onChange={(e) => setNewQuesito(e.target.value)}
+              placeholder="Inserisci il testo del quesito..."
+              className="min-h-[80px]"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addQuesito}
+              disabled={!newQuesito.trim()}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Aggiungi quesito
+            </Button>
           </div>
         </CardContent>
       </Card>

@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
+import { resolveAnomalies, filterUnresolvedAnomalies } from '@/services/validation/anomaly-resolver';
+import type { OcrPageFetcher } from '@/services/validation/anomaly-resolver';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
@@ -113,10 +115,10 @@ export async function POST(request: NextRequest) {
     await admin.from('missing_documents').delete().eq('case_id', caseId);
 
     // Re-detect anomalies
-    const anomalies = detectAnomalies(events);
-    if (anomalies.length > 0) {
+    const rawAnomalies = detectAnomalies(events);
+    if (rawAnomalies.length > 0) {
       await admin.from('anomalies').insert(
-        anomalies.map((a) => ({
+        rawAnomalies.map((a) => ({
           case_id: caseId,
           anomaly_type: a.anomalyType,
           severity: a.severity,
@@ -126,6 +128,51 @@ export async function POST(request: NextRequest) {
         })),
       );
     }
+
+    // Resolve anomalies via LLM (check source OCR pages)
+    const fetchOcrPages: OcrPageFetcher = async (requests) => {
+      const result = new Map<string, string>();
+      for (const req of requests) {
+        const { data: pages } = await admin
+          .from('pages')
+          .select('page_number, ocr_text')
+          .eq('document_id', req.documentId)
+          .in('page_number', req.pageNumbers);
+        if (pages) {
+          for (const page of pages) {
+            result.set(`${req.documentId}:${page.page_number}`, (page.ocr_text as string) ?? '');
+          }
+        }
+      }
+      return result;
+    };
+
+    const resolvedAnomalies = await resolveAnomalies(rawAnomalies, events, fetchOcrPages);
+
+    // Update anomaly rows with resolution status
+    for (const r of resolvedAnomalies) {
+      if (!r.resolution) continue;
+      const { data: rows } = await admin
+        .from('anomalies')
+        .select('id')
+        .eq('case_id', caseId)
+        .eq('anomaly_type', r.anomalyType)
+        .eq('description', r.description)
+        .limit(1);
+      const anomalyRow = rows?.[0];
+      if (!anomalyRow) continue;
+      const status = r.resolution.resolved ? 'llm_resolved' : 'llm_confirmed';
+      const resolutionNote = r.resolution.resolved
+        ? `Risolta automaticamente (confidenza: ${Math.round(r.resolution.confidence * 100)}%). Evidenza: ${r.resolution.evidence}`
+        : `Confermata dopo verifica OCR (confidenza: ${Math.round(r.resolution.confidence * 100)}%). ${r.resolution.reasoning}`;
+      await admin.from('anomalies').update({
+        status,
+        resolution_note: resolutionNote,
+        resolved_at: r.resolution.resolved ? new Date().toISOString() : null,
+      }).eq('id', anomalyRow.id);
+    }
+
+    const anomalies = filterUnresolvedAnomalies(resolvedAnomalies);
 
     // Build caseTypes: use case_types if available, fallback to [case_type]
     const rawCaseTypes = caseRow.case_types as string[] | null;
@@ -188,6 +235,7 @@ export async function POST(request: NextRequest) {
       version: newVersion,
       report_status: 'bozza',
       synthesis: result.synthesis,
+      generation_metadata: { promptVersion: result.promptVersion },
     });
 
     // Audit log

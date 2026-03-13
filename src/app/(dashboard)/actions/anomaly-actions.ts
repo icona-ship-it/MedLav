@@ -77,7 +77,7 @@ export async function updateAnomaly(params: {
 }
 
 /**
- * Dismiss (hard delete) an anomaly.
+ * Dismiss (soft-delete) an anomaly — marks as user_dismissed instead of deleting.
  */
 export async function dismissAnomaly(params: {
   anomalyId: string;
@@ -100,11 +100,14 @@ export async function dismissAnomaly(params: {
 
   const { error } = await supabase
     .from('anomalies')
-    .delete()
+    .update({
+      status: 'user_dismissed',
+      resolved_at: new Date().toISOString(),
+    })
     .eq('id', params.anomalyId)
     .eq('case_id', params.caseId);
 
-  if (error) return { error: 'Errore eliminazione anomalia' };
+  if (error) return { error: 'Errore archiviazione anomalia' };
 
   // Audit log
   await supabase.from('audit_log').insert({

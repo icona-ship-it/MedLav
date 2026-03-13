@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
         .from('documents')
         .update({
           document_type: dt.documentType,
+          processing_status: 'estrazione_in_corso',
           updated_at: now,
         })
         .eq('id', dt.documentId);

@@ -3,14 +3,13 @@
 import { useState, useCallback, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Loader2, Download, Pencil, X, Save, Printer, GitCompare, ShieldCheck, FileCode, ChevronDown, AlertTriangle, Eye } from 'lucide-react';
 import { AnonymizeDialog } from '@/components/anonymize-dialog';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { updateReportStatus, updateReportSynthesis, getCaseReportVersions } from '../../actions';
 import { MarkdownPreview } from '@/components/markdown-preview';
@@ -424,6 +423,15 @@ export function ReportTab({
               </PopoverTrigger>
               <PopoverContent align="end" className="w-52 p-2">
                 <div className="flex flex-col gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => window.open(`/api/cases/${caseId}/export/html?inline=true`, '_blank')}
+                  >
+                    <Eye className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Anteprima Report
+                  </Button>
+                  <div className="my-1 h-px bg-border" />
                   <Button variant="ghost" size="sm" className="justify-start" asChild>
                     <a href={`/api/cases/${caseId}/export/html`} download aria-label="Esporta in formato HTML">
                       <Download className="mr-2 h-3.5 w-3.5" aria-hidden="true" />Esporta HTML
@@ -478,26 +486,22 @@ export function ReportTab({
           <IncompleteDataWarning documents={documents} events={events} />
         )}
         {isEditingReport ? (
-          <div className="space-y-2">
-            <Tabs defaultValue="edit" className="w-full">
-              <TabsList>
-                <TabsTrigger value="edit">Modifica</TabsTrigger>
-                <TabsTrigger value="preview">Anteprima</TabsTrigger>
-              </TabsList>
-              <TabsContent value="edit">
-                <Textarea
-                  className="min-h-[400px] font-mono text-sm"
-                  value={editedSynthesis}
-                  onChange={(e) => setEditedSynthesis(e.target.value)}
-                  autoFocus
-                />
-              </TabsContent>
-              <TabsContent value="preview">
-                <div className="min-h-[400px] rounded-md border p-4">
-                  <MarkdownPreview content={editedSynthesis} />
-                </div>
-              </TabsContent>
-            </Tabs>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Modifica (Markdown)</p>
+              <Textarea
+                className="min-h-[500px] font-mono text-sm"
+                value={editedSynthesis}
+                onChange={(e) => setEditedSynthesis(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Anteprima</p>
+              <div className="min-h-[500px] max-h-[70vh] overflow-y-auto rounded-md border p-4">
+                <MarkdownPreview content={editedSynthesis} />
+              </div>
+            </div>
           </div>
         ) : report?.synthesis ? (
           <SectionedReportView

@@ -1,8 +1,9 @@
 # MedLav — Roadmap verso il prodotto #1
 
-## Stato attuale: MVP+ completo (Marzo 2026)
+## Stato attuale: MVP++ (Marzo 2026)
 
 Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RAG linee guida, Sentry, E2E tests, health check, GDPR compliance, DB ottimizzato con indici.
+**Ultimo update**: prompt versioning, quesiti del giudice, export professionale con firma, editor side-by-side, classificazione AI su tutti i doc.
 
 ---
 
@@ -41,8 +42,18 @@ Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RA
 | 3.1 | Onboarding wizard | DA FARE |
 | 3.2 | Pagina sicurezza/compliance | DA FARE |
 | 3.3 | Admin gestione utenti | DA FARE |
-| 3.4 | Empty states e skeleton loaders | DA FARE |
+| 3.4 | Skeleton loaders | FATTO | ReportSkeleton, EventsSkeleton, DocumentsSkeleton |
 | 3.5 | Documentazione utente | DA FARE |
+| 3.6 | Quesiti del giudice nel form perizia | FATTO | Input, salvataggio, integrazione prompt |
+| 3.7 | Editor report side-by-side (markdown + preview) | FATTO | Sostituisce tab Modifica/Anteprima |
+| 3.8 | Anteprima export prima del download | FATTO | Bottone "Anteprima Report" nel dropdown |
+| 3.9 | DOCX con blocco firma e numerazione pagine | FATTO | Entrambi export standard e professionale |
+| 3.10 | Prompt versioning (tracciabilità report) | FATTO | SHA-256 hash del system prompt, salvato in generation_metadata |
+| 3.11 | Classificazione AI su tutti i documenti per metadata | FATTO | Mismatch warning nella review |
+| 3.12 | Upload UX migliorata (label, hint, dropdown più grande) | FATTO |
+| 3.13 | Fix bug post-conferma classificazione | FATTO | processing_status aggiornato |
+| 3.14 | Perizia form con descrizioni campi | FATTO | Helper text per tribunale, RG, fondo spese, CTU |
+| 3.15 | User-friendly error messages | FATTO | Mappatura errori tecnici → messaggi azionabili in italiano |
 
 ## FASE 4 — SCALABILITÀ E AFFIDABILITÀ
 

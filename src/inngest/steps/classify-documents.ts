@@ -12,37 +12,31 @@ export interface DocumentClassification {
 }
 
 /**
- * Step 2.5: Auto-classify documents that have type 'altro' (not manually set by user).
- * Skips documents where the user already chose a specific type.
- * Updates the DB and returns classifications. The pipeline must apply
- * the returned classifications to ocrResults (in-place mutations don't survive
- * Inngest step memoization on retries).
+ * Step 2.5: Classify ALL documents with OCR text for AI metadata.
+ * - Always saves classification_metadata (AI suggestion) for every doc with text.
+ * - Only changes document_type for docs that are "altro" with confidence >= 50%.
+ * - Returns reclassified "altro" docs so the pipeline can apply them to ocrResults.
  */
 export async function classifyDocumentsStep(
   ocrResults: OcrResult[],
 ): Promise<DocumentClassification[]> {
-  const docsToClassify = ocrResults.filter((r) => r.documentType === 'altro');
+  const docsWithText = ocrResults.filter((r) => r.fullText.trim().length > 0);
 
-  if (docsToClassify.length === 0) {
-    logger.info('pipeline', 'Step 2.5: All documents already have types, skipping classification');
+  if (docsWithText.length === 0) {
+    logger.info('pipeline', 'Step 2.5: No documents with OCR text, skipping classification');
     return [];
   }
 
-  logger.info('pipeline', `Step 2.5: Classifying ${docsToClassify.length}/${ocrResults.length} documents`);
+  logger.info('pipeline', `Step 2.5: Classifying ${docsWithText.length}/${ocrResults.length} documents for AI metadata`);
 
   const supabase = createAdminClient();
   const classifications: DocumentClassification[] = [];
 
-  for (const ocrResult of docsToClassify) {
-    if (ocrResult.fullText.trim().length === 0) {
-      logger.info('pipeline', `Step 2.5: Doc ${ocrResult.documentId} has empty OCR text, skipping classification`);
-      continue;
-    }
-
+  for (const ocrResult of docsWithText) {
     try {
       const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
 
-      // Always save AI classification metadata (even below threshold)
+      // Always save AI classification metadata for all docs
       await supabase
         .from('documents')
         .update({
@@ -55,10 +49,10 @@ export async function classifyDocumentsStep(
         })
         .eq('id', ocrResult.documentId);
 
-      if (result.documentType !== 'altro' && result.confidence >= 50) {
+      // Only change document_type for "altro" docs with sufficient confidence
+      if (ocrResult.documentType === 'altro' && result.documentType !== 'altro' && result.confidence >= 50) {
         const oldType = ocrResult.documentType;
 
-        // Update the document type in DB
         await supabase
           .from('documents')
           .update({
@@ -76,21 +70,25 @@ export async function classifyDocumentsStep(
         });
 
         logger.info('pipeline',
-          `Step 2.5: Doc ${ocrResult.documentId} classified as "${result.documentType}" (confidence: ${result.confidence})`,
+          `Step 2.5: Doc ${ocrResult.documentId} reclassified "${oldType}" → "${result.documentType}" (confidence: ${result.confidence})`,
+        );
+      } else if (ocrResult.documentType !== 'altro') {
+        logger.info('pipeline',
+          `Step 2.5: Doc ${ocrResult.documentId} has user type "${ocrResult.documentType}", AI suggests "${result.documentType}" (confidence: ${result.confidence}) — metadata saved`,
         );
       } else {
         logger.info('pipeline',
-          `Step 2.5: Doc ${ocrResult.documentId} kept as "altro" (classified: "${result.documentType}", confidence: ${result.confidence})`,
+          `Step 2.5: Doc ${ocrResult.documentId} kept as "altro" (AI: "${result.documentType}", confidence: ${result.confidence})`,
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Classification failed';
       logger.warn('pipeline', `Step 2.5: Classification failed for doc ${ocrResult.documentId}: ${message}`);
-      // Non-fatal: document keeps 'altro' type
+      // Non-fatal: document keeps its type, no metadata saved
     }
   }
 
-  logger.info('pipeline', `Step 2.5: Classification complete — ${classifications.length} documents reclassified`);
+  logger.info('pipeline', `Step 2.5: Classification complete — ${classifications.length} "altro" documents reclassified`);
   return classifications;
 }
 

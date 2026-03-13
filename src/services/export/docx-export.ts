@@ -110,6 +110,51 @@ function buildWatermarkHeader(reportStatus?: string): Header {
 }
 
 /**
+ * Build a signature block for the end of the report.
+ */
+function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, caseRole?: string): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+
+  paragraphs.push(new Paragraph({ text: '', spacing: { before: 600 } }));
+
+  // Location and date line
+  paragraphs.push(new Paragraph({
+    children: [new TextRun({ text: 'Luogo e data: _________________________', size: 24 })],
+    spacing: { after: 400 },
+  }));
+
+  const signerLabel = caseRole === 'ctu' ? 'Il Consulente Tecnico d\'Ufficio'
+    : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
+    : 'Il Perito';
+
+  paragraphs.push(new Paragraph({
+    children: [new TextRun({ text: signerLabel, bold: true, size: 24 })],
+    alignment: AlignmentType.RIGHT,
+  }));
+
+  if (periziaMetadata?.ctuName) {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: periziaMetadata.ctuName, size: 24 })],
+      alignment: AlignmentType.RIGHT,
+    }));
+  }
+  if (periziaMetadata?.ctuTitle) {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: periziaMetadata.ctuTitle, size: 20, italics: true })],
+      alignment: AlignmentType.RIGHT,
+    }));
+  }
+
+  paragraphs.push(new Paragraph({
+    children: [new TextRun({ text: '_________________________', size: 24 })],
+    alignment: AlignmentType.RIGHT,
+    spacing: { before: 200 },
+  }));
+
+  return paragraphs;
+}
+
+/**
  * Generate a DOCX report document.
  * Returns a Buffer ready for download.
  */
@@ -378,6 +423,9 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     }
   }
 
+  // Signature block
+  children.push(...buildSignatureBlock(periziaMetadata, caseRole));
+
   // Footer
   children.push(
     new Paragraph({ text: '' }),
@@ -389,9 +437,32 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   const doc = new Document({
     sections: [{
-      properties: {},
+      properties: {
+        page: {
+          margin: {
+            top: 1440,
+            bottom: 1440,
+            left: 1440,
+            right: 1440,
+          },
+        },
+      },
       headers: {
         default: buildWatermarkHeader(reportStatus),
+      },
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({ children: [PageNumber.CURRENT], size: 17, color: '444444' }),
+                new TextRun({ text: '/', size: 17, color: '444444' }),
+                new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 17, color: '444444' }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+          ],
+        }),
       },
       children,
     }],
@@ -756,6 +827,9 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
     children.push(new Paragraph({ text: '' }));
   }
 
+  // Signature block
+  children.push(...buildSignatureBlock(periziaMetadata as PeriziaMetadataExport, caseRole));
+
   // Footer timestamp
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
   children.push(new Paragraph({
@@ -766,7 +840,16 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
 
   const doc = new Document({
     sections: [{
-      properties: {},
+      properties: {
+        page: {
+          margin: {
+            top: 1440,
+            bottom: 1440,
+            left: 1440,
+            right: 1440,
+          },
+        },
+      },
       headers: {
         default: new Header({
           children: [

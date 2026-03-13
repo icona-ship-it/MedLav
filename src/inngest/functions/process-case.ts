@@ -8,6 +8,7 @@ import { planChunks, extractChunkEvents, markDocumentExtractionError } from '../
 import { consolidateEventsStep } from '../steps/consolidate-events';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
 import { detectAnomaliesStep, detectMissingDocumentsStep } from '../steps/detect-issues';
+import { resolveAnomaliesStep } from '../steps/resolve-anomalies';
 import {
   calculatePeriodsStep,
   buildSynthesisParams,
@@ -169,9 +170,15 @@ export const processCaseDocuments = inngest.createFunction(
     );
 
     // Step 5: Detect anomalies
-    const anomalies = await step.run(
+    const rawAnomalies = await step.run(
       'detect-anomalies',
       () => detectAnomaliesStep(caseId, consolidationResult.allEvents, metadata.caseType, metadata.caseTypes),
+    );
+
+    // Step 5.5: LLM Anomaly Resolution — verify anomalies against source OCR pages
+    const anomalies = await step.run(
+      'resolve-anomalies',
+      () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
     );
 
     // Step 6: Detect missing documents
@@ -205,22 +212,25 @@ export const processCaseDocuments = inngest.createFunction(
     // Step 7c/d/e: Generate synthesis
     let synthesisText: string;
     let synthesisWordCount: number;
+    let promptVersion: string | undefined;
 
     if (!needsSplit) {
       const result = await step.run('generate-synthesis', () => generateFullSynthesis(synthesisParams));
       synthesisText = result.synthesis;
       synthesisWordCount = result.wordCount;
+      promptVersion = result.promptVersion;
     } else {
       const chronology = await step.run('generate-synthesis-chronology', () => generateChronologyPart(synthesisParams));
       const result = await step.run('generate-synthesis-summary', () => generateSummaryPart(synthesisParams, chronology));
       synthesisText = result.synthesis;
       synthesisWordCount = result.wordCount;
+      promptVersion = result.promptVersion;
     }
 
     // Step 7f: Save report
     const synthesisResult = await step.run(
       'save-report',
-      () => saveReportStep(caseId, synthesisText, synthesisWordCount),
+      () => saveReportStep(caseId, synthesisText, synthesisWordCount, promptVersion),
     );
 
     // Step 8: Finalize

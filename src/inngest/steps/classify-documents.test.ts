@@ -54,17 +54,18 @@ describe('classify-documents step', () => {
         makeOcrResult({ documentId: 'doc-1', documentType: 'cartella_clinica' }),
         makeOcrResult({ documentId: 'doc-2', documentType: 'esame_strumentale' }),
       ];
+      mockClassify.mockResolvedValue({
+        documentType: 'cartella_clinica',
+        confidence: 85,
+        reasoning: 'Matches user type',
+      });
 
       // Act
       const result = await classifyDocumentsStep(ocrResults);
 
-      // Assert
+      // Assert — all docs classified for metadata, but none reclassified
       expect(result).toEqual([]);
-      expect(mockClassify).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(
-        'pipeline',
-        expect.stringContaining('skipping classification'),
-      );
+      expect(mockClassify).toHaveBeenCalledTimes(2);
     });
 
     it('should skip documents with empty OCR text', async () => {
@@ -82,7 +83,7 @@ describe('classify-documents step', () => {
       expect(mockClassify).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         'pipeline',
-        expect.stringContaining('empty OCR text'),
+        expect.stringContaining('No documents with OCR text'),
       );
     });
 
@@ -168,7 +169,7 @@ describe('classify-documents step', () => {
       );
     });
 
-    it('should classify only "altro" documents, skip already typed', async () => {
+    it('should classify all documents but only reclassify "altro" ones', async () => {
       // Arrange
       const ocrResults = [
         makeOcrResult({ documentId: 'doc-1', documentType: 'cartella_clinica' }),
@@ -183,8 +184,8 @@ describe('classify-documents step', () => {
       // Act
       const result = await classifyDocumentsStep(ocrResults);
 
-      // Assert
-      expect(mockClassify).toHaveBeenCalledOnce();
+      // Assert — both classified for metadata, only "altro" one reclassified
+      expect(mockClassify).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(1);
       expect(result[0].documentId).toBe('doc-2');
     });

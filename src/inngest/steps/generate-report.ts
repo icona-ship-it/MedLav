@@ -73,7 +73,7 @@ export function checkSynthesisSplit(
  */
 export async function generateFullSynthesis(
   synthesisParams: SynthesisParams,
-): Promise<{ synthesis: string; wordCount: number }> {
+): Promise<{ synthesis: string; wordCount: number; promptVersion: string }> {
   const startMs = Date.now();
   const r = await generateSynthesis(synthesisParams);
   logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
@@ -98,7 +98,7 @@ export async function generateChronologyPart(
 export async function generateSummaryPart(
   synthesisParams: SynthesisParams,
   chronology: string,
-): Promise<{ synthesis: string; wordCount: number }> {
+): Promise<{ synthesis: string; wordCount: number; promptVersion: string }> {
   const startMs = Date.now();
   const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
   logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
@@ -112,6 +112,7 @@ export async function saveReportStep(
   caseId: string,
   synthesisText: string,
   synthesisWordCount: number,
+  promptVersion?: string,
 ): Promise<SynthesisStepResult> {
   const supabase = createAdminClient();
 
@@ -132,6 +133,7 @@ export async function saveReportStep(
       version: newVersion,
       report_status: 'bozza',
       synthesis: synthesisText,
+      ...(promptVersion ? { generation_metadata: { promptVersion } } : {}),
     })
     .select('id')
     .single();

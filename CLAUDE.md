@@ -32,7 +32,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `app/(auth)/` | Login, registrazione, forgot-password | `actions.ts` (signUp, signIn, resetPassword) |
 | `app/(dashboard)/` | Dashboard, casi, impostazioni | `actions.ts` (CRUD casi/eventi/documenti), `cases/[id]/client.tsx` (UI caso) |
 | `app/(admin)/` | Admin panel (stats, audit, processing) | `actions.ts` |
-| `app/api/processing/` | API start/cancel/regenerate/regenerate-section | Trigger Inngest, regen report |
+| `app/api/processing/` | API start/cancel/regenerate/regenerate-section/confirm-classification | Trigger Inngest, regen report |
 | `app/api/cases/[id]/export/` | Export HTML, DOCX, CSV | Usa `services/export/` |
 | `app/api/admin/guidelines/` | CRUD linee guida RAG | GET/POST/DELETE |
 | `app/api/stripe/` | Checkout, portal, webhook Stripe | Pagamenti e subscriptions |
@@ -41,7 +41,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `services/ocr/` | OCR Mistral (PDF, immagini, DOCX) | `ocr-service.ts`, `ocr-types.ts` |
 | `services/classification/` | Auto-classificazione tipo documento (Mistral Large) | `document-classifier.ts` |
 | `services/extraction/` | Estrazione eventi da testo OCR | `extraction-service.ts`, `extraction-prompts.ts` |
-| `services/synthesis/` | Generazione report medico-legale + validazione qualità | `synthesis-service.ts`, `synthesis-prompts.ts`, `role-prompts.ts`, `case-type-templates.ts`, `report-validator.ts` |
+| `services/synthesis/` | Generazione report medico-legale + validazione qualità + prompt versioning | `synthesis-service.ts`, `synthesis-prompts.ts`, `role-prompts.ts`, `case-type-templates.ts`, `report-validator.ts`, `prompt-version.ts` |
 | `services/validation/` | Anomalie, doc mancanti, source verification | `anomaly-detector.ts`, `missing-doc-detector.ts`, `source-text-verifier.ts` |
 | `services/consolidation/` | Merge eventi, dedup cross-doc | `event-consolidator.ts` |
 | `services/calculations/` | ITT, ITP, giorni ricovero | `medico-legal-calc.ts` |
@@ -56,14 +56,16 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `lib/supabase/` | Client Supabase (server, admin, middleware, storage) | |
 | `lib/stripe/` | Client Stripe (checkout, portal, webhook) | `client.ts` |
 | `lib/logger.ts` | Logging centralizzato con sanitizzazione dati sensibili | |
-| `db/schema/` | Schema Drizzle (11 tabelle) | `cases.ts`, `events.ts`, `documents.ts`, `reports.ts`, `anomalies.ts`, `guidelines.ts`, `profiles.ts`, `audit.ts`, `event-images.ts`, `case-shares.ts`, `report-ratings.ts` |
+| `db/schema/` | Schema Drizzle (11 tabelle, reports ha `generation_metadata` JSONB) | `cases.ts`, `events.ts`, `documents.ts`, `reports.ts`, `anomalies.ts`, `guidelines.ts`, `profiles.ts`, `audit.ts`, `event-images.ts`, `case-shares.ts`, `report-ratings.ts` |
+| `lib/user-error-messages.ts` | Messaggi errore user-friendly (13 pattern → italiano) | |
 | `components/` | UI components (shadcn + custom) | `error-boundary.tsx`, `cookie-consent.tsx`, `onboarding-dialog.tsx` |
+| `app/(dashboard)/cases/[id]/` | UI caso: report editor, skeleton, classification review | `report-tab.tsx`, `report-skeleton.tsx`, `classification-review.tsx`, `perizia-form.tsx` |
 
 ### Pipeline elaborazione (`process-case.ts` — 13 step logici Inngest)
 
 1. **fetch-case-metadata** → carica caso + documenti da DB
 2. **ocr-doc-{id}** → OCR tutti i documenti in parallelo (Mistral OCR, Promise.all)
-3. **classify-documents** → auto-classificazione documenti tipo "altro" (Mistral Large, step 2.5)
+3. **classify-documents** → auto-classificazione TUTTI i documenti per metadata, cambia tipo solo per "altro" (Mistral Large, step 2.5)
 4. **plan-chunks + extract-{id}-p{start}-{end}** → chunking + estrazione eventi per chunk (parallelo, streaming)
 5. **consolidate-events** → ordina cronologicamente, dedup cross-doc, rinumera
 6. **link-images-to-events** → collega immagini a eventi via sourcePages
@@ -100,7 +102,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 ## Documentazione
 
 - `docs/REQUIREMENTS.md` — Requisiti funzionali completi
-- `docs/ARCHITECTURE-DECISIONS.md` — ADR (10 decisioni)
+- `docs/ARCHITECTURE-DECISIONS.md` — ADR (11 decisioni)
 - `docs/VISION.md` — Visione prodotto e obiettivi
 - `docs/CONSTRAINTS.md` — Vincoli tecnici e GDPR
 - `docs/DPIA.md` — Data Protection Impact Assessment (GDPR Art. 9)
@@ -109,6 +111,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 - `docs/ROADMAP.md` — Roadmap e feature future
 - `docs/GUIDA-COMPLETA-FUNZIONALITA-MEDLAV.md` — Guida utente completa
 - `docs/PRESENTAZIONE.md` — Presentazione prodotto
+- `docs/TODO-WORLD-CLASS.md` — TODO prioritizzato per miglioramenti futuri
 - `.claude/rules/` — Regole codice, sicurezza, testing, git
 - `.claude/skills/` — Workflow: debug, deploy, new-feature, research
 - `.claude/commands/` — Comandi: /plan, /review, /ship

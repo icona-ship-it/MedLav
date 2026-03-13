@@ -112,3 +112,15 @@
 - **Decisione**: OCR parallelizzato con Promise.all su step.run — stesso pattern gia usato per l'estrazione chunk. Ogni step.run ha il suo budget timeout Inngest indipendente.
 - **Alternative considerate**: Mantenere sequenziale per semplicita — scartato perche il guadagno di tempo e significativo senza rischi aggiuntivi (il semaforo nel client Mistral gestisce i rate limit).
 - **Conseguenze**: Tempo OCR = max(singolo documento) invece di sum(tutti i documenti). Con 5 documenti, riduzione tipica da ~150s a ~30s.
+
+---
+
+## ADR-011: Prompt versioning con SHA-256 hash
+- **Data**: 2026-03-13
+- **Contesto**: I report generati da Mistral non hanno tracciabilità della versione del prompt che li ha generati. Se il prompt cambia, non si sa quale versione ha prodotto quale report. Critico per audit di qualità e compliance.
+- **Decisione**: Ogni report generato include un `promptVersion` (hash SHA-256 troncato a 12 caratteri del system prompt) salvato nel campo `generation_metadata` (JSONB) della tabella reports.
+- **Alternative considerate**:
+  - Versione manuale (v1, v2, v3) — richiede aggiornamento manuale, errore umano
+  - Hash completo — troppo lungo per display, 12 char sufficienti per unicità pratica
+  - Salvataggio intero prompt — spreco di storage, il hash è sufficiente per identificazione
+- **Conseguenze**: Ogni report è tracciabile alla versione del prompt. Permette analisi di qualità per versione, rollback, e A/B testing futuro. Richiede migration DB per aggiungere colonna `generation_metadata`.

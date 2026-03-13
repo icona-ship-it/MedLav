@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  FileText, Loader2, CheckCircle2, Info,
+  FileText, Loader2, CheckCircle2, Info, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,7 +21,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { DOCUMENT_TYPES } from '@/lib/constants';
+import { DOCUMENT_TYPES, documentTypeLabels } from '@/lib/constants';
 import { csrfHeaders } from '@/lib/csrf-client';
 import type { Document } from './types';
 
@@ -111,59 +111,82 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
         <div className="space-y-2">
           {documents.map((doc) => {
             const selection = selections.find((s) => s.documentId === doc.id);
+            const selectedType = selection?.documentType ?? 'altro';
             const meta = doc.classification_metadata;
+            const hasMismatch = meta
+              && selectedType !== 'altro'
+              && meta.aiSuggestedType !== selectedType
+              && meta.confidence >= 70;
+            const isAltro = selectedType === 'altro';
 
             return (
               <div
                 key={doc.id}
-                className="flex items-center gap-3 rounded-lg border p-3"
+                className="rounded-lg border p-3 space-y-2"
               >
-                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="flex items-center gap-3">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" title={doc.file_name}>
-                    {doc.file_name}
-                  </p>
-                  {meta && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant={confidenceBadgeVariant(meta.confidence)} className="text-xs">
-                        AI: {meta.confidence}% — {confidenceLabel(meta.confidence)}
-                      </Badge>
-                      {meta.reasoning && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label="Motivazione AI"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent side="top" className="text-xs max-w-xs">
-                            {meta.reasoning}
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" title={doc.file_name}>
+                      {doc.file_name}
+                    </p>
+                    {meta && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge variant={confidenceBadgeVariant(meta.confidence)} className="text-xs">
+                          AI: {meta.confidence}% — {confidenceLabel(meta.confidence)}
+                        </Badge>
+                        {meta.reasoning && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-foreground"
+                                aria-label="Motivazione AI"
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="top" className="text-xs max-w-xs">
+                              {meta.reasoning}
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <Select
+                    value={selectedType}
+                    onValueChange={(value) => updateType(doc.id, value)}
+                  >
+                    <SelectTrigger className="w-[200px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOCUMENT_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <Select
-                  value={selection?.documentType ?? 'altro'}
-                  onValueChange={(value) => updateType(doc.id, value)}
-                >
-                  <SelectTrigger className="w-[200px] shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {hasMismatch && (
+                  <div className="flex items-start gap-2 rounded-md bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      L&apos;AI suggerisce: <strong>{documentTypeLabels[meta.aiSuggestedType] ?? meta.aiSuggestedType}</strong> ({meta.confidence}%) — verifica che il tipo sia corretto
+                    </span>
+                  </div>
+                )}
+
+                {isAltro && (
+                  <p className="text-xs text-muted-foreground pl-7">
+                    Documento non classificato — verrà analizzato con istruzioni generiche
+                  </p>
+                )}
               </div>
             );
           })}

@@ -340,8 +340,9 @@ export function buildSummarySystemPrompt(params: {
   caseType: CaseType;
   caseRole: CaseRole;
   caseTypes?: CaseType[];
+  periziaMetadata?: PeriziaMetadata;
 }): string {
-  const { caseType, caseRole, caseTypes } = params;
+  const { caseType, caseRole, caseTypes, periziaMetadata } = params;
   const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
   const causalNexus = formatCausalNexusForPrompt();
@@ -400,7 +401,15 @@ STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 <!-- SECTION:ELEMENTI -->
 ## ELEMENTI DI RILIEVO MEDICO-LEGALE
 [testo]
-<!-- END:ELEMENTI -->${fewShotSection}`;
+${periziaMetadata?.quesiti?.length ? `
+## RISPOSTA AI QUESITI
+Risposta punto per punto a CIASCUN quesito del Giudice, NUMERATA corrispondentemente.
+Ogni risposta deve:
+- Essere argomentata con riferimenti SPECIFICI alla cronologia fornita
+- Citare fatti documentati dalla cronologia con date precise
+- Essere conclusiva (esprimere un giudizio motivato)
+- Per CTU: struttura TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO
+` : ''}<!-- END:ELEMENTI -->${fewShotSection}`;
 }
 
 /**
@@ -441,6 +450,17 @@ export function buildSummaryUserPrompt(params: {
 
   prompt += '\nBasandoti sulla cronologia e sulle anomalie sopra indicate, genera TUTTE le sezioni richieste nel formato specificato. Ricorda di includere i marker <!-- SECTION:xxx --> e <!-- END:xxx -->.';
   prompt += `\nAdatta tono e prospettiva al ruolo: ${expertRole}.`;
+
+  // Explicit quesiti mapping instructions for split mode
+  if (periziaMetadata?.quesiti && periziaMetadata.quesiti.length > 0) {
+    prompt += '\n\nIMPORTANTE — RISPOSTA AI QUESITI:';
+    prompt += '\nI quesiti del Giudice sono elencati sopra nei DATI PERIZIA FORMALE.';
+    prompt += '\nPer CIASCUN quesito, identifica nella cronologia gli eventi rilevanti e rispondi con:';
+    prompt += '\n1. I FATTI documentati nella cronologia (con date precise)';
+    prompt += '\n2. Il GIUDIZIO medico-legale motivato';
+    prompt += '\n3. La CONCLUSIONE specifica per quel quesito';
+    prompt += '\nLa sezione RISPOSTA AI QUESITI deve essere DENTRO il blocco <!-- SECTION:ELEMENTI --> ... <!-- END:ELEMENTI -->.';
+  }
 
   return prompt;
 }
@@ -483,7 +503,17 @@ function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): s
     const tableRef = c.tableReference ? `\n  Rif. tabellare: ${c.tableReference}` : '';
     return `- ${c.label}: ${c.value}${dateRange}\n  ${c.notes}${tableRef}`;
   });
-  return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)\n\n${lines.join('\n')}\n\nNOTA: Integra questi periodi nella valutazione del danno biologico. Sono stime automatiche da confermare.`;
+  return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)
+
+${lines.join('\n')}
+
+### ISTRUZIONI PER INTEGRAZIONE NEL REPORT
+Nella sezione "Valutazione del danno biologico" e nelle "Conclusioni", INTEGRA questi dati in forma NARRATIVA DISCORSIVA:
+- Riporta i periodi di ITT e ITP con date precise e durata in giorni nel testo delle conclusioni
+- Indica i criteri tabellari utilizzati (es. Tabella Unica Nazionale DPR 12/2025, Tabelle Milano 2024)
+- Nella conclusione, sintetizza: "I periodi di invalidità temporanea totale ammontano a X giorni (dal DD.MM.YYYY al DD.MM.YYYY), mentre l'invalidità temporanea parziale è quantificata in Y giorni..."
+- NON limitarti a elencare i calcoli — integra i dati come parte dell'argomentazione medico-legale
+- Se i calcoli includono riferimenti tabellari, citali esplicitamente nella valutazione del danno`;
 }
 
 function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): string {

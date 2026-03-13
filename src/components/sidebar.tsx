@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(auth)/actions';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
+import { GlobalSearch } from '@/components/global-search';
 
 export const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -55,6 +56,11 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
             Nuovo Caso
           </Link>
         </Button>
+      </div>
+
+      {/* Global Search */}
+      <div className="px-3 pb-2">
+        <GlobalSearch />
       </div>
 
       {/* Navigation */}

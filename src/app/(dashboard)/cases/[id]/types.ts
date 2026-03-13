@@ -80,6 +80,8 @@ export interface AnomalyRow {
   description: string;
   involved_events: string | null;
   suggestion: string | null;
+  status: string | null;
+  resolution_note: string | null;
 }
 
 export interface MissingDocRow {

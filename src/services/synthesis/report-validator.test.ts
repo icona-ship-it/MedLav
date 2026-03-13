@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateReport } from './report-validator';
+import type { ReportValidationContext } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
   const eventCount = overrides?.events ?? 5;
@@ -240,6 +241,208 @@ ${Array(100).fill('parola').join(' ')}`;
     });
   });
 
+  describe('phantom dates', () => {
+    const context: ReportValidationContext = {
+      events: [
+        { orderNumber: 1, eventDate: '2024-01-15' },
+        { orderNumber: 2, eventDate: '2024-03-20' },
+      ],
+    };
+
+    it('should detect dates in report not present in events', () => {
+      const report = buildFullReport() + '\nIn data 25/06/2024 si verificava un peggioramento.';
+      const result = validateReport(report, 5, context);
+
+      expect(result.issues.some((i) =>
+        i.type === 'phantom_date' && i.message.includes('25/06/2024'),
+      )).toBe(true);
+    });
+
+    it('should not flag dates that match event dates', () => {
+      const report = buildFullReport() + '\nIn data 15/01/2024 il paziente si presentava.';
+      const result = validateReport(report, 5, context);
+
+      expect(result.issues.filter((i) => i.type === 'phantom_date')).toHaveLength(0);
+    });
+
+    it('should skip sentinel dates (handled by sentinel check)', () => {
+      const report = buildFullReport() + '\nIn data 01/01/1900 si segnala.';
+      const result = validateReport(report, 5, context);
+
+      expect(result.issues.filter((i) => i.type === 'phantom_date')).toHaveLength(0);
+    });
+
+    it('should not duplicate phantom date warnings for same date', () => {
+      const report = buildFullReport() + '\nData 25/06/2024 e ancora 25/06/2024 ripetuta.';
+      const result = validateReport(report, 5, context);
+
+      const phantomIssues = result.issues.filter((i) => i.type === 'phantom_date');
+      expect(phantomIssues).toHaveLength(1);
+    });
+
+    it('should not run phantom dates check when no context', () => {
+      const report = buildFullReport() + '\nIn data 25/06/2024 extra.';
+      const result = validateReport(report, 5);
+
+      expect(result.issues.filter((i) => i.type === 'phantom_date')).toHaveLength(0);
+    });
+
+    it('should handle ISO event dates correctly', () => {
+      const ctx: ReportValidationContext = {
+        events: [{ orderNumber: 1, eventDate: '2024-05-10' }],
+      };
+      const report = buildFullReport() + '\nIn data 10/05/2024 il controllo.';
+      const result = validateReport(report, 5, ctx);
+
+      expect(result.issues.filter((i) => i.type === 'phantom_date')).toHaveLength(0);
+    });
+  });
+
+  describe('numerical mismatch', () => {
+    const contextWithCalc: ReportValidationContext = {
+      events: [
+        { orderNumber: 1, eventDate: '2024-01-15' },
+      ],
+      calculations: [
+        { label: 'Invalidità temporanea totale', value: '45 giorni', days: 45 },
+        { label: 'Invalidità temporanea parziale', value: '30 giorni', days: 30 },
+        { label: 'Giorni ricovero', value: '10 giorni', days: 10 },
+      ],
+    };
+
+    it('should detect ITT mismatch between report and calculations', () => {
+      const report = buildFullReport() + '\nITT: 60 giorni di invalidità temporanea totale.';
+      const result = validateReport(report, 5, contextWithCalc);
+
+      expect(result.issues.some((i) =>
+        i.type === 'numerical_mismatch' && i.message.includes('ITT') && i.message.includes('60'),
+      )).toBe(true);
+    });
+
+    it('should not flag ITT within tolerance (±2 days)', () => {
+      const report = buildFullReport() + '\nITT: 46 giorni complessivi.';
+      const result = validateReport(report, 5, contextWithCalc);
+
+      expect(result.issues.filter((i) => i.type === 'numerical_mismatch' && i.message.includes('ITT'))).toHaveLength(0);
+    });
+
+    it('should detect ITP mismatch', () => {
+      const report = buildFullReport() + '\nITP: 90 giorni di invalidità temporanea parziale.';
+      const result = validateReport(report, 5, contextWithCalc);
+
+      expect(result.issues.some((i) =>
+        i.type === 'numerical_mismatch' && i.message.includes('ITP'),
+      )).toBe(true);
+    });
+
+    it('should detect ricovero days mismatch', () => {
+      const report = buildFullReport() + '\nGiorni di ricovero: 25 giorni.';
+      const result = validateReport(report, 5, contextWithCalc);
+
+      expect(result.issues.some((i) =>
+        i.type === 'numerical_mismatch' && i.message.includes('ricovero'),
+      )).toBe(true);
+    });
+
+    it('should not run when no calculations provided', () => {
+      const ctx: ReportValidationContext = { events: [] };
+      const report = buildFullReport() + '\nITT: 999 giorni.';
+      const result = validateReport(report, 5, ctx);
+
+      expect(result.issues.filter((i) => i.type === 'numerical_mismatch')).toHaveLength(0);
+    });
+
+    it('should match alternative ITT phrasing', () => {
+      const report = buildFullReport() + '\ninvalidità temporanea totale: 100 giorni.';
+      const result = validateReport(report, 5, contextWithCalc);
+
+      expect(result.issues.some((i) =>
+        i.type === 'numerical_mismatch' && i.message.includes('ITT'),
+      )).toBe(true);
+    });
+  });
+
+  describe('invalid event references', () => {
+    it('should detect [Ev.0] as invalid', () => {
+      const report = buildFullReport() + '\nCome da [Ev.0] il paziente.';
+      const result = validateReport(report, 5);
+
+      expect(result.issues.some((i) =>
+        i.type === 'invalid_event_ref' && i.message.includes('[Ev.0]'),
+      )).toBe(true);
+    });
+
+    it('should detect [Ev.N] where N > eventCount', () => {
+      const report = buildFullReport({ events: 3 }) + '\nCome evidenziato in [Ev.10].';
+      const result = validateReport(report, 3);
+
+      expect(result.issues.some((i) =>
+        i.type === 'invalid_event_ref' && i.message.includes('[Ev.10]'),
+      )).toBe(true);
+    });
+
+    it('should not flag valid event references', () => {
+      const report = buildFullReport({ events: 5 });
+      const result = validateReport(report, 5);
+
+      expect(result.issues.filter((i) => i.type === 'invalid_event_ref')).toHaveLength(0);
+    });
+
+    it('should not duplicate error for same invalid ref', () => {
+      const report = buildFullReport() + '\n[Ev.99] e ancora [Ev.99] ripetuto.';
+      const result = validateReport(report, 5);
+
+      const invalidRefs = result.issues.filter((i) =>
+        i.type === 'invalid_event_ref' && i.message.includes('[Ev.99]'),
+      );
+      expect(invalidRefs).toHaveLength(1);
+    });
+
+    it('should flag invalid ref as error severity', () => {
+      const report = buildFullReport() + '\n[Ev.100]';
+      const result = validateReport(report, 5);
+
+      const issue = result.issues.find((i) => i.type === 'invalid_event_ref');
+      expect(issue?.severity).toBe('error');
+    });
+  });
+
+  describe('duplicate content', () => {
+    it('should detect large duplicated blocks', () => {
+      const block = Array(60).fill('parola duplicata ripetuta nel testo del report').join(' ');
+      const report = buildFullReport() + `\n${block}\nAltra sezione\n${block}`;
+      const result = validateReport(report, 5);
+
+      expect(result.issues.some((i) => i.type === 'duplicate_content')).toBe(true);
+    });
+
+    it('should not flag short reports (too few words for meaningful duplicate)', () => {
+      const report = buildFullReport();
+      const result = validateReport(report, 5);
+
+      expect(result.issues.filter((i) => i.type === 'duplicate_content')).toHaveLength(0);
+    });
+
+    it('should report only one duplicate issue to avoid noise', () => {
+      const block1 = Array(60).fill('blocco uno duplicato nel testo').join(' ');
+      const block2 = Array(60).fill('blocco due duplicato nel testo').join(' ');
+      const report = buildFullReport() + `\n${block1}\n${block2}\n${block1}\n${block2}`;
+      const result = validateReport(report, 5);
+
+      const dupIssues = result.issues.filter((i) => i.type === 'duplicate_content');
+      expect(dupIssues).toHaveLength(1);
+    });
+
+    it('should mark 3+ repeats as error', () => {
+      const block = Array(60).fill('contenuto triplicato nel report medico legale').join(' ');
+      const report = buildFullReport() + `\n${block}\nSezione A\n${block}\nSezione B\n${block}`;
+      const result = validateReport(report, 5);
+
+      const dupIssue = result.issues.find((i) => i.type === 'duplicate_content');
+      expect(dupIssue?.severity).toBe('error');
+    });
+  });
+
   describe('combined issues', () => {
     it('should detect multiple issues simultaneously', () => {
       const report = `## Riassunto del caso
@@ -253,6 +456,31 @@ Breve. 01/01/1900.`;
       expect(types).toContain('missing_section');
       expect(types).toContain('sentinel_date_leak');
       expect(types).toContain('low_event_coverage');
+    });
+  });
+
+  describe('backward compatibility', () => {
+    it('should work without context (3rd arg optional)', () => {
+      const report = buildFullReport();
+      const result = validateReport(report, 5);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should work with context providing additional checks', () => {
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-15' },
+          { orderNumber: 3, eventDate: '2024-03-15' },
+          { orderNumber: 4, eventDate: '2024-04-15' },
+          { orderNumber: 5, eventDate: '2024-05-15' },
+        ],
+      };
+      const report = buildFullReport();
+      const result = validateReport(report, 5, context);
+
+      expect(result.valid).toBe(true);
     });
   });
 });

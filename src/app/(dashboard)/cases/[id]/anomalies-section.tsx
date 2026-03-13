@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useTransition, useRef } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2 } from 'lucide-react';
+import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +98,42 @@ function resolveEventReferences(
   });
 }
 
+// --- Status helpers ---
+
+function isResolved(status: string | null): boolean {
+  return status === 'llm_resolved' || status === 'user_dismissed';
+}
+
+function StatusBadge({ status }: { status: string | null }) {
+  if (!status || status === 'detected') return null;
+
+  if (status === 'llm_resolved') {
+    return (
+      <Badge variant="outline" className="text-xs border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
+        <ShieldCheck className="mr-1 h-3 w-3" />Risolta IA
+      </Badge>
+    );
+  }
+
+  if (status === 'llm_confirmed') {
+    return (
+      <Badge variant="outline" className="text-xs border-blue-500 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30">
+        <ShieldAlert className="mr-1 h-3 w-3" />Confermata
+      </Badge>
+    );
+  }
+
+  if (status === 'user_dismissed') {
+    return (
+      <Badge variant="outline" className="text-xs border-gray-400 text-gray-500">
+        <CheckCircle2 className="mr-1 h-3 w-3" />Archiviata
+      </Badge>
+    );
+  }
+
+  return null;
+}
+
 // --- Anomaly Card ---
 
 function AnomalyCard({
@@ -121,6 +157,7 @@ function AnomalyCard({
 
   const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
   const references = resolveEventReferences(involvedEvents, events, documents);
+  const resolved = isResolved(anomaly.status);
 
   const handleSave = useCallback(() => {
     startSave(async () => {
@@ -150,20 +187,21 @@ function AnomalyCard({
         setShowDismissConfirm(false);
         return;
       }
-      toast.success('Anomalia rimossa');
+      toast.success('Anomalia archiviata');
       setShowDismissConfirm(false);
       onChanged?.(anomaly.id);
     });
   }, [anomaly.id, caseId, onChanged]);
 
   return (
-    <div className="rounded-md border p-3">
+    <div className={`rounded-md border p-3 ${resolved ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
+          <StatusBadge status={anomaly.status} />
           <span className="text-sm font-medium">{anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type}</span>
         </div>
-        {!isEditing && (
+        {!isEditing && !resolved && (
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsEditing(true)}>
               <Pencil className="mr-1 h-3 w-3" />Modifica
@@ -178,7 +216,7 @@ function AnomalyCard({
                   onClick={handleDismiss}
                   disabled={isDismissing}
                 >
-                  {isDismissing ? 'Rimozione...' : 'Elimina'}
+                  {isDismissing ? 'Archiviazione...' : 'Archivia'}
                 </Button>
                 <Button
                   variant="ghost"
@@ -234,6 +272,11 @@ function AnomalyCard({
           {anomaly.suggestion && (
             <p className="mt-2 text-sm text-muted-foreground italic">{anomaly.suggestion}</p>
           )}
+          {anomaly.resolution_note && (
+            <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
+              {anomaly.resolution_note}
+            </p>
+          )}
         </>
       )}
 
@@ -254,20 +297,50 @@ function AnomalyCard({
 // --- Anomalies Component ---
 
 export function AnomaliesSection({ anomalies, events, documents, caseId, onChanged }: AnomaliesSectionProps) {
+  const [showResolved, setShowResolved] = useState(false);
+
+  const resolvedCount = useMemo(
+    () => anomalies.filter((a) => isResolved(a.status)).length,
+    [anomalies],
+  );
+
+  const visibleAnomalies = useMemo(
+    () => showResolved ? anomalies : anomalies.filter((a) => !isResolved(a.status)),
+    [anomalies, showResolved],
+  );
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-yellow-500" />
-          Anomalie Rilevate
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            Anomalie Rilevate
+          </CardTitle>
+          {resolvedCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setShowResolved(!showResolved)}
+            >
+              {showResolved ? (
+                <><EyeOff className="mr-1 h-3 w-3" />Nascondi risolte ({resolvedCount})</>
+              ) : (
+                <><Eye className="mr-1 h-3 w-3" />Mostra risolte ({resolvedCount})</>
+              )}
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
-        {anomalies.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Nessuna anomalia rilevata.</p>
+        {visibleAnomalies.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {anomalies.length > 0 ? 'Tutte le anomalie sono state risolte.' : 'Nessuna anomalia rilevata.'}
+          </p>
         ) : (
           <div className="space-y-3">
-            {anomalies.map((a) => (
+            {visibleAnomalies.map((a) => (
               <AnomalyCard
                 key={a.id}
                 anomaly={a}

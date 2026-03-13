@@ -21,11 +21,14 @@ import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-ana
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { validateReport } from './report-validator';
+import type { ReportValidationContext } from './report-validator';
+import { computePromptVersion } from './prompt-version';
 import { logger } from '@/lib/logger';
 
 export interface SynthesisResult {
   synthesis: string;
   wordCount: number;
+  promptVersion: string;
 }
 
 export interface SynthesisParams {
@@ -152,7 +155,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       messages: [
         {
           role: 'system',
-          content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
+          content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
         },
         {
           role: 'user',
@@ -178,7 +181,12 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     report = assembleSplitReport(summaryAndAnalysis, chronology);
   }
 
-  return finalizeReport(report, events.length);
+  const promptVersion = computePromptVersion({ caseType, caseRole, caseTypes: params.caseTypes });
+  const validationContext: ReportValidationContext = {
+    events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
+    calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+  };
+  return finalizeReport(report, events.length, promptVersion, validationContext);
 }
 
 /**
@@ -243,7 +251,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
     messages: [
       {
         role: 'system',
-        content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes }),
+        content: buildSummarySystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
       },
       {
         role: 'user',
@@ -267,7 +275,12 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
 
   logger.info('synthesis', ` Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
   const report = assembleSplitReport(summaryAndAnalysis, chronology);
-  return finalizeReport(report, events.length);
+  const promptVersion = computePromptVersion({ caseType, caseRole, caseTypes: params.caseTypes });
+  const validationContext: ReportValidationContext = {
+    events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
+    calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+  };
+  return finalizeReport(report, events.length, promptVersion, validationContext);
 }
 
 // ── Shared helpers ──
@@ -293,11 +306,16 @@ async function fetchGuidelineContext(
   }
 }
 
-function finalizeReport(report: string, eventCount?: number): SynthesisResult {
+function finalizeReport(
+  report: string,
+  eventCount: number,
+  promptVersion: string,
+  validationContext?: ReportValidationContext,
+): SynthesisResult {
   const cleaned = stripSectionMarkers(report);
   const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
 
-  const validation = validateReport(cleaned, eventCount ?? 0);
+  const validation = validateReport(cleaned, eventCount, validationContext);
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');
@@ -310,9 +328,9 @@ function finalizeReport(report: string, eventCount?: number): SynthesisResult {
   }
 
   logger.info('synthesis',
-    ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%`,
+    ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%, promptVersion: ${promptVersion}`,
   );
-  return { synthesis: cleaned, wordCount };
+  return { synthesis: cleaned, wordCount, promptVersion };
 }
 
 // ── Formatting helpers ──
