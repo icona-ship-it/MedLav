@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { anomalyTypeLabels } from '@/lib/constants';
-import { updateAnomaly, dismissAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
+import { updateAnomaly, dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
 import { createClient } from '@/lib/supabase/client';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
@@ -101,7 +101,7 @@ function resolveEventReferences(
 // --- Status helpers ---
 
 function isResolved(status: string | null): boolean {
-  return status === 'llm_resolved' || status === 'user_dismissed';
+  return status === 'llm_resolved' || status === 'user_dismissed' || status === 'user_confirmed';
 }
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -123,10 +123,18 @@ function StatusBadge({ status }: { status: string | null }) {
     );
   }
 
+  if (status === 'user_confirmed') {
+    return (
+      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
+        <ThumbsUp className="mr-1 h-3 w-3" />Confermata — nel report
+      </Badge>
+    );
+  }
+
   if (status === 'user_dismissed') {
     return (
       <Badge variant="outline" className="text-xs border-gray-400 text-gray-500">
-        <CheckCircle2 className="mr-1 h-3 w-3" />Archiviata
+        <Archive className="mr-1 h-3 w-3" />Ignorata — esclusa dal report
       </Badge>
     );
   }
@@ -154,6 +162,7 @@ function AnomalyCard({
   const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
   const [isSaving, startSave] = useTransition();
   const [isDismissing, startDismiss] = useTransition();
+  const [isConfirming, startConfirm] = useTransition();
 
   const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
   const references = resolveEventReferences(involvedEvents, events, documents);
@@ -177,24 +186,33 @@ function AnomalyCard({
     });
   }, [anomaly.id, caseId, editDescription, editSuggestion, onChanged]);
 
-  const [showDismissConfirm, setShowDismissConfirm] = useState(false);
-
   const handleDismiss = useCallback(() => {
     startDismiss(async () => {
       const result = await dismissAnomaly({ anomalyId: anomaly.id, caseId });
       if (result.error) {
         toast.error(result.error);
-        setShowDismissConfirm(false);
         return;
       }
-      toast.success('Anomalia archiviata');
-      setShowDismissConfirm(false);
+      toast.success('Anomalia ignorata — non sara inclusa nel report');
       onChanged?.(anomaly.id);
+    });
+  }, [anomaly.id, caseId, onChanged]);
+
+  const handleConfirm = useCallback(() => {
+    startConfirm(async () => {
+      const result = await confirmAnomaly({ anomalyId: anomaly.id, caseId });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Anomalia confermata — sara segnalata nel report');
+      onChanged?.();
     });
   }, [anomaly.id, caseId, onChanged]);
 
   return (
     <div className={`rounded-md border p-3 ${resolved ? 'opacity-60' : ''}`}>
+      {/* Header: severity + type + status */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
@@ -202,45 +220,13 @@ function AnomalyCard({
           <span className="text-sm font-medium">{anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type}</span>
         </div>
         {!isEditing && !resolved && (
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsEditing(true)}>
-              <Pencil className="mr-1 h-3 w-3" />Modifica
-            </Button>
-            {showDismissConfirm ? (
-              <>
-                <span className="text-xs text-muted-foreground">Confermi?</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={handleDismiss}
-                  disabled={isDismissing}
-                >
-                  {isDismissing ? 'Archiviazione...' : 'Archivia'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setShowDismissConfirm(false)}
-                >
-                  No
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-green-700 hover:text-green-800 hover:bg-green-50"
-                onClick={() => setShowDismissConfirm(true)}
-              >
-                <CheckCircle2 className="mr-1 h-3 w-3" />Risolto
-              </Button>
-            )}
-          </div>
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsEditing(true)}>
+            <Pencil className="mr-1 h-3 w-3" />Modifica
+          </Button>
         )}
       </div>
 
+      {/* Body: description + suggestion + edit form */}
       {isEditing ? (
         <div className="space-y-2">
           <Textarea
@@ -270,7 +256,9 @@ function AnomalyCard({
         <>
           <p className="text-sm">{anomaly.description}</p>
           {anomaly.suggestion && (
-            <p className="mt-2 text-sm text-muted-foreground italic">{anomaly.suggestion}</p>
+            <p className="mt-2 text-sm text-muted-foreground italic">
+              Suggerimento: {anomaly.suggestion}
+            </p>
           )}
           {anomaly.resolution_note && (
             <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
@@ -288,6 +276,40 @@ function AnomalyCard({
               {ref}
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Action buttons — only for unresolved anomalies */}
+      {!resolved && !isEditing && (
+        <div className="mt-3 flex items-center gap-2 pt-2 border-t border-dashed">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+            onClick={handleConfirm}
+            disabled={isConfirming}
+          >
+            {isConfirming ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <ThumbsUp className="mr-1 h-3 w-3" />
+            )}
+            Confermo — includi nel report
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleDismiss}
+            disabled={isDismissing}
+          >
+            {isDismissing ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Archive className="mr-1 h-3 w-3" />
+            )}
+            Ignora — escludi dal report
+          </Button>
         </div>
       )}
     </div>
