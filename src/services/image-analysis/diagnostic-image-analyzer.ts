@@ -25,11 +25,12 @@ const IMAGE_TYPE_KEYWORDS: Record<string, string[]> = {
   altro: [],
 };
 
-const MAX_IMAGES_PER_CASE = 5;
+const MAX_IMAGES_PER_CASE = 3;
 
 /**
  * Analyze diagnostic images from a document using Mistral vision.
  * Returns objective descriptions (no diagnoses).
+ * Processes images in parallel to stay within Vercel timeout.
  */
 export async function analyzeDocumentImages(params: {
   images: Array<{ base64: string; pageNumber: number }>;
@@ -40,18 +41,23 @@ export async function analyzeDocumentImages(params: {
 
   if (images.length === 0) return [];
 
-  // Limit images to control costs
+  // Limit images to control costs and timeout
   const imagesToAnalyze = images.slice(0, maxImages);
-  const results: ImageAnalysisResult[] = [];
 
-  for (const image of imagesToAnalyze) {
-    try {
-      const result = await analyzeSingleImage(image.base64, image.pageNumber, caseType);
-      if (result) {
-        results.push(result);
-      }
-    } catch (error) {
-      logger.error('image-analysis', `Failed for page ${image.pageNumber}`, { error: error instanceof Error ? error.message : 'unknown' });
+  // Analyze in parallel to stay within Vercel timeout
+  const settledResults = await Promise.allSettled(
+    imagesToAnalyze.map((image) => analyzeSingleImage(image.base64, image.pageNumber, caseType)),
+  );
+
+  const results: ImageAnalysisResult[] = [];
+  for (let i = 0; i < settledResults.length; i++) {
+    const settled = settledResults[i];
+    if (settled.status === 'fulfilled' && settled.value) {
+      results.push(settled.value);
+    } else if (settled.status === 'rejected') {
+      logger.error('image-analysis', `Failed for page ${imagesToAnalyze[i].pageNumber}`, {
+        error: settled.reason instanceof Error ? settled.reason.message : 'unknown',
+      });
     }
   }
 

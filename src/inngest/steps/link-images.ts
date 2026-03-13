@@ -111,30 +111,30 @@ export async function analyzeDiagnosticImagesStep(
     .select('page_number, image_path, document_id')
     .in('document_id', docIds)
     .not('image_path', 'is', null)
-    .limit(5);
+    .limit(3); // Max 3 images to stay within Vercel timeout
 
   if (!pagesWithImages || pagesWithImages.length === 0) {
     logger.info('pipeline', ' Step 4.6: No images to analyze');
     return [];
   }
 
-  // Fetch image data from storage (use first path if semicolon-separated)
-  const images: Array<{ base64: string; pageNumber: number; storagePath: string }> = [];
-  for (const page of pagesWithImages) {
-    const firstPath = (page.image_path as string).split(';')[0];
-    try {
+  // Download images in parallel
+  const downloadResults = await Promise.allSettled(
+    pagesWithImages.map(async (page) => {
+      const firstPath = (page.image_path as string).split(';')[0];
       const { data: imageData } = await supabase.storage
         .from('documents')
         .download(firstPath);
-      if (imageData) {
-        const buffer = await imageData.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString('base64');
-        images.push({ base64, pageNumber: page.page_number as number, storagePath: firstPath });
-      }
-    } catch {
-      // Skip images that fail to download
-    }
-  }
+      if (!imageData) throw new Error('No data');
+      const buffer = await imageData.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      return { base64, pageNumber: page.page_number as number, storagePath: firstPath };
+    }),
+  );
+
+  const images = downloadResults
+    .filter((r): r is PromiseFulfilledResult<{ base64: string; pageNumber: number; storagePath: string }> => r.status === 'fulfilled')
+    .map((r) => r.value);
 
   if (images.length === 0) return [];
 
@@ -142,6 +142,7 @@ export async function analyzeDiagnosticImagesStep(
   const results = await analyzeDocumentImages({
     images,
     caseType,
+    maxImages: 3,
   });
 
   // Attach storage paths to results

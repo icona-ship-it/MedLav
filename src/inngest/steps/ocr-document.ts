@@ -10,45 +10,49 @@ import { logger } from '@/lib/logger';
  * Groups images by page, uploads each to ocr-images/{docId}/p{N}-f{M}.png,
  * then updates the page row with semicolon-separated storage paths.
  */
+const MAX_OCR_IMAGES_TO_SAVE = 20;
+
 async function saveOcrImagesToStorage(
   supabase: ReturnType<typeof createAdminClient>,
   documentId: string,
   images: OcrImageResult[],
 ): Promise<void> {
-  // Group images by page number
-  const byPage = new Map<number, OcrImageResult[]>();
-  for (const img of images) {
-    const existing = byPage.get(img.pageNumber) ?? [];
-    existing.push(img);
-    byPage.set(img.pageNumber, existing);
+  // Limit images to avoid timeout (large docs can have 50+ images)
+  const imagesToSave = images.slice(0, MAX_OCR_IMAGES_TO_SAVE);
+
+  // Upload ALL images in parallel
+  const uploadResults = await Promise.allSettled(
+    imagesToSave.map(async (img) => {
+      const storagePath = `ocr-images/${documentId}/p${img.pageNumber}-f${img.figureIndex}.png`;
+      await uploadBase64Image({ base64Data: img.imageBase64, storagePath });
+      return { pageNumber: img.pageNumber, storagePath };
+    }),
+  );
+
+  // Group successful uploads by page
+  const byPage = new Map<number, string[]>();
+  for (const result of uploadResults) {
+    if (result.status === 'fulfilled') {
+      const { pageNumber, storagePath } = result.value;
+      const existing = byPage.get(pageNumber) ?? [];
+      existing.push(storagePath);
+      byPage.set(pageNumber, existing);
+    }
   }
 
-  for (const [pageNumber, pageImages] of byPage) {
-    const storagePaths: string[] = [];
-
-    for (const img of pageImages) {
-      const storagePath = `ocr-images/${documentId}/p${pageNumber}-f${img.figureIndex}.png`;
-      try {
-        await uploadBase64Image({
-          base64Data: img.imageBase64,
-          storagePath,
-        });
-        storagePaths.push(storagePath);
-      } catch (err) {
-        logger.warn('pipeline', `Failed to upload image p${pageNumber}-f${img.figureIndex} for doc ${documentId}: ${err instanceof Error ? err.message : 'unknown'}`);
-      }
-    }
-
-    if (storagePaths.length > 0) {
-      await supabase
+  // Update pages in parallel
+  const savedCount = [...byPage.values()].reduce((sum, paths) => sum + paths.length, 0);
+  await Promise.allSettled(
+    [...byPage.entries()].map(([pageNumber, paths]) =>
+      supabase
         .from('pages')
-        .update({ image_path: storagePaths.join(';') })
+        .update({ image_path: paths.join(';') })
         .eq('document_id', documentId)
-        .eq('page_number', pageNumber);
-    }
-  }
+        .eq('page_number', pageNumber),
+    ),
+  );
 
-  logger.info('pipeline', ` Step 2: Saved ${images.length} images to storage for doc ${documentId}`);
+  logger.info('pipeline', ` Step 2: Saved ${savedCount}/${imagesToSave.length} images to storage for doc ${documentId}`);
 }
 
 /**
