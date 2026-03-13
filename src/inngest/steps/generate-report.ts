@@ -69,49 +69,12 @@ export function checkSynthesisSplit(
 }
 
 /**
- * Step 7c: Generate full synthesis in a single Mistral call (small case).
+ * Save report to DB with error handling. Throws on failure so Inngest retries.
  */
-export async function generateFullSynthesis(
-  synthesisParams: SynthesisParams,
-): Promise<{ synthesis: string; wordCount: number; promptVersion: string }> {
-  const startMs = Date.now();
-  const r = await generateSynthesis(synthesisParams);
-  logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
-  return r;
-}
-
-/**
- * Step 7d: Generate chronology part (large case, split mode).
- */
-export async function generateChronologyPart(
-  synthesisParams: SynthesisParams,
-): Promise<string> {
-  const startMs = Date.now();
-  const c = await generateSynthesisChronology(synthesisParams);
-  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${c.length} chars)`);
-  return c;
-}
-
-/**
- * Step 7e: Generate summary part (large case, split mode).
- */
-export async function generateSummaryPart(
-  synthesisParams: SynthesisParams,
-  chronology: string,
-): Promise<{ synthesis: string; wordCount: number; promptVersion: string }> {
-  const startMs = Date.now();
-  const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
-  logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words)`);
-  return r;
-}
-
-/**
- * Step 7f: Save report to DB (fast, no API call).
- */
-export async function saveReportStep(
+async function insertReport(
   caseId: string,
   synthesisText: string,
-  synthesisWordCount: number,
+  wordCount: number,
   promptVersion?: string,
 ): Promise<SynthesisStepResult> {
   const supabase = createAdminClient();
@@ -126,7 +89,7 @@ export async function saveReportStep(
 
   const newVersion = ((latestReport?.version as number | null) ?? 0) + 1;
 
-  const { data: report } = await supabase
+  const { data: report, error } = await supabase
     .from('reports')
     .insert({
       case_id: caseId,
@@ -138,5 +101,66 @@ export async function saveReportStep(
     .select('id')
     .single();
 
-  return { reportId: report?.id, reportVersion: newVersion, wordCount: synthesisWordCount };
+  if (error || !report) {
+    logger.error('pipeline', `Failed to insert report for case ${caseId}`, {
+      error: error?.message ?? 'No data returned',
+      code: error?.code,
+      synthesisLength: synthesisText?.length ?? 0,
+    });
+    throw new Error(`Report insert failed: ${error?.message ?? 'no data returned'}`);
+  }
+
+  logger.info('pipeline', `Report saved: case=${caseId} version=${newVersion} words=${wordCount} id=${report.id}`);
+
+  return { reportId: report.id, reportVersion: newVersion, wordCount };
 }
+
+/**
+ * Step 7c+f: Generate full synthesis AND save to DB in a single step.
+ * The synthesis text stays within the step — never serialized into Inngest step output.
+ * Only small metadata is returned (reportId, version, wordCount).
+ */
+export async function generateAndSaveReport(
+  caseId: string,
+  synthesisParams: SynthesisParams,
+): Promise<SynthesisStepResult & { promptVersion?: string }> {
+  const startMs = Date.now();
+  const r = await generateSynthesis(synthesisParams);
+  logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
+
+  const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
+  return { ...result, promptVersion: r.promptVersion };
+}
+
+/**
+ * Step 7d: Generate chronology part (large case, split mode).
+ * Returns chronology text — stored in Inngest step output for use by next step.
+ */
+export async function generateChronologyPart(
+  synthesisParams: SynthesisParams,
+): Promise<string> {
+  const startMs = Date.now();
+  const c = await generateSynthesisChronology(synthesisParams);
+  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${c.length} chars)`);
+  return c;
+}
+
+/**
+ * Step 7e+f: Generate summary part AND save to DB in a single step.
+ * The final synthesis text stays within the step.
+ */
+export async function generateSummaryAndSaveReport(
+  caseId: string,
+  synthesisParams: SynthesisParams,
+  chronology: string,
+): Promise<SynthesisStepResult & { promptVersion?: string }> {
+  const startMs = Date.now();
+  const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
+  logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
+
+  const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
+  return { ...result, promptVersion: r.promptVersion };
+}
+
+// Keep for backward compatibility but mark as deprecated
+export { insertReport as saveReportStep };

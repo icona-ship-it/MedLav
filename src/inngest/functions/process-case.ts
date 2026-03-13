@@ -13,10 +13,9 @@ import {
   calculatePeriodsStep,
   buildSynthesisParams,
   checkSynthesisSplit,
-  generateFullSynthesis,
+  generateAndSaveReport,
   generateChronologyPart,
-  generateSummaryPart,
-  saveReportStep,
+  generateSummaryAndSaveReport,
 } from '../steps/generate-report';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
 
@@ -341,29 +340,28 @@ export const processCaseDocuments = inngest.createFunction(
       () => checkSynthesisSplit(synthesisParams, consolidationResult.allEvents.length),
     );
 
-    // Step 7c/d/e: Generate synthesis
-    let synthesisText: string;
-    let synthesisWordCount: number;
-    let promptVersion: string | undefined;
+    // Step 7c/d/e/f: Generate synthesis AND save report in a single step.
+    // The full synthesis text stays within the step — never serialized into
+    // Inngest step output, avoiding data loss on large reports.
+    let synthesisResult: Awaited<ReturnType<typeof generateAndSaveReport>>;
 
     if (!needsSplit) {
-      const result = await step.run('generate-synthesis', () => generateFullSynthesis(synthesisParams));
-      synthesisText = result.synthesis;
-      synthesisWordCount = result.wordCount;
-      promptVersion = result.promptVersion;
+      synthesisResult = await step.run(
+        'generate-and-save-report',
+        () => generateAndSaveReport(caseId, synthesisParams),
+      );
     } else {
-      const chronology = await step.run('generate-synthesis-chronology', () => generateChronologyPart(synthesisParams));
-      const result = await step.run('generate-synthesis-summary', () => generateSummaryPart(synthesisParams, chronology));
-      synthesisText = result.synthesis;
-      synthesisWordCount = result.wordCount;
-      promptVersion = result.promptVersion;
+      const chronology = await step.run(
+        'generate-synthesis-chronology',
+        () => generateChronologyPart(synthesisParams),
+      );
+      synthesisResult = await step.run(
+        'generate-summary-and-save-report',
+        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronology),
+      );
     }
 
-    // Step 7f: Save report
-    const synthesisResult = await step.run(
-      'save-report',
-      () => saveReportStep(caseId, synthesisText, synthesisWordCount, promptVersion),
-    );
+    const synthesisWordCount = synthesisResult.wordCount;
 
     // Step 8: Finalize
     await step.run('finalize', () => finalizeStep({
