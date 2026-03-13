@@ -134,7 +134,11 @@ export function EventCard({
     });
   };
 
-  const images = eventImages[event.id] ?? [];
+  const rawPaths = eventImages[event.id] ?? [];
+  // Build proxy URLs from raw storage paths (avoids server-side signed URL generation)
+  const images = rawPaths.map((path) =>
+    `/api/cases/${caseId}/images?path=${encodeURIComponent(path)}`
+  );
 
   return (
     <div

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 import { getCase, getCaseDocuments, getCaseEvents, getCaseAnomalies, getCaseMissingDocs, getCaseReport, getCaseEventImages, getCaseDocumentPages } from '../../actions';
-import { getSignedUrl } from '@/lib/supabase/storage';
 import { createClient } from '@/lib/supabase/server';
 import { logAccess } from '@/lib/audit';
 import { CaseDetailClient } from './client';
@@ -47,30 +46,8 @@ export default async function CaseDetailPage({
     isActivelyProcessing ? Promise.resolve([] as Awaited<ReturnType<typeof getCaseDocumentPages>>) : getCaseDocumentPages(id),
   ]);
 
-  // Generate signed URLs for event images (skip during processing)
-  const eventImages: Record<string, string[]> = {};
-  const entries = Object.entries(eventImagesMap);
-  if (entries.length > 0) {
-    const urlResults = await Promise.all(
-      entries.map(async ([eventId, paths]) => {
-        const urls = await Promise.all(
-          paths.map(async (path) => {
-            try {
-              return await getSignedUrl(path);
-            } catch {
-              return null;
-            }
-          }),
-        );
-        return { eventId, urls: urls.filter((u): u is string => u !== null) };
-      }),
-    );
-    for (const { eventId, urls } of urlResults) {
-      if (urls.length > 0) {
-        eventImages[eventId] = urls;
-      }
-    }
-  }
+  // Pass raw storage paths to client — images are loaded via proxy API on demand
+  // (avoids N signed URL API calls that cause timeout on large cases)
 
   return (
     <div className="space-y-6">
@@ -83,7 +60,7 @@ export default async function CaseDetailPage({
         missingDocs={missingDocs}
         report={report}
         processingLabels={processingLabels}
-        eventImages={eventImages}
+        eventImages={eventImagesMap}
         documentPages={documentPages}
       />
     </div>
