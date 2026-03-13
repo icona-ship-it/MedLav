@@ -80,7 +80,7 @@
   - Step separati per ogni documento (OCR-doc-1, OCR-doc-2) — vantaggi di retry granulare ma complessita di orchestrazione
   - Pipeline sincrona in API route — impossibile per documenti grandi (timeout Vercel 300s)
 - **Conseguenze**:
-  - I documenti sono processati sequenzialmente dentro lo step OCR e estrazione (semplificazione)
+  - I documenti OCR vengono processati in parallelo (Promise.all su step.run), l'estrazione per chunk è parallela per documento
   - Se un documento fallisce OCR, gli altri continuano (graceful degradation)
   - Admin Supabase client usato negli step Inngest (no cookie utente)
   - Signed URL generate per step per evitare scadenza
@@ -94,3 +94,21 @@
 - **Decisione**: Detection puramente algoritmica (no LLM) basata su soglie temporali e confronto eventi. Le soglie sono costanti configurabili.
 - **Rationale**: Determinismo, velocita, costo zero (no API calls), risultati prevedibili e verificabili.
 - **Conseguenze**: Anomalie limitate a pattern temporali e relazionali. Anomalie semantiche (es. "terapia inappropriata") richiederebbero LLM in futuro.
+
+---
+
+## ADR-009: Report quality guardrails post-generazione
+- **Data**: 2026-03-13
+- **Contesto**: Il report generato da Mistral Large puo contenere sezioni mancanti, date sentinel leaked (01/01/1900), o eventi omessi dalla cronologia. Senza validazione, questi problemi finiscono nel report salvato.
+- **Decisione**: Validatore post-generazione (`report-validator.ts`) che controlla 5 condizioni: report vuoto, troppo corto (<200 parole), sezioni obbligatorie mancanti, date sentinel nel testo, copertura eventi <50%. Non blocca la pipeline — logga warning/errori e salva comunque (meglio un report imperfetto che niente).
+- **Rationale**: Determinismo e velocita (regex + conteggi, no LLM). Fornisce metriche osservabili (eventCoverage %) per monitoring qualita nel tempo.
+- **Conseguenze**: I log di sintesi ora includono validation errors/warnings e % copertura eventi, utili per identificare pattern di bassa qualita.
+
+---
+
+## ADR-010: OCR parallelo nella pipeline Inngest
+- **Data**: 2026-03-13
+- **Contesto**: L'OCR dei documenti era sequenziale (for loop con await). Con 5 documenti, il tempo era 5x il singolo OCR.
+- **Decisione**: OCR parallelizzato con Promise.all su step.run — stesso pattern gia usato per l'estrazione chunk. Ogni step.run ha il suo budget timeout Inngest indipendente.
+- **Alternative considerate**: Mantenere sequenziale per semplicita — scartato perche il guadagno di tempo e significativo senza rischi aggiuntivi (il semaforo nel client Mistral gestisce i rate limit).
+- **Conseguenze**: Tempo OCR = max(singolo documento) invece di sum(tutti i documenti). Con 5 documenti, riduzione tipica da ~150s a ~30s.

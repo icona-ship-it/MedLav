@@ -20,6 +20,7 @@ MedLav è una web application per **medici legali** (CTU, CTP, stragiudiziale) c
 | Storage file | Supabase Storage | EU - Frankfurt |
 | Autenticazione | Supabase Auth | EU |
 | OCR documenti | Mistral OCR (`mistral-ocr-latest`) | Mistral API EU |
+| Classificazione doc | Mistral Large (`mistral-large-latest`) | Mistral API EU |
 | Estrazione eventi | Mistral Large (`mistral-large-latest`) | Mistral API EU |
 | Generazione report | Mistral Large (`mistral-large-latest`) | Mistral API EU |
 | Job Queue | Inngest | Cloud (orchestrazione step) |
@@ -783,17 +784,18 @@ Output: metadata caso + lista documenti (id, fileName, fileType, storagePath)
 Durata: ~1 secondo
 ```
 
-#### Step 2: `ocr-doc-{documentId}` (uno per documento)
+#### Step 2: `ocr-doc-{documentId}` (tutti i documenti in parallelo)
 ```
 Input: documento (id, storagePath, fileName, fileType)
-Azioni:
+Esecuzione: TUTTI i documenti processati IN PARALLELO (Promise.all su step.run)
+Azioni per ogni documento:
   1. Marca documento come 'ocr_in_corso'
   2. Genera signed URL da Supabase Storage (scadenza breve)
   3. Chiama Mistral OCR API con retry
   4. Salva pagine nel DB (tabella 'pages') con testo, confidence, manoscritto
   5. Aggiorna page_count sul documento
 Output: { documentId, fullText, pageCount, averageConfidence }
-Durata: ~10-30 secondi per documento
+Durata: ~10-30 secondi per il documento più lento (non la somma)
 Nota: fullText passa attraverso Inngest (necessario per il chunking)
 ```
 
@@ -883,9 +885,15 @@ Durata: ~1 secondo
 Input: allEvents + anomalies + missingDocs + metadata caso
 Azioni:
   1. Chiama Mistral Large con prompt di sintesi
-  2. Ottiene versione corrente del report (per incremento)
-  3. Inserisce nuovo report nel DB con version = max + 1
+  2. Validazione qualità post-generazione (report-validator.ts):
+     - Report vuoto o troppo corto (<200 parole)
+     - Sezioni obbligatorie mancanti (cronologia, riassunto, elementi)
+     - Date sentinel leaked (01/01/1900, "Data non documentata")
+     - Copertura eventi <50% (quanti [Ev.N] presenti vs totale)
+  3. Ottiene versione corrente del report (per incremento)
+  4. Inserisce nuovo report nel DB con version = max + 1
 Output: { synthesis, wordCount, reportId, reportVersion }
+Nota: la validazione logga warning/errori ma non blocca il salvataggio
 Durata: ~30-60 secondi
 ```
 
@@ -934,9 +942,10 @@ Questo elimina il rischio di "connection reset" causato da risposte HTTP grandi.
 | Cartella clinica breve | 10-20 | ~15s | ~60s | ~30s | ~2-3 min |
 | Cartella clinica media | 30-50 | ~30s | ~60-90s | ~45s | ~3-4 min |
 | Cartella clinica grande | 100+ | ~60s | ~60-90s (parallelo) | ~60s | ~4-5 min |
+| Multi-documento (5 doc) | 50-200 | ~30-60s (parallelo) | ~90s (parallelo) | ~60s | ~3-5 min |
 
 > I tempi dipendono dal carico dei server Mistral e dalla complessità del documento.
-> L'estrazione scala sub-linearmente grazie al parallelismo dei chunk.
+> L'OCR e l'estrazione scalano sub-linearmente grazie al parallelismo (OCR: tutti i doc in parallelo, estrazione: chunk in parallelo per doc).
 
 ---
 

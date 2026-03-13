@@ -29,6 +29,8 @@ Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RA
 | 2.3 | Few-shot prompting | FATTO | Integrato in synthesis + summary system prompts |
 | 2.4 | Calibrazione su perizie reali | IN ATTESA | Quando avrai perizie reali da medici legali |
 | 2.5 | Barème SIMLA digitalizzato | OPZIONALE | Libro + data entry |
+| 2.6 | Report quality guardrails | FATTO | Validatore post-generazione: sezioni mancanti, date sentinel, copertura eventi |
+| 2.7 | Classificazione doc con Mistral Large | FATTO | Upgrade da Small a Large per maggiore accuratezza |
 
 ## FASE 3 — UX PROFESSIONALE
 
@@ -45,6 +47,8 @@ Pipeline completa, 10 tipi caso, prompt adattivi per ruolo, few-shot perizie, RA
 | # | Task | Stato |
 |---|------|-------|
 | 4.1 | Test E2E Playwright | FATTO |
+| 4.1b | Test suite unit (355 test, 36 file) | FATTO | Classificazione, prompt, validatore, pipeline |
+| 4.1c | OCR parallelo in pipeline | FATTO | Promise.all su step.run, tempo ridotto da N*T a max(T) |
 | 4.2 | Health check endpoint (/api/health) | FATTO |
 | 4.3 | Sentry + error boundaries | FATTO |
 | 4.4 | Cookie consent GDPR | FATTO |
