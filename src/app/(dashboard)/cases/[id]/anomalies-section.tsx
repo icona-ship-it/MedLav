@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
