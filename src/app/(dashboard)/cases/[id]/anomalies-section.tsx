@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, FileWarning, Pencil, X, Save, CheckCircle2, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,46 @@ function severityVariant(severity: string): 'destructive' | 'warning' | 'seconda
     default: return 'secondary';
   }
 }
+
+/** Per-type guidance: what it means and how to resolve it */
+const anomalyGuidance: Record<string, { meaning: string; howToResolve: string }> = {
+  ritardo_diagnostico: {
+    meaning: 'Tra il momento in cui i sintomi sono comparsi e la diagnosi è passato un tempo superiore alla norma.',
+    howToResolve: 'Verifica se esistono documenti che giustifichino il ritardo (visite intermedie, esami in attesa). Se il ritardo è reale e rilevante, confermalo per includerlo nel report. Se hai documentazione che copre il periodo, caricala nello Step 1.',
+  },
+  gap_post_chirurgico: {
+    meaning: 'Dopo un intervento chirurgico non risulta documentazione di follow-up nel periodo atteso.',
+    howToResolve: 'Controlla se esistono referti di visite post-operatorie o lettere di dimissione non ancora caricati. Se il follow-up è avvenuto ma manca la documentazione, caricala. Se il gap è reale, confermalo.',
+  },
+  gap_documentale: {
+    meaning: 'Nella timeline clinica c\'è un periodo significativo senza documentazione.',
+    howToResolve: 'Verifica se mancano referti, visite o esami relativi a quel periodo. Puoi caricare la documentazione mancante nello Step 1, oppure ignorare se il gap non è rilevante per la perizia.',
+  },
+  complicanza_non_gestita: {
+    meaning: 'È stata rilevata una complicanza per la quale non risulta un trattamento o gestione documentata.',
+    howToResolve: 'Controlla se esiste documentazione sulla gestione della complicanza non ancora caricata. Se la complicanza è stata gestita ma non documentata, annota nei tuoi appunti. Se è reale, confermala.',
+  },
+  consenso_non_documentato: {
+    meaning: 'Per una procedura invasiva non risulta il consenso informato nella documentazione.',
+    howToResolve: 'Verifica se il modulo di consenso informato è disponibile e caricalo. Se non esiste, confermalo come anomalia — è un elemento rilevante per la perizia.',
+  },
+  diagnosi_contraddittoria: {
+    meaning: 'Due o più documenti riportano diagnosi diverse o contrastanti per la stessa condizione.',
+    howToResolve: 'Esamina i documenti coinvolti per capire se si tratta di un\'evoluzione diagnostica (normale) o di un errore. Se è un\'evoluzione, ignorala. Se è una contraddizione reale, confermala.',
+  },
+  terapia_senza_followup: {
+    meaning: 'È stata prescritta una terapia senza successivi controlli documentati per valutarne l\'efficacia.',
+    howToResolve: 'Verifica se esistono referti di controllo non ancora caricati. Se il follow-up è avvenuto altrove, annotalo. Se manca davvero, confermalo come anomalia.',
+  },
+  valore_clinico_critico: {
+    meaning: 'Un valore di laboratorio o parametro clinico risulta fuori range in modo significativo.',
+    howToResolve: 'Verifica se il valore è stato gestito clinicamente (terapia aggiustata, ricovero, ecc.). Se la gestione è documentata altrove, carica il documento. Se il valore critico non è stato gestito, confermalo.',
+  },
+  sequenza_temporale_violata: {
+    meaning: 'L\'ordine cronologico degli eventi clinici presenta incongruenze (es. referto datato prima della visita).',
+    howToResolve: 'Spesso si tratta di errori di data nei documenti. Verifica le date reali. Se è un errore di trascrizione, ignorala. Se la sequenza è effettivamente anomala, confermala.',
+  },
+};
 
 function parseInvolvedEvents(involvedEventsJson: string | null): InvolvedEvent[] {
   if (!involvedEventsJson) return [];
@@ -158,6 +198,7 @@ function AnomalyCard({
   onChanged?: (dismissedId?: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [editDescription, setEditDescription] = useState(anomaly.description);
   const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
   const [isSaving, startSave] = useTransition();
@@ -167,6 +208,7 @@ function AnomalyCard({
   const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
   const references = resolveEventReferences(involvedEvents, events, documents);
   const resolved = isResolved(anomaly.status);
+  const guidance = anomalyGuidance[anomaly.anomaly_type];
 
   const handleSave = useCallback(() => {
     startSave(async () => {
@@ -276,6 +318,33 @@ function AnomalyCard({
               {ref}
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Guidance: "Come risolvere?" — collapsible, only for unresolved */}
+      {!resolved && !isEditing && guidance && (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            onClick={() => setShowGuide(!showGuide)}
+          >
+            {showGuide ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            <HelpCircle className="h-3 w-3" />
+            Come risolvere questa anomalia?
+          </button>
+          {showGuide && (
+            <div className="mt-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
+              <div>
+                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">Cosa significa</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400">{guidance.meaning}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">Cosa fare</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400">{guidance.howToResolve}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
