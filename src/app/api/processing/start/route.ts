@@ -105,22 +105,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check no processing is already running
-    const { count: runningCount } = await supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .eq('case_id', caseId)
-      .in('processing_status', ['ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso']);
-
-    if (runningCount && runningCount > 0) {
-      return NextResponse.json(
-        { success: false, error: 'Elaborazione già in corso per questo caso.' },
-        { status: 409 },
-      );
-    }
-
     // Re-processing cleanup: if the case was already processed, clean ALL derived data
     // including OCR pages — every analysis runs fresh for maximum quality
+    // This runs BEFORE the running check so that stuck documents from failed runs get cleaned up
     const isReprocessing = caseData.processing_stage !== 'idle';
     if (isReprocessing) {
       logger.info('processing/start', `Re-processing case ${caseId}: cleaning all data for fresh analysis`);
