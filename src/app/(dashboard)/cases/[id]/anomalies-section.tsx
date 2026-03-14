@@ -206,7 +206,8 @@ function AnomalyCard({
   onChanged?: (dismissedId?: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
+  const needsAction = anomaly.status === 'detected' || anomaly.status === 'llm_confirmed';
+  const [showGuide, setShowGuide] = useState(needsAction);
   const [editDescription, setEditDescription] = useState(anomaly.description);
   const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
   const [isSaving, startSave] = useTransition();
@@ -371,7 +372,7 @@ function AnomalyCard({
             ) : (
               <ThumbsUp className="mr-1 h-3 w-3" />
             )}
-            Confermo — includi nel report
+            Si, segnala nel report
           </Button>
           <Button
             variant="ghost"
@@ -385,7 +386,7 @@ function AnomalyCard({
             ) : (
               <Archive className="mr-1 h-3 w-3" />
             )}
-            Ignora — escludi dal report
+            Non rilevante — escludi
           </Button>
         </div>
       )}

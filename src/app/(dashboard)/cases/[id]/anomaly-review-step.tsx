@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CheckCircle2, Loader2, ChevronDown, ChevronRight, Play, PauseCircle,
+  CheckCircle2, Loader2, ChevronDown, ChevronRight, Play, PauseCircle, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -197,6 +197,32 @@ export function AnomalyReviewStep({
           </p>
         </CardContent>
       </Card>
+
+      {/* Workflow guide — always visible */}
+      <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/30 p-4">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <div className="space-y-2 text-sm">
+            <p className="font-semibold text-blue-900 dark:text-blue-200">Come funziona la revisione</p>
+            <p className="text-blue-800 dark:text-blue-300">
+              Per ogni anomalia rilevata, hai due opzioni:
+            </p>
+            <ul className="space-y-1.5 text-blue-700 dark:text-blue-400">
+              <li className="flex items-start gap-2">
+                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-amber-500 text-amber-700 dark:text-amber-400">Segnala</Badge>
+                <span>L&apos;anomalia e reale e rilevante — verra <strong>inclusa nel report</strong> finale.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-gray-400 text-gray-600 dark:text-gray-400">Escludi</Badge>
+                <span>L&apos;anomalia non e rilevante — <strong>non apparira nel report</strong>.</span>
+              </li>
+            </ul>
+            <p className="text-xs text-blue-600 dark:text-blue-500">
+              Le anomalie con badge verde &quot;Risolta automaticamente&quot; non richiedono azione. Non e obbligatorio revisionare tutto: le anomalie non gestite verranno comunque segnalate nel report.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Anomalies */}
       {anomalies.length > 0 && (

@@ -119,16 +119,21 @@ export function CaseDetailClient({
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [activeResultTab, setActiveResultTab] = useState(report?.synthesis ? 'synthesis' : 'events');
   const [localAnomalies, setLocalAnomalies] = useState(anomalies);
+  const [localDocuments, setLocalDocuments] = useState(initialDocuments);
 
   // Sync with server data on refresh
   useEffect(() => {
     setLocalAnomalies(anomalies);
   }, [anomalies]);
 
+  useEffect(() => {
+    setLocalDocuments(initialDocuments);
+  }, [initialDocuments]);
+
   // Wizard step
-  const hasProcessingDocs = initialDocuments.some((d) => isDocProcessing(d.processing_status));
-  const hasClassificationReview = initialDocuments.some((d) => d.processing_status === 'classificazione_completata');
-  const hasUploadedDocs = initialDocuments.some((d) => d.processing_status === 'caricato');
+  const hasProcessingDocs = localDocuments.some((d) => isDocProcessing(d.processing_status));
+  const hasClassificationReview = localDocuments.some((d) => d.processing_status === 'classificazione_completata');
+  const hasUploadedDocs = localDocuments.some((d) => d.processing_status === 'caricato');
   const hasReport = !!report;
   const hasEvents = events.length > 0;
   const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
@@ -207,12 +212,12 @@ export function CaseDetailClient({
         steps={WIZARD_STEPS.map((step) => ({
           ...step,
           subtitle:
-            step.number === 1 ? `${initialDocuments.length} documenti`
+            step.number === 1 ? `${localDocuments.length} documenti`
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
             : step.number === 3 ? (processingStage === 'revisione_classificazione' || hasClassificationReview
                 ? 'Revisione classificazione'
                 : hasProcessingDocs || processingStage === 'elaborazione'
-                ? `${initialDocuments.filter((d) => d.processing_status === 'completato').length}/${initialDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
+                ? `${localDocuments.filter((d) => d.processing_status === 'completato').length}/${localDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
                 : 'Pronto')
             : step.number === 4 ? (processingStage === 'revisione_anomalie'
                 ? `${localAnomalies.length + missingDocs.length} da revisionare`
@@ -235,7 +240,7 @@ export function CaseDetailClient({
         <div key="step-1" className="animate-step-in">
         <DocumentsSection
           caseId={caseId}
-          documents={initialDocuments}
+          documents={localDocuments}
           processingLabels={processingLabels}
           hasUploadedDocs={hasUploadedDocs}
           onProceedToNext={() => handleSetStep(2)}
@@ -260,7 +265,7 @@ export function CaseDetailClient({
         <div key="step-3" className="animate-step-in">
         <ProcessingSection
           caseId={caseId}
-          documents={initialDocuments}
+          documents={localDocuments}
           hasProcessingDocs={hasProcessingDocs}
           hasUploadedDocs={hasUploadedDocs}
         />
@@ -276,7 +281,7 @@ export function CaseDetailClient({
               anomalies={localAnomalies}
               missingDocs={missingDocs}
               events={events}
-              documents={initialDocuments}
+              documents={localDocuments}
               documentPages={documentPages}
               processingStage={processingStage}
               onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
@@ -319,7 +324,7 @@ export function CaseDetailClient({
             )}
             {/* Document Coverage Card */}
             <DocumentCoverageCard
-              documents={initialDocuments}
+              documents={localDocuments}
               events={events}
             />
             {/* Quality Summary Card */}
@@ -368,7 +373,7 @@ export function CaseDetailClient({
                   missingDocsCount={missingDocs.length}
                   anomalies={localAnomalies}
                   missingDocs={missingDocs}
-                  documents={initialDocuments}
+                  documents={localDocuments}
                   onSwitchToAnomalies={() => handleSetStep(4)}
                   onEventClick={(orderNumber) => {
                     setHighlightedEventId(orderNumber);
@@ -380,7 +385,7 @@ export function CaseDetailClient({
               <TabsContent value="ocr">
                 <OcrPreviewTab
                   caseId={caseId}
-                  documents={initialDocuments}
+                  documents={localDocuments}
                   documentPages={documentPages}
                 />
               </TabsContent>
