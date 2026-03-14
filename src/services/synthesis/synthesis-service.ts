@@ -2,6 +2,7 @@ import {
   MISTRAL_MODELS,
   streamMistralChat,
   TIMEOUT_SYNTHESIS,
+  DETERMINISTIC_SEED,
 } from '@/lib/mistral/client';
 import {
   buildSynthesisSystemPrompt,
@@ -120,9 +121,10 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
           }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
         },
       ],
-      temperature: 0.1,
+      temperature: 0,
       maxTokens: 16384,
       timeoutMs: TIMEOUT_SYNTHESIS,
+      randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:full',
     });
   } else {
@@ -142,9 +144,10 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
           ),
         },
       ],
-      temperature: 0.1,
+      temperature: 0,
       maxTokens: 16384,
       timeoutMs: TIMEOUT_SYNTHESIS,
+      randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:chronology',
     });
 
@@ -171,9 +174,10 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
           }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
         },
       ],
-      temperature: 0.1,
+      temperature: 0,
       maxTokens: 16384,
       timeoutMs: TIMEOUT_SYNTHESIS,
+      randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:summary',
     });
 
@@ -215,9 +219,10 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
         ),
       },
     ],
-    temperature: 0.3,
+    temperature: 0,
     maxTokens: 16384,
     timeoutMs: TIMEOUT_SYNTHESIS,
+    randomSeed: DETERMINISTIC_SEED,
     label: 'synthesis:chronology',
   });
 
@@ -267,9 +272,10 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
         }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
       },
     ],
-    temperature: 0.3,
+    temperature: 0,
     maxTokens: 16384,
     timeoutMs: TIMEOUT_SYNTHESIS,
+    randomSeed: DETERMINISTIC_SEED,
     label: 'synthesis:summary',
   });
 

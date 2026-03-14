@@ -1,4 +1,4 @@
-import { streamMistralChat, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 const VALID_DOCUMENT_TYPES = new Set([
@@ -73,6 +73,7 @@ export async function classifyDocument(
     temperature: 0,
     maxTokens: 256,
     responseFormat: { type: 'json_object' },
+    randomSeed: DETERMINISTIC_SEED,
     label: `classify-${safeFileName.slice(0, 30)}`,
   });
 

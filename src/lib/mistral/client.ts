@@ -14,16 +14,19 @@ const MAX_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 2000;
 const MAX_RETRY_DELAY_MS = 30_000;
 
-// Model constants
+// ── Deterministic seed for reproducible outputs ──
+export const DETERMINISTIC_SEED = 42;
+
+// Model constants — pinned to dated releases for reproducibility
 export const MISTRAL_MODELS = {
   /** Vision model for OCR and document analysis */
-  PIXTRAL_LARGE: 'pixtral-large-latest',
+  PIXTRAL_LARGE: 'pixtral-large-2411',
   /** Large model for complex reasoning (synthesis, review) */
-  MISTRAL_LARGE: 'mistral-large-latest',
+  MISTRAL_LARGE: 'mistral-large-2501',
   /** Small model for fast structured extraction */
-  MISTRAL_SMALL: 'mistral-small-latest',
+  MISTRAL_SMALL: 'mistral-small-2501',
   /** Dedicated OCR model for document text extraction */
-  OCR: 'mistral-ocr-latest',
+  OCR: 'mistral-ocr-2503',
 } as const;
 
 /**
@@ -217,6 +220,14 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
   throw new Error(`[retry:${label}] Unreachable`);
 }
 
+// ── Response format types ──
+type JsonObjectFormat = { type: 'json_object' | 'text' };
+type JsonSchemaFormat = {
+  type: 'json_schema';
+  jsonSchema: { name: string; schemaDefinition: Record<string, unknown> };
+};
+export type MistralResponseFormat = JsonObjectFormat | JsonSchemaFormat;
+
 // ── Streaming chat with stall detection + fallback ──
 
 export async function streamMistralChat(params: {
@@ -224,8 +235,9 @@ export async function streamMistralChat(params: {
   messages: Array<{ role: string; content: string }>;
   temperature?: number;
   maxTokens?: number;
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: MistralResponseFormat;
   timeoutMs?: number;
+  randomSeed?: number;
   label: string;
 }): Promise<string> {
   await mistralSemaphore.acquire();
@@ -241,8 +253,9 @@ async function _streamWithFallback(params: {
   messages: Array<{ role: string; content: string }>;
   temperature?: number;
   maxTokens?: number;
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: MistralResponseFormat;
   timeoutMs?: number;
+  randomSeed?: number;
   label: string;
 }): Promise<string> {
   const { label } = params;
@@ -269,11 +282,12 @@ async function _streamMistralChatInternal(params: {
   messages: Array<{ role: string; content: string }>;
   temperature?: number;
   maxTokens?: number;
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: MistralResponseFormat;
   timeoutMs?: number;
+  randomSeed?: number;
   label: string;
 }): Promise<string> {
-  const { model, messages, temperature, maxTokens, responseFormat, label } = params;
+  const { model, messages, temperature, maxTokens, responseFormat, randomSeed, label } = params;
   const timeoutMs = params.timeoutMs ?? TIMEOUT_DEFAULT;
 
   return withMistralRetry(async () => {
@@ -287,6 +301,7 @@ async function _streamMistralChatInternal(params: {
         temperature,
         maxTokens,
         ...(responseFormat && { responseFormat }),
+        ...(randomSeed != null && { randomSeed }),
       },
       { timeoutMs },
     );
@@ -332,11 +347,12 @@ async function _completeMistralChatFallback(params: {
   messages: Array<{ role: string; content: string }>;
   temperature?: number;
   maxTokens?: number;
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: MistralResponseFormat;
   timeoutMs?: number;
+  randomSeed?: number;
   label: string;
 }): Promise<string> {
-  const { model, messages, temperature, maxTokens, responseFormat, label } = params;
+  const { model, messages, temperature, maxTokens, responseFormat, randomSeed, label } = params;
   const timeoutMs = params.timeoutMs ?? TIMEOUT_DEFAULT;
 
   return withMistralRetry(async () => {
@@ -352,6 +368,7 @@ async function _completeMistralChatFallback(params: {
         temperature,
         maxTokens,
         ...(responseFormat && { responseFormat }),
+        ...(randomSeed != null && { randomSeed }),
       },
       { timeoutMs },
     );

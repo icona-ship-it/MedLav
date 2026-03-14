@@ -23,7 +23,7 @@ function buildCspHeader(): string {
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,
     `connect-src 'self' https://*.supabase.co https://*.mistral.ai https://*.inngest.com https://*.sentry.io`,
-    `frame-ancestors 'none'`,
+    `frame-ancestors 'self'`,
   ];
 
   return directives.join('; ') + ';';

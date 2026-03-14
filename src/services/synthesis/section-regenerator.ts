@@ -1,4 +1,4 @@
-import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
@@ -102,9 +102,10 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
-    temperature: 0.3,
+    temperature: 0,
     maxTokens: 4096,
     timeoutMs: TIMEOUT_EXTRACTION,
+    randomSeed: DETERMINISTIC_SEED,
     label: `regen-section:${sectionId}`,
   });
 

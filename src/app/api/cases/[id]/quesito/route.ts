@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
@@ -160,7 +160,8 @@ Mappa ogni punto del quesito agli eventi e anomalie rilevanti.`,
             schemaDefinition: mappingJsonSchema,
           },
         },
-        temperature: 0.2,
+        temperature: 0,
+        randomSeed: DETERMINISTIC_SEED,
       }),
       'quesito',
     );

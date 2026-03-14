@@ -9,6 +9,7 @@ import {
   MISTRAL_MODELS,
   streamMistralChat,
   TIMEOUT_DEFAULT,
+  DETERMINISTIC_SEED,
 } from '@/lib/mistral/client';
 import type { DetectedAnomaly } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -167,6 +168,7 @@ async function resolveOneAnomaly(
     maxTokens: 512,
     responseFormat: { type: 'json_object' },
     timeoutMs: TIMEOUT_DEFAULT,
+    randomSeed: DETERMINISTIC_SEED,
     label: `anomaly-resolve:${anomalyIndex}`,
   });
 

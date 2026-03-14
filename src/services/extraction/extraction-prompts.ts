@@ -153,6 +153,14 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
 1. **ZERO DISCARD**: Non scartare MAI nessun dato. Tutto ciò che è documentato DEVE essere estratto. Anche i fatti clinici citati all'interno di documenti legali (memorie, conclusioni, contestazioni) sono eventi da estrarre.
 2. **COPIA FEDELE E DETTAGLIATA**: La descrizione deve essere LUNGA e COMPLETA — riporta FEDELMENTE tutto il contenuto clinico rilevante dal testo originale. Includi tutti i valori numerici, dosaggi, parametri. NON sintetizzare, NON abbreviare. Questa descrizione verrà usata direttamente nella relazione peritale.
 3. **DATE**: Usa formato YYYY-MM-DD. Se la data è imprecisa, usa il primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01" con datePrecision "mese"). Se la data è COMPLETAMENTE ASSENTE e non deducibile dal contesto, usa NULL per eventDate e datePrecision "sconosciuta". NON inventare MAI date — è meglio una data mancante che una data sbagliata.
+
+   RISOLUZIONE DATE RELATIVE:
+   - "3 giorni prima della dimissione" → calcola dalla data di dimissione se nota nel documento, datePrecision="giorno"
+   - "il giorno precedente l'intervento" → calcola dalla data intervento se nota, datePrecision="giorno"
+   - "circa 2 mesi fa" → usa la data del documento come riferimento, datePrecision="mese"
+   - "in data imprecisata" / "data non specificata" → eventDate=NULL, datePrecision="sconosciuta"
+   - Se il contesto permette di dedurre almeno mese/anno, preferisci una data approssimata a NULL
+   - Se una sezione del documento ha un'intestazione con data (es. "Visita del 15/03/2024"), usa quella data per tutti gli eventi della sezione
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
 5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
 6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
@@ -171,8 +179,14 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
 - NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.
 - Se un dato non è leggibile o non è presente nel testo, usa NULL per quel campo. NON indovinare.
 - NON completare informazioni parziali con dati di tua conoscenza medica. Riporta SOLO ciò che il documento dice.
-- L'esempio JSON sotto è FITTIZIO e serve solo a mostrare il formato. NON copiare nomi, date, diagnosi o strutture dall'esempio.
 - Ogni campo deve avere un ancoraggio diretto nel testo OCR fornito. Se non riesci a trovare il dato nel testo, lascia il campo a NULL.
+
+ESEMPI CONCRETI DI HALLUCINATION DA EVITARE:
+- Il testo dice "intervento chirurgico" senza specificare il tipo → scrivi "intervento chirurgico (tipo non specificato)", NON inventare "artroprotesi d'anca"
+- Il testo dice "paziente seguito da specialista" → scrivi il fatto, NON inventare il nome dello specialista
+- Il testo riporta una data parziale "Febbraio" → usa "2024-02-01" con datePrecision "mese", NON inventare il giorno
+- Il testo dice "terapia farmacologica" senza specificare il farmaco → scrivi "terapia farmacologica (farmaco non specificato)", NON inventare il nome del farmaco
+- Il testo è illeggibile o parziale → metti confidence basso e requiresVerification=true, NON ricostruire il contenuto
 
 ${SOURCE_RULES}
 
@@ -221,26 +235,47 @@ IMPORTANTE: Classifica SEMPRE l'evento nella categoria più specifica possibile.
 ## FORMATO OUTPUT
 Rispondi con un JSON valido. La struttura ESATTA deve essere:
 
+CAMPI PER OGNI EVENTO (in questo ordine):
+- **extraction_reasoning**: (OBBLIGATORIO) Breve spiegazione (1-2 frasi) di PERCHÉ stai estraendo questo evento e DOVE lo hai trovato nel testo. Questo campo va compilato PRIMA di tutti gli altri campi dati — serve a verificare che l'evento sia reale e non inventato.
+- **eventDate**: Data in formato YYYY-MM-DD. NULL se assente.
+- **datePrecision**: "giorno" | "mese" | "anno" | "sconosciuta"
+- **eventType**: Una delle categorie ammesse (vedi sopra)
+- **title**: Titolo breve (max 100 caratteri)
+- **description**: Descrizione COMPLETA e DETTAGLIATA. Includi TUTTI i valori numerici, dosaggi, parametri. NON sintetizzare.
+- **sourceType**: "cartella_clinica" | "referto_controllo" | "esame_strumentale" | "esame_ematochimico" | "altro"
+- **diagnosis**: Diagnosi formale se presente, altrimenti NULL
+- **doctor**: Nome medico se presente, altrimenti NULL
+- **facility**: Struttura se presente, altrimenti NULL
+- **confidence**: 0-100 (80-100 testo chiaro, 50-79 parziale, 10-49 manoscritto)
+- **requiresVerification**: true/false
+- **reliabilityNotes**: Note su affidabilità, NULL se non necessario
+- **sourceText**: Citazione ESATTA dal testo OCR (max 200 caratteri) che prova l'esistenza dell'evento
+- **sourcePages**: Array numeri pagina da marker [PAGE_START:N]
+
+ATTENZIONE: I valori nell'esempio sotto sono FITTIZI con nomi PLACEHOLDER. Se trovi "NOME_ESEMPIO_FITTIZIO", "STRUTTURA_PLACEHOLDER" o "DIAGNOSI_PLACEHOLDER" nel tuo output, stai copiando dall'esempio — FERMATI e usa i dati reali dal documento.
+
 \`\`\`json
 {
   "events": [
     {
+      "extraction_reasoning": "Trovato ricovero documentato a pagina 1 con data esplicita e diagnosi di ingresso",
       "eventDate": "2024-01-15",
       "datePrecision": "giorno",
       "eventType": "ricovero",
       "title": "Ricovero per intervento chirurgico",
-      "description": "Paziente ricoverato presso reparto di ortopedia per intervento di protesi d'anca destra. Diagnosi di ingresso: coxartrosi destra. PA 130/80, FC 72, peso 78 kg, altezza 172 cm.",
+      "description": "Paziente ricoverato presso reparto per intervento. Diagnosi di ingresso documentata. PA 130/80, FC 72.",
       "sourceType": "cartella_clinica",
-      "diagnosis": "Coxartrosi destra",
-      "doctor": "Dr. Rossi",
-      "facility": "Ospedale San Giovanni",
+      "diagnosis": "DIAGNOSI_PLACEHOLDER_NON_COPIARE",
+      "doctor": "NOME_ESEMPIO_FITTIZIO",
+      "facility": "STRUTTURA_PLACEHOLDER_NON_COPIARE",
       "confidence": 90,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Ricovero presso reparto ortopedia per coxartrosi dx",
+      "sourceText": "Ricovero presso reparto per intervento programmato",
       "sourcePages": [1]
     },
     {
+      "extraction_reasoning": "Referto di visita senza data esplicita trovato a pagina 3",
       "eventDate": null,
       "datePrecision": "sconosciuta",
       "eventType": "visita",
@@ -264,59 +299,81 @@ Rispondi con un JSON valido. La struttura ESATTA deve essere:
 }
 \`\`\`
 
-IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere tutti i campi mostrati sopra.`;
+IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere TUTTI i campi mostrati sopra, incluso extraction_reasoning.`;
 }
 
 // --- Document Type Hints ---
 
 const DOCUMENT_TYPE_HINTS: Record<string, string> = {
-  spese_mediche: `ISTRUZIONI SPECIFICHE PER SPESE MEDICHE: Per OGNI voce di spesa estrai un evento separato con:
-- eventType: "spesa_medica"
-- Data della prestazione/fattura
-- Descrizione: prestazione, importo esatto, struttura erogatrice, codice prestazione se presente
-- Raggruppa per data se più voci nella stessa fattura, ma mantieni il dettaglio degli importi`,
+  cartella_clinica: `ISTRUZIONI SPECIFICHE PER CARTELLA CLINICA:
+STRUTTURA ATTESA: Foglio di accettazione → Anamnesi → Esame obiettivo → Diario medico/infermieristico → Descrizione operatoria → Cartella anestesiologica → Esami → Lettera di dimissione.
+CAMPI CRITICI DA ESTRARRE:
+- Dati di ingresso: diagnosi COMPLETA, parametri vitali (PA, FC, SpO2, T°), peso, altezza, allergie
+- Descrizione operatoria: testo INTEGRALE (tipo intervento, operatori, tecnica, durata, materiali/protesi, complicanze intraop)
+- Cartella anestesiologica: ASA score, tipo anestesia, farmaci, parametri intraop
+- Diario medico: SOLO complicanze, peggioramenti, eventi avversi, allarmi — NON la routine quotidiana ("paziente stabile, riposo a letto")
+- Esami: TUTTI i valori con unità di misura e range di riferimento
+- Dimissione: diagnosi dimissione completa, terapia domiciliare (farmaco, dose, via, frequenza), follow-up, prognosi
+ERRORI COMUNI: Saltare valori di laboratorio in tabelle, ignorare annotazioni manoscritte a margine, perdere la cartella anestesiologica.
+COSA NON ESTRARRE: Routine quotidiana del diario infermieristico (pasti, igiene, posizionamento), firme senza contenuto clinico.`,
 
-  memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA: Questo è un atto legale. Devi:
-- Estrarre TUTTI i fatti clinici citati (interventi, ricoveri, diagnosi, date) come eventi clinici normali
-- Estrarre i punti legali e le contestazioni come eventi "documento_amministrativo"
-- Le date citate nella memoria sono fatti clinici da estrarre come timeline
-- NON ignorare nulla: ogni affermazione fattuale è rilevante per la perizia`,
+  referto_specialistico: `ISTRUZIONI SPECIFICHE PER REFERTO SPECIALISTICO:
+STRUTTURA ATTESA: Intestazione (specialista, data, struttura) → Motivo della visita → Anamnesi → Esame obiettivo → Esami richiesti/visionati → Diagnosi/Conclusioni → Terapia/Follow-up.
+CAMPI CRITICI: Data visita, nome specialista e qualifica, struttura, motivo della visita, esame obiettivo COMPLETO (misurazioni, test funzionali, scale di valutazione), diagnosi, terapia prescritta, follow-up programmato.
+ERRORI COMUNI: Sintetizzare l'esame obiettivo perdendo misurazioni specifiche, ignorare le scale di valutazione (VAS, Barthel, WOMAC), perdere la terapia prescritta.`,
 
-  perizia_ctp: `ISTRUZIONI SPECIFICHE PER PERIZIA CTP: Questa è una consulenza tecnica di parte. Devi:
-- Estrarre i fatti accertati dal CTP come eventi clinici (visita, diagnosi, intervento, etc.)
-- Estrarre le conclusioni e quantificazioni come eventi separati
-- Estrarre valutazioni di danno biologico, ITT/ITP se presenti
-- Ogni riferimento a documentazione clinica citata va estratto come evento`,
+  esame_strumentale: `ISTRUZIONI SPECIFICHE PER ESAME STRUMENTALE:
+STRUTTURA ATTESA: Tipo esame → Distretto/regione anatomica → Tecnica (con/senza mdc) → Descrizione → Conclusioni diagnostiche.
+CAMPI CRITICI: Data esame, tipo esame (RX/TAC/RM/ECO/ECG/EMG/endoscopia), distretto esaminato, tecnica usata, descrizione COMPLETA dei reperti, conclusioni diagnostiche INTEGRALI.
+ERRORI COMUNI: Riassumere le conclusioni perdendo dettagli (es. dimensioni lesioni, grading, classificazioni), ignorare il confronto con esami precedenti citato nel referto.
+UN EVENTO PER ESAME: ogni esame strumentale = un evento separato, anche se nello stesso giorno. NON aggregare RX + RM in un unico evento.`,
 
-  perizia_ctu: `ISTRUZIONI SPECIFICHE PER PERIZIA CTU: Questa è una consulenza tecnica d'ufficio. Devi:
-- Estrarre i fatti accertati dal CTU come eventi clinici
-- Estrarre i quesiti e le risposte come eventi "documento_amministrativo"
-- Estrarre le conclusioni, quantificazioni e valutazioni di danno
-- Ogni riferimento a documentazione esaminata va estratto come evento`,
+  esame_laboratorio: `ISTRUZIONI SPECIFICHE PER ESAMI DI LABORATORIO:
+STRUTTURA ATTESA: Data prelievo → Tabella valori con: parametro, valore, unità di misura, range di riferimento, flag (H/L/N).
+CAMPI CRITICI: Data prelievo OBBLIGATORIA, OGNI valore numerico con unità e range. Evidenzia valori fuori range nel campo reliabilityNotes.
+ERRORI COMUNI: Aggregare più parametri in un solo evento perdendo valori, inventare range di riferimento non presenti nel documento, saltare valori normali che potrebbero essere significativi nel contesto del caso.
+FORMATO DESCRIZIONE: Per ogni pannello/prelievo, elenca TUTTI i parametri: "Emocromo (01/03/2024): WBC 12.5 x10^3/uL (rif. 4.0-11.0, ALTO), RBC 4.2 x10^6/uL (rif. 4.5-5.5, BASSO), Hb 11.2 g/dL (rif. 13.0-17.0, BASSO), PLT 245 x10^3/uL (rif. 150-400, nella norma)..."
+Raggruppa per DATA DI PRELIEVO — un evento per data, con tutti i valori di quella data.`,
 
-  cartella_clinica: `ISTRUZIONI SPECIFICHE PER CARTELLA CLINICA: Segui attentamente le regole FONTE A. Estrai TUTTO: dati ingresso, esami, diario clinico (solo eventi avversi), descrizione operatoria INTEGRALE, lettera dimissione.`,
+  lettera_dimissione: `ISTRUZIONI SPECIFICHE PER LETTERA DI DIMISSIONE:
+STRUTTURA ATTESA: Dati ricovero (date ingresso/dimissione) → Diagnosi ingresso → Interventi eseguiti → Decorso → Diagnosi dimissione → Terapia domiciliare → Follow-up.
+CAMPI CRITICI:
+- Date ricovero e dimissione (ENTRAMBE obbligatorie, crea eventi "ricovero" e "referto" separati)
+- Diagnosi di ingresso e di dimissione INTEGRALI (non abbreviate)
+- Interventi eseguiti: tipo, data, operatore se citato
+- Decorso: SOLO eventi significativi (complicanze, modifiche terapia, consulenze)
+- Terapia alla dimissione: OGNI farmaco con dosaggio, via, frequenza
+- Follow-up: controlli programmati con date e specialista
+ERRORI COMUNI: Perdere la terapia alla dimissione, non distinguere diagnosi ingresso da dimissione, saltare il follow-up programmato.`,
 
-  referto_specialistico: `ISTRUZIONI SPECIFICHE PER REFERTO SPECIALISTICO: Riporta INTEGRALMENTE il contenuto del referto. Data, specialista, contenuto completo, conclusioni diagnostiche.`,
+  certificato: `ISTRUZIONI SPECIFICHE PER CERTIFICATO:
+CAMPI CRITICI: Tipo certificato (medico, INAIL, invalidità, malattia, idoneità), data emissione, ente/medico emittente, contenuto, periodi di inabilità con date precise, percentuali di invalidità se presenti.
+ERRORI COMUNI: Non distinguere tra certificato iniziale e di continuazione INAIL, perdere le date di prognosi.`,
 
-  esame_strumentale: `ISTRUZIONI SPECIFICHE PER ESAME STRUMENTALE: Riporta INTEGRALMENTE. Data, tipo esame, distretto, descrizione completa, conclusioni diagnostiche.`,
+  spese_mediche: `ISTRUZIONI SPECIFICHE PER SPESE MEDICHE:
+CAMPI CRITICI: Per OGNI voce di spesa crea un evento "spesa_medica" separato con: data prestazione/fattura, descrizione prestazione, importo ESATTO (€), struttura erogatrice, codice prestazione se presente.
+Se una fattura contiene più voci con importi separati, crea un evento per voce.
+Se più fatture hanno la stessa data, crea eventi separati per ciascuna.
+ERRORI COMUNI: Aggregare più voci perdendo dettaglio importi, inventare importi non leggibili.`,
 
-  esame_laboratorio: `ISTRUZIONI SPECIFICHE PER ESAMI DI LABORATORIO: Riporta TUTTI i valori con unità di misura. Evidenzia valori fuori range. Data prelievo obbligatoria.`,
+  memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA:
+Questo è un ATTO LEGALE. Contiene sia argomentazioni giuridiche sia fatti clinici citati.
+DOPPIA ESTRAZIONE OBBLIGATORIA:
+1. Ogni FATTO CLINICO citato (intervento, ricovero, diagnosi, esame, data) → evento clinico normale (visita, intervento, diagnosi, etc.)
+2. Ogni ARGOMENTAZIONE LEGALE (contestazione, richiesta, conclusione) → evento "documento_amministrativo"
+Le date citate nella memoria sono fatti clinici da estrarre nella timeline.
+NON ignorare nulla: ogni affermazione fattuale è rilevante per la perizia.`,
 
-  certificato: `ISTRUZIONI SPECIFICHE PER CERTIFICATO: Estrai tipo certificato, data, ente emittente, contenuto, eventuali percentuali di invalidità o periodi di inabilità.`,
+  perizia_ctp: `ISTRUZIONI SPECIFICHE PER PERIZIA CTP (Consulenza Tecnica di Parte):
+CAMPI CRITICI: Fatti accertati dal CTP, valutazioni di danno biologico (% permanente), periodi ITT/ITP con date, nesso causale, conclusioni, ogni documentazione clinica citata.
+Estrai i fatti accertati come eventi clinici normali. Estrai valutazioni e conclusioni come eventi separati.`,
 
-  lettera_dimissione: `ISTRUZIONI SPECIFICHE PER LETTERA DI DIMISSIONE: Estrai TUTTI i dati chiave:
-- Data ricovero e data dimissione
-- Diagnosi di ingresso e diagnosi di dimissione (INTEGRALI)
-- Interventi eseguiti durante il ricovero
-- Decorso clinico significativo e complicanze
-- Terapia alla dimissione (farmaco, dosaggio, via, frequenza)
-- Indicazioni per il follow-up e prognosi`,
+  perizia_ctu: `ISTRUZIONI SPECIFICHE PER PERIZIA CTU (Consulenza Tecnica d'Ufficio):
+CAMPI CRITICI: Quesiti del giudice, fatti accertati dal CTU, valutazioni di danno, risposte ai quesiti, conclusioni, documentazione esaminata.
+Estrai quesiti e risposte come "documento_amministrativo". Estrai fatti clinici come eventi normali. Estrai conclusioni e quantificazioni come eventi separati.`,
 
-  perizia_precedente: `ISTRUZIONI SPECIFICHE PER PERIZIA PRECEDENTE: Questa è una perizia medico-legale da analizzare. Devi:
-- Estrarre i fatti clinici accertati dal perito come eventi clinici normali
-- Estrarre le valutazioni di danno biologico (%, ITT/ITP) come eventi separati
-- Estrarre ogni riferimento a documentazione esaminata
-- Estrarre le conclusioni del perito come evento "documento_amministrativo"`,
+  perizia_precedente: `ISTRUZIONI SPECIFICHE PER PERIZIA PRECEDENTE:
+Estrai i fatti clinici accertati dal perito come eventi clinici normali. Estrai valutazioni di danno biologico (%, ITT/ITP) come eventi separati. Estrai ogni riferimento a documentazione esaminata. Estrai conclusioni come "documento_amministrativo".`,
 };
 
 /**
@@ -357,18 +414,18 @@ export function buildExtractionUserPrompt(params: {
   const typeHint = getDocumentTypeHint(documentType);
   const typeHintBlock = typeHint ? `\n${typeHint}\n` : '';
 
-  return `${chunkContext}Analizza il seguente documento medico ed estrai TUTTI gli eventi clinici.
-
-DOCUMENTO: ${fileName}
+  return `${chunkContext}${typeHintBlock ? `${typeHintBlock}\n` : ''}DOCUMENTO: ${fileName}
 TIPO DOCUMENTO: ${documentType}
-${typeHintBlock}
+
 NOTA: Il testo contiene marker [PAGE_START:N] e [PAGE_END:N] che delimitano le pagine del documento.
 Usa questi marker per determinare i numeri di pagina (sourcePages) di ciascun evento.
-Per sourceText, riporta una frase chiave (max 200 caratteri) dal testo OCR che ancora l'evento.
+Per sourceText, riporta una frase chiave ESATTA (max 200 caratteri) dal testo OCR che ancora l'evento.
 
 --- INIZIO TESTO DOCUMENTO ---
 ${documentText}
 --- FINE TESTO DOCUMENTO ---
 
-Estrai TUTTI gli eventi clinici. Politica ZERO DISCARD. Espandi abbreviazioni. sourceText breve (max 200 char), sourcePages obbligatori.`;
+Estrai TUTTI gli eventi clinici dal documento sopra. Politica ZERO DISCARD. Espandi abbreviazioni.
+Per OGNI evento compila PRIMA il campo extraction_reasoning (perché lo estrai e dove lo hai trovato), POI i campi dati.
+sourceText breve (max 200 char, citazione ESATTA dal testo), sourcePages obbligatori.`;
 }

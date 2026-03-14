@@ -6,7 +6,7 @@
  * Non-fatal: if it fails, the pipeline continues with existing events.
  */
 
-import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import { CASE_TYPE_GUIDANCE } from './extraction-prompts';
 import type { ExtractedEvent } from './extraction-schemas';
 import type { CaseType } from '@/types';
@@ -86,7 +86,8 @@ export async function reviewExtraction(params: {
           { role: 'user', content: userPrompt },
         ],
         responseFormat: { type: 'json_object' },
-        temperature: 0.0,
+        temperature: 0,
+        randomSeed: DETERMINISTIC_SEED,
       }),
       'review',
     );
@@ -124,10 +125,18 @@ Devi trovare:
 ## GUIDA SPECIFICA
 ${CASE_TYPE_GUIDANCE[caseType]}
 
+## CHECKLIST DI VERIFICA
+Prima di rispondere, verifica sistematicamente:
+1. Ogni sezione del documento è stata coperta dall'estrazione?
+2. Ci sono tabelle con valori di laboratorio non estratti?
+3. Ci sono date o eventi citati indirettamente (es. "visita precedente del...") non estratti?
+4. I fatti clinici in documenti legali (memorie, perizie) sono stati estratti?
+5. Le date estratte corrispondono a quelle nel testo?
+
 ## FORMATO OUTPUT
 Rispondi con JSON:
 {
-  "missingEvents": [{ eventDate, datePrecision, eventType, title, description, sourceType, diagnosis, doctor, facility, confidence, sourceText, sourcePages }],
+  "missingEvents": [{ extraction_reasoning, eventDate, datePrecision, eventType, title, description, sourceType, diagnosis, doctor, facility, confidence, sourceText, sourcePages }],
   "corrections": [{ eventIndex, field, oldValue, newValue, reason }]
 }`;
 }

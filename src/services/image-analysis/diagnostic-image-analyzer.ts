@@ -5,7 +5,7 @@
  */
 
 import type { CaseType } from '@/types';
-import { getMistralClient, withMistralRetry, MISTRAL_MODELS } from '@/lib/mistral/client';
+import { getMistralClient, withMistralRetry, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 export interface ImageAnalysisResult {
@@ -108,9 +108,10 @@ Rispondi in formato JSON:
           ],
         },
       ],
-      temperature: 0.1,
+      temperature: 0,
       maxTokens: 500,
       responseFormat: { type: 'json_object' },
+      randomSeed: DETERMINISTIC_SEED,
     });
 
     return chatResponse;

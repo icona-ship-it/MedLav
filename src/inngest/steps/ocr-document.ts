@@ -57,6 +57,7 @@ async function saveOcrImagesToStorage(
 
 /**
  * Step 2: OCR a single document.
+ * Always runs fresh OCR to ensure maximum analysis quality.
  * Saves OCR pages to database and updates document status.
  * Returns null if OCR fails (error is logged and document marked as errore).
  */

@@ -42,6 +42,7 @@ pnpm-debug.log*
 
 # Scratchpad temp files
 scratchpad/*.tmp
+scratchpad/prompt-backups-*
 
 # Supabase
 supabase/.temp/

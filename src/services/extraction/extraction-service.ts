@@ -1,4 +1,5 @@
-import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import type { MistralResponseFormat } from '@/lib/mistral/client';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
@@ -8,6 +9,82 @@ import { logger } from '@/lib/logger';
 
 // Smaller chunks = faster per-chunk extraction + less risk of truncation
 const MAX_CHUNK_CHARS = 15_000;
+
+// ── JSON Schema for structured extraction (enforced at token level by Mistral) ──
+const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
+  type: 'json_schema',
+  jsonSchema: {
+    name: 'extraction_response',
+    schemaDefinition: {
+      type: 'object',
+      properties: {
+        events: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              extraction_reasoning: {
+                type: 'string',
+                description: 'Why this event was extracted and where it was found in the text',
+              },
+              eventDate: {
+                type: ['string', 'null'],
+                description: 'Date in YYYY-MM-DD format, null if unknown',
+              },
+              datePrecision: {
+                type: 'string',
+                enum: ['giorno', 'mese', 'anno', 'sconosciuta'],
+                description: 'How precise the date is',
+              },
+              eventType: {
+                type: 'string',
+                enum: [
+                  'visita', 'esame', 'diagnosi', 'intervento', 'terapia',
+                  'ricovero', 'follow-up', 'referto', 'prescrizione',
+                  'consenso', 'complicanza', 'spesa_medica',
+                  'documento_amministrativo', 'certificato', 'altro',
+                ],
+                description: 'Category of clinical event',
+              },
+              title: { type: 'string', description: 'Short title, max 100 chars' },
+              description: { type: 'string', description: 'Complete detailed description with all values' },
+              sourceType: {
+                type: 'string',
+                enum: ['cartella_clinica', 'referto_controllo', 'esame_strumentale', 'esame_ematochimico', 'altro'],
+                description: 'Source document category',
+              },
+              diagnosis: { type: ['string', 'null'], description: 'Formal diagnosis if present' },
+              doctor: { type: ['string', 'null'], description: 'Doctor name if present' },
+              facility: { type: ['string', 'null'], description: 'Facility name if present' },
+              confidence: { type: 'number', description: '0-100 confidence score' },
+              requiresVerification: { type: 'boolean', description: 'Whether manual verification is needed' },
+              reliabilityNotes: { type: ['string', 'null'], description: 'Reliability notes if applicable' },
+              sourceText: { type: 'string', description: 'Exact quote from OCR text, max 200 chars' },
+              sourcePages: { type: 'array', items: { type: 'number' }, description: 'Page numbers' },
+            },
+            required: [
+              'extraction_reasoning', 'eventDate', 'datePrecision', 'eventType',
+              'title', 'description', 'sourceType', 'confidence',
+              'requiresVerification', 'sourceText', 'sourcePages',
+            ],
+          },
+        },
+        abbreviations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              abbreviation: { type: 'string' },
+              expansion: { type: 'string' },
+            },
+            required: ['abbreviation', 'expansion'],
+          },
+        },
+      },
+      required: ['events'],
+    },
+  },
+};
 
 export interface ExtractionParams {
   documentText: string;
@@ -86,10 +163,11 @@ export async function extractEventsFromChunk(params: {
         }),
       },
     ],
-    responseFormat: { type: 'json_object' },
+    responseFormat: EXTRACTION_JSON_SCHEMA,
     temperature,
     maxTokens: 8192,
     timeoutMs: TIMEOUT_EXTRACTION,
+    randomSeed: DETERMINISTIC_SEED,
     label: `extraction:${chunkLabel.slice(0, 30)}`,
   });
 
@@ -150,7 +228,7 @@ export async function extractEventsFromDocument(
 
   // Self-verify critical events
   const fullText = chunks.join('\n');
-  const verifiedEvents = flagUnverifiedCriticalEvents(dedupedEvents, fullText);
+  const verifiedEvents = flagUnverifiedEvents(dedupedEvents, fullText);
 
   return {
     events: verifiedEvents,
@@ -343,6 +421,7 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
 
   // Parse each event with safe defaults
   const validEvents: ExtractedEvent[] = [];
+  let sentinelCopyCount = 0;
   for (const rawEvent of rawEvents) {
     const e = rawEvent as Record<string, unknown>;
     if (!e || typeof e !== 'object') continue;
@@ -358,6 +437,17 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
       ? 'sconosciuta'
       : String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');
 
+    // Sentinel detection: nullify fields where LLM copied placeholder values from example
+    const rawDiagnosis = e.diagnosis != null ? String(e.diagnosis) : null;
+    const rawDoctor = e.doctor != null ? String(e.doctor) : null;
+    const rawFacility = e.facility != null ? String(e.facility) : null;
+    const diagnosis = rawDiagnosis && isSentinelValue(rawDiagnosis) ? null : rawDiagnosis;
+    const doctor = rawDoctor && isSentinelValue(rawDoctor) ? null : rawDoctor;
+    const facility = rawFacility && isSentinelValue(rawFacility) ? null : rawFacility;
+    if (diagnosis !== rawDiagnosis || doctor !== rawDoctor || facility !== rawFacility) {
+      sentinelCopyCount++;
+    }
+
     validEvents.push({
       eventDate,
       datePrecision,
@@ -365,9 +455,9 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
       title: String(e.title ?? 'Evento clinico'),
       description: String(e.description ?? ''),
       sourceType: String(e.sourceType ?? e.source_type ?? 'altro'),
-      diagnosis: e.diagnosis != null ? String(e.diagnosis) : null,
-      doctor: e.doctor != null ? String(e.doctor) : null,
-      facility: e.facility != null ? String(e.facility) : null,
+      diagnosis,
+      doctor,
+      facility,
       confidence: typeof e.confidence === 'number' ? Math.min(100, Math.max(0, e.confidence)) : 70,
       requiresVerification: isDateMissing ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
       reliabilityNotes: isDateMissing
@@ -378,9 +468,24 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     });
   }
 
+  if (sentinelCopyCount > 0) {
+    logger.warn('extraction', `Detected ${sentinelCopyCount} events with sentinel/placeholder values copied from example — nullified`);
+  }
+
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
   logger.info('extraction', ` Parsed ${validEvents.length}/${rawEvents.length} events`);
   return { events: validEvents, abbreviations };
+}
+
+// ── Sentinel value detection (prevent LLM from copying example placeholders) ──
+
+const SENTINEL_PATTERNS = [
+  /PLACEHOLDER/i, /NON_COPIARE/i, /ESEMPIO_FITTIZIO/i,
+  /NOME_ESEMPIO/i, /STRUTTURA_PLACEHOLDER/i, /DIAGNOSI_PLACEHOLDER/i,
+];
+
+function isSentinelValue(value: string): boolean {
+  return SENTINEL_PATTERNS.some((p) => p.test(value));
 }
 
 // ── Intra-document deduplication ──
@@ -442,46 +547,61 @@ function deduplicateWithinDocument(allChunkEvents: ExtractedEvent[]): ExtractedE
   return result;
 }
 
-// ── Self-verification for critical events ──
+// ── Self-verification: grounding check for ALL events ──
 
 const CRITICAL_EVENT_TYPES = [
   'intervento', 'diagnosi', 'complicanza', 'ricovero', 'dimissione',
   'decesso', 'consenso', 'trasfusione',
 ];
 
-function flagUnverifiedCriticalEvents(
+function flagUnverifiedEvents(
   events: ExtractedEvent[],
   fullText: string,
 ): ExtractedEvent[] {
   const normalizedFull = fullText.toLowerCase().replace(/\s+/g, ' ');
+  let ungroundedCount = 0;
 
-  return events.map((event) => {
+  const result = events.map((event) => {
     const isCritical = CRITICAL_EVENT_TYPES.includes(event.eventType || '');
-    if (!isCritical) return event;
-
     const sourceText = event.sourceText || '';
+
+    // Check 1: sourceText too short or missing
     if (sourceText.length < 10) {
+      ungroundedCount++;
       return {
         ...event,
         requiresVerification: true,
         reliabilityNotes: ((event.reliabilityNotes || '') +
-          ' [AUTO] Evento critico senza testo sorgente — richiede revisione manuale.').trim(),
+          (isCritical
+            ? ' [AUTO] Evento critico senza testo sorgente — richiede revisione manuale.'
+            : ' [AUTO] Testo sorgente assente o troppo breve.')).trim(),
       };
     }
 
-    const normalizedSource = sourceText.toLowerCase().replace(/\s+/g, ' ').trim();
+    // Check 2: sourceText not found in document (fuzzy: use first 60 chars for matching)
+    const matchText = sourceText.length > 60 ? sourceText.slice(0, 60) : sourceText;
+    const normalizedSource = matchText.toLowerCase().replace(/\s+/g, ' ').trim();
 
-    if (!normalizedFull.includes(normalizedSource)) {
+    if (normalizedSource.length >= 10 && !normalizedFull.includes(normalizedSource)) {
+      ungroundedCount++;
       return {
         ...event,
         requiresVerification: true,
         reliabilityNotes: ((event.reliabilityNotes || '') +
-          ' [AUTO] Evento critico: testo sorgente non trovato nel documento — possibile imprecisione, richiede revisione.').trim(),
+          (isCritical
+            ? ' [AUTO] Evento critico: testo sorgente non trovato nel documento — possibile imprecisione, richiede revisione.'
+            : ' [AUTO] Testo sorgente non trovato nel documento — verificare.')).trim(),
       };
     }
 
     return event;
   });
+
+  if (ungroundedCount > 0) {
+    logger.info('extraction', `Grounding check: ${ungroundedCount}/${events.length} events flagged for verification`);
+  }
+
+  return result;
 }
 
 function deduplicateAbbreviations(
