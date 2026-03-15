@@ -18,7 +18,7 @@ vi.mock('@/lib/mistral/client', () => ({
     },
   })),
   withMistralRetry: vi.fn(async (fn: () => Promise<unknown>) => fn()),
-  MISTRAL_MODELS: { PIXTRAL_LARGE: 'pixtral-large-24-11' },
+  MISTRAL_MODELS: { PIXTRAL_LARGE: 'pixtral-large-latest' },
   TIMEOUT_DEFAULT: 120000,
   DETERMINISTIC_SEED: 42,
 }));

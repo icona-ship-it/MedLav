@@ -17,17 +17,17 @@ const MAX_RETRY_DELAY_MS = 30_000;
 // ── Deterministic seed for reproducible outputs ──
 export const DETERMINISTIC_SEED = 42;
 
-// Model constants — pinned to dated releases for reproducibility
-// See https://docs.mistral.ai/getting-started/models for valid IDs
+// Model constants — using -latest aliases for now.
+// TODO: pin to exact version IDs after verifying with Mistral List Models API.
 export const MISTRAL_MODELS = {
   /** Vision model for OCR and document analysis */
-  PIXTRAL_LARGE: 'pixtral-large-24-11',
+  PIXTRAL_LARGE: 'pixtral-large-latest',
   /** Large model for complex reasoning (synthesis, review) */
-  MISTRAL_LARGE: 'mistral-large-2-1-24-11',
+  MISTRAL_LARGE: 'mistral-large-latest',
   /** Small model for fast structured extraction */
-  MISTRAL_SMALL: 'mistral-small-3-1-25-03',
+  MISTRAL_SMALL: 'mistral-small-latest',
   /** Dedicated OCR model for document text extraction */
-  OCR: 'mistral-ocr-2503',
+  OCR: 'mistral-ocr-latest',
 } as const;
 
 /**

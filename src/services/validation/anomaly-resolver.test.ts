@@ -6,7 +6,7 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
 // Mock Mistral client
 vi.mock('@/lib/mistral/client', () => ({
-  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-2-1-24-11' },
+  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
   TIMEOUT_DEFAULT: 120_000,
   DETERMINISTIC_SEED: 42,
   streamMistralChat: vi.fn(),

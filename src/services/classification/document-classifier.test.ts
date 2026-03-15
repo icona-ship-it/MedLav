@@ -3,7 +3,7 @@ import type { Mock } from 'vitest';
 
 vi.mock('@/lib/mistral/client', () => ({
   streamMistralChat: vi.fn(),
-  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-2-1-24-11' },
+  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
   DETERMINISTIC_SEED: 42,
 }));
 
@@ -152,7 +152,7 @@ describe('document-classifier', () => {
 
       // Assert
       const callArgs = mockStreamChat.mock.calls[0][0];
-      expect(callArgs.model).toBe('mistral-large-2-1-24-11');
+      expect(callArgs.model).toBe('mistral-large-latest');
     });
 
     it('should request json_object response format', async () => {
