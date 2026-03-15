@@ -35,11 +35,13 @@ export function consolidateEvents(
     }
   }
 
-  // Sort chronologically, then by event type for same-date events
+  // Sort chronologically, then by event type, then by title for deterministic ordering
   allEvents.sort((a, b) => {
     const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
-    return (a.eventType ?? '').localeCompare(b.eventType ?? '');
+    const typeCompare = (a.eventType ?? '').localeCompare(b.eventType ?? '');
+    if (typeCompare !== 0) return typeCompare;
+    return (a.title ?? '').localeCompare(b.title ?? '');
   });
 
   // Detect duplicates/discrepancies across documents
@@ -243,7 +245,9 @@ export function consolidateNewWithExisting(
   const allEvents = [...existingEvents, ...newEventsToInsert].sort((a, b) => {
     const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
-    return (a.eventType ?? '').localeCompare(b.eventType ?? '');
+    const typeCompare = (a.eventType ?? '').localeCompare(b.eventType ?? '');
+    if (typeCompare !== 0) return typeCompare;
+    return (a.title ?? '').localeCompare(b.title ?? '');
   });
 
   return { newEventsToInsert, allEvents };

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { csrfHeaders } from '@/lib/csrf-client';
 import { AnomaliesSection, MissingDocsSection } from './anomalies-section';
 import { QualitySummaryCard } from './quality-summary-card';
@@ -56,6 +57,7 @@ export function AnomalyReviewStep({
   const router = useRouter();
   const [isConfirming, setIsConfirming] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const activeAnomalies = useMemo(
     () => anomalies.filter((a) => a.status !== 'user_dismissed'),
@@ -182,34 +184,30 @@ export function AnomalyReviewStep({
         documentPages={documentPages}
       />
 
-      {/* Progress */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">
-              {userActionedCount} di {totalActionable} revisionate
-            </span>
-            <span className="text-xs text-muted-foreground">{progressPercent}%</span>
-          </div>
-          <Progress value={progressPercent} className="h-2" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Puoi confermare (includi nel report) o ignorare (escludi) le anomalie. Le anomalie risolte dall&apos;analisi automatica non richiedono azione.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Workflow guide — always visible */}
-      <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/30 p-4">
-        <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-          <div className="space-y-2 text-sm">
-            <p className="font-semibold text-blue-900 dark:text-blue-200">Come funziona la revisione</p>
+      {/* Workflow guide — collapsible, closed by default */}
+      <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+          >
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-sm font-medium text-blue-900 dark:text-blue-200 flex-1">Come funziona la revisione?</span>
+            {guideOpen ? (
+              <ChevronDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="rounded-b-lg border border-t-0 border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/30 px-4 py-3 -mt-px space-y-2 text-sm">
             <p className="text-blue-800 dark:text-blue-300">
               Per ogni anomalia rilevata, hai due opzioni:
             </p>
             <ul className="space-y-1.5 text-blue-700 dark:text-blue-400">
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-amber-500 text-amber-700 dark:text-amber-400">Segnala</Badge>
+                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-amber-500 text-amber-700 dark:text-amber-400">Includi</Badge>
                 <span>L&apos;anomalia e reale e rilevante — verra <strong>inclusa nel report</strong> finale.</span>
               </li>
               <li className="flex items-start gap-2">
@@ -221,8 +219,8 @@ export function AnomalyReviewStep({
               Le anomalie con badge verde &quot;Risolta automaticamente&quot; non richiedono azione. Non e obbligatorio revisionare tutto: le anomalie non gestite verranno comunque segnalate nel report.
             </p>
           </div>
-        </div>
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Anomalies */}
       {anomalies.length > 0 && (
@@ -283,29 +281,40 @@ export function AnomalyReviewStep({
         </Card>
       )}
 
-      {/* Generate Report button — prominent and always visible */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="pt-6 pb-6">
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-sm text-muted-foreground text-center">
-              Non e necessario revisionare ogni anomalia. Le anomalie non archiviate saranno segnalate nel report.
+      {/* Sticky footer — "Genera Report" always visible at bottom */}
+      <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Progress indicator */}
+          <div className="flex-1 min-w-0">
+            {totalActionable > 0 && (
+              <div className="flex items-center gap-2">
+                <Progress value={progressPercent} className="h-2 flex-1" />
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {userActionedCount}/{totalActionable} revisionate
+                </span>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Le anomalie non gestite saranno segnalate nel report.
             </p>
-            <Button
-              size="lg"
-              className="text-base py-6 px-12 bg-green-600 hover:bg-green-700 text-white shadow-md"
-              onClick={handleConfirmReview}
-              disabled={isConfirming}
-            >
-              {isConfirming ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <Play className="mr-2 h-5 w-5" />
-              )}
-              Genera Report
-            </Button>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Generate button */}
+          <Button
+            size="lg"
+            className="shrink-0 text-base py-5 px-8 bg-green-600 hover:bg-green-700 text-white shadow-md"
+            onClick={handleConfirmReview}
+            disabled={isConfirming}
+          >
+            {isConfirming ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <Play className="mr-2 h-5 w-5" />
+            )}
+            Genera Report
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

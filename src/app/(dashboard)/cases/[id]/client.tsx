@@ -59,11 +59,11 @@ interface CaseDetailClientProps {
 const POLL_INTERVAL_MS = 10000;
 
 const WIZARD_STEPS = [
-  { number: 1, label: 'Documenti' },
-  { number: 2, label: 'Info Perizia' },
-  { number: 3, label: 'Elaborazione' },
-  { number: 4, label: 'Revisione' },
-  { number: 5, label: 'Report' },
+  { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },
+  { number: 2, label: 'Info Perizia', hint: 'Compila i dati della perizia (facoltativo)' },
+  { number: 3, label: 'Elaborazione', hint: 'Avvia l\'analisi AI dei documenti' },
+  { number: 4, label: 'Revisione', hint: 'Rivedi le segnalazioni trovate' },
+  { number: 5, label: 'Report', hint: 'Il tuo report è pronto' },
 ] as const;
 
 // --- Helpers ---
@@ -120,6 +120,7 @@ export function CaseDetailClient({
   const [activeResultTab, setActiveResultTab] = useState(report?.synthesis ? 'synthesis' : 'events');
   const [localAnomalies, setLocalAnomalies] = useState(anomalies);
   const [localDocuments, setLocalDocuments] = useState(initialDocuments);
+  const hasAutoOpenedReportRef = useRef(false);
 
   // Sync with server data on refresh
   useEffect(() => {
@@ -175,6 +176,14 @@ export function CaseDetailClient({
     return () => clearInterval(interval);
   }, [needsPolling, router]);
 
+  // Auto-open report dialog on first arrival at step 5 with report ready
+  useEffect(() => {
+    if (activeStep === 5 && hasReport && report?.synthesis && !hasAutoOpenedReportRef.current) {
+      hasAutoOpenedReportRef.current = true;
+      setReportDialogOpen(true);
+    }
+  }, [activeStep, hasReport, report?.synthesis]);
+
   const handleRegenerate = useCallback(async () => {
     setIsRegenerating(true);
     try {
@@ -227,6 +236,7 @@ export function CaseDetailClient({
             : processingStage === 'generazione_report'
                 ? 'Generazione in corso...'
                 : hasReport ? 'Report pronto' : 'In attesa',
+          hint: activeStep === step.number ? step.hint : undefined,
         }))}
         activeStep={activeStep}
         autoStep={autoStep}
@@ -322,18 +332,6 @@ export function CaseDetailClient({
                 />
               </>
             )}
-            {/* Document Coverage Card */}
-            <DocumentCoverageCard
-              documents={localDocuments}
-              events={events}
-            />
-            {/* Quality Summary Card */}
-            <QualitySummaryCard
-              events={events}
-              anomalies={localAnomalies}
-              missingDocs={missingDocs}
-              documentPages={documentPages}
-            />
             <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
               <TabsList className="sticky top-[72px] z-20 bg-background/95 backdrop-blur-sm overflow-x-auto scrollbar-hide flex-nowrap">
                 <TabsTrigger value="synthesis" className="relative">
@@ -390,6 +388,17 @@ export function CaseDetailClient({
                 />
               </TabsContent>
             </Tabs>
+            {/* Coverage & Quality below tabs */}
+            <DocumentCoverageCard
+              documents={localDocuments}
+              events={events}
+            />
+            <QualitySummaryCard
+              events={events}
+              anomalies={localAnomalies}
+              missingDocs={missingDocs}
+              documentPages={documentPages}
+            />
             </div>
           ) : processingStage === 'generazione_report' ? (
             <Card className="border-primary/30">

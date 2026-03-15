@@ -232,34 +232,27 @@ export const processCaseDocuments = inngest.createFunction(
     // Step 4.5: Link images to events
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
 
-    // Step 4.6: Analyze diagnostic images
-    const imageAnalysisResults = await step.run(
-      'analyze-diagnostic-images',
-      () => analyzeDiagnosticImagesStep(caseId, metadata.caseType),
-    );
-
-    // Step 5: Detect anomalies
-    const rawAnomalies = await step.run(
-      'detect-anomalies',
-      () => detectAnomaliesStep(caseId, consolidationResult.allEvents, metadata.caseType, metadata.caseTypes),
-    );
+    // Steps 4.6 + 5 + 6 + 7a: Run independent analysis steps in parallel
+    const [imageAnalysisResults, rawAnomalies, missingDocs, calculations] = await Promise.all([
+      step.run('analyze-diagnostic-images', () =>
+        analyzeDiagnosticImagesStep(caseId, metadata.caseType),
+      ),
+      step.run('detect-anomalies', () =>
+        detectAnomaliesStep(caseId, consolidationResult.allEvents, metadata.caseType, metadata.caseTypes),
+      ),
+      step.run('detect-missing-documents', () =>
+        detectMissingDocumentsStep(caseId, consolidationResult.allEvents, metadata.caseType, metadata.caseTypes),
+      ),
+      step.run('calculate-periods', () =>
+        calculatePeriodsStep(consolidationResult.allEvents, metadata.caseType),
+      ),
+    ]);
 
     // Step 5.5: LLM Anomaly Resolution — verify anomalies against source OCR pages
+    // Must run after detect-anomalies completes (depends on rawAnomalies)
     let anomalies = await step.run(
       'resolve-anomalies',
       () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
-    );
-
-    // Step 6: Detect missing documents
-    const missingDocs = await step.run(
-      'detect-missing-documents',
-      () => detectMissingDocumentsStep(caseId, consolidationResult.allEvents, metadata.caseType, metadata.caseTypes),
-    );
-
-    // Step 7a: Calculate medico-legal periods
-    const calculations = await step.run(
-      'calculate-periods',
-      () => calculatePeriodsStep(consolidationResult.allEvents, metadata.caseType),
     );
 
     // Step 7a.5: Anomaly review gate — pause if anomalies or missing docs exist

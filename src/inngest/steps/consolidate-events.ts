@@ -21,7 +21,9 @@ export async function consolidateEventsStep(
     .select('*')
     .eq('case_id', caseId)
     .eq('is_deleted', false)
-    .order('event_date', { ascending: true });
+    .order('event_date', { ascending: true })
+    .order('event_type', { ascending: true })
+    .order('created_at', { ascending: true });
 
   const allEvents: ConsolidatedEvent[] = (existingRaw ?? []).map((e, idx) => ({
     orderNumber: idx + 1,

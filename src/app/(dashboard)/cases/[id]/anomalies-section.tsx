@@ -372,7 +372,7 @@ function AnomalyCard({
             ) : (
               <ThumbsUp className="mr-1 h-3 w-3" />
             )}
-            Si, segnala nel report
+            Includi nel report
           </Button>
           <Button
             variant="ghost"
@@ -386,7 +386,7 @@ function AnomalyCard({
             ) : (
               <Archive className="mr-1 h-3 w-3" />
             )}
-            Non rilevante — escludi
+            Escludi
           </Button>
         </div>
       )}
