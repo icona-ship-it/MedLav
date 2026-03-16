@@ -138,7 +138,7 @@ export function ReportStep({
                   L&apos;AI sta analizzando {events.length} eventi e generando il report medico-legale.
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground italic">
-                  Questa operazione richiede 1-3 minuti. La pagina si aggiorna automaticamente.
+                  La pagina si aggiorna automaticamente al completamento.
                 </p>
               </div>
             </div>

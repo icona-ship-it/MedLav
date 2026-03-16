@@ -169,7 +169,26 @@ export function ProcessingSection({
         <CardContent className="pt-6">
           {hasProcessingDocs ? (
             <div className="space-y-4">
-              <p className="text-sm font-medium text-center">Elaborazione in corso</p>
+              {/* Big progress indicator */}
+              {(() => {
+                const processingDocs = documents.filter((d) => !['caricato'].includes(d.processing_status));
+                const completedCount = processingDocs.filter((d) => d.processing_status === 'completato' || d.processing_status === 'errore').length;
+                const totalCount = processingDocs.length;
+                const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+                return (
+                  <div className="space-y-3">
+                    <p className="text-base font-semibold text-center">
+                      Elaborazione in corso — {completedCount}/{totalCount} documenti
+                    </p>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
 
               <ProcessingProgress
                 documents={documents.filter((d) => !['caricato'].includes(d.processing_status))}
