@@ -23,7 +23,7 @@ async function saveOcrImagesToStorage(
   // Upload ALL images in parallel
   const uploadResults = await Promise.allSettled(
     imagesToSave.map(async (img) => {
-      const storagePath = `ocr-images/${documentId}/p${img.pageNumber}-f${img.figureIndex}.png`;
+      const storagePath = `ocr-images/${documentId}/p${img.pageNumber}-f${img.figureIndex}.jpg`;
       await uploadBase64Image({ base64Data: img.imageBase64, storagePath });
       return { pageNumber: img.pageNumber, storagePath };
     }),

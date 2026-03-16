@@ -1,7 +1,15 @@
+import sharp from 'sharp';
 import { createAdminClient } from './admin';
 
 const BUCKET_NAME = 'documents';
 const SIGNED_URL_EXPIRY_SECONDS = 3600; // 1 hour
+
+/**
+ * Max width for stored images. Medical images displayed at max ~800px in A4,
+ * so 1600px gives 2x for retina/print while keeping size reasonable.
+ */
+const MAX_IMAGE_WIDTH = 1600;
+const JPEG_QUALITY = 80;
 
 /**
  * Generate a signed URL for downloading a file from Supabase Storage.
@@ -41,7 +49,8 @@ export async function downloadFile(storagePath: string): Promise<Blob> {
 
 /**
  * Upload a base64-encoded image to Supabase Storage.
- * Converts base64 data to a Buffer and uploads as PNG.
+ * Compresses to JPEG (quality 80) and resizes to max 1600px width to save storage and egress.
+ * Backwards-compatible: storage path extension is controlled by the caller.
  */
 export async function uploadBase64Image(params: {
   base64Data: string;
@@ -54,12 +63,19 @@ export async function uploadBase64Image(params: {
     ? params.base64Data.split(',')[1]
     : params.base64Data;
 
-  const buffer = Buffer.from(rawBase64, 'base64');
+  const rawBuffer = Buffer.from(rawBase64, 'base64');
+
+  // Compress: resize to max width + convert to JPEG quality 80
+  // Typical reduction: 2-5 MB PNG → 100-400 KB JPEG
+  const compressed = await sharp(rawBuffer)
+    .resize({ width: MAX_IMAGE_WIDTH, withoutEnlargement: true })
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toBuffer();
 
   const { error } = await supabase.storage
     .from(BUCKET_NAME)
-    .upload(params.storagePath, buffer, {
-      contentType: 'image/png',
+    .upload(params.storagePath, compressed, {
+      contentType: 'image/jpeg',
       upsert: true,
     });
 

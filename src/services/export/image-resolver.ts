@@ -44,7 +44,9 @@ export async function resolveOcrImages(text: string): Promise<Map<string, Resolv
       const arrayBuffer = await blob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       const base64 = buffer.toString('base64');
-      const mimeType = blob.type || 'image/png';
+      // New uploads are JPEG, old ones may be PNG
+      const isJpeg = storagePath.endsWith('.jpg') || storagePath.endsWith('.jpeg');
+      const mimeType = isJpeg ? 'image/jpeg' : (blob.type || 'image/png');
       resolved.set(storagePath, { storagePath, base64, mimeType, buffer });
     } catch (err) {
       logger.warn('export', `Failed to resolve image ${storagePath}: ${err instanceof Error ? err.message : 'unknown'}`);

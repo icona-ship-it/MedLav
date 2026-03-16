@@ -52,13 +52,25 @@ export async function GET(
   }
 
   try {
+    // Check ETag — if browser already has this image, skip download
+    const etag = `"${Buffer.from(imagePath).toString('base64url')}"`;
+    if (request.headers.get('if-none-match') === etag) {
+      return new NextResponse(null, { status: 304 });
+    }
+
     const blob = await downloadFile(imagePath);
     const arrayBuffer = await blob.arrayBuffer();
 
+    // Detect content type: new uploads are JPEG, old ones may be PNG
+    const isJpeg = imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg');
+    const contentType = isJpeg ? 'image/jpeg' : (blob.type || 'image/png');
+
     return new NextResponse(new Uint8Array(arrayBuffer), {
       headers: {
-        'Content-Type': blob.type || 'image/png',
-        'Cache-Control': 'private, max-age=3600',
+        'Content-Type': contentType,
+        // OCR images never change — cache aggressively (30 days, immutable)
+        'Cache-Control': 'private, max-age=2592000, immutable',
+        'ETag': etag,
       },
     });
   } catch {
