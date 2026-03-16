@@ -44,10 +44,17 @@ export async function signUp(formData: FormData) {
   });
 
   if (error) {
+    logger.error('auth', 'Sign up error', { error: error.message, code: error.status });
     if (error.message.includes('already registered')) {
       return { error: 'Questa email è già registrata' };
     }
-    return { error: 'Errore durante la registrazione. Riprova.' };
+    if (error.message.includes('rate limit') || error.status === 429) {
+      return { error: 'Troppi tentativi di registrazione. Riprova tra qualche minuto.' };
+    }
+    if (error.message.includes('not authorized') || error.message.includes('not allowed')) {
+      return { error: 'La registrazione non è abilitata. Contatta l\'amministratore.' };
+    }
+    return { error: `Errore durante la registrazione: ${error.message}` };
   }
 
   // Create profile in profiles table with GDPR consent record
