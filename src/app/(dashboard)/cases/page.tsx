@@ -1,12 +1,19 @@
 export const revalidate = 30;
 
 import Link from 'next/link';
-import { Archive, FileText, FolderPlus } from 'lucide-react';
+import { Archive, FileText, FolderPlus, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
 import { statusConfig, caseTypeLabels, processingStageConfig } from '@/lib/constants';
+
+const STAGE_ICONS = {
+  spinner: Loader2,
+  check: CheckCircle2,
+  alert: AlertTriangle,
+  error: XCircle,
+} as const;
 
 const VALID_STATUSES = ['bozza', 'in_revisione', 'definitivo', 'archiviato'];
 
@@ -102,11 +109,14 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                         </Badge>
                         {(() => {
                           const stage = processingStageConfig[caseItem.processing_stage as string];
-                          return stage?.show ? (
+                          if (!stage?.show) return null;
+                          const Icon = stage.icon ? STAGE_ICONS[stage.icon] : null;
+                          return (
                             <Badge variant={stage.variant}>
+                              {Icon && <Icon className={`mr-1 h-3 w-3${stage.icon === 'spinner' ? ' animate-spin' : ''}`} />}
                               {stage.label}
                             </Badge>
-                          ) : null;
+                          );
                         })()}
                         <Badge variant="outline">
                           {(caseItem.case_role as string).toUpperCase()}

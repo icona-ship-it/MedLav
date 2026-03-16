@@ -75,7 +75,7 @@ export function ReportA4Viewer({
         <div className="report-a4-page">
           <p className="py-12 text-center text-sm text-muted-foreground">
             {events.length > 0
-              ? 'Il report non è ancora stato generato, ma gli eventi sono già disponibili nella tab Timeline.'
+              ? 'Il report non \u00e8 ancora stato generato, ma gli eventi sono gi\u00e0 disponibili nella tab Timeline.'
               : 'Nessuna sintesi generata. Avvia l\'elaborazione dei documenti.'}
           </p>
         </div>
@@ -86,44 +86,76 @@ export function ReportA4Viewer({
   return (
     <div className="report-page-container">
       <div className="report-a4-page">
-        <div className="space-y-6">
-          {sections.map((section) => (
+        {sections.map((section, index) => {
+          const isPreamble = section.id === 'preamble';
+          const isFullReport = section.id === 'full_report';
+          const showRegenerate = !isPreamble && !isFullReport;
+          const isFirst = index === 0;
+
+          return (
             <div
               key={section.id}
               id={`section-${section.id}`}
-              className={`group ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}`}
+              className={`group ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}${!isFirst ? ' mt-10 pt-8 border-t border-border/40' : ''}`}
             >
-              {section.id !== 'preamble' && section.id !== 'full_report' && (
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg font-semibold">{section.title}</h2>
-                  <SectionRegenerateButton
-                    caseId={caseId}
-                    sectionId={section.id}
-                    sectionTitle={section.title}
-                    disabled={regeneratingSection !== null}
-                    onRegenerated={() => handleSectionRegenerated(section.id)}
-                  />
+              {/* Section heading with regenerate button */}
+              {showRegenerate && (
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <h2 className="text-xl font-bold tracking-tight leading-tight">
+                    {section.title}
+                  </h2>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1">
+                    <SectionRegenerateButton
+                      caseId={caseId}
+                      sectionId={section.id}
+                      sectionTitle={section.title}
+                      disabled={regeneratingSection !== null}
+                      onRegenerated={() => handleSectionRegenerated(section.id)}
+                    />
+                  </div>
                 </div>
               )}
-              <div className="prose prose-sm max-w-none">
-                {eventRefs.length > 0 ? (
-                  <LinkedReportViewer
-                    content={section.content}
-                    events={eventRefs}
-                    onEventClick={onEventClick}
-                    caseId={caseId}
-                  />
-                ) : (
-                  <MarkdownPreview content={section.content} caseId={caseId} />
-                )}
-              </div>
+
+              {/* Preamble: render as formal header block */}
+              {isPreamble && (
+                <div className="mb-2 pb-6 border-b border-border/40 text-center">
+                  <div className="prose max-w-none">
+                    {eventRefs.length > 0 ? (
+                      <LinkedReportViewer
+                        content={section.content}
+                        events={eventRefs}
+                        onEventClick={onEventClick}
+                        caseId={caseId}
+                      />
+                    ) : (
+                      <MarkdownPreview content={section.content} caseId={caseId} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Regular sections */}
+              {!isPreamble && (
+                <div className="prose max-w-none">
+                  {eventRefs.length > 0 ? (
+                    <LinkedReportViewer
+                      content={section.content}
+                      events={eventRefs}
+                      onEventClick={onEventClick}
+                      caseId={caseId}
+                    />
+                  ) : (
+                    <MarkdownPreview content={section.content} caseId={caseId} />
+                  )}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          );
+        })}
 
         {/* Rating at bottom of A4 page for definitivo reports */}
         {report.report_status === 'definitivo' && (
-          <div className="mt-8 pt-6 border-t">
+          <div className="mt-10 pt-6 border-t border-border/40">
             <ReportRating
               reportId={report.id}
               existingRating={existingRating}
