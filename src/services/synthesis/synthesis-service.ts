@@ -190,7 +190,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext);
+  return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis);
 }
 
 /**
@@ -286,7 +286,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext);
+  return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis);
 }
 
 // ── Shared helpers ──
@@ -312,13 +312,41 @@ async function fetchGuidelineContext(
   }
 }
 
+/**
+ * Programmatically append ALLEGATI ICONOGRAFICI section to ensure
+ * diagnostic images always appear in the report, regardless of LLM behavior.
+ */
+function appendImageAppendix(
+  report: string,
+  imageAnalysis?: ImageAnalysisResult[],
+): string {
+  if (!imageAnalysis || imageAnalysis.length === 0) return report;
+
+  // Only include images that have a storagePath (actually downloadable)
+  const withPaths = imageAnalysis.filter((img) => img.storagePath);
+  if (withPaths.length === 0) return report;
+
+  // Check if the LLM already generated an ALLEGATI section
+  if (/allegati\s+iconografici/i.test(report)) return report;
+
+  const lines = withPaths.map((img, index) => {
+    const figNum = index + 1;
+    const caption = `Fig. ${figNum} — ${img.imageType}, pagina ${img.pageNumber}`;
+    return `![${caption}](ocr-image:${img.storagePath})\n\n*${img.description}*`;
+  });
+
+  return `${report.trimEnd()}\n\n## ALLEGATI ICONOGRAFICI\n\n${lines.join('\n\n')}`;
+}
+
 function finalizeReport(
   report: string,
   eventCount: number,
   promptVersion: string,
   validationContext?: ReportValidationContext,
+  imageAnalysis?: ImageAnalysisResult[],
 ): SynthesisResult {
-  const cleaned = stripSectionMarkers(report);
+  const withImages = appendImageAppendix(report, imageAnalysis);
+  const cleaned = stripSectionMarkers(withImages);
   const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
 
   const validation = validateReport(cleaned, eventCount, validationContext);
