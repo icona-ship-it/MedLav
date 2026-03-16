@@ -2,36 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import Image from 'next/image';
-import {
-  Loader2, FileText,
-} from 'lucide-react';
-import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import { csrfHeaders } from '@/lib/csrf-client';
 import { CaseHeader } from './case-header';
 import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
-import { EventsTab } from './events-tab';
-import { ReportTab } from './report-tab';
 import { PeriziaMetadataForm } from './perizia-form';
-const ReportDialog = dynamic(
-  () => import('./report-dialog').then((m) => ({ default: m.ReportDialog })),
-  { loading: () => null },
-);
-const OcrPreviewTab = dynamic(
-  () => import('./ocr-preview-tab').then((m) => ({ default: m.OcrPreviewTab })),
-  { loading: () => null },
-);
-import { QualitySummaryCard } from './quality-summary-card';
-import { DocumentCoverageCard } from './document-coverage-card';
+import { ReportStep } from './report-step';
 import { WizardStepBar } from './wizard-step-bar';
 import { AnomalyReviewStep } from './anomaly-review-step';
 import type {
@@ -113,14 +89,8 @@ export function CaseDetailClient({
   documentPages,
 }: CaseDetailClientProps) {
   const router = useRouter();
-  const [isRegenerating, setIsRegenerating] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [reportDialogOpen, setReportDialogOpen] = useState(false);
-  const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState(report?.synthesis ? 'synthesis' : 'events');
   const [localAnomalies, setLocalAnomalies] = useState(anomalies);
   const [localDocuments, setLocalDocuments] = useState(initialDocuments);
-  const hasAutoOpenedReportRef = useRef(false);
 
   // Sync with server data on refresh
   useEffect(() => {
@@ -175,34 +145,6 @@ export function CaseDetailClient({
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [needsPolling, router]);
-
-  // Auto-open report dialog on first arrival at step 5 with report ready
-  useEffect(() => {
-    if (activeStep === 5 && hasReport && report?.synthesis && !hasAutoOpenedReportRef.current) {
-      hasAutoOpenedReportRef.current = true;
-      setReportDialogOpen(true);
-    }
-  }, [activeStep, hasReport, report?.synthesis]);
-
-  const handleRegenerate = useCallback(async () => {
-    setIsRegenerating(true);
-    try {
-      const response = await fetch('/api/processing/regenerate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-        body: JSON.stringify({ caseId }),
-      });
-      const result = await response.json() as { success: boolean; error?: string };
-      if (!result.success) {
-        toast.error(result.error ?? 'Errore rigenerazione');
-      }
-      router.refresh();
-    } catch {
-      toast.error('Errore di rete. Verifica la connessione.');
-    } finally {
-      setIsRegenerating(false);
-    }
-  }, [caseId, router]);
 
   return (
     <div className="space-y-6">
@@ -311,147 +253,21 @@ export function CaseDetailClient({
       {/* === STEP 5: Report === */}
       {activeStep === 5 && (
         <div key="step-5" className="animate-step-in">
-          {hasReport ? (
-            <div className="space-y-4">
-            {report?.synthesis && (
-              <>
-                <Button
-                  size="lg"
-                  className="w-full text-base py-6 bg-primary hover:bg-primary/90 shadow-md"
-                  onClick={() => setReportDialogOpen(true)}
-                >
-                  <FileText className="mr-2 h-5 w-5" />
-                  Apri Report Completo
-                </Button>
-                <ReportDialog
-                  open={reportDialogOpen}
-                  onOpenChange={setReportDialogOpen}
-                  caseId={caseId}
-                  caseData={caseData}
-                  report={report}
-                />
-              </>
-            )}
-            <Tabs value={activeResultTab} onValueChange={setActiveResultTab} className="space-y-4">
-              <TabsList className="sticky top-[72px] z-20 bg-background/95 backdrop-blur-sm overflow-x-auto scrollbar-hide flex-nowrap">
-                <TabsTrigger value="synthesis" className="relative">
-                  Report
-                  {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length > 0 && (
-                    <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 leading-tight">
-                      {localAnomalies.filter((a) => a.severity === 'critica' || a.severity === 'alta').length}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="events">Timeline ({events.length})</TabsTrigger>
-                <TabsTrigger value="ocr">OCR</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="events">
-                <EventsTab
-                  caseId={caseId}
-                  events={events}
-                  eventImages={eventImages}
-                  onImageClick={setPreviewImage}
-                  highlightedEventOrderNumber={highlightedEventId}
-                  onViewInReport={(orderNumber) => {
-                    setHighlightedEventId(orderNumber);
-                    setActiveResultTab('synthesis');
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="synthesis">
-                <ReportTab
-                  caseId={caseId}
-                  report={report}
-                  isRegenerating={isRegenerating}
-                  onRegenerate={handleRegenerate}
-                  events={events}
-                  anomalyCount={localAnomalies.length}
-                  missingDocsCount={missingDocs.length}
-                  anomalies={localAnomalies}
-                  missingDocs={missingDocs}
-                  documents={localDocuments}
-                  onSwitchToAnomalies={() => handleSetStep(4)}
-                  onEventClick={(orderNumber) => {
-                    setHighlightedEventId(orderNumber);
-                    setActiveResultTab('events');
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="ocr">
-                <OcrPreviewTab
-                  caseId={caseId}
-                  documents={localDocuments}
-                  documentPages={documentPages}
-                />
-              </TabsContent>
-            </Tabs>
-            {/* Coverage & Quality below tabs */}
-            <DocumentCoverageCard
-              documents={localDocuments}
-              events={events}
-            />
-            <QualitySummaryCard
-              events={events}
-              anomalies={localAnomalies}
-              missingDocs={missingDocs}
-              documentPages={documentPages}
-            />
-            </div>
-          ) : processingStage === 'generazione_report' ? (
-            <Card className="border-primary/30">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center gap-4 py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <div className="text-center">
-                    <p className="text-base font-semibold">
-                      Generazione report in corso...
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      L&apos;AI sta analizzando {events.length} eventi e generando il report medico-legale.
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground italic">
-                      Questa operazione richiede 1-3 minuti. La pagina si aggiorna automaticamente.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nessun report disponibile. Carica i documenti e avvia l&apos;elaborazione.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          <ReportStep
+            caseId={caseId}
+            report={report}
+            events={events}
+            anomalies={localAnomalies}
+            missingDocs={missingDocs}
+            documents={localDocuments}
+            documentPages={documentPages}
+            eventImages={eventImages}
+            processingStage={processingStage}
+            onNavigateToStep={handleSetStep}
+          />
         </div>
       )}
       </div>
-
-      {/* Image Preview Dialog */}
-      {previewImage && (
-        <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>Immagine documento</DialogTitle>
-            </DialogHeader>
-            <div className="relative flex items-center justify-center overflow-auto min-h-[300px]">
-              <Image
-                src={previewImage}
-                alt="Immagine documento medico"
-                fill
-                className="object-contain"
-                sizes="(max-width: 896px) 100vw, 896px"
-                unoptimized
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

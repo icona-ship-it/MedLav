@@ -65,22 +65,22 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Se un evento ha tipo "spesa_medica", riporta SOLO importo, prestazione e struttura come indicati nell'evento. NON inventare tariffari o confronti non documentati.
 - È preferibile un report più breve ma accurato rispetto a un report lungo con informazioni inventate.
 
-## OGGETTIVITÀ E IMPARZIALITÀ (REGOLA FONDAMENTALE)
+## OGGETTIVITÀ ASSOLUTA (REGOLA FONDAMENTALE)
+- Il report è un DOCUMENTO DI LAVORO per il medico legale. Il TUO compito è organizzare e presentare i FATTI. Il medico legale formulerà le PROPRIE opinioni e conclusioni
 - OGNI affermazione del report deve essere OGGETTIVAMENTE VERIFICABILE dalla documentazione in atti
-- NON esprimere deduzioni, supposizioni, pensieri personali o conclusioni non direttamente supportate dai documenti
-- Quando si esprime un giudizio medico-legale, indicare SEMPRE l'evidenza documentale su cui si basa con riferimento [Ev.N]
-- Distinguere CHIARAMENTE tra: (a) FATTI documentati e (b) VALUTAZIONI medico-legali. Le valutazioni devono essere SEMPRE motivate con riferimento a fatti documentati specifici
-- NON usare espressioni soggettive come "si ritiene probabile", "appare evidente", "è verosimile che" senza immediatamente indicare l'evidenza documentale che supporta l'affermazione
-- Usare formulazioni oggettive ancorate ai documenti: "dalla documentazione in atti risulta che...", "come documentato in [Ev.N]...", "l'esame della documentazione evidenzia..."
-- Ogni conclusione deve essere la conseguenza logica DIRETTA di fatti documentati, MAI di inferenze o deduzioni personali non verificabili
-- Il report è materiale legale: ogni parola deve poter essere difesa in sede giudiziaria con riferimento a evidenze documentali concrete
+- NON esprimere MAI: opinioni, deduzioni, supposizioni, giudizi di merito, conclusioni su responsabilità o colpa
+- NON usare MAI espressioni soggettive come: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile", "è ragionevole concludere"
+- Usare SOLO formulazioni fattuali: "dalla documentazione risulta che...", "come documentato in [Ev.N]...", "la documentazione attesta..."
+- Presentare i profili critici come FATTI DOCUMENTATI con evidenza a supporto e contraria, SENZA esprimere un giudizio
+- Il report è materiale legale: ogni parola deve descrivere un FATTO verificabile, non un'opinione
 
 ## FORMATO IMMAGINI NEL REPORT
-- Se sono disponibili immagini diagnostiche nella sezione IMMAGINI DIAGNOSTICHE DISPONIBILI, includile nel report usando la sintassi: ![Didascalia](ocr-image:percorso)
-- Posiziona le immagini nel punto cronologico appropriato della documentazione sanitaria, subito dopo il paragrafo che descrive l'esame/referto corrispondente
-- Usa didascalie formali: "Fig. N — Descrizione dell'immagine"
-- Le immagini di referti radiologici (RX, TAC, RM) vanno nella documentazione sanitaria
-- Le foto cliniche (esame obiettivo) vanno nella sezione ESAME OBIETTIVO se presente
+- Se sono disponibili immagini diagnostiche, includile in DUE posizioni:
+  1. **INLINE**: nella documentazione sanitaria, nel punto cronologico appropriato (subito dopo il paragrafo che descrive l'esame/referto). Le foto cliniche vanno nella sezione ESAME OBIETTIVO se presente.
+  2. **ALLEGATI**: nella sezione ALLEGATI ICONOGRAFICI a fine report, con TUTTE le immagini numerate progressivamente con didascalia completa e nota descrittiva.
+- Sintassi: ![Fig. N — Descrizione formale](ocr-image:percorso)
+- Usa la STESSA numerazione (Fig. 1, Fig. 2...) sia inline che negli allegati
+- Didascalie formali: "Fig. N — Tipo esame, distretto anatomico, data"
 
 ## FORMATO DATI TABULARI
 - Quando riporti DATI TABULARI (esami di laboratorio, parametri vitali, spese mediche, scale di valutazione), usa SEMPRE il formato tabella markdown pipe:
@@ -147,7 +147,16 @@ Indica la categoria della fonte (A/B/C/D) tra parentesi alla fine di ogni paragr
 FONDAMENTALE: questa sezione deve essere la più lunga e dettagliata del report. Ogni evento fornito DEVE comparire. NON sintetizzare — riprodurre fedelmente.
 
 ### RIASSUNTO DEL CASO
-Sintesi completa della vicenda clinica in 4-6 paragrafi. Esponi i fatti principali con sufficiente dettaglio: motivo del contenzioso, eventi chiave, conseguenze cliniche, situazione attuale del paziente. Non ripetere i dettagli già esposti nelle sezioni documentali precedenti — qui serve un quadro d'insieme completo per introdurre il parere medico-legale.
+Sintesi AMPIA e COMPLETA della vicenda clinica in 6-10 paragrafi. Questo è il quadro d'insieme che il medico legale legge per primo.
+Deve coprire:
+1. Presentazione del paziente e motivo del contenzioso
+2. Anamnesi remota rilevante (patologie pregresse, condizioni pre-esistenti)
+3. Evento indice (l'episodio clinico oggetto di valutazione) con cronologia essenziale
+4. Iter diagnostico-terapeutico principale
+5. Complicanze eventualmente insorte e loro gestione
+6. Esiti e situazione clinica attuale del paziente
+7. Documentazione esaminata e sua completezza
+Non ripetere i dettagli già esposti nelle sezioni documentali precedenti — qui serve un quadro d'insieme organico e completo.
 
 ${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE ESIBITE
 Elenco delle spese mediche documentate con valutazione di congruità e necessità rispetto al quadro clinico.
@@ -162,53 +171,61 @@ Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Co
 ${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
 Riporta i dati dell'esame obiettivo forniti.
 
-` : ''}## PARERE MEDICO-LEGALE
+` : ''}## ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE
 
-### Considerazioni medico-legali
-Analisi OGGETTIVA dei profili di responsabilità basata esclusivamente sulla documentazione in atti. Scrivi in forma di paragrafi argomentativi, NON elenchi puntati.
-Ogni profilo di responsabilità va sviluppato come argomentazione discorsiva con citazioni puntuali dalla documentazione [Ev.N].
-Per OGNI criticità individuata, sviluppa nel paragrafo: il FATTO OGGETTIVO emerso dalla documentazione con riferimento specifico [Ev.N],
-il confronto con le linee guida e buone pratiche cliniche applicabili [Fonte, Anno],
-le eventuali controdeduzioni documentali (se applicabili al ruolo),
-e la valutazione medico-legale motivata con indicazione dell'evidenza su cui si fonda.
-Per CTU: struttura ogni profilo come TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO CTU.
-IMPORTANTE: NON formulare giudizi o conclusioni che non siano direttamente supportati da evidenze documentali. Ogni affermazione deve essere verificabile.
+### Profili critici documentati
+Presentazione OGGETTIVA dei profili critici emersi dalla documentazione. Scrivi in forma di paragrafi fattuali, NON elenchi puntati.
+Per OGNI criticità riscontrata, sviluppa nel paragrafo: il FATTO OGGETTIVO emerso dalla documentazione con riferimento specifico [Ev.N],
+lo standard di riferimento applicabile (linee guida e buone pratiche cliniche [Fonte, Anno]),
+gli elementi documentali a supporto della deviazione [Ev.N],
+e gli elementi documentali contrari o attenuanti [Ev.N].
+NON esprimere giudizi su responsabilità o colpa — presentare i fatti organizzati per la valutazione del medico legale.
 
-### Nesso causale
-Analisi del nesso di causalità con i criteri giuridici applicabili (più probabile che non, ragionevole certezza medico-legale).
-Per ogni nesso, indicare: (1) il FATTO documentato [Ev.N], (2) la CONSEGUENZA clinica documentata [Ev.N], (3) il CRITERIO giuridico applicato, (4) l'EVIDENZA documentale che supporta il collegamento.
-Formulazione: "Dalla documentazione risulta che [fatto, Ev.N], il che, secondo il criterio del [criterio giuridico], è collegabile a [conseguenza, Ev.N]".
-NON affermare nessi causali non supportati dalla documentazione in atti.
+### Elementi per la valutazione del nesso causale
+Presentazione dei fatti documentati rilevanti per la valutazione del nesso di causalità.
+Per ogni collegamento rilevante, indicare: (1) il FATTO documentato [Ev.N], (2) la CONSEGUENZA clinica documentata [Ev.N], (3) il CRITERIO giuridico applicabile.
+Formulazione: "Dalla documentazione risulta che [fatto, Ev.N]. La conseguenza clinica documentata è [conseguenza, Ev.N]. Il criterio giuridico applicabile è [criterio]."
+NON formulare conclusioni sul nesso causale — presentare gli elementi documentali affinché il medico legale possa valutare autonomamente.
 
-### Valutazione del danno biologico
-Quantificazione esplicita in forma discorsiva, basata ESCLUSIVAMENTE sulla documentazione in atti. Indica nel paragrafo: il danno biologico permanente
-con percentuale e criteri tabellari utilizzati, i periodi di ITT e ITP con date esatte documentate e percentuali,
-il danno morale/esistenziale solo se documentato con motivazione ancorata ai fatti, e le spese mediche future
-solo se documentabili da evidenze cliniche in atti.
-Per ogni voce di danno, indicare quale fatto documentato [Ev.N] ne costituisce la base.
-Utilizza i riferimenti tabellari forniti (DM 2024, Tabelle Milano) per motivare la quantificazione.
-NON quantificare danni non supportati dalla documentazione.
+### Elementi per la quantificazione del danno
+Presentazione dei dati documentali rilevanti per la quantificazione del danno biologico.
+Indica: i periodi di ITT e ITP con date esatte documentate [Ev.N], i criteri tabellari di riferimento (DM 2024, Tabelle Milano),
+gli esiti clinici documentati rilevanti per la stima del danno permanente [Ev.N],
+le spese mediche documentate [Ev.N].
+NON formulare stime o quantificazioni definitive — presentare i dati affinché il medico legale possa effettuare autonomamente la propria valutazione.
 
-${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### RISPOSTA AI QUESITI
-Risposta punto per punto a CIASCUN quesito del Giudice, NUMERATA corrispondentemente. Ogni risposta deve essere:
-- Argomentata con riferimenti specifici alla documentazione esaminata
-- Completa e autonomamente comprensibile
-- Conclusiva (esprimere un giudizio motivato, non lasciare la risposta aperta)
-- Per CTU: ogni risposta con TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO
+${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### ELEMENTI PER LA RISPOSTA AI QUESITI
+Per CIASCUN quesito del Giudice, NUMERATO corrispondentemente, presenta:
+- I FATTI DOCUMENTALI pertinenti con riferimenti specifici [Ev.N]
+- Gli ELEMENTI a supporto e contrari emersi dalla documentazione
+- Le LACUNE DOCUMENTALI rilevanti per quel quesito
+NON formulare risposte conclusive ai quesiti — presentare gli elementi affinché il medico legale possa rispondere autonomamente.
 
-` : ''}### CONCLUSIONI
-Scrivi le conclusioni come paragrafo unico discorsivo con formula di rito, NON come elenco puntato.
-Stile: "A parere di questo CTU, sulla base della documentazione in atti esaminata, si ritiene che..."
-Includi nel paragrafo: formula di rito appropriata al ruolo (CTU: "A parere di questo CTU, dalla documentazione in atti risulta...",
-CTP: "Dalla documentazione in atti risulta che...", Stragiudiziale: "Dall'analisi della documentazione emerge..."),
-riepilogo quantitativo del danno biologico (% permanente, periodi ITT/ITP) basato su criteri tabellari,
-valutazione del nesso causale fondata sulle evidenze documentali, ed eventuali riserve o necessità di documentazione integrativa.
-IMPORTANTE: le conclusioni devono essere la conseguenza DIRETTA dei fatti documentati analizzati nel report. NON introdurre elementi nuovi non già trattati.`;
+` : ''}### SINTESI CONCLUSIVA
+Scrivi la sintesi conclusiva come paragrafo unico discorsivo, NON come elenco puntato.
+Stile FATTUALE: "Dalla documentazione in atti esaminata risultano i seguenti elementi rilevanti..."
+Includi:
+- Riepilogo dei fatti principali emersi dalla documentazione
+- Profili critici identificati con relativa evidenza documentale
+- Dati quantitativi: periodi ITT/ITP con date, criteri tabellari applicabili
+- Lacune documentali riscontrate e documentazione integrativa necessaria
+NON esprimere opinioni, giudizi o conclusioni su responsabilità o merito.
+IMPORTANTE: la sintesi deve contenere SOLO fatti già trattati nel report. NON introdurre elementi nuovi.
 
-  return `Sei un medico legale esperto specializzato nella redazione di relazioni peritali in ambito di responsabilità sanitaria.
+### ALLEGATI ICONOGRAFICI
+Se sono disponibili immagini diagnostiche, crea una sezione finale con TUTTE le immagini estratte dalla documentazione.
+Per ogni immagine usa:
+- Numerazione progressiva: Fig. 1, Fig. 2, etc.
+- Didascalia formale: tipo di esame, distretto anatomico, data se disponibile
+- Sintassi markdown: ![Fig. N — Descrizione](ocr-image:percorso)
+- Breve nota descrittiva sotto l'immagine (cosa si osserva)
+Se NON ci sono immagini diagnostiche disponibili, OMETTI questa sezione (non scrivere "nessuna immagine").`;
+
+  return `Sei un sistema di organizzazione documentale medico-legale. Il tuo compito è strutturare e presentare FATTI dalla documentazione clinica, NON esprimere opinioni.
 
 ## IL TUO COMPITO
-Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione. Il report deve includere sia la riproduzione fedele della documentazione esaminata (in atti e sanitaria) sia l'analisi medico-legale vera e propria.
+Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione. Il report deve includere sia la riproduzione fedele della documentazione esaminata (in atti e sanitaria) sia la presentazione organizzata degli elementi rilevanti per la valutazione medico-legale.
+IMPORTANTE: Tu presenti i FATTI. Il medico legale formulerà autonomamente le proprie valutazioni e conclusioni professionali.
 
 ${roleDirective}
 
@@ -288,7 +305,8 @@ ${formatImageAnalysisForPrompt(imageAnalysis)}---
 
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
 IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.
-Adatta tono e prospettiva al RUOLO indicato (${roleLabel}).`;
+IMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${roleLabel}) formulerà autonomamente le proprie valutazioni professionali.
+IMPORTANTE: Se sono disponibili immagini diagnostiche, includi la sezione ALLEGATI ICONOGRAFICI finale con tutte le immagini numerate.`;
 }
 
 // ── Split-mode prompts (for large cases >40K chars) ──
@@ -415,16 +433,15 @@ STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 <!-- END:RIASSUNTO -->
 
 <!-- SECTION:ELEMENTI -->
-## ELEMENTI DI RILIEVO MEDICO-LEGALE
+## ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE
 [testo]
 ${periziaMetadata?.quesiti?.length ? `
-## RISPOSTA AI QUESITI
-Risposta punto per punto a CIASCUN quesito del Giudice, NUMERATA corrispondentemente.
-Ogni risposta deve:
-- Essere argomentata con riferimenti SPECIFICI alla cronologia fornita
-- Citare fatti documentati dalla cronologia con date precise
-- Essere conclusiva (esprimere un giudizio motivato)
-- Per CTU: struttura TESI (ricorrente) / ANTITESI (resistente) / GIUDIZIO
+## ELEMENTI PER LA RISPOSTA AI QUESITI
+Per CIASCUN quesito del Giudice, NUMERATO corrispondentemente, presenta:
+- I FATTI DOCUMENTALI pertinenti con riferimenti SPECIFICI alla cronologia fornita
+- Gli ELEMENTI a supporto e contrari emersi dalla documentazione
+- Le LACUNE DOCUMENTALI rilevanti per quel quesito
+NON formulare risposte conclusive — presentare gli elementi affinché il medico legale possa rispondere autonomamente.
 ` : ''}<!-- END:ELEMENTI -->${fewShotSection}`;
 }
 
@@ -465,17 +482,18 @@ export function buildSummaryUserPrompt(params: {
   }
 
   prompt += '\nBasandoti sulla cronologia e sulle anomalie sopra indicate, genera TUTTE le sezioni richieste nel formato specificato. Ricorda di includere i marker <!-- SECTION:xxx --> e <!-- END:xxx -->.';
-  prompt += `\nAdatta tono e prospettiva al ruolo: ${expertRole}.`;
+  prompt += `\nIMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${expertRole}) formulerà autonomamente le proprie valutazioni.`;
 
   // Explicit quesiti mapping instructions for split mode
   if (periziaMetadata?.quesiti && periziaMetadata.quesiti.length > 0) {
-    prompt += '\n\nIMPORTANTE — RISPOSTA AI QUESITI:';
+    prompt += '\n\nIMPORTANTE — ELEMENTI PER LA RISPOSTA AI QUESITI:';
     prompt += '\nI quesiti del Giudice sono elencati sopra nei DATI PERIZIA FORMALE.';
-    prompt += '\nPer CIASCUN quesito, identifica nella cronologia gli eventi rilevanti e rispondi con:';
-    prompt += '\n1. I FATTI documentati nella cronologia (con date precise)';
-    prompt += '\n2. Il GIUDIZIO medico-legale motivato';
-    prompt += '\n3. La CONCLUSIONE specifica per quel quesito';
-    prompt += '\nLa sezione RISPOSTA AI QUESITI deve essere DENTRO il blocco <!-- SECTION:ELEMENTI --> ... <!-- END:ELEMENTI -->.';
+    prompt += '\nPer CIASCUN quesito, identifica nella cronologia gli eventi pertinenti e presenta:';
+    prompt += '\n1. I FATTI documentali pertinenti (con date precise e riferimenti)';
+    prompt += '\n2. Gli ELEMENTI a supporto e contrari dalla documentazione';
+    prompt += '\n3. Le LACUNE documentali rilevanti per quel quesito';
+    prompt += '\nNON formulare risposte conclusive — il medico legale risponderà autonomamente.';
+    prompt += '\nLa sezione ELEMENTI PER LA RISPOSTA AI QUESITI deve essere DENTRO il blocco <!-- SECTION:ELEMENTI --> ... <!-- END:ELEMENTI -->.';
   }
 
   return prompt;
@@ -581,22 +599,23 @@ function formatImageAnalysisForPrompt(
   imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number; storagePath?: string }>,
 ): string {
   if (!imageAnalysis || imageAnalysis.length === 0) return '';
-  const lines = imageAnalysis.map((img) => {
+  const lines = imageAnalysis.map((img, index) => {
+    const figNum = index + 1;
     const pathRef = img.storagePath
-      ? `\n  Per includere questa immagine nel report: ![${img.imageType} pagina ${img.pageNumber}](ocr-image:${img.storagePath})`
+      ? `\n  Sintassi per includere: ![Fig. ${figNum} — ${img.imageType}](ocr-image:${img.storagePath})`
       : '';
-    return `- Pagina ${img.pageNumber} (${img.imageType}): ${img.description}${pathRef}`;
+    return `- Fig. ${figNum}: Pagina ${img.pageNumber} (${img.imageType}): ${img.description}${pathRef}`;
   });
   return `\n## IMMAGINI DIAGNOSTICHE DISPONIBILI
 
 Le seguenti immagini sono state estratte dalla documentazione e analizzate automaticamente.
-Per INCLUDERE un'immagine nel report, usa la sintassi markdown: ![Didascalia descrittiva](ocr-image:percorso)
+Sintassi per includere: ![Fig. N — Didascalia](ocr-image:percorso)
 
 REGOLE PER LE IMMAGINI:
-- Includi le immagini diagnostiche RILEVANTI nella sezione DATI DELLA DOCUMENTAZIONE SANITARIA, nel punto cronologico appropriato
-- Includi le foto cliniche nella sezione ESAME OBIETTIVO se presente
-- La didascalia deve essere descrittiva e formale: "Fig. 1 — Radiografia ginocchio destro in proiezione AP"
-- NON includere immagini non pertinenti al caso
+1. **INLINE**: Includi le immagini nel punto cronologico appropriato della documentazione sanitaria (subito dopo il paragrafo del referto). Le foto cliniche vanno in ESAME OBIETTIVO.
+2. **ALLEGATI ICONOGRAFICI**: Includi TUTTE le immagini nella sezione finale ALLEGATI ICONOGRAFICI con numerazione progressiva, didascalia completa e breve nota descrittiva.
+- La numerazione (Fig. 1, Fig. 2...) deve essere coerente tra inline e allegati
+- La didascalia deve essere formale: "Fig. 1 — Radiografia ginocchio destro in proiezione AP, dd/mm/yyyy"
 
 ${lines.join('\n')}
 

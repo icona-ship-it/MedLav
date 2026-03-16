@@ -33,7 +33,7 @@ export function WizardStepBar({
         {currentStep && (
           <div className="rounded-xl border-2 border-primary bg-primary/5 px-4 py-3 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold animate-pulse">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold ring-2 ring-primary/30">
                 {autoStep > currentStep.number ? (
                   <CheckCircle2 className="h-5 w-5" />
                 ) : (
@@ -92,7 +92,7 @@ export function WizardStepBar({
               >
                 <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-all ${
                   isActive
-                    ? 'bg-primary text-primary-foreground animate-pulse'
+                    ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
                     : isCompleted
                       ? 'bg-green-500 text-white'
                       : 'bg-muted text-muted-foreground'

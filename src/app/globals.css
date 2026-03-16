@@ -141,3 +141,47 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Report A4 page styling */
+.report-page-container {
+  background: hsl(var(--muted));
+  padding: 1.5rem;
+  min-height: 60vh;
+  border-radius: var(--radius);
+}
+
+.report-a4-page {
+  max-width: 794px;
+  margin: 0 auto;
+  background: white;
+  padding: 3rem 2.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.7;
+}
+
+.dark .report-a4-page {
+  background: hsl(var(--card));
+}
+
+/* Prose override for serif in A4 page */
+.report-a4-page .prose {
+  font-family: inherit;
+  max-width: none;
+}
+
+.report-a4-page .prose h2 {
+  margin-top: 2em;
+  margin-bottom: 0.75em;
+}
+
+@media (max-width: 640px) {
+  .report-a4-page {
+    padding: 1.5rem 1rem;
+    box-shadow: none;
+  }
+  .report-page-container {
+    padding: 0;
+  }
+}

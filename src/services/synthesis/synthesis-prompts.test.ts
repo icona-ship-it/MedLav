@@ -42,36 +42,36 @@ describe('synthesis-prompts', () => {
       expect(prompt).toContain('NON scrivere MAI la stringa letterale "Data non documentata"');
     });
 
-    it('should contain CTU role directive for ctu role', () => {
+    it('should contain objective tone for ctu role', () => {
       const prompt = buildSynthesisSystemPrompt({
         caseType: 'ortopedica',
         caseRole: 'ctu',
       });
 
-      expect(prompt).toContain('NEUTRALE');
-      expect(prompt).toContain('IMPARZIALE');
-      expect(prompt).toContain('TESI');
-      expect(prompt).toContain('ANTITESI');
+      expect(prompt).toContain('OGGETTIVO');
+      expect(prompt).toContain('FATTUALE');
+      expect(prompt).toContain('CTU');
     });
 
-    it('should contain CTP role directive for ctp role', () => {
+    it('should contain objective tone for ctp role', () => {
       const prompt = buildSynthesisSystemPrompt({
         caseType: 'ortopedica',
         caseRole: 'ctp',
       });
 
-      expect(prompt).toContain('consulente tecnico di PARTE');
-      expect(prompt).toContain('OGGETTIVAMENTE');
+      expect(prompt).toContain('OGGETTIVO');
+      expect(prompt).toContain('FATTUALE');
+      expect(prompt).toContain('CTP');
     });
 
-    it('should contain stragiudiziale role directive', () => {
+    it('should contain objective tone for stragiudiziale role', () => {
       const prompt = buildSynthesisSystemPrompt({
         caseType: 'ortopedica',
         caseRole: 'stragiudiziale',
       });
 
-      expect(prompt).toContain('STRAGIUDIZIALE');
-      expect(prompt).toContain('OGGETTIVA');
+      expect(prompt).toContain('stragiudiziale');
+      expect(prompt).toContain('OGGETTIVO');
     });
 
     it('should contain mandatory section headings', () => {
@@ -82,9 +82,10 @@ describe('synthesis-prompts', () => {
 
       expect(prompt).toContain('DATI DELLA DOCUMENTAZIONE SANITARIA');
       expect(prompt).toContain('RIASSUNTO DEL CASO');
-      expect(prompt).toContain('PARERE MEDICO-LEGALE');
-      expect(prompt).toContain('Considerazioni medico-legali');
-      expect(prompt).toContain('CONCLUSIONI');
+      expect(prompt).toContain('ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE');
+      expect(prompt).toContain('Profili critici documentati');
+      expect(prompt).toContain('SINTESI CONCLUSIVA');
+      expect(prompt).toContain('ALLEGATI ICONOGRAFICI');
     });
 
     it('should contain anti-hallucination rules', () => {
@@ -118,7 +119,7 @@ describe('synthesis-prompts', () => {
       });
 
       expect(prompt).toContain('PREMESSE');
-      expect(prompt).toContain('RISPOSTA AI QUESITI');
+      expect(prompt).toContain('ELEMENTI PER LA RISPOSTA AI QUESITI');
     });
   });
 
