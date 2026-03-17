@@ -70,30 +70,33 @@ export function ReportDialog({
       <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle>Modifica Report</DialogTitle>
-            <div className="flex items-center gap-2">
+            <DialogTitle className="text-lg">Modifica Report</DialogTitle>
+            <div className="flex items-center gap-3">
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
                 onClick={() => handleOpenChange(false)}
                 disabled={isSaving}
               >
-                <X className="mr-1 h-3 w-3" />
+                <X className="mr-1.5 h-4 w-4" />
                 Annulla
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={isSaving}>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 shadow-sm"
+              >
                 {isSaving ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                 ) : (
-                  <Save className="mr-1 h-3 w-3" />
+                  <Save className="mr-1.5 h-4 w-4" />
                 )}
-                Salva
+                Salva modifiche
               </Button>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <RichTextEditor
             content={editedSynthesis}
             onChange={setEditedSynthesis}
