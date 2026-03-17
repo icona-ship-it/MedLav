@@ -75,12 +75,11 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Il report è materiale legale: ogni parola deve descrivere un FATTO verificabile, non un'opinione
 
 ## FORMATO IMMAGINI NEL REPORT
-- Se sono disponibili immagini diagnostiche, includile in DUE posizioni:
-  1. **INLINE**: nella documentazione sanitaria, nel punto cronologico appropriato (subito dopo il paragrafo che descrive l'esame/referto). Le foto cliniche vanno nella sezione ESAME OBIETTIVO se presente.
-  2. **ALLEGATI**: nella sezione ALLEGATI ICONOGRAFICI a fine report, con TUTTE le immagini numerate progressivamente con didascalia completa e nota descrittiva.
+- Le immagini diagnostiche vanno incluse ESCLUSIVAMENTE INLINE, nel punto cronologico appropriato della documentazione sanitaria (subito dopo il paragrafo che descrive l'esame/referto). Le foto cliniche vanno nella sezione ESAME OBIETTIVO se presente.
+- NON creare MAI una sezione "ALLEGATI ICONOGRAFICI" separata a fine report.
 - Sintassi: ![Fig. N — Descrizione formale](ocr-image:percorso)
-- Usa la STESSA numerazione (Fig. 1, Fig. 2...) sia inline che negli allegati
 - Didascalie formali: "Fig. N — Tipo esame, distretto anatomico, data"
+- Tra immagini consecutive, inserire un breve commento descrittivo che colleghi le immagini al contesto clinico
 
 ## FORMATO DATI TABULARI
 - Quando riporti DATI TABULARI (esami di laboratorio, parametri vitali, spese mediche, scale di valutazione), usa SEMPRE il formato tabella markdown pipe:
@@ -88,7 +87,7 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
   |---------|--------|-------------|
   | Emoglobina | 9.7 g/dL | 13.0-17.0 |
   NON descrivere i valori uno per uno come testo discorsivo. La tabella è più chiara e leggibile.
-- Per gli esami ematochimici: includi SOLO i valori clinicamente rilevanti o fuori range, a meno che il quadro complessivo non sia pertinente al caso. Raggruppa per data di esecuzione.
+- Per gli esami ematochimici: includi TUTTI i valori riportati nel documento originale. Crea una tabella SEPARATA per ogni data/prelievo. NON omettere valori nella norma — il medico legale necessita del quadro completo.
 - Per le spese mediche: riporta TUTTE le voci in tabella con Data, Descrizione e Importo.
 
 ## EVENTI NON CLINICI NEL REPORT
@@ -140,11 +139,52 @@ Se non sono presenti documenti non sanitari nel fascicolo, omettere questa sezio
 
 ### DATI DELLA DOCUMENTAZIONE SANITARIA
 Riproduzione DETTAGLIATA e FEDELE della documentazione sanitaria in ordine cronologico.
-Per ogni documento/episodio scrivi un PARAGRAFO NARRATIVO che riproduca fedelmente: diari medici, diari infermieristici, valori di laboratorio, verbali operatori, descrizioni degli interventi, lettere di dimissione, referti di esami strumentali, referti specialistici, prescrizioni terapeutiche.
-Stile: prosa narrativa giorno per giorno, come nella sezione "DATI DOCUMENTAZIONE SANITARIA" di una perizia CTU depositata in tribunale.
-Esempio: "In data 30.09.2021 il sig. Rossi si recava presso il Pronto Soccorso del P.O. ove veniva ricoverato. All'ingresso si rilevavano i seguenti parametri: PA 130/80, FC 88 bpm, SpO2 98%. L'esame radiografico evidenziava frattura composta del III medio di femore dx. In data 01.10.2021 il paziente veniva sottoposto ad intervento di riduzione e osteosintesi con placca e viti (verbale operatorio: durata 95 min, chirurgo Dr. Bianchi). Il decorso post-operatorio risultava regolare. Alla dimissione in data 05.10.2021 veniva prescritta terapia con enoxaparina 4000 UI/die e FKT. (A)"
-Indica la categoria della fonte (A/B/C/D) tra parentesi alla fine di ogni paragrafo.
+
+#### FORMATO CITAZIONE OBBLIGATORIO
+Per OGNI documento/episodio clinico usa SEMPRE questo formato:
+
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."
+
+Esempio completo:
+**Cartella clinica, P.O. San Giovanni, in data 30.09.2021:** "Paziente giunto in PS per trauma contusivo al ginocchio dx. All'ingresso PA 130/80, FC 88 bpm, SpO2 98%. Esame obiettivo: tumefazione e limitazione funzionale del ginocchio dx. Esame radiografico: frattura composta del III medio di femore dx." (A)
+
+**Verbale operatorio, Dr. Bianchi, in data 01.10.2021:** "Intervento di riduzione e osteosintesi con placca e viti. Durata intervento: 95 min. Decorso intraoperatorio regolare." (A)
+
+**Lettera di dimissione, P.O. San Giovanni, in data 05.10.2021:** "Decorso post-operatorio regolare. Si prescrive terapia con enoxaparina 4000 UI/die e FKT." (A)
+
+**Esami ematochimici, Laboratorio Analisi, in data 02.10.2021:**
+
+| Analita | Valore | Unità | Riferimento |
+|---------|--------|-------|-------------|
+| Emoglobina | 9.7 | g/dL | 13.0-17.0 |
+| Globuli bianchi | 12.500 | /μL | 4.000-10.000 |
+| PCR | 8.4 | mg/dL | <0.5 |
+| Creatinina | 0.9 | mg/dL | 0.7-1.2 |
+(D)
+
+#### Regole per la documentazione sanitaria:
+- Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE ("...")
+- Diari clinici giornalieri: un bullet (•) per ogni giorno con formato • DD.MM.YYYY: "..."
+- Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO, con Analita, Valore, Unità, Riferimento
+- Verbali operatori: riprodurre INTEGRALMENTE (descrizione intervento, tempi, chirurghi, note intraoperatorie)
+- Indicare la categoria della fonte (A/B/C/D) tra parentesi alla fine di ogni citazione
+- Se sono disponibili immagini diagnostiche per quel documento, inserirle INLINE subito dopo la citazione
 FONDAMENTALE: questa sezione deve essere la più lunga e dettagliata del report. Ogni evento fornito DEVE comparire. NON sintetizzare — riprodurre fedelmente.
+
+${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE ESIBITE
+Elenco delle spese mediche documentate in tabella con Data, Descrizione, Struttura, Importo. Valutazione di congruità e necessità rispetto al quadro clinico.
+
+` : ''}### PRECEDENTI PARERI TECNICI
+Se tra gli eventi ci sono documenti di tipo perizia CTP, perizia CTU o perizia precedente, riprodurre le conclusioni e l'analisi delle perizie precedenti in forma virgolettata fedele.
+Se sono disponibili immagini diagnostiche citate nei pareri, inserirle INLINE dopo la citazione pertinente.
+Se non sono presenti perizie precedenti, omettere questa sezione.
+
+${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
+Riporta i dati dell'esame obiettivo forniti. Le foto cliniche vanno inserite INLINE in questa sezione.
+
+` : ''}---
+
+*Le sezioni seguenti costituiscono l'analisi e la sintesi prodotta dal sistema MedLav sulla base della documentazione sopra riportata.*
 
 ### RIASSUNTO DEL CASO
 Sintesi AMPIA e COMPLETA della vicenda clinica in 6-10 paragrafi. Questo è il quadro d'insieme che il medico legale legge per primo.
@@ -158,20 +198,10 @@ Deve coprire:
 7. Documentazione esaminata e sua completezza
 Non ripetere i dettagli già esposti nelle sezioni documentali precedenti — qui serve un quadro d'insieme organico e completo.
 
-${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE ESIBITE
-Elenco delle spese mediche documentate con valutazione di congruità e necessità rispetto al quadro clinico.
-
-` : ''}### PRECEDENTI PARERI TECNICI
-Se tra gli eventi ci sono documenti di tipo perizia CTP, perizia CTU o perizia precedente, riprodurre le conclusioni e l'analisi delle perizie precedenti in forma riassuntiva fedele.
-Se non sono presenti perizie precedenti, omettere questa sezione.
-
 ### [SEZIONI SPECIALIZZATE PER TIPO CASO]
 Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Complicanze, Timeline diagnostica).
 
-${hasPeriziaData && periziaMetadata?.esameObiettivo ? `### ESAME OBIETTIVO
-Riporta i dati dell'esame obiettivo forniti.
-
-` : ''}## ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE
+## ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE
 
 ### Profili critici documentati
 Presentazione OGGETTIVA dei profili critici emersi dalla documentazione. Scrivi in forma di paragrafi fattuali, NON elenchi puntati.
@@ -210,16 +240,7 @@ Includi:
 - Dati quantitativi: periodi ITT/ITP con date, criteri tabellari applicabili
 - Lacune documentali riscontrate e documentazione integrativa necessaria
 NON esprimere opinioni, giudizi o conclusioni su responsabilità o merito.
-IMPORTANTE: la sintesi deve contenere SOLO fatti già trattati nel report. NON introdurre elementi nuovi.
-
-### ALLEGATI ICONOGRAFICI
-Se sono disponibili immagini diagnostiche, crea una sezione finale con TUTTE le immagini estratte dalla documentazione.
-Per ogni immagine usa:
-- Numerazione progressiva: Fig. 1, Fig. 2, etc.
-- Didascalia formale: tipo di esame, distretto anatomico, data se disponibile
-- Sintassi markdown: ![Fig. N — Descrizione](ocr-image:percorso)
-- Breve nota descrittiva sotto l'immagine (cosa si osserva)
-Se NON ci sono immagini diagnostiche disponibili, OMETTI questa sezione (non scrivere "nessuna immagine").`;
+IMPORTANTE: la sintesi deve contenere SOLO fatti già trattati nel report. NON introdurre elementi nuovi.`;
 
   return `Sei un sistema di organizzazione documentale medico-legale. Il tuo compito è strutturare e presentare FATTI dalla documentazione clinica, NON esprimere opinioni.
 
@@ -239,10 +260,13 @@ ${causalNexus}
 
 ## FORMATO DOCUMENTAZIONE SANITARIA
 
-Per ogni episodio nella sezione DATI DELLA DOCUMENTAZIONE SANITARIA scrivi un PARAGRAFO NARRATIVO che integri:
-- La data (formato DD.MM.YYYY) nel testo
-- La categoria della fonte tra parentesi (A), (B), (C) o (D) alla fine del paragrafo
-- Il contenuto fedelmente dal documento originale, in prosa discorsiva dettagliata
+Per ogni episodio nella sezione DATI DELLA DOCUMENTAZIONE SANITARIA usa il FORMATO CITAZIONE OBBLIGATORIO:
+
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+
+- Intestazione in GRASSETTO con tipo documento, autore/struttura, data
+- Contenuto del documento tra VIRGOLETTE ("..."), riprodotto fedelmente
+- La categoria della fonte tra parentesi (A), (B), (C) o (D) alla fine della citazione
 
 ${CHRONOLOGY_SOURCES_GUIDE}
 
@@ -306,7 +330,7 @@ ${formatImageAnalysisForPrompt(imageAnalysis)}---
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
 IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.
 IMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${roleLabel}) formulerà autonomamente le proprie valutazioni professionali.
-IMPORTANTE: Se sono disponibili immagini diagnostiche, includi la sezione ALLEGATI ICONOGRAFICI finale con tutte le immagini numerate.`;
+IMPORTANTE: Se sono disponibili immagini diagnostiche, inseriscile SOLO INLINE nella documentazione sanitaria nel punto cronologico appropriato. NON creare una sezione ALLEGATI ICONOGRAFICI separata.`;
 }
 
 // ── Split-mode prompts (for large cases >40K chars) ──
@@ -319,10 +343,30 @@ export function buildChronologySystemPrompt(): string {
 
 COMPITO: Genera ESCLUSIVAMENTE la riproduzione dettagliata e fedele della documentazione sanitaria in ordine cronologico. NON generare riassunti, analisi, o elementi di rilievo.
 
-STILE: Prosa giuridica formale come nella sezione "DATI DOCUMENTAZIONE SANITARIA" di una perizia CTU depositata in tribunale. Per ogni documento/episodio scrivi un PARAGRAFO NARRATIVO dettagliato che riproduca fedelmente: diari medici, diari infermieristici, valori di laboratorio, verbali operatori, descrizioni degli interventi, lettere di dimissione, referti di esami strumentali, referti specialistici, prescrizioni terapeutiche. NON usare elenchi puntati.
-Esempio: "In data 30.09.2021 il sig. Rossi si recava presso il Pronto Soccorso del P.O. ove veniva ricoverato. All'ingresso si rilevavano i seguenti parametri: PA 130/80, FC 88 bpm, SpO2 98%. L'esame radiografico evidenziava frattura composta del III medio di femore dx. In data 01.10.2021 il paziente veniva sottoposto ad intervento di riduzione e osteosintesi con placca e viti (verbale operatorio: durata 95 min, chirurgo Dr. Bianchi). Il decorso post-operatorio risultava regolare. (A)"
+STILE: Usa il FORMATO CITAZIONE OBBLIGATORIO per ogni documento/episodio:
 
-FORMATO: Indica la categoria della fonte (A), (B), (C) o (D) tra parentesi alla fine di ogni paragrafo.
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."
+
+Esempio completo:
+**Cartella clinica, P.O. San Giovanni, in data 30.09.2021:** "Paziente giunto in PS per trauma contusivo al ginocchio dx. All'ingresso PA 130/80, FC 88 bpm, SpO2 98%. Esame obiettivo: tumefazione e limitazione funzionale del ginocchio dx. Esame radiografico: frattura composta del III medio di femore dx." (A)
+
+**Verbale operatorio, Dr. Bianchi, in data 01.10.2021:** "Intervento di riduzione e osteosintesi con placca e viti. Durata intervento: 95 min. Decorso intraoperatorio regolare." (A)
+
+**Esami ematochimici, Laboratorio Analisi, in data 02.10.2021:**
+
+| Analita | Valore | Unità | Riferimento |
+|---------|--------|-------|-------------|
+| Emoglobina | 9.7 | g/dL | 13.0-17.0 |
+| Globuli bianchi | 12.500 | /μL | 4.000-10.000 |
+| PCR | 8.4 | mg/dL | <0.5 |
+(D)
+
+**Lettera di dimissione, P.O. San Giovanni, in data 05.10.2021:** "Decorso post-operatorio regolare. Si prescrive terapia con enoxaparina 4000 UI/die e FKT." (A)
+
+Per i diari clinici giornalieri usa il formato:
+• DD.MM.YYYY: "... contenuto del giorno ..."
+
+FORMATO: Indica la categoria della fonte (A), (B), (C) o (D) tra parentesi alla fine di ogni citazione.
 
 ${CHRONOLOGY_SOURCES_GUIDE}
 
@@ -330,11 +374,12 @@ REGOLE:
 - Ordine rigorosamente cronologico
 - Il contenuto deve essere FEDELE alla documentazione — riprodurre, non sintetizzare
 - Includi TUTTI gli eventi forniti, nessuno deve essere escluso
-- Descrizioni DETTAGLIATE e COMPLETE: riporta valori, misure, dosaggi, nomi farmaci, parametri vitali, referti completi
+- Intestazione GRASSETTO con tipo documento, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
+- Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO
+- Verbali operatori: riprodurre INTEGRALMENTE
 - Se la data è incerta, indica la migliore approssimazione disponibile
-- Scrivi in PROSA NARRATIVA, MAI elenchi puntati
 - DIVIETO DI INVENZIONE: NON aggiungere fatti, diagnosi, date, nomi o dettagli clinici non presenti negli eventi forniti
-- OGGETTIVITÀ: riportare ESCLUSIVAMENTE i fatti documentati, senza commenti, interpretazioni o deduzioni personali. La cronologia deve essere una riproduzione FEDELE e OGGETTIVA della documentazione
+- OGGETTIVITÀ: riportare ESCLUSIVAMENTE i fatti documentati, senza commenti, interpretazioni o deduzioni personali
 - Gli eventi di tipo "spesa_medica", "documento_amministrativo" e "certificato" vanno inclusi nella posizione temporale corretta
 
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
@@ -342,9 +387,9 @@ STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 <!-- SECTION:CRONOLOGIA -->
 ## DATI DELLA DOCUMENTAZIONE SANITARIA
 
-In data DD.MM.YYYY il paziente... [paragrafo narrativo dettagliato e completo]. (X)
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..." (X)
 
-In data DD.MM.YYYY presso... [paragrafo narrativo dettagliato e completo]. (X)
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..." (X)
 <!-- END:CRONOLOGIA -->`;
 }
 
@@ -614,10 +659,10 @@ Le seguenti immagini sono state estratte dalla documentazione e analizzate autom
 Sintassi per includere: ![Fig. N — Didascalia](ocr-image:percorso)
 
 REGOLE PER LE IMMAGINI:
-1. **INLINE**: Includi le immagini nel punto cronologico appropriato della documentazione sanitaria (subito dopo il paragrafo del referto). Le foto cliniche vanno in ESAME OBIETTIVO.
-2. **ALLEGATI ICONOGRAFICI**: Includi TUTTE le immagini nella sezione finale ALLEGATI ICONOGRAFICI con numerazione progressiva, didascalia completa e breve nota descrittiva.
-- La numerazione (Fig. 1, Fig. 2...) deve essere coerente tra inline e allegati
-- La didascalia deve essere formale: "Fig. 1 — Radiografia ginocchio destro in proiezione AP, dd/mm/yyyy"
+- Includi le immagini ESCLUSIVAMENTE INLINE nella documentazione sanitaria, subito dopo la citazione del documento/referto pertinente. Le foto cliniche vanno in ESAME OBIETTIVO.
+- NON creare una sezione "ALLEGATI ICONOGRAFICI" separata.
+- Didascalia formale: "Fig. N — Tipo esame, distretto anatomico, data"
+- Tra immagini consecutive, inserire un breve commento descrittivo che le colleghi al contesto clinico.
 
 ${lines.join('\n')}
 

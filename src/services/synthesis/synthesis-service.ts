@@ -12,7 +12,6 @@ import {
   buildSummarySystemPrompt,
   buildSummaryUserPrompt,
   CASE_TYPE_LABELS,
-  filterMedicalImages,
 } from './synthesis-prompts';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -314,29 +313,12 @@ async function fetchGuidelineContext(
 }
 
 /**
- * Programmatically append ALLEGATI ICONOGRAFICI section to ensure
- * diagnostic images always appear in the report, regardless of LLM behavior.
+ * No-op: images are now inline-only (no ALLEGATI ICONOGRAFICI section).
+ * Kept for backward compatibility with callers.
  */
-function appendImageAppendix(
-  report: string,
-  imageAnalysis?: ImageAnalysisResult[],
-): string {
-  if (!imageAnalysis || imageAnalysis.length === 0) return report;
-
-  // Only include medical images that have a storagePath (actually downloadable)
-  const withPaths = filterMedicalImages(imageAnalysis).filter((img) => img.storagePath);
-  if (withPaths.length === 0) return report;
-
-  // Check if the LLM already generated an ALLEGATI section
-  if (/allegati\s+iconografici/i.test(report)) return report;
-
-  const lines = withPaths.map((img, index) => {
-    const figNum = index + 1;
-    const caption = `Fig. ${figNum} — ${img.imageType}, pagina ${img.pageNumber}`;
-    return `![${caption}](ocr-image:${img.storagePath})\n\n*${img.description}*`;
-  });
-
-  return `${report.trimEnd()}\n\n## ALLEGATI ICONOGRAFICI\n\n${lines.join('\n\n')}`;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function appendImageAppendix(report: string, imageAnalysis?: ImageAnalysisResult[]): string {
+  return report;
 }
 
 function finalizeReport(

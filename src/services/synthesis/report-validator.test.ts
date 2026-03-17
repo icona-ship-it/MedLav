@@ -16,12 +16,12 @@ Si procede alla ricostruzione cronologica della vicenda clinica e alla valutazio
 con particolare attenzione ai profili di responsabilità professionale sanitaria e al nesso causale tra
 la condotta dei sanitari e il danno biologico permanente residuato al paziente.
 
-## Cronologia medico-legale
+## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${eventRefs}
 
-## Elementi di rilievo medico-legale
+## Elementi per la valutazione medico-legale
 Si rileva un ritardo diagnostico significativo nella gestione del paziente. La condotta clinica appare censurabile
-sotto il profilo della diligenza professionale per le ragioni ampiamente esposte nella cronologia medico-legale.
+sotto il profilo della diligenza professionale per le ragioni ampiamente esposte nella documentazione sanitaria.
 In particolare si osserva che il paziente non veniva sottoposto tempestivamente agli accertamenti diagnostici
 indicati dalle linee guida di settore, con conseguente ritardo nella diagnosi e nel trattamento della patologia.
 Il nesso di causalità tra la condotta omissiva e il danno biologico permanente appare configurabile con
@@ -91,24 +91,24 @@ describe('validateReport', () => {
   });
 
   describe('missing sections', () => {
-    it('should detect missing cronologia', () => {
+    it('should detect missing documentazione sanitaria/cronologia', () => {
       const report = `## Riassunto del caso
 ${Array(100).fill('parola').join(' ')}
 
-## Elementi di rilievo
+## Elementi per la valutazione
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
       expect(result.issues.some((i) =>
-        i.type === 'missing_section' && i.message.includes('Cronologia'),
+        i.type === 'missing_section' && i.message.includes('Documentazione sanitaria'),
       )).toBe(true);
     });
 
     it('should detect missing riassunto', () => {
-      const report = `## Cronologia medico-legale
+      const report = `## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}
 
-## Elementi di rilievo
+## Elementi per la valutazione
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
@@ -117,11 +117,11 @@ ${Array(100).fill('parola').join(' ')}`;
       )).toBe(true);
     });
 
-    it('should detect missing elementi di rilievo', () => {
+    it('should detect missing elementi di rilievo/valutazione', () => {
       const report = `## Riassunto del caso
 ${Array(100).fill('parola').join(' ')}
 
-## Cronologia medico-legale
+## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
@@ -134,7 +134,7 @@ ${Array(100).fill('parola').join(' ')}`;
       const report = `## Riassunto del caso
 ${Array(100).fill('parola').join(' ')}
 
-## Cronologia medico-legale
+## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}
 
 ## Considerazioni medico-legali
@@ -148,10 +148,24 @@ ${Array(100).fill('parola').join(' ')}`;
       const report = `## Riassunto del caso
 ${Array(100).fill('parola').join(' ')}
 
-## Cronologia medico-legale
+## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}
 
 ## Valutazione di merito
+${Array(100).fill('parola').join(' ')}`;
+      const result = validateReport(report, 0);
+
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+    });
+
+    it('should accept "Elementi per la valutazione" as elementi variant', () => {
+      const report = `## Riassunto del caso
+${Array(100).fill('parola').join(' ')}
+
+## DATI DELLA DOCUMENTAZIONE SANITARIA
+${Array(100).fill('parola').join(' ')}
+
+## Elementi per la valutazione medico-legale
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
@@ -229,10 +243,10 @@ ${Array(100).fill('parola').join(' ')}`;
       const report = `## Riassunto del caso
 ${Array(100).fill('parola').join(' ')}
 
-## Cronologia medico-legale
+## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}
 
-## Elementi di rilievo
+## Elementi per la valutazione
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 10);
 

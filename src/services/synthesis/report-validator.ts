@@ -32,14 +32,14 @@ export interface ReportValidationContext {
 }
 
 const REQUIRED_SECTIONS = [
-  { name: 'Cronologia medico-legale', pattern: /cronologia\s+medico/i },
+  { name: 'Documentazione sanitaria/Cronologia', pattern: /dati\s+della\s+documentazione\s+sanitaria|cronologia\s+medico/i },
   {
     name: 'Riassunto/Inquadramento',
     pattern: /riassunto\s+(del\s+)?caso|inquadramento/i,
   },
   {
-    name: 'Elementi di rilievo/Considerazioni',
-    pattern: /elementi\s+di\s+rilievo|considerazioni\s+medico|aspetti\s+(critici|rilevanti)|osservazioni\s+medico|profili\s+di\s+responsabilit|valutazione\s+di\s+merito/i,
+    name: 'Elementi di rilievo/Valutazione',
+    pattern: /elementi\s+di\s+rilievo|elementi\s+per\s+la\s+valutazione|considerazioni\s+medico|aspetti\s+(critici|rilevanti)|osservazioni\s+medico|profili\s+di\s+responsabilit|valutazione\s+di\s+merito/i,
   },
 ];
 

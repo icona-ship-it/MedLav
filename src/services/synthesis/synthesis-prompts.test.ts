@@ -86,7 +86,45 @@ describe('synthesis-prompts', () => {
       expect(prompt).toContain('ELEMENTI PER LA VALUTAZIONE MEDICO-LEGALE');
       expect(prompt).toContain('Profili critici documentati');
       expect(prompt).toContain('SINTESI CONCLUSIVA');
-      expect(prompt).toContain('ALLEGATI ICONOGRAFICI');
+    });
+
+    it('should NOT contain ALLEGATI ICONOGRAFICI section', () => {
+      const prompt = buildSynthesisSystemPrompt({
+        caseType: 'ortopedica',
+        caseRole: 'ctu',
+      });
+
+      expect(prompt).not.toMatch(/### ALLEGATI ICONOGRAFICI/);
+    });
+
+    it('should contain FORMATO CITAZIONE OBBLIGATORIO', () => {
+      const prompt = buildSynthesisSystemPrompt({
+        caseType: 'ortopedica',
+        caseRole: 'ctu',
+      });
+
+      expect(prompt).toContain('FORMATO CITAZIONE OBBLIGATORIO');
+      expect(prompt).toContain('**Tipo documento, autore/struttura, in data DD.MM.YYYY:**');
+    });
+
+    it('should require COMPLETE lab tables (TUTTI i valori)', () => {
+      const prompt = buildSynthesisSystemPrompt({
+        caseType: 'ortopedica',
+        caseRole: 'ctu',
+      });
+
+      expect(prompt).toContain('TUTTI i valori riportati nel documento originale');
+      expect(prompt).not.toContain('SOLO i valori clinicamente rilevanti');
+    });
+
+    it('should instruct images ESCLUSIVAMENTE INLINE', () => {
+      const prompt = buildSynthesisSystemPrompt({
+        caseType: 'ortopedica',
+        caseRole: 'ctu',
+      });
+
+      expect(prompt).toContain('ESCLUSIVAMENTE INLINE');
+      expect(prompt).not.toContain('includile in DUE posizioni');
     });
 
     it('should contain anti-hallucination rules', () => {
