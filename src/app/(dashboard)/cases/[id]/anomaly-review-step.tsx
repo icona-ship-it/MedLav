@@ -28,6 +28,7 @@ interface AnomalyReviewStepProps {
   documentPages: DocumentPage[];
   processingStage: string;
   onAnomaliesChanged: (updatedAnomalies: AnomalyRow[]) => void;
+  onGenerateStarted?: () => void;
 }
 
 // --- Helpers ---
@@ -53,6 +54,7 @@ export function AnomalyReviewStep({
   documentPages,
   processingStage,
   onAnomaliesChanged,
+  onGenerateStarted,
 }: AnomalyReviewStepProps) {
   const router = useRouter();
   const [isConfirming, setIsConfirming] = useState(false);
@@ -97,6 +99,7 @@ export function AnomalyReviewStep({
         return;
       }
       toast.success('Revisione confermata. Generazione report in corso...');
+      onGenerateStarted?.();
       router.refresh();
     } catch {
       toast.error('Errore di rete. Verifica la connessione.');

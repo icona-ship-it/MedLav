@@ -237,6 +237,10 @@ export function CaseDetailClient({
               documentPages={documentPages}
               processingStage={processingStage}
               onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
+              onGenerateStarted={() => {
+                userNavigatedRef.current = false;
+                setActiveStep(5);
+              }}
             />
           ) : (
             <Card>
