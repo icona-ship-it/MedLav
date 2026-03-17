@@ -4,8 +4,10 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
+import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge } from '@/lib/domain-knowledge';
+import { formatDocumentsOcrForPrompt } from './synthesis-prompts';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { formatDate } from '@/lib/format';
 
@@ -21,6 +23,7 @@ interface RegenerateSectionParams {
   calculations?: MedicoLegalCalculation[];
   userInstruction?: string;
   periziaMetadata?: PeriziaMetadata;
+  documentsOcrText?: DocumentOcrContext[];
 }
 
 /**
@@ -90,12 +93,22 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
     userPrompt += `\n\n## DOCUMENTAZIONE MANCANTE\n${missingContext}`;
   }
 
+  // Add OCR text for faithful transcription (especially for cronologia/documentazione sections)
+  const ocrSection = formatDocumentsOcrForPrompt(params.documentsOcrText);
+  if (ocrSection) {
+    userPrompt += '\n\n' + ocrSection;
+  }
+
   if (userInstruction) {
     userPrompt += `\n\n## ISTRUZIONE SPECIFICA DELL'UTENTE\n${userInstruction}`;
   }
 
   userPrompt += `\n\n---\nGenera ORA la sezione "${sectionTitle}". Solo il contenuto, senza heading ##.`;
+  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
+    userPrompt += '\nUsa il testo OCR come fonte primaria per la trascrizione fedele.';
+  }
 
+  const hasOcr = params.documentsOcrText && params.documentsOcrText.length > 0;
   const { content: newContent } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
@@ -103,7 +116,7 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
       { role: 'user', content: userPrompt },
     ],
     temperature: 0,
-    maxTokens: 4096,
+    maxTokens: hasOcr ? 16384 : 4096,
     timeoutMs: TIMEOUT_EXTRACTION,
     randomSeed: DETERMINISTIC_SEED,
     label: `regen-section:${sectionId}`,

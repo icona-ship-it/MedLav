@@ -12,8 +12,63 @@ import type { ConsolidatedEvent } from '@/services/consolidation/event-consolida
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
-import type { CaseMetadata, SynthesisStepResult } from './types';
+import type { CaseMetadata, SynthesisStepResult, DocumentOcrContext } from './types';
 import { logger } from '@/lib/logger';
+
+/**
+ * Fetch OCR text for all documents in a case.
+ * Called INSIDE step functions to avoid serializing large text between steps.
+ */
+export async function fetchDocumentsOcrContext(caseId: string): Promise<DocumentOcrContext[]> {
+  const supabase = createAdminClient();
+
+  const { data: docs } = await supabase
+    .from('documents')
+    .select('id, file_name, document_type')
+    .eq('case_id', caseId);
+
+  if (!docs || docs.length === 0) return [];
+
+  const docIds = docs.map((d) => d.id);
+
+  const { data: pages } = await supabase
+    .from('pages')
+    .select('document_id, page_number, ocr_text')
+    .in('document_id', docIds)
+    .order('page_number', { ascending: true });
+
+  if (!pages) return [];
+
+  const pagesByDoc = new Map<string, Array<{ pageNumber: number; ocrText: string }>>();
+  for (const page of pages) {
+    const docId = page.document_id as string;
+    if (!pagesByDoc.has(docId)) pagesByDoc.set(docId, []);
+    if (page.ocr_text) {
+      pagesByDoc.get(docId)!.push({
+        pageNumber: page.page_number as number,
+        ocrText: page.ocr_text as string,
+      });
+    }
+  }
+
+  const result = docs
+    .map((doc) => {
+      const docPages = pagesByDoc.get(doc.id) ?? [];
+      const totalChars = docPages.reduce((sum, p) => sum + p.ocrText.length, 0);
+      return {
+        documentId: doc.id as string,
+        fileName: doc.file_name as string,
+        documentType: (doc.document_type ?? 'altro') as string,
+        pages: docPages,
+        totalChars,
+      };
+    })
+    .filter((d) => d.pages.length > 0);
+
+  const totalChars = result.reduce((sum, d) => sum + d.totalChars, 0);
+  logger.info('pipeline', `Fetched OCR text: ${result.length} docs, ${totalChars} total chars`);
+  return result;
+}
 
 /**
  * Step 7a: Calculate medico-legal periods (instant, no API call).
@@ -77,6 +132,23 @@ async function insertReport(
   wordCount: number,
   promptVersion?: string,
 ): Promise<SynthesisStepResult> {
+  return insertReportWithMetadata(
+    caseId,
+    synthesisText,
+    wordCount,
+    promptVersion ? { promptVersion } : undefined,
+  );
+}
+
+/**
+ * Save report to DB with full generation metadata.
+ */
+async function insertReportWithMetadata(
+  caseId: string,
+  synthesisText: string,
+  wordCount: number,
+  generationMetadata?: Record<string, unknown>,
+): Promise<SynthesisStepResult> {
   const supabase = createAdminClient();
 
   const { data: latestReport } = await supabase
@@ -96,7 +168,7 @@ async function insertReport(
       version: newVersion,
       report_status: 'bozza',
       synthesis: synthesisText,
-      ...(promptVersion ? { generation_metadata: { promptVersion } } : {}),
+      ...(generationMetadata ? { generation_metadata: generationMetadata } : {}),
     })
     .select('id')
     .single();
@@ -119,30 +191,51 @@ async function insertReport(
  * Step 7c+f: Generate full synthesis AND save to DB in a single step.
  * The synthesis text stays within the step — never serialized into Inngest step output.
  * Only small metadata is returned (reportId, version, wordCount).
+ * Fetches OCR text inside the step to avoid serializing large data between steps.
  */
 export async function generateAndSaveReport(
   caseId: string,
   synthesisParams: SynthesisParams,
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
   const startMs = Date.now();
-  const r = await generateSynthesis(synthesisParams);
-  logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
 
-  const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
+  // Fetch OCR text inside this step (avoids serialization between Inngest steps)
+  const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+  const paramsWithOcr: SynthesisParams = { ...synthesisParams, documentsOcrText };
+
+  const r = await generateSynthesis(paramsWithOcr);
+  const ocrChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+  logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars, OCR: ${ocrChars} chars)`);
+
+  const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
+  if (ocrChars > 0) {
+    generationMetadata.ocrTextProvided = true;
+    generationMetadata.ocrTotalChars = ocrChars;
+  }
+
+  const result = await insertReportWithMetadata(caseId, r.synthesis, r.wordCount, generationMetadata);
   return { ...result, promptVersion: r.promptVersion, usage: r.usage };
 }
 
 /**
  * Step 7d: Generate chronology part (large case, split mode).
  * Returns chronology text — stored in Inngest step output for use by next step.
+ * Fetches OCR text inside the step for faithful transcription.
  */
 export async function generateChronologyPart(
+  caseId: string,
   synthesisParams: SynthesisParams,
-): Promise<{ chronology: string; usage?: import('@/services/cost-tracking/cost-calculator').TokenUsage }> {
+): Promise<{ chronology: string; ocrTotalChars: number; usage?: import('@/services/cost-tracking/cost-calculator').TokenUsage }> {
   const startMs = Date.now();
-  const { chronology, usage } = await generateSynthesisChronology(synthesisParams);
-  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${chronology.length} chars)`);
-  return { chronology, usage };
+
+  // Fetch OCR text inside this step
+  const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+  const paramsWithOcr: SynthesisParams = { ...synthesisParams, documentsOcrText };
+  const ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+
+  const { chronology, usage } = await generateSynthesisChronology(paramsWithOcr);
+  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${chronology.length} chars, OCR: ${ocrTotalChars} chars)`);
+  return { chronology, ocrTotalChars, usage };
 }
 
 /**
@@ -153,12 +246,19 @@ export async function generateSummaryAndSaveReport(
   caseId: string,
   synthesisParams: SynthesisParams,
   chronology: string,
+  ocrTotalChars?: number,
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
   const startMs = Date.now();
   const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
   logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
 
-  const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
+  const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
+  if (ocrTotalChars && ocrTotalChars > 0) {
+    generationMetadata.ocrTextProvided = true;
+    generationMetadata.ocrTotalChars = ocrTotalChars;
+  }
+
+  const result = await insertReportWithMetadata(caseId, r.synthesis, r.wordCount, generationMetadata);
   return { ...result, promptVersion: r.promptVersion, usage: r.usage };
 }
 

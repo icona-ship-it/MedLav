@@ -112,47 +112,115 @@ function buildWatermarkHeader(reportStatus?: string): Header {
 
 /**
  * Build a signature block for the end of the report.
+ * Supports dual signature (CTU + collaboratore) using a side-by-side layout.
  */
-function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, caseRole?: string): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
+function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, caseRole?: string): (Paragraph | Table)[] {
+  const result: (Paragraph | Table)[] = [];
+  const pm = periziaMetadata;
 
-  paragraphs.push(new Paragraph({ text: '', spacing: { before: 600 } }));
+  result.push(new Paragraph({ text: '', spacing: { before: 600 } }));
 
   // Location and date line
-  paragraphs.push(new Paragraph({
+  result.push(new Paragraph({
     children: [new TextRun({ text: 'Luogo e data: _________________________', size: 24 })],
     spacing: { after: 400 },
   }));
 
-  const signerLabel = caseRole === 'ctu' ? 'Il Consulente Tecnico d\'Ufficio'
+  const signerLabel = caseRole === 'ctu' ? 'I CC.TT.U.'
     : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
     : 'Il Perito';
+  const hasCollaboratore = Boolean(pm?.collaboratoreName);
 
-  paragraphs.push(new Paragraph({
-    children: [new TextRun({ text: signerLabel, bold: true, size: 24 })],
-    alignment: AlignmentType.RIGHT,
-  }));
+  if (hasCollaboratore) {
+    // Dual signature block using borderless table
+    const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const cellBorders = { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder };
 
-  if (periziaMetadata?.ctuName) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: periziaMetadata.ctuName, size: 24 })],
+    result.push(new Paragraph({
+      children: [new TextRun({ text: signerLabel, bold: true, size: 24 })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 300 },
+    }));
+
+    const leftChildren: Paragraph[] = [
+      new Paragraph({
+        children: [new TextRun({ text: pm?.ctuName ?? '_________________________', size: 24 })],
+        alignment: AlignmentType.CENTER,
+      }),
+    ];
+    if (pm?.ctuTitle) {
+      leftChildren.push(new Paragraph({
+        children: [new TextRun({ text: pm.ctuTitle, size: 20, italics: true })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    leftChildren.push(new Paragraph({
+      children: [new TextRun({ text: '_________________________', size: 24 })],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200 },
+    }));
+
+    const rightChildren: Paragraph[] = [
+      new Paragraph({
+        children: [new TextRun({ text: pm!.collaboratoreName!, size: 24 })],
+        alignment: AlignmentType.CENTER,
+      }),
+    ];
+    if (pm?.collaboratoreTitle) {
+      rightChildren.push(new Paragraph({
+        children: [new TextRun({ text: pm.collaboratoreTitle, size: 20, italics: true })],
+        alignment: AlignmentType.CENTER,
+      }));
+    }
+    rightChildren.push(new Paragraph({
+      children: [new TextRun({ text: '_________________________', size: 24 })],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200 },
+    }));
+
+    result.push(new Table({
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({ children: leftChildren, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
+            new TableCell({ children: rightChildren, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
+          ],
+        }),
+      ],
+      width: { size: 9000, type: WidthType.DXA },
+    }));
+  } else {
+    // Single signature block
+    const singleSignerLabel = caseRole === 'ctu' ? 'Il Consulente Tecnico d\'Ufficio'
+      : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
+      : 'Il Perito';
+
+    result.push(new Paragraph({
+      children: [new TextRun({ text: singleSignerLabel, bold: true, size: 24 })],
       alignment: AlignmentType.RIGHT,
     }));
-  }
-  if (periziaMetadata?.ctuTitle) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: periziaMetadata.ctuTitle, size: 20, italics: true })],
+
+    if (pm?.ctuName) {
+      result.push(new Paragraph({
+        children: [new TextRun({ text: pm.ctuName, size: 24 })],
+        alignment: AlignmentType.RIGHT,
+      }));
+    }
+    if (pm?.ctuTitle) {
+      result.push(new Paragraph({
+        children: [new TextRun({ text: pm.ctuTitle, size: 20, italics: true })],
+        alignment: AlignmentType.RIGHT,
+      }));
+    }
+
+    result.push(new Paragraph({
+      children: [new TextRun({ text: '_________________________', size: 24 })],
       alignment: AlignmentType.RIGHT,
+      spacing: { before: 200 },
     }));
   }
 
-  paragraphs.push(new Paragraph({
-    children: [new TextRun({ text: '_________________________', size: 24 })],
-    alignment: AlignmentType.RIGHT,
-    spacing: { before: 200 },
-  }));
-
-  return paragraphs;
+  return result;
 }
 
 /**

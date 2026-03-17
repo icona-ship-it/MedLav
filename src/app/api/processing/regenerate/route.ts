@@ -12,6 +12,7 @@ import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -206,7 +207,12 @@ export async function POST(request: NextRequest) {
     }));
     const calculations = calculateMedicoLegalPeriods(calcEvents);
 
-    // Regenerate synthesis with role-adaptive prompts + calculations
+    // Fetch OCR text for faithful transcription
+    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+    const ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+    logger.info('processing/regenerate', `Fetched OCR text for regeneration: ${documentsOcrText.length} docs, ${ocrTotalChars} chars`);
+
+    // Regenerate synthesis with role-adaptive prompts + calculations + OCR text
     const result = await generateSynthesis({
       caseType: caseRow.case_type as CaseType,
       caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
@@ -217,6 +223,7 @@ export async function POST(request: NextRequest) {
       missingDocuments: missingDocs,
       calculations,
       periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+      documentsOcrText,
     });
 
     // Get current max version
@@ -230,12 +237,18 @@ export async function POST(request: NextRequest) {
 
     const newVersion = (latestReport?.version ?? 0) + 1;
 
+    const generationMetadata: Record<string, unknown> = { promptVersion: result.promptVersion };
+    if (ocrTotalChars > 0) {
+      generationMetadata.ocrTextProvided = true;
+      generationMetadata.ocrTotalChars = ocrTotalChars;
+    }
+
     const { error: insertError } = await admin.from('reports').insert({
       case_id: caseId,
       version: newVersion,
       report_status: 'bozza',
       synthesis: result.synthesis,
-      generation_metadata: { promptVersion: result.promptVersion },
+      generation_metadata: generationMetadata,
     });
 
     if (insertError) {

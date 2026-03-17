@@ -10,6 +10,7 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import { regenerateSection } from '@/services/synthesis/section-regenerator';
+import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -143,6 +144,9 @@ export async function POST(request: NextRequest) {
     }));
     const calculations = calculateMedicoLegalPeriods(calcEvents);
 
+    // Fetch OCR text for faithful transcription
+    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+
     // Regenerate the section
     const updatedSynthesis = await regenerateSection({
       sectionId,
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
       calculations,
       userInstruction: instruction,
       periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+      documentsOcrText,
     });
 
     // Save as new version

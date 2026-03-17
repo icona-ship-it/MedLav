@@ -52,3 +52,15 @@ export interface ClassificationStepResult {
   confidence: number;
   reasoning: string;
 }
+
+/**
+ * OCR context for a single document, used to pass original text
+ * to synthesis for faithful transcription.
+ */
+export interface DocumentOcrContext {
+  documentId: string;
+  fileName: string;
+  documentType: string;
+  pages: Array<{ pageNumber: number; ocrText: string }>;
+  totalChars: number;
+}

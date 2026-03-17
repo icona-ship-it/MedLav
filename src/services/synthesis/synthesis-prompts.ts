@@ -3,6 +3,7 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
+import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatDate } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
@@ -92,7 +93,16 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 
 ## EVENTI NON CLINICI NEL REPORT
 - Se tra gli eventi ci sono voci di tipo "spesa_medica", dedicare una sezione "## SPESE MEDICHE DOCUMENTATE" che elenca ogni voce con: data, importo, prestazione, struttura, e una valutazione di congruità/necessità rispetto al quadro clinico documentato. Se il tipo caso NON è "analisi_spese_mediche" o "perizia_assicurativa", la sezione può essere sintetica.
-- Se ci sono eventi di tipo "documento_amministrativo" o "certificato", menzionarli nella sezione più appropriata del report (cronologia per la data, documentazione esaminata per il contenuto). I certificati medici e INAIL vanno integrati nella narrazione clinica.`;
+- Se ci sono eventi di tipo "documento_amministrativo" o "certificato", menzionarli nella sezione più appropriata del report (cronologia per la data, documentazione esaminata per il contenuto). I certificati medici e INAIL vanno integrati nella narrazione clinica.
+
+## TRASCRIZIONE FEDELE DAL TESTO OCR (quando fornito)
+- Se il TESTO OCR DEI DOCUMENTI ORIGINALI è fornito, USALO come fonte primaria per la trascrizione
+- Il testo tra virgolette ("...") DEVE corrispondere al testo OCR originale — NON parafrasare, NON riorganizzare il testo citato
+- Testo illeggibile nell'OCR → riportare "[non leggibile]"
+- Tabelle di esami di laboratorio: riportare valori ESATTI dal testo OCR, con la stessa formattazione
+- Dato presente negli eventi ma NON nel testo OCR → segnalare [dato non verificabile nel testo OCR]
+- Gli eventi servono come INDICE e STRUTTURA cronologica; il CONTENUTO dettagliato viene dal testo OCR
+- Per ogni documento OCR, riprodurre il contenuto nella sezione appropriata in base al tipo documento`;
 
 // ── Full-report mode (single call) ──
 
@@ -106,8 +116,9 @@ export function buildSynthesisSystemPrompt(params: {
   caseRole: CaseRole;
   caseTypes?: CaseType[];
   periziaMetadata?: PeriziaMetadata;
+  hasOcrText?: boolean;
 }): string {
-  const { caseType, caseRole, caseTypes, periziaMetadata } = params;
+  const { caseType, caseRole, caseTypes, periziaMetadata, hasOcrText } = params;
   const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
   const caseTypeDirective = buildCaseTypeDirective(effectiveTypes);
@@ -242,11 +253,20 @@ Includi:
 NON esprimere opinioni, giudizi o conclusioni su responsabilità o merito.
 IMPORTANTE: la sintesi deve contenere SOLO fatti già trattati nel report. NON introdurre elementi nuovi.`;
 
+  const ocrDirective = hasOcrText ? `
+
+## TESTO OCR DISPONIBILE
+Ti verrà fornito il TESTO OCR COMPLETO dei documenti originali. Usa questo testo come FONTE PRIMARIA per trascrivere fedelmente il contenuto dei documenti.
+- Il testo tra virgolette ("...") DEVE provenire dal testo OCR originale
+- Gli eventi estratti servono come INDICE cronologico e struttura; il CONTENUTO dettagliato va trascritto dal testo OCR
+- Non parafrasare — riproduci fedelmente il linguaggio dei documenti originali
+- Per tabelle di esami, riporta i valori ESATTI come appaiono nel testo OCR` : '';
+
   return `Sei un sistema di organizzazione documentale medico-legale. Il tuo compito è strutturare e presentare FATTI dalla documentazione clinica, NON esprimere opinioni.
 
 ## IL TUO COMPITO
-Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione. Il report deve includere sia la riproduzione fedele della documentazione esaminata (in atti e sanitaria) sia la presentazione organizzata degli elementi rilevanti per la valutazione medico-legale.
-IMPORTANTE: Tu presenti i FATTI. Il medico legale formulerà autonomamente le proprie valutazioni e conclusioni professionali.
+Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione${hasOcrText ? ' e sul testo OCR originale dei documenti' : ''}. Il report deve includere sia la riproduzione fedele della documentazione esaminata (in atti e sanitaria) sia la presentazione organizzata degli elementi rilevanti per la valutazione medico-legale.
+IMPORTANTE: Tu presenti i FATTI. Il medico legale formulerà autonomamente le proprie valutazioni e conclusioni professionali.${ocrDirective}
 
 ${roleDirective}
 
@@ -287,8 +307,9 @@ export function buildSynthesisUserPrompt(params: {
   caseTypes?: CaseType[];
   periziaMetadata?: PeriziaMetadata;
   imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number }>;
+  documentsOcrText?: DocumentOcrContext[];
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata, imageAnalysis } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata, imageAnalysis, documentsOcrText } = params;
 
   const eventsText = formatEventsForPrompt(events);
   const anomaliesText = formatAnomaliesForPrompt(anomalies);
@@ -325,10 +346,10 @@ ${anomaliesText}
 
 ${missingDocsText}
 ${calculationsText}
-${formatImageAnalysisForPrompt(imageAnalysis)}---
+${formatImageAnalysisForPrompt(imageAnalysis)}${formatDocumentsOcrForPrompt(documentsOcrText)}---
 
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
-IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.
+IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.${documentsOcrText && documentsOcrText.length > 0 ? '\nIMPORTANTE: Il testo OCR fornito è la FONTE PRIMARIA. Trascrivi FEDELMENTE il contenuto dei documenti originali usando il testo OCR. Il testo tra virgolette deve corrispondere esattamente al testo OCR.' : ''}
 IMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${roleLabel}) formulerà autonomamente le proprie valutazioni professionali.
 IMPORTANTE: Se sono disponibili immagini diagnostiche, inseriscile SOLO INLINE nella documentazione sanitaria nel punto cronologico appropriato. NON creare una sezione ALLEGATI ICONOGRAFICI separata.`;
 }
@@ -338,10 +359,23 @@ IMPORTANTE: Se sono disponibili immagini diagnostiche, inseriscile SOLO INLINE n
 /**
  * System prompt for chronology-only generation (split mode).
  */
-export function buildChronologySystemPrompt(): string {
-  return `Sei un medico legale esperto incaricato di redigere la sezione "DATI DELLA DOCUMENTAZIONE SANITARIA" di un report peritale.
+export function buildChronologySystemPrompt(params?: { hasOcrText?: boolean }): string {
+  const hasOcr = params?.hasOcrText ?? false;
+  const ocrDirective = hasOcr ? `
 
-COMPITO: Genera ESCLUSIVAMENTE la riproduzione dettagliata e fedele della documentazione sanitaria in ordine cronologico. NON generare riassunti, analisi, o elementi di rilievo.
+TESTO OCR DISPONIBILE: Ti verrà fornito il testo OCR completo dei documenti originali. Usa questo come FONTE PRIMARIA per la trascrizione.
+- Il testo tra virgolette ("...") DEVE provenire dal testo OCR
+- Gli eventi estratti servono come INDICE cronologico; il CONTENUTO dettagliato va trascritto dall'OCR
+- Per documenti non sanitari (memorie, ricorsi, certificati), includi sezioni aggiuntive PRIMA della documentazione sanitaria:
+  - "## DATI DELLA DOCUMENTAZIONE IN ATTI" per documenti non sanitari
+  - "## PREMESSE" per memorie difensive e ricorsi (se presenti)
+- Per spese mediche, aggiungi "## SPESE MEDICHE ESIBITE" con tabella DATA | VOCE | IMPORTO
+- Per perizie precedenti, aggiungi "## PRECEDENTI PARERI TECNICI" con trascrizione fedele
+- Testo illeggibile → "[non leggibile]"` : '';
+
+  return `Sei un medico legale esperto incaricato di redigere ${hasOcr ? 'le sezioni documentali' : 'la sezione "DATI DELLA DOCUMENTAZIONE SANITARIA"'} di un report peritale.
+
+COMPITO: Genera ESCLUSIVAMENTE la riproduzione dettagliata e fedele della documentazione${hasOcr ? ' (in atti, sanitaria, spese mediche, pareri tecnici)' : ' sanitaria'} in ordine cronologico. NON generare riassunti, analisi, o elementi di rilievo.${ocrDirective}
 
 STILE: Usa il FORMATO CITAZIONE OBBLIGATORIO per ogni documento/episodio:
 
@@ -385,29 +419,64 @@ REGOLE:
 STRUTTURA OUTPUT (rispetta ESATTAMENTE questa struttura, inclusi i marker HTML):
 
 <!-- SECTION:CRONOLOGIA -->
-## DATI DELLA DOCUMENTAZIONE SANITARIA
+${hasOcr ? `## DATI DELLA DOCUMENTAZIONE IN ATTI
+(Solo se presenti documenti non sanitari: ricorsi, memorie, certificati, atti)
+
+## PREMESSE
+(Solo se presenti memorie difensive o ricorsi)
+
+` : ''}## DATI DELLA DOCUMENTAZIONE SANITARIA
 
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..." (X)
 
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..." (X)
-<!-- END:CRONOLOGIA -->`;
+${hasOcr ? `
+## SPESE MEDICHE ESIBITE
+(Solo se presenti documenti di spese mediche — tabella DATA | VOCE | IMPORTO)
+
+## PRECEDENTI PARERI TECNICI
+(Solo se presenti perizie precedenti CTP/CTU)
+` : ''}<!-- END:CRONOLOGIA -->`;
 }
 
 /**
  * User prompt for chronology-only generation (split mode).
+ * Accepts either positional args (legacy) or object params (new).
  */
 export function buildChronologyUserPrompt(
-  eventsFormatted: string,
-  caseTypeLabel: string,
-  expertRole: string,
+  paramsOrEvents: string | {
+    eventsFormatted: string;
+    caseTypeLabel: string;
+    expertRole: string;
+    patientInitials?: string;
+    documentsOcrText?: DocumentOcrContext[];
+  },
+  caseTypeLabel?: string,
+  expertRole?: string,
   patientInitials?: string,
 ): string {
-  let prompt = `TIPO CASO: ${caseTypeLabel}\n`;
-  prompt += `RUOLO PERITO: ${expertRole}\n`;
-  if (patientInitials) prompt += `PAZIENTE: ${patientInitials}\n`;
-  prompt += '\nEVENTI ESTRATTI DA INCLUDERE NELLA DOCUMENTAZIONE SANITARIA:\n\n';
-  prompt += eventsFormatted;
-  prompt += '\n\nGenera la sezione DATI DELLA DOCUMENTAZIONE SANITARIA completa, includendo TUTTI gli eventi elencati sopra in forma dettagliata e fedele, nel formato specificato nelle istruzioni di sistema. Ricorda di includere i marker <!-- SECTION:CRONOLOGIA --> e <!-- END:CRONOLOGIA -->.';
+  // Support both legacy positional args and new object params
+  const params = typeof paramsOrEvents === 'string'
+    ? { eventsFormatted: paramsOrEvents, caseTypeLabel: caseTypeLabel!, expertRole: expertRole!, patientInitials, documentsOcrText: undefined }
+    : paramsOrEvents;
+
+  let prompt = `TIPO CASO: ${params.caseTypeLabel}\n`;
+  prompt += `RUOLO PERITO: ${params.expertRole}\n`;
+  if (params.patientInitials) prompt += `PAZIENTE: ${params.patientInitials}\n`;
+  prompt += '\nEVENTI ESTRATTI (indice cronologico):\n\n';
+  prompt += params.eventsFormatted;
+
+  // Add OCR text if available
+  const ocrSection = formatDocumentsOcrForPrompt(params.documentsOcrText);
+  if (ocrSection) {
+    prompt += '\n\n' + ocrSection;
+  }
+
+  prompt += '\n\nGenera le sezioni documentali complete, includendo TUTTI gli eventi elencati sopra in forma dettagliata e fedele, nel formato specificato nelle istruzioni di sistema.';
+  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
+    prompt += '\nIMPORTANTE: Usa il TESTO OCR come fonte primaria per la trascrizione. Il testo tra virgolette DEVE corrispondere al testo OCR originale. Gli eventi servono come indice cronologico.';
+  }
+  prompt += ' Ricorda di includere i marker <!-- SECTION:CRONOLOGIA --> e <!-- END:CRONOLOGIA -->.';
   return prompt;
 }
 
@@ -692,6 +761,87 @@ export function filterMedicalImages<T extends { imageType: string; description: 
     if (ADMIN_IMAGE_KEYWORDS.some((kw) => descLower.includes(kw))) return false;
     return true;
   });
+}
+
+// ── OCR text formatting for faithful transcription ──
+
+type DocumentCategory = 'sanitario' | 'non_sanitario' | 'spese' | 'perizie' | 'memorie';
+
+function categorizeDocumentType(docType: string): DocumentCategory {
+  switch (docType) {
+    case 'memoria_difensiva': return 'memorie';
+    case 'spese_mediche': return 'spese';
+    case 'perizia_precedente':
+    case 'perizia_ctp':
+    case 'perizia_ctu': return 'perizie';
+    case 'certificato': return 'non_sanitario';
+    default: return 'sanitario';
+  }
+}
+
+function formatSingleDocOcr(doc: DocumentOcrContext): string {
+  let text = `#### ${doc.fileName} (${doc.documentType})\n`;
+  for (const page of doc.pages) {
+    text += `--- Pagina ${page.pageNumber} ---\n${page.ocrText}\n\n`;
+  }
+  return text + '\n';
+}
+
+/**
+ * Format OCR text from all documents, organized by category for the LLM.
+ * Returns empty string if no OCR text is available.
+ */
+export function formatDocumentsOcrForPrompt(docs?: DocumentOcrContext[]): string {
+  if (!docs || docs.length === 0) return '';
+
+  const categorized = {
+    memorie: docs.filter((d) => categorizeDocumentType(d.documentType) === 'memorie'),
+    non_sanitario: docs.filter((d) => categorizeDocumentType(d.documentType) === 'non_sanitario'),
+    sanitario: docs.filter((d) => categorizeDocumentType(d.documentType) === 'sanitario'),
+    spese: docs.filter((d) => categorizeDocumentType(d.documentType) === 'spese'),
+    perizie: docs.filter((d) => categorizeDocumentType(d.documentType) === 'perizie'),
+  };
+
+  const totalChars = docs.reduce((sum, d) => sum + d.totalChars, 0);
+  let result = `\n## TESTO OCR DEI DOCUMENTI ORIGINALI (${docs.length} documenti, ${totalChars} caratteri)\n\n`;
+  result += 'Di seguito il testo OCR completo dei documenti originali. Usa questo testo per TRASCRIVERE FEDELMENTE il contenuto nel report, nelle sezioni appropriate.\n\n';
+
+  if (categorized.memorie.length > 0) {
+    result += '### DOCUMENTI PER SEZIONE "PREMESSE" (memorie, ricorsi)\n\n';
+    for (const doc of categorized.memorie) {
+      result += formatSingleDocOcr(doc);
+    }
+  }
+
+  if (categorized.non_sanitario.length > 0) {
+    result += '### DOCUMENTI PER SEZIONE "DATI DELLA DOCUMENTAZIONE IN ATTI" (non sanitari)\n\n';
+    for (const doc of categorized.non_sanitario) {
+      result += formatSingleDocOcr(doc);
+    }
+  }
+
+  if (categorized.sanitario.length > 0) {
+    result += '### DOCUMENTI PER SEZIONE "DATI DELLA DOCUMENTAZIONE SANITARIA"\n\n';
+    for (const doc of categorized.sanitario) {
+      result += formatSingleDocOcr(doc);
+    }
+  }
+
+  if (categorized.spese.length > 0) {
+    result += '### DOCUMENTI PER SEZIONE "SPESE MEDICHE ESIBITE"\n\n';
+    for (const doc of categorized.spese) {
+      result += formatSingleDocOcr(doc);
+    }
+  }
+
+  if (categorized.perizie.length > 0) {
+    result += '### DOCUMENTI PER SEZIONE "PRECEDENTI PARERI TECNICI"\n\n';
+    for (const doc of categorized.perizie) {
+      result += formatSingleDocOcr(doc);
+    }
+  }
+
+  return result;
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

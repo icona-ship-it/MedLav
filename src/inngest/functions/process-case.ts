@@ -349,11 +349,11 @@ export const processCaseDocuments = inngest.createFunction(
     } else {
       const chronologyResult = await step.run(
         'generate-synthesis-chronology',
-        () => generateChronologyPart(synthesisParams),
+        () => generateChronologyPart(caseId, synthesisParams),
       );
       synthesisResult = await step.run(
         'generate-summary-and-save-report',
-        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronologyResult.chronology),
+        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronologyResult.chronology, chronologyResult.ocrTotalChars),
       );
       // Merge chronology usage into synthesis result if both present
       if (chronologyResult.usage && synthesisResult.usage) {

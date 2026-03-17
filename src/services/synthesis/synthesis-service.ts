@@ -13,6 +13,7 @@ import {
   buildChronologyUserPrompt,
   buildSummarySystemPrompt,
   buildSummaryUserPrompt,
+  formatDocumentsOcrForPrompt,
   CASE_TYPE_LABELS,
 } from './synthesis-prompts';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
@@ -21,6 +22,7 @@ import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-analyzer';
+import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { validateReport } from './report-validator';
@@ -48,6 +50,8 @@ export interface SynthesisParams {
   caseTypeLabel?: string;
   expertRole?: string;
   periziaMetadata?: PeriziaMetadata;
+  /** Original OCR text for faithful transcription in report */
+  documentsOcrText?: DocumentOcrContext[];
 }
 
 const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
@@ -55,8 +59,13 @@ const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
 /**
  * Check if synthesis needs to be split into multiple Mistral calls.
  * Used by the Inngest pipeline to decide whether to use 1 or 2 steps.
+ * Split is mandatory when OCR text is provided (faithful transcription is long).
  */
 export function shouldSplitSynthesis(params: SynthesisParams): boolean {
+  // Always split when OCR text is available — transcription produces long output
+  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
+    return true;
+  }
   const eventsFormatted = formatEventsForPrompt(params.events);
   const anomaliesFormatted = formatAnomalies(params.anomalies);
   const missingDocsFormatted = formatMissingDocs(params.missingDocuments);
@@ -75,7 +84,7 @@ export function shouldSplitSynthesis(params: SynthesisParams): boolean {
 export async function generateSynthesis(params: SynthesisParams): Promise<SynthesisResult> {
   const {
     caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
-    patientInitials, calculations, periziaMetadata, imageAnalysis,
+    patientInitials, calculations, periziaMetadata, imageAnalysis, documentsOcrText,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -84,17 +93,22 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
   const anomaliesFormatted = formatAnomalies(anomalies);
   const missingDocsFormatted = formatMissingDocs(missingDocuments);
   const calculationsFormatted = formatCalculations(calculations);
+  const ocrFormatted = formatDocumentsOcrForPrompt(documentsOcrText);
+  const ocrTotalChars = documentsOcrText?.reduce((sum, d) => sum + d.totalChars, 0) ?? 0;
 
   const totalPromptChars = eventsFormatted.length +
     (anomaliesFormatted?.length ?? 0) +
-    (missingDocsFormatted?.length ?? 0);
+    (missingDocsFormatted?.length ?? 0) +
+    ocrFormatted.length;
 
-  const needsSplit = totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
+  // Always split when OCR text is present
+  const needsSplit = (documentsOcrText && documentsOcrText.length > 0) ||
+    totalPromptChars > SYNTHESIS_SPLIT_THRESHOLD_CHARS;
 
   const guidelineContext = await fetchGuidelineContext(events, caseType, caseTypes);
 
   logger.info('synthesis',
-    ` Total prompt: ${totalPromptChars} chars, split: ${needsSplit}, ` +
+    ` Total prompt: ${totalPromptChars} chars (OCR: ${ocrTotalChars}), split: ${needsSplit}, ` +
     `events: ${events.length}, role: ${caseRole}, type: ${caseType}`,
   );
 
@@ -107,7 +121,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       messages: [
         {
           role: 'system',
-          content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata }),
+          content: buildSynthesisSystemPrompt({ caseType, caseRole, caseTypes, periziaMetadata, hasOcrText: ocrTotalChars > 0 }),
         },
         {
           role: 'user',
@@ -122,11 +136,12 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
             caseTypes,
             periziaMetadata,
             imageAnalysis,
+            documentsOcrText,
           }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
         },
       ],
       temperature: 0,
-      maxTokens: 16384,
+      maxTokens: 32768,
       timeoutMs: TIMEOUT_SYNTHESIS,
       randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:full',
@@ -134,24 +149,25 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     report = fullReport;
     totalUsage = usage;
   } else {
-    logger.info('synthesis', ' Split mode: generating chronology...');
+    logger.info('synthesis', ` Split mode: generating chronology (OCR: ${ocrTotalChars} chars)...`);
 
     const { content: chronology, usage: chronoUsage } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
-        { role: 'system', content: buildChronologySystemPrompt() },
+        { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 }) },
         {
           role: 'user',
-          content: buildChronologyUserPrompt(
+          content: buildChronologyUserPrompt({
             eventsFormatted,
             caseTypeLabel,
             expertRole,
-            patientInitials ?? undefined,
-          ),
+            patientInitials: patientInitials ?? undefined,
+            documentsOcrText,
+          }),
         },
       ],
       temperature: 0,
-      maxTokens: 16384,
+      maxTokens: 24576,
       timeoutMs: TIMEOUT_SYNTHESIS,
       randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:chronology',
@@ -196,6 +212,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
   const validationContext: ReportValidationContext = {
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+    ocrText: ocrTotalChars > 0 ? documentsOcrText : undefined,
   };
   return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis, totalUsage);
 }
@@ -205,29 +222,31 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
  * Runs in its own Inngest step with full 800s Vercel budget.
  */
 export async function generateSynthesisChronology(params: SynthesisParams): Promise<{ chronology: string; usage: TokenUsage }> {
-  const { events, caseType, caseRole, patientInitials } = params;
+  const { events, caseType, caseRole, patientInitials, documentsOcrText } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
   const eventsFormatted = formatEventsForPrompt(events);
+  const ocrTotalChars = documentsOcrText?.reduce((sum, d) => sum + d.totalChars, 0) ?? 0;
 
-  logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events)...`);
+  logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events, OCR: ${ocrTotalChars} chars)...`);
 
   const { content: chronology, usage } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
-      { role: 'system', content: buildChronologySystemPrompt() },
+      { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 }) },
       {
         role: 'user',
-        content: buildChronologyUserPrompt(
+        content: buildChronologyUserPrompt({
           eventsFormatted,
           caseTypeLabel,
           expertRole,
-          patientInitials ?? undefined,
-        ),
+          patientInitials: patientInitials ?? undefined,
+          documentsOcrText,
+        }),
       },
     ],
     temperature: 0,
-    maxTokens: 16384,
+    maxTokens: 24576,
     timeoutMs: TIMEOUT_SYNTHESIS,
     randomSeed: DETERMINISTIC_SEED,
     label: 'synthesis:chronology',
@@ -289,9 +308,11 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
   logger.info('synthesis', ` Summary done: ${summaryAndAnalysis.length} chars. Assembling...`);
   const report = assembleSplitReport(summaryAndAnalysis, chronology);
   const promptVersion = computePromptVersion({ caseType, caseRole, caseTypes: params.caseTypes });
+  const ocrTotalChars = params.documentsOcrText?.reduce((sum, d) => sum + d.totalChars, 0) ?? 0;
   const validationContext: ReportValidationContext = {
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+    ocrText: ocrTotalChars > 0 ? params.documentsOcrText : undefined,
   };
   return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis, summaryUsage);
 }

@@ -14,7 +14,8 @@ export interface ReportIssue {
     | 'phantom_date'
     | 'numerical_mismatch'
     | 'invalid_event_ref'
-    | 'duplicate_content';
+    | 'duplicate_content'
+    | 'unverified_citation';
   severity: 'error' | 'warning';
   message: string;
 }
@@ -29,6 +30,8 @@ export interface ReportValidation {
 export interface ReportValidationContext {
   events: Array<{ orderNumber: number; eventDate: string }>;
   calculations?: Array<{ label: string; value: string; days: number | null }>;
+  /** OCR text for citation verification (Phase 5 safeguard). */
+  ocrText?: Array<{ documentId: string; pages: Array<{ ocrText: string }> }>;
 }
 
 const REQUIRED_SECTIONS = [
@@ -124,6 +127,7 @@ export function validateReport(
   if (context) {
     issues.push(...checkPhantomDates(synthesis, context));
     issues.push(...checkNumericalMismatch(synthesis, context));
+    issues.push(...checkUnverifiedCitations(synthesis, context));
   }
   issues.push(...checkInvalidEventRefs(synthesis, eventCount));
   issues.push(...checkDuplicateContent(synthesis));
@@ -309,6 +313,70 @@ function checkInvalidEventRefs(synthesis: string, eventCount: number): ReportIss
 
 const MIN_BLOCK_WORDS = 50;
 const DUPLICATE_ERROR_THRESHOLD = 3; // 3+ repeats → error
+
+// ── New check: Unverified Citations (OCR cross-reference) ──
+
+/** Regex matching quoted text "..." in report (at least 8 words). */
+const QUOTED_TEXT_PATTERN = /"([^"]{30,})"/g;
+
+/**
+ * Check that quoted text ("...") in the report can be found in the OCR text.
+ * Uses fuzzy match on first 8 words of each citation.
+ * Only runs when OCR text is provided — severity is 'warning' because OCR can have typos.
+ */
+function checkUnverifiedCitations(
+  synthesis: string,
+  context: ReportValidationContext,
+): ReportIssue[] {
+  if (!context.ocrText || context.ocrText.length === 0) return [];
+
+  // Concatenate all OCR text for searching
+  const allOcrText = context.ocrText
+    .flatMap((doc) => doc.pages.map((p) => p.ocrText))
+    .join('\n')
+    .toLowerCase();
+
+  if (allOcrText.length === 0) return [];
+
+  const issues: ReportIssue[] = [];
+  let unverifiedCount = 0;
+  const maxReported = 3; // Limit noise
+
+  let match: RegExpExecArray | null;
+  const quoteRegex = new RegExp(QUOTED_TEXT_PATTERN.source, 'g');
+
+  while ((match = quoteRegex.exec(synthesis)) !== null) {
+    const quotedText = match[1];
+    // Extract first 8 words for fuzzy matching
+    const words = quotedText.split(/\s+/).slice(0, 8);
+    if (words.length < 4) continue; // Skip very short quotes
+
+    const searchPhrase = words.join(' ').toLowerCase();
+
+    // Check if the first 8 words appear in OCR text
+    if (!allOcrText.includes(searchPhrase)) {
+      unverifiedCount++;
+      if (unverifiedCount <= maxReported) {
+        const preview = quotedText.slice(0, 60);
+        issues.push({
+          type: 'unverified_citation',
+          severity: 'warning',
+          message: `Quoted text not found in OCR: "${preview}..."`,
+        });
+      }
+    }
+  }
+
+  if (unverifiedCount > maxReported) {
+    issues.push({
+      type: 'unverified_citation',
+      severity: 'warning',
+      message: `${unverifiedCount - maxReported} additional unverified citations not shown`,
+    });
+  }
+
+  return issues;
+}
 
 /**
  * Detect blocks of >50 words that appear multiple times in the report.

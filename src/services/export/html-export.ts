@@ -1036,19 +1036,19 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
 
 <!-- ═══ Print-only fixed header ═══ -->
 <div class="print-header-fixed">
-  <span class="ph-left">${escapeHtmlPro(nrgInfo)}</span>
-  <span class="ph-right">Riservato</span>
+  <span class="ph-left">${pm.ctuName ? escapeHtmlPro(pm.ctuName) + (pm.ctuTitle ? ` — ${escapeHtmlPro(pm.ctuTitle)}` : '') : escapeHtmlPro(nrgInfo)}</span>
+  <span class="ph-right">${hasCollaboratore && pm.collaboratoreName ? escapeHtmlPro(pm.collaboratoreName) + (pm.collaboratoreTitle ? ` — ${escapeHtmlPro(pm.collaboratoreTitle)}` : '') : 'Riservato'}</span>
 </div>
 
 <!-- ═══ Print-only fixed footer ═══ -->
 <div class="print-footer-fixed">
-  ${escapeHtmlPro(roleTitle)} &mdash; ${escapeHtmlPro(nrgInfo)}
+  ${escapeHtmlPro(nrgInfo)}${patientInfo ? ` &mdash; ${escapeHtmlPro(patientInfo)}` : ''}${pm.parteResistente ? ` // ${escapeHtmlPro(pm.parteResistente)}` : ''}
 </div>
 
 <!-- ═══ Screen header ═══ -->
 <div class="running-header no-print-hide">
-  <div class="rh-left">${escapeHtmlPro(nrgInfo)}${patientInfo ? ` &mdash; ${escapeHtmlPro(patientInfo)}` : ''}</div>
-  <div class="rh-right">Riservato</div>
+  <div class="rh-left">${pm.ctuName ? escapeHtmlPro(pm.ctuName) + (pm.ctuTitle ? ` — ${escapeHtmlPro(pm.ctuTitle)}` : '') : escapeHtmlPro(nrgInfo)}</div>
+  <div class="rh-right">${hasCollaboratore && pm.collaboratoreName ? escapeHtmlPro(pm.collaboratoreName) + (pm.collaboratoreTitle ? ` — ${escapeHtmlPro(pm.collaboratoreTitle)}` : '') : 'Riservato'}</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -1115,7 +1115,7 @@ ${sectionsHtml}
 
 <!-- ═══ Running footer (screen) ═══ -->
 <div class="running-footer">
-  <span>${escapeHtmlPro(nrgInfo)}</span>
+  <span>${escapeHtmlPro(nrgInfo)}${patientInfo ? ` &mdash; ${escapeHtmlPro(patientInfo)}` : ''}${pm.parteResistente ? ` // ${escapeHtmlPro(pm.parteResistente)}` : ''}</span>
   <span>${now}</span>
 </div>
 </div>
