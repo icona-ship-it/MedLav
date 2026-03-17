@@ -13,6 +13,13 @@ async function verifyAdmin() {
   return user;
 }
 
+export interface ApiCostStats {
+  totalCostUSD: number;
+  avgCostPerCase: number;
+  casesWithCost: number;
+  topCases: Array<{ caseId: string; costUSD: number }>;
+}
+
 export interface AnalyticsData {
   casesLast30Days: Array<{ date: string; count: number }>;
   pipelineSuccessRate: { total: number; completed: number; failed: number; rate: number };
@@ -23,6 +30,7 @@ export interface AnalyticsData {
   activeUsersLast7Days: number;
   casesByType: Array<{ type: string; count: number }>;
   casesByRole: Array<{ role: string; count: number }>;
+  apiCosts: ApiCostStats;
 }
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
@@ -43,6 +51,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     auditResult,
     caseTypesResult,
     caseRolesResult,
+    costAuditResult,
   ] = await Promise.all([
     // Cases created last 30 days
     admin
@@ -91,6 +100,13 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 
     // Cases by role
     admin.from('cases').select('case_role'),
+
+    // API costs from audit log (last 30 days)
+    admin
+      .from('audit_log')
+      .select('entity_id, metadata')
+      .eq('action', 'case.processing.completed')
+      .gte('created_at', thirtyDaysAgo),
   ]);
 
   // Cases per day
@@ -171,6 +187,30 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     .map(([role, count]) => ({ role, count }))
     .sort((a, b) => b.count - a.count);
 
+  // API costs
+  let totalCostUSD = 0;
+  const caseCosts: Array<{ caseId: string; costUSD: number }> = [];
+  for (const row of costAuditResult.data ?? []) {
+    const meta = row.metadata as Record<string, unknown> | null;
+    const apiUsage = meta?.apiUsage as { totalCostUSD?: number } | undefined;
+    if (apiUsage?.totalCostUSD && typeof apiUsage.totalCostUSD === 'number') {
+      totalCostUSD += apiUsage.totalCostUSD;
+      caseCosts.push({ caseId: row.entity_id as string, costUSD: apiUsage.totalCostUSD });
+    }
+  }
+  const casesWithCost = caseCosts.length;
+  const avgCostPerCase = casesWithCost > 0 ? totalCostUSD / casesWithCost : 0;
+  const topCases = caseCosts
+    .sort((a, b) => b.costUSD - a.costUSD)
+    .slice(0, 5);
+
+  const apiCosts: ApiCostStats = {
+    totalCostUSD: Math.round(totalCostUSD * 100) / 100,
+    avgCostPerCase: Math.round(avgCostPerCase * 100) / 100,
+    casesWithCost,
+    topCases,
+  };
+
   return {
     casesLast30Days,
     pipelineSuccessRate,
@@ -181,5 +221,6 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     activeUsersLast7Days,
     casesByType,
     casesByRole,
+    apiCosts,
   };
 }

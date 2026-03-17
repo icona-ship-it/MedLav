@@ -25,6 +25,11 @@ import type { SynthesisParams } from './synthesis-service';
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamChat = streamMistralChat as Mock;
+const emptyUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+function mockChat(content: string) {
+  mockStreamChat.mockResolvedValue({ content, usage: emptyUsage });
+}
 
 function buildParams(overrides?: Partial<SynthesisParams>): SynthesisParams {
   return {
@@ -68,7 +73,7 @@ describe('synthesis-service', () => {
         '## Riassunto del caso\nPaziente M.R. visitato.\n\n' +
         '## Cronologia medico-legale\n1. 15/01/2024 — Prima visita\n\n' +
         '## Elementi di rilievo\nNessuna anomalia.';
-      mockStreamChat.mockResolvedValue(reportText);
+      mockChat(reportText);
 
       // Act
       const result = await generateSynthesis(buildParams());
@@ -86,7 +91,7 @@ describe('synthesis-service', () => {
         '## Riassunto del caso\nNon sono presenti eventi clinici.\n\n' +
         '## Cronologia medico-legale\nNessun evento.\n\n' +
         '## Elementi di rilievo\nDocumentazione insufficiente.';
-      mockStreamChat.mockResolvedValue(reportText);
+      mockChat(reportText);
 
       // Act
       const result = await generateSynthesis(buildParams({ events: [] }));
@@ -102,7 +107,7 @@ describe('synthesis-service', () => {
         '## Riassunto del caso\nA parere di questo CTU...\n\n' +
         '## Cronologia medico-legale\n1. Evento\n\n' +
         '## Elementi di rilievo\nAnalisi.';
-      mockStreamChat.mockResolvedValue(ctuReport);
+      mockChat(ctuReport);
 
       // Act
       const result = await generateSynthesis(buildParams({ caseRole: 'ctu' }));
@@ -123,7 +128,7 @@ describe('synthesis-service', () => {
         '## Riassunto del caso\nRisulta evidente che...\n\n' +
         '## Cronologia medico-legale\n1. Evento\n\n' +
         '## Elementi di rilievo\nProfili di responsabilità.';
-      mockStreamChat.mockResolvedValue(ctpReport);
+      mockChat(ctpReport);
 
       // Act
       const result = await generateSynthesis(buildParams({ caseRole: 'ctp' }));
@@ -154,7 +159,7 @@ describe('synthesis-service', () => {
         '## Riassunto del caso\nPaziente con ITT.\n\n' +
         '## Cronologia medico-legale\n1. Evento\n\n' +
         '## Elementi di rilievo\nCalcoli inclusi.';
-      mockStreamChat.mockResolvedValue(reportText);
+      mockChat(reportText);
 
       // Act
       const result = await generateSynthesis(buildParams({

@@ -1,4 +1,5 @@
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 
 export interface CaseMetadata {
   caseId: string;
@@ -25,6 +26,7 @@ export interface OcrResult {
   fullText: string;
   pageCount: number;
   averageConfidence: number;
+  ocrPages?: number;
 }
 
 export interface ExtractionResult {
@@ -40,6 +42,7 @@ export interface SynthesisStepResult {
   reportId?: string;
   reportVersion: number;
   wordCount: number;
+  usage?: TokenUsage;
 }
 
 export interface ClassificationStepResult {

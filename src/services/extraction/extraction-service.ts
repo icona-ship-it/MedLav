@@ -1,5 +1,6 @@
 import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import type { MistralResponseFormat } from '@/lib/mistral/client';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './extraction-prompts';
 import { annotateTablesInText } from './table-detector';
@@ -134,7 +135,7 @@ export async function extractEventsFromChunk(params: {
   totalChunks?: number;
   documentName?: string;
   pageRange?: string;
-}): Promise<ExtractionResponse> {
+}): Promise<ExtractionResponse & { usage?: TokenUsage }> {
   const {
     chunkText, chunkLabel, documentType, caseType,
     temperature = 0, chunkIndex, totalChunks, documentName, pageRange,
@@ -143,7 +144,7 @@ export async function extractEventsFromChunk(params: {
   const startMs = Date.now();
   logger.info('extraction', ` Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
 
-  const content = await streamMistralChat({
+  const { content, usage } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       {
@@ -174,7 +175,9 @@ export async function extractEventsFromChunk(params: {
   const elapsedMs = Date.now() - startMs;
   logger.info('extraction', ` Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
 
-  return parseExtractionResponse(content, chunkLabel);
+  const result = parseExtractionResponse(content, chunkLabel);
+  const inferredEvents = inferMissingDates(result.events);
+  return { ...result, events: inferredEvents, usage };
 }
 
 /**
@@ -338,6 +341,86 @@ function splitByCharacterBoundaries(text: string, maxChunkSize: number): string[
   }
 
   return chunks;
+}
+
+// ── Date inference for events with missing dates ──
+
+const SENTINEL_DATE = '1900-01-01';
+
+/**
+ * Infer missing dates from nearby events on the same source pages.
+ * For events with sentinel date '1900-01-01', tries to find a "donor" event
+ * on the same page (or ±1 page) that has a valid date.
+ */
+export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
+  if (events.length === 0) return events;
+
+  // Index events with valid dates by page number
+  const datedEventsByPage = new Map<number, ExtractedEvent[]>();
+  for (const event of events) {
+    if (event.eventDate === SENTINEL_DATE) continue;
+    for (const page of event.sourcePages) {
+      const existing = datedEventsByPage.get(page) ?? [];
+      existing.push(event);
+      datedEventsByPage.set(page, existing);
+    }
+  }
+
+  // Nothing to donate from
+  if (datedEventsByPage.size === 0) return events;
+
+  let inferredCount = 0;
+
+  const result = events.map((event) => {
+    if (event.eventDate !== SENTINEL_DATE) return event;
+
+    // Try to find a donor: same page first, then ±1
+    const donor = findDateDonor(event.sourcePages, datedEventsByPage);
+    if (!donor) return event;
+
+    inferredCount++;
+    const note = `[AUTO] Data ereditata da evento nella stessa pagina: "${donor.title}"`;
+    return {
+      ...event,
+      eventDate: donor.eventDate,
+      datePrecision: 'sconosciuta' as const,
+      requiresVerification: true,
+      reliabilityNotes: event.reliabilityNotes
+        ? `${event.reliabilityNotes} | ${note}`
+        : note,
+    };
+  });
+
+  if (inferredCount > 0) {
+    logger.info('extraction', `Date inference: ${inferredCount} events inherited dates from nearby events`);
+  }
+
+  return result;
+}
+
+function findDateDonor(
+  sourcePages: number[],
+  datedEventsByPage: Map<number, ExtractedEvent[]>,
+): ExtractedEvent | null {
+  // Priority 1: exact same page
+  for (const page of sourcePages) {
+    const donors = datedEventsByPage.get(page);
+    if (donors && donors.length > 0) {
+      return donors[0];
+    }
+  }
+
+  // Priority 2: adjacent page (±1)
+  for (const page of sourcePages) {
+    for (const offset of [-1, 1]) {
+      const donors = datedEventsByPage.get(page + offset);
+      if (donors && donors.length > 0) {
+        return donors[0];
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

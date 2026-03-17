@@ -23,6 +23,11 @@ vi.mock('@/lib/logger', () => ({
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamMistralChat = vi.mocked(streamMistralChat);
+const emptyUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+function mockChatResult(content: string) {
+  return { content, usage: emptyUsage };
+}
 
 function makeAnomaly(overrides?: Partial<DetectedAnomaly>): DetectedAnomaly {
   return {
@@ -76,12 +81,12 @@ describe('resolveAnomalies', () => {
   });
 
   it('should resolve anomaly when LLM finds explicit evidence', async () => {
-    mockStreamMistralChat.mockResolvedValueOnce(JSON.stringify({
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
       resolved: true,
       confidence: 0.95,
       evidence: 'Diagnosi formulata il 20/01/2024 nel referto.',
       reasoning: 'Il testo OCR contiene una diagnosi precedente.',
-    }));
+    })));
 
     const anomalies = [makeAnomaly()];
     const events = [
@@ -98,12 +103,12 @@ describe('resolveAnomalies', () => {
   });
 
   it('should confirm anomaly when LLM finds no evidence', async () => {
-    mockStreamMistralChat.mockResolvedValueOnce(JSON.stringify({
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
       resolved: false,
       confidence: 0.9,
       evidence: '',
       reasoning: 'Nessuna evidenza di diagnosi precedente nel testo OCR.',
-    }));
+    })));
 
     const anomalies = [makeAnomaly()];
     const events = [
@@ -119,12 +124,12 @@ describe('resolveAnomalies', () => {
   });
 
   it('should be conservative: low confidence resolution is NOT resolved', async () => {
-    mockStreamMistralChat.mockResolvedValueOnce(JSON.stringify({
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
       resolved: true,
       confidence: 0.5, // Below threshold
       evidence: 'Forse c\'è un referto...',
       reasoning: 'Debole evidenza.',
-    }));
+    })));
 
     const anomalies = [makeAnomaly()];
     const events = [makeEvent({ orderNumber: 1, sourcePages: [1] })];
@@ -136,7 +141,7 @@ describe('resolveAnomalies', () => {
   });
 
   it('should handle JSON parse errors conservatively', async () => {
-    mockStreamMistralChat.mockResolvedValueOnce('this is not json');
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult('this is not json'));
 
     const anomalies = [makeAnomaly()];
     const events = [makeEvent({ orderNumber: 1, sourcePages: [1] })];
@@ -199,9 +204,9 @@ describe('resolveAnomalies', () => {
     ];
 
     // All will return confirmed
-    mockStreamMistralChat.mockResolvedValue(JSON.stringify({
+    mockStreamMistralChat.mockResolvedValue(mockChatResult(JSON.stringify({
       resolved: false, confidence: 0.9, evidence: '', reasoning: 'No evidence',
-    }));
+    })));
 
     const events = [
       makeEvent({ orderNumber: 1, sourcePages: [1] }),
@@ -221,12 +226,12 @@ describe('resolveAnomalies', () => {
   });
 
   it('should clamp confidence to [0, 1]', async () => {
-    mockStreamMistralChat.mockResolvedValueOnce(JSON.stringify({
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
       resolved: true,
       confidence: 5.0, // Out of range
       evidence: 'found it',
       reasoning: 'high confidence',
-    }));
+    })));
 
     const anomalies = [makeAnomaly()];
     const events = [makeEvent({ orderNumber: 1, sourcePages: [1] })];

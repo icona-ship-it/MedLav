@@ -115,6 +115,7 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       fullText: result.fullText,
       pageCount: result.pageCount,
       averageConfidence: result.averageConfidence,
+      ocrPages: result.ocrPages ?? result.pageCount,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'OCR failed';

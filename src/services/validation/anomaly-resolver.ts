@@ -158,7 +158,7 @@ async function resolveOneAnomaly(
 
   // 5. Call Mistral Large
   const prompt = buildResolutionPrompt(anomaly, ocrContext);
-  const response = await streamMistralChat({
+  const { content: response } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: RESOLUTION_SYSTEM_PROMPT },

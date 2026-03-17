@@ -50,7 +50,7 @@ describe('extraction-service', () => {
           sourcePages: [1],
         }],
       });
-      mockStreamChat.mockResolvedValue(llmResponse);
+      mockStreamChat.mockResolvedValue({ content: llmResponse, usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
 
       // Act
       const result = await extractEventsFromChunk({
@@ -70,7 +70,7 @@ describe('extraction-service', () => {
 
     it('should return empty events for empty LLM response', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(JSON.stringify({ events: [] }));
+      mockStreamChat.mockResolvedValue({ content: JSON.stringify({ events: [] }), usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
 
       // Act
       const result = await extractEventsFromChunk({
@@ -86,9 +86,10 @@ describe('extraction-service', () => {
 
     it('should handle malformed LLM response gracefully', async () => {
       // Arrange — truncated JSON
-      mockStreamChat.mockResolvedValue(
-        '{"events": [{"title": "Intervento", "description": "desc", "eventDate": "2024-01-01"',
-      );
+      mockStreamChat.mockResolvedValue({
+        content: '{"events": [{"title": "Intervento", "description": "desc", "eventDate": "2024-01-01"',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      });
 
       // Act
       const result = await extractEventsFromChunk({

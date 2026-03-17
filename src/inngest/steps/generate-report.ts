@@ -129,7 +129,7 @@ export async function generateAndSaveReport(
   logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
 
   const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
-  return { ...result, promptVersion: r.promptVersion };
+  return { ...result, promptVersion: r.promptVersion, usage: r.usage };
 }
 
 /**
@@ -138,11 +138,11 @@ export async function generateAndSaveReport(
  */
 export async function generateChronologyPart(
   synthesisParams: SynthesisParams,
-): Promise<string> {
+): Promise<{ chronology: string; usage?: import('@/services/cost-tracking/cost-calculator').TokenUsage }> {
   const startMs = Date.now();
-  const c = await generateSynthesisChronology(synthesisParams);
-  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${c.length} chars)`);
-  return c;
+  const { chronology, usage } = await generateSynthesisChronology(synthesisParams);
+  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${chronology.length} chars)`);
+  return { chronology, usage };
 }
 
 /**
@@ -159,7 +159,7 @@ export async function generateSummaryAndSaveReport(
   logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
 
   const result = await insertReport(caseId, r.synthesis, r.wordCount, r.promptVersion);
-  return { ...result, promptVersion: r.promptVersion };
+  return { ...result, promptVersion: r.promptVersion, usage: r.usage };
 }
 
 // Keep for backward compatibility but mark as deprecated

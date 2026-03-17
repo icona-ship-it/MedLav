@@ -22,4 +22,5 @@ export interface OcrDocumentResult {
   averageConfidence: number; // 0-100
   fullText: string; // concatenated text of all pages
   images: OcrImageResult[]; // all images across all pages
+  ocrPages?: number; // number of pages billed by OCR API
 }

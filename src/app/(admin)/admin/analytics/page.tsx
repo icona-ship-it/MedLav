@@ -55,6 +55,45 @@ export default async function AnalyticsPage() {
         />
       </div>
 
+      {/* API Costs */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Costi API (ultimi 30 giorni)</h2>
+        <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+          <StatCard
+            label="Costo totale"
+            value={`$${data.apiCosts.totalCostUSD.toFixed(2)}`}
+          />
+          <StatCard
+            label="Costo medio/caso"
+            value={`$${data.apiCosts.avgCostPerCase.toFixed(2)}`}
+          />
+          <StatCard
+            label="Casi con dati costo"
+            value={data.apiCosts.casesWithCost.toString()}
+          />
+        </div>
+        {data.apiCosts.topCases.length > 0 && (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Caso ID</th>
+                  <th className="px-4 py-2 text-left font-medium">Costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.apiCosts.topCases.map((c) => (
+                  <tr key={c.caseId}>
+                    <td className="px-4 py-2 font-mono text-xs">{c.caseId.slice(0, 8)}...</td>
+                    <td className="px-4 py-2 font-mono">${c.costUSD.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {/* Cases per day */}
       <section>
         <h2 className="mb-3 text-lg font-semibold">Casi creati (ultimi 30 giorni)</h2>

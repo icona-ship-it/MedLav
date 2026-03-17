@@ -3,6 +3,7 @@ import { sendReportReadyEmail } from '@/services/email/email-service';
 import type { ExtractionResult, ConsolidationStepResult, SynthesisStepResult } from './types';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
+import type { PipelineCostSummary } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 interface FinalizeParams {
@@ -14,6 +15,7 @@ interface FinalizeParams {
   missingDocs: MissingDocument[];
   synthesisResult: SynthesisStepResult;
   synthesisWordCount: number;
+  pipelineCost?: PipelineCostSummary;
 }
 
 /**
@@ -29,6 +31,7 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
     missingDocs,
     synthesisResult,
     synthesisWordCount,
+    pipelineCost,
   } = params;
   const supabase = createAdminClient();
 
@@ -65,6 +68,14 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
       missingDocuments: missingDocs.length,
       reportVersion: synthesisResult.reportVersion,
       synthesisWordCount: synthesisResult.wordCount ?? synthesisWordCount,
+      ...(pipelineCost ? {
+        apiUsage: {
+          totalCostUSD: pipelineCost.totalCostUSD,
+          totalTokens: pipelineCost.totalPromptTokens + pipelineCost.totalCompletionTokens,
+          totalOcrPages: pipelineCost.totalOcrPages,
+          steps: pipelineCost.steps,
+        },
+      } : {}),
     },
   });
 }

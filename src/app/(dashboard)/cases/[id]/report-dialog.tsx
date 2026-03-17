@@ -26,11 +26,19 @@ export function ReportDialog({
   const router = useRouter();
   const [editedSynthesis, setEditedSynthesis] = useState('');
   const [isSaving, startSave] = useTransition();
-  // Initialize content when dialog opens
+
+  // Sync content when dialog opens — React 19 "adjusting state based on props" pattern.
+  // Uses useState (not useRef) to track the previous open value during render,
+  // so RichTextEditor receives the report content on its first render.
+  const [prevOpen, setPrevOpen] = useState(false);
+  if (open && !prevOpen) {
+    setEditedSynthesis(report?.synthesis ?? '');
+  }
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+  }
+
   const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen && report?.synthesis) {
-      setEditedSynthesis(report.synthesis);
-    }
     if (!isOpen) {
       setEditedSynthesis('');
     }

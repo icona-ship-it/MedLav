@@ -69,6 +69,7 @@ interface OcrRawPage {
 
 interface OcrRawResponse {
   pages?: OcrRawPage[];
+  usageInfo?: { pagesProcessed?: number };
 }
 
 /**
@@ -148,6 +149,8 @@ function mapOcrResponseToResult(params: {
     ? pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length
     : 0;
 
+  const ocrPages = response.usageInfo?.pagesProcessed ?? pages.length;
+
   return {
     documentId,
     fileName,
@@ -156,6 +159,7 @@ function mapOcrResponseToResult(params: {
     averageConfidence: Math.round(averageConfidence),
     fullText,
     images: allImages,
+    ocrPages,
   };
 }
 

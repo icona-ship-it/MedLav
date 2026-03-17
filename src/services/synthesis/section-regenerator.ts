@@ -96,7 +96,7 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
 
   userPrompt += `\n\n---\nGenera ORA la sezione "${sectionTitle}". Solo il contenuto, senza heading ##.`;
 
-  const newContent = await streamMistralChat({
+  const { content: newContent } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: systemPrompt },

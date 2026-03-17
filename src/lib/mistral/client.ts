@@ -1,5 +1,7 @@
 import { Mistral, HTTPClient } from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
+import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 
 // ── Timeout per tipo di operazione ──
 // Vercel Pro maxDuration = 800s per Inngest step.
@@ -231,6 +233,11 @@ export type MistralResponseFormat = JsonObjectFormat | JsonSchemaFormat;
 
 // ── Streaming chat with stall detection + fallback ──
 
+export interface MistralChatResult {
+  content: string;
+  usage: TokenUsage;
+}
+
 export async function streamMistralChat(params: {
   model: string;
   messages: Array<{ role: string; content: string }>;
@@ -240,7 +247,7 @@ export async function streamMistralChat(params: {
   timeoutMs?: number;
   randomSeed?: number;
   label: string;
-}): Promise<string> {
+}): Promise<MistralChatResult> {
   await mistralSemaphore.acquire();
   try {
     return await _streamWithFallback(params);
@@ -258,7 +265,7 @@ async function _streamWithFallback(params: {
   timeoutMs?: number;
   randomSeed?: number;
   label: string;
-}): Promise<string> {
+}): Promise<MistralChatResult> {
   const { label } = params;
   try {
     return await _streamMistralChatInternal(params);
@@ -287,7 +294,7 @@ async function _streamMistralChatInternal(params: {
   timeoutMs?: number;
   randomSeed?: number;
   label: string;
-}): Promise<string> {
+}): Promise<MistralChatResult> {
   const { model, messages, temperature, maxTokens, responseFormat, randomSeed, label } = params;
   const timeoutMs = params.timeoutMs ?? TIMEOUT_DEFAULT;
 
@@ -310,14 +317,26 @@ async function _streamMistralChatInternal(params: {
     let content = '';
     let lastLogAt = 0;
     let lastTokenAt = Date.now();
+    let usage: TokenUsage = createEmptyUsage();
     const STALL_TIMEOUT_MS = 90_000;
 
     for await (const event of stream) {
-      const delta = (event.data as { choices?: Array<{ delta?: { content?: string } }> })
-        ?.choices?.[0]?.delta?.content;
+      const data = event.data as {
+        choices?: Array<{ delta?: { content?: string } }>;
+        usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+      };
+      const delta = data?.choices?.[0]?.delta?.content;
       if (typeof delta === 'string' && delta.length > 0) {
         content += delta;
         lastTokenAt = Date.now();
+      }
+      // Capture usage from the last chunk (Mistral sends it in the final event)
+      if (data?.usage) {
+        usage = {
+          promptTokens: data.usage.promptTokens ?? 0,
+          completionTokens: data.usage.completionTokens ?? 0,
+          totalTokens: data.usage.totalTokens ?? 0,
+        };
       }
       if (Date.now() - lastTokenAt > STALL_TIMEOUT_MS && content.length === 0) {
         throw new Error(
@@ -339,7 +358,7 @@ async function _streamMistralChatInternal(params: {
     logger.info('mistral',
       `[mistral:${label}] Stream complete: ${content.length} chars in ${Date.now() - startMs}ms`,
     );
-    return content;
+    return { content, usage };
   }, label);
 }
 
@@ -352,7 +371,7 @@ async function _completeMistralChatFallback(params: {
   timeoutMs?: number;
   randomSeed?: number;
   label: string;
-}): Promise<string> {
+}): Promise<MistralChatResult> {
   const { model, messages, temperature, maxTokens, responseFormat, randomSeed, label } = params;
   const timeoutMs = params.timeoutMs ?? TIMEOUT_DEFAULT;
 
@@ -380,9 +399,17 @@ async function _completeMistralChatFallback(params: {
       throw new Error(`[mistral:${label}] chat.complete() returned empty content`);
     }
 
+    const usage: TokenUsage = response?.usage
+      ? {
+        promptTokens: response.usage.promptTokens ?? 0,
+        completionTokens: response.usage.completionTokens ?? 0,
+        totalTokens: response.usage.totalTokens ?? 0,
+      }
+      : createEmptyUsage();
+
     logger.info('mistral',
       `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms`,
     );
-    return content;
+    return { content, usage };
   }, label);
 }

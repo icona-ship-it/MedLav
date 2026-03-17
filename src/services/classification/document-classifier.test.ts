@@ -20,6 +20,11 @@ import { streamMistralChat } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 const mockStreamChat = streamMistralChat as Mock;
+const emptyUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+function mockChat(content: string) {
+  mockStreamChat.mockResolvedValue({ content, usage: emptyUsage });
+}
 
 describe('document-classifier', () => {
   beforeEach(() => {
@@ -29,9 +34,7 @@ describe('document-classifier', () => {
   describe('classifyDocument', () => {
     it('should return correct type for valid JSON response with high confidence', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'cartella_clinica', confidence: 85, reasoning: 'Contiene diario clinico' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'cartella_clinica', confidence: 85, reasoning: 'Contiene diario clinico' }));
 
       // Act
       const result = await classifyDocument('Diario clinico del paziente...', 'cartella.pdf');
@@ -44,9 +47,7 @@ describe('document-classifier', () => {
 
     it('should fall back to "altro" for invalid document type', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'tipo_inventato', confidence: 90, reasoning: 'Unknown type' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'tipo_inventato', confidence: 90, reasoning: 'Unknown type' }));
 
       // Act
       const result = await classifyDocument('Testo qualsiasi', 'file.pdf');
@@ -62,7 +63,7 @@ describe('document-classifier', () => {
 
     it('should fall back to "altro" with confidence 0 for malformed JSON', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue('This is not JSON at all');
+      mockChat('This is not JSON at all');
 
       // Act
       const result = await classifyDocument('Testo qualsiasi', 'file.pdf');
@@ -80,9 +81,7 @@ describe('document-classifier', () => {
     it('should sanitize newlines from fileName and truncate to 100 chars', async () => {
       // Arrange
       const longName = 'a'.repeat(150) + '\ninjected';
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'certificato', confidence: 70, reasoning: 'ok' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'certificato', confidence: 70, reasoning: 'ok' }));
 
       // Act
       await classifyDocument('Testo', longName);
@@ -99,9 +98,7 @@ describe('document-classifier', () => {
     it('should truncate OCR text to 3000 chars', async () => {
       // Arrange
       const longText = 'x'.repeat(5000);
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'esame_laboratorio', confidence: 80, reasoning: 'ok' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'esame_laboratorio', confidence: 80, reasoning: 'ok' }));
 
       // Act
       await classifyDocument(longText, 'esami.pdf');
@@ -116,9 +113,7 @@ describe('document-classifier', () => {
 
     it('should handle response with null fields gracefully', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: null, confidence: null, reasoning: null }),
-      );
+      mockChat(JSON.stringify({ documentType: null, confidence: null, reasoning: null }));
 
       // Act
       const result = await classifyDocument('Testo', 'file.pdf');
@@ -131,7 +126,7 @@ describe('document-classifier', () => {
 
     it('should handle response that is a JSON array (not object)', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue('[1, 2, 3]');
+      mockChat('[1, 2, 3]');
 
       // Act
       const result = await classifyDocument('Testo', 'file.pdf');
@@ -143,9 +138,7 @@ describe('document-classifier', () => {
 
     it('should use MISTRAL_LARGE model', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
       // Act
       await classifyDocument('Testo', 'file.pdf');
@@ -157,9 +150,7 @@ describe('document-classifier', () => {
 
     it('should request json_object response format', async () => {
       // Arrange
-      mockStreamChat.mockResolvedValue(
-        JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }),
-      );
+      mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
       // Act
       await classifyDocument('Testo', 'file.pdf');

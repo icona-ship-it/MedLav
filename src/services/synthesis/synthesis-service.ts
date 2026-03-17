@@ -4,6 +4,8 @@ import {
   TIMEOUT_SYNTHESIS,
   DETERMINISTIC_SEED,
 } from '@/lib/mistral/client';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
+import { createEmptyUsage, mergeUsage } from '@/services/cost-tracking/cost-calculator';
 import {
   buildSynthesisSystemPrompt,
   buildSynthesisUserPrompt,
@@ -30,6 +32,7 @@ export interface SynthesisResult {
   synthesis: string;
   wordCount: number;
   promptVersion: string;
+  usage?: TokenUsage;
 }
 
 export interface SynthesisParams {
@@ -96,9 +99,10 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
   );
 
   let report: string;
+  let totalUsage: TokenUsage = createEmptyUsage();
 
   if (!needsSplit) {
-    report = await streamMistralChat({
+    const { content: fullReport, usage } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         {
@@ -127,10 +131,12 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
       randomSeed: DETERMINISTIC_SEED,
       label: 'synthesis:full',
     });
+    report = fullReport;
+    totalUsage = usage;
   } else {
     logger.info('synthesis', ' Split mode: generating chronology...');
 
-    const chronology = await streamMistralChat({
+    const { content: chronology, usage: chronoUsage } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         { role: 'system', content: buildChronologySystemPrompt() },
@@ -153,7 +159,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
 
     logger.info('synthesis', ` Chronology: ${chronology.length} chars. Generating summary...`);
 
-    const summaryAndAnalysis = await streamMistralChat({
+    const { content: summaryAndAnalysis, usage: summaryUsage } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         {
@@ -183,6 +189,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
 
     logger.info('synthesis', ` Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
     report = assembleSplitReport(summaryAndAnalysis, chronology);
+    totalUsage = mergeUsage(chronoUsage, summaryUsage);
   }
 
   const promptVersion = computePromptVersion({ caseType, caseRole, caseTypes: params.caseTypes });
@@ -190,14 +197,14 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis);
+  return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis, totalUsage);
 }
 
 /**
  * Split mode step 1: Generate chronology section only.
  * Runs in its own Inngest step with full 800s Vercel budget.
  */
-export async function generateSynthesisChronology(params: SynthesisParams): Promise<string> {
+export async function generateSynthesisChronology(params: SynthesisParams): Promise<{ chronology: string; usage: TokenUsage }> {
   const { events, caseType, caseRole, patientInitials } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -205,7 +212,7 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
 
   logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events)...`);
 
-  const chronology = await streamMistralChat({
+  const { content: chronology, usage } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: buildChronologySystemPrompt() },
@@ -227,7 +234,7 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
   });
 
   logger.info('synthesis', ` Chronology done: ${chronology.length} chars`);
-  return chronology;
+  return { chronology, usage };
 }
 
 /**
@@ -251,7 +258,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
 
   logger.info('synthesis', ` Split step 2: generating summary from ${chronology.length} char chronology...`);
 
-  const summaryAndAnalysis = await streamMistralChat({
+  const { content: summaryAndAnalysis, usage: summaryUsage } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       {
@@ -286,7 +293,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
     events: events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis);
+  return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis, summaryUsage);
 }
 
 // ── Shared helpers ──
@@ -327,6 +334,7 @@ function finalizeReport(
   promptVersion: string,
   validationContext?: ReportValidationContext,
   imageAnalysis?: ImageAnalysisResult[],
+  usage?: TokenUsage,
 ): SynthesisResult {
   const withImages = appendImageAppendix(report, imageAnalysis);
   const cleaned = stripSectionMarkers(withImages);
@@ -347,7 +355,7 @@ function finalizeReport(
   logger.info('synthesis',
     ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%, promptVersion: ${promptVersion}`,
   );
-  return { synthesis: cleaned, wordCount, promptVersion };
+  return { synthesis: cleaned, wordCount, promptVersion, usage };
 }
 
 // ── Formatting helpers ──

@@ -1,4 +1,5 @@
 import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 const VALID_DOCUMENT_TYPES = new Set([
@@ -49,6 +50,7 @@ export interface ClassificationResult {
   documentType: string;
   confidence: number;
   reasoning: string;
+  usage?: TokenUsage;
 }
 
 /**
@@ -64,7 +66,7 @@ export async function classifyDocument(
 
   const userMessage = `Nome file: ${safeFileName}\n\nTesto documento (prime ${truncatedText.length} caratteri):\n${truncatedText}`;
 
-  const raw = await streamMistralChat({
+  const { content: raw, usage } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: CLASSIFICATION_SYSTEM_PROMPT },
@@ -77,7 +79,8 @@ export async function classifyDocument(
     label: `classify-${safeFileName.slice(0, 30)}`,
   });
 
-  return parseClassificationResponse(raw, fileName);
+  const result = parseClassificationResponse(raw, fileName);
+  return { ...result, usage };
 }
 
 function parseClassificationResponse(raw: string, fileName: string): ClassificationResult {

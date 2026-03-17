@@ -18,6 +18,9 @@ import {
   generateSummaryAndSaveReport,
 } from '../steps/generate-report';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
+import type { CostStep } from '@/services/cost-tracking/cost-calculator';
+import { calculateTokenCost, buildPipelineSummary } from '@/services/cost-tracking/cost-calculator';
+import { MISTRAL_MODELS } from '@/lib/mistral/client';
 
 import type { OcrResult, ExtractionResult } from '../steps/types';
 
@@ -344,17 +347,58 @@ export const processCaseDocuments = inngest.createFunction(
         () => generateAndSaveReport(caseId, synthesisParams),
       );
     } else {
-      const chronology = await step.run(
+      const chronologyResult = await step.run(
         'generate-synthesis-chronology',
         () => generateChronologyPart(synthesisParams),
       );
       synthesisResult = await step.run(
         'generate-summary-and-save-report',
-        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronology),
+        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronologyResult.chronology),
       );
+      // Merge chronology usage into synthesis result if both present
+      if (chronologyResult.usage && synthesisResult.usage) {
+        synthesisResult = {
+          ...synthesisResult,
+          usage: {
+            promptTokens: synthesisResult.usage.promptTokens + chronologyResult.usage.promptTokens,
+            completionTokens: synthesisResult.usage.completionTokens + chronologyResult.usage.completionTokens,
+            totalTokens: synthesisResult.usage.totalTokens + chronologyResult.usage.totalTokens,
+          },
+        };
+      }
     }
 
     const synthesisWordCount = synthesisResult.wordCount;
+
+    // Build pipeline cost summary from available usage data
+    const costSteps: CostStep[] = [];
+    const totalOcrPages = ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0);
+
+    // Add synthesis cost
+    if (synthesisResult.usage && synthesisResult.usage.totalTokens > 0) {
+      costSteps.push({
+        step: 'synthesis',
+        model: MISTRAL_MODELS.MISTRAL_LARGE,
+        promptTokens: synthesisResult.usage.promptTokens,
+        completionTokens: synthesisResult.usage.completionTokens,
+        costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_LARGE, synthesisResult.usage),
+      });
+    }
+
+    // Add image analysis costs
+    for (const img of imageAnalysisResults) {
+      if (img.usage && img.usage.totalTokens > 0) {
+        costSteps.push({
+          step: `image-analysis:p${img.pageNumber}`,
+          model: MISTRAL_MODELS.PIXTRAL_LARGE,
+          promptTokens: img.usage.promptTokens,
+          completionTokens: img.usage.completionTokens,
+          costUSD: calculateTokenCost(MISTRAL_MODELS.PIXTRAL_LARGE, img.usage),
+        });
+      }
+    }
+
+    const pipelineCost = buildPipelineSummary(costSteps, totalOcrPages);
 
     // Step 8: Finalize
     await step.run('finalize', () => finalizeStep({
@@ -366,6 +410,7 @@ export const processCaseDocuments = inngest.createFunction(
       missingDocs,
       synthesisResult,
       synthesisWordCount,
+      pipelineCost,
     }));
 
     // Step 9: Send notification

@@ -6,6 +6,8 @@
 
 import type { CaseType } from '@/types';
 import { getMistralClient, withMistralRetry, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
+import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 export interface ImageAnalysisResult {
@@ -14,6 +16,7 @@ export interface ImageAnalysisResult {
   description: string;
   confidence: number;
   storagePath?: string;
+  usage?: TokenUsage;
 }
 
 const IMAGE_TYPE_KEYWORDS: Record<string, string[]> = {
@@ -120,6 +123,14 @@ Rispondi in formato JSON:
   const content = response.choices?.[0]?.message?.content;
   if (!content || typeof content !== 'string') return null;
 
+  const usage: TokenUsage = response.usage
+    ? {
+      promptTokens: response.usage.promptTokens ?? 0,
+      completionTokens: response.usage.completionTokens ?? 0,
+      totalTokens: response.usage.totalTokens ?? 0,
+    }
+    : createEmptyUsage();
+
   try {
     const parsed = JSON.parse(content) as {
       imageType?: string;
@@ -132,6 +143,7 @@ Rispondi in formato JSON:
       imageType: normalizeImageType(parsed.imageType ?? 'altro'),
       description: parsed.description ?? 'Nessuna descrizione disponibile',
       confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+      usage,
     };
   } catch {
     return {
@@ -139,6 +151,7 @@ Rispondi in formato JSON:
       imageType: 'altro',
       description: content.slice(0, 500),
       confidence: 0.3,
+      usage,
     };
   }
 }
