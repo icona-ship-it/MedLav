@@ -3,6 +3,8 @@ import {
   buildSynthesisSystemPrompt,
   buildSynthesisUserPrompt,
   filterMedicalImages,
+  truncateOcrProportionally,
+  formatDocumentsOcrForPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
@@ -310,6 +312,91 @@ describe('synthesis-prompts', () => {
 
       expect(prompt).toContain('Frattura femore');
       expect(prompt).not.toContain('Logo ospedale');
+    });
+  });
+
+  describe('truncateOcrProportionally', () => {
+    it('should return docs unchanged when under budget', () => {
+      const docs = [
+        { documentId: 'd1', fileName: 'doc1.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'abc' }], totalChars: 3 },
+      ];
+      const result = truncateOcrProportionally(docs, 1000);
+      expect(result).toEqual(docs);
+    });
+
+    it('should truncate proportionally across documents', () => {
+      const docs = [
+        { documentId: 'd1', fileName: 'doc1.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'a'.repeat(600) }], totalChars: 600 },
+        { documentId: 'd2', fileName: 'doc2.pdf', documentType: 'referto_controllo', pages: [{ pageNumber: 1, ocrText: 'b'.repeat(400) }], totalChars: 400 },
+      ];
+      const result = truncateOcrProportionally(docs, 500);
+      // d1 gets 60% of 500 = 300, d2 gets 40% of 500 = 200
+      const d1Chars = result[0].pages.reduce((s, p) => s + p.ocrText.length, 0);
+      const d2Chars = result[1].pages.reduce((s, p) => s + p.ocrText.length, 0);
+      expect(d1Chars).toBeLessThanOrEqual(400); // truncated text + "[... troncato...]" marker
+      expect(d2Chars).toBeLessThanOrEqual(300);
+    });
+
+    it('should add truncation markers', () => {
+      const docs = [
+        { documentId: 'd1', fileName: 'doc1.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'x'.repeat(1000) }], totalChars: 1000 },
+      ];
+      const result = truncateOcrProportionally(docs, 500);
+      const pageText = result[0].pages[0].ocrText;
+      expect(pageText).toContain('troncato');
+      expect(pageText).toContain('1000 chars originali');
+    });
+
+    it('should omit later pages and add omission notice', () => {
+      const docs = [
+        {
+          documentId: 'd1', fileName: 'doc1.pdf', documentType: 'cartella_clinica',
+          pages: [
+            { pageNumber: 1, ocrText: 'a'.repeat(300) },
+            { pageNumber: 2, ocrText: 'b'.repeat(300) },
+            { pageNumber: 3, ocrText: 'c'.repeat(400) },
+          ],
+          totalChars: 1000,
+        },
+      ];
+      const result = truncateOcrProportionally(docs, 500);
+      // Budget is 500. Page 1 (300) fits, page 2 (300) partially, page 3 omitted
+      expect(result[0].pages.length).toBeLessThanOrEqual(4); // at most pages + omission notice
+      const lastPage = result[0].pages[result[0].pages.length - 1];
+      expect(lastPage.ocrText).toContain('pagine omesse');
+    });
+  });
+
+  describe('formatDocumentsOcrForPrompt', () => {
+    it('should return empty string for no docs', () => {
+      expect(formatDocumentsOcrForPrompt(undefined)).toBe('');
+      expect(formatDocumentsOcrForPrompt([])).toBe('');
+    });
+
+    it('should include truncation notice when over budget', () => {
+      const largeDocs = [
+        {
+          documentId: 'd1', fileName: 'big.pdf', documentType: 'cartella_clinica',
+          pages: [{ pageNumber: 1, ocrText: 'x'.repeat(400_000) }],
+          totalChars: 400_000,
+        },
+      ];
+      const result = formatDocumentsOcrForPrompt(largeDocs);
+      expect(result).toContain('troncato proporzionalmente');
+      expect(result).toContain('400000');
+    });
+
+    it('should not truncate when under budget', () => {
+      const docs = [
+        {
+          documentId: 'd1', fileName: 'small.pdf', documentType: 'cartella_clinica',
+          pages: [{ pageNumber: 1, ocrText: 'some text' }],
+          totalChars: 9,
+        },
+      ];
+      const result = formatDocumentsOcrForPrompt(docs);
+      expect(result).not.toContain('troncato proporzionalmente');
+      expect(result).toContain('some text');
     });
   });
 

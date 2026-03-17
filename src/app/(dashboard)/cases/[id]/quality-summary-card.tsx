@@ -48,6 +48,7 @@ export function QualitySummaryCard({
   const criticalCount = severityCount(anomalies, 'critica');
   const highCount = severityCount(anomalies, 'alta');
   const mediumCount = severityCount(anomalies, 'media');
+  const lowCount = severityCount(anomalies, 'bassa');
 
   return (
     <Card>
@@ -80,9 +81,9 @@ export function QualitySummaryCard({
                   {mediumCount} medie
                 </Badge>
               )}
-              {criticalCount === 0 && highCount === 0 && mediumCount === 0 && (
-                <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                  {anomalies.length} basse
+              {lowCount > 0 && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0">
+                  {lowCount} basse
                 </Badge>
               )}
             </div>

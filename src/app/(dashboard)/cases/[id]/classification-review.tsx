@@ -108,7 +108,11 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
           </p>
         </div>
 
-        <div className="space-y-2">
+        <p className="text-xs text-muted-foreground text-center">
+          {documents.length} documenti da classificare
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {documents.map((doc) => {
             const selection = selections.find((s) => s.documentId === doc.id);
             const selectedType = selection?.documentType ?? 'altro';
@@ -192,24 +196,26 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
           })}
         </div>
 
-        <Button
-          size="lg"
-          className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
-          onClick={handleConfirm}
-          disabled={isConfirming}
-        >
-          {isConfirming ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Conferma in corso...
-            </>
-          ) : (
-            <>
-              <CheckCircle2 className="mr-2 h-5 w-5" />
-              Conferma classificazione e prosegui
-            </>
-          )}
-        </Button>
+        <div className="sticky bottom-0 z-10 pt-2 pb-1 bg-gradient-to-t from-background via-background to-transparent">
+          <Button
+            size="lg"
+            className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+            onClick={handleConfirm}
+            disabled={isConfirming}
+          >
+            {isConfirming ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Conferma in corso...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                Conferma classificazione e prosegui
+              </>
+            )}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

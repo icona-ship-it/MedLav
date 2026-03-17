@@ -44,43 +44,117 @@ function severityVariant(severity: string): 'destructive' | 'warning' | 'seconda
   }
 }
 
-/** Per-type guidance: what it means and how to resolve it */
-const anomalyGuidance: Record<string, { meaning: string; howToResolve: string }> = {
+interface GuidedQuestion {
+  question: string;
+  options: Array<{ label: string; action: 'confirm' | 'dismiss' }>;
+}
+
+interface AnomalyGuidanceEntry {
+  meaning: string;
+  howToResolve: string;
+  questions: GuidedQuestion[];
+}
+
+/** Per-type guidance: what it means, how to resolve, and guided questions */
+const anomalyGuidance: Record<string, AnomalyGuidanceEntry> = {
   ritardo_diagnostico: {
     meaning: 'Tra il momento in cui i sintomi sono comparsi e la diagnosi è passato un tempo superiore alla norma.',
     howToResolve: 'Verifica se esistono documenti che giustifichino il ritardo (visite intermedie, esami in attesa). Se il ritardo è reale e rilevante, confermalo per includerlo nel report. Se hai documentazione che copre il periodo, caricala nello Step 1.',
+    questions: [{
+      question: 'Hai documentazione di visite o esami nel periodo del ritardo?',
+      options: [
+        { label: 'No, il ritardo diagnostico è reale e rilevante', action: 'confirm' },
+        { label: 'Non è rilevante per questa perizia', action: 'dismiss' },
+      ],
+    }],
   },
   gap_post_chirurgico: {
     meaning: 'Dopo un intervento chirurgico non risulta documentazione di follow-up nel periodo atteso.',
     howToResolve: 'Controlla se esistono referti di visite post-operatorie o lettere di dimissione non ancora caricati. Se il follow-up è avvenuto ma manca la documentazione, caricala. Se il gap è reale, confermalo.',
+    questions: [{
+      question: 'Esistono referti di follow-up post-operatorio non ancora caricati?',
+      options: [
+        { label: 'No, il follow-up manca davvero', action: 'confirm' },
+        { label: 'Il follow-up non è rilevante per il caso', action: 'dismiss' },
+      ],
+    }],
   },
   gap_documentale: {
     meaning: 'Nella timeline clinica c\'è un periodo significativo senza documentazione.',
     howToResolve: 'Verifica se mancano referti, visite o esami relativi a quel periodo. Puoi caricare la documentazione mancante nello Step 1, oppure ignorare se il gap non è rilevante per la perizia.',
+    questions: [{
+      question: 'Hai documentazione che copre questo periodo?',
+      options: [
+        { label: 'No, il gap nella documentazione è reale', action: 'confirm' },
+        { label: 'Non è rilevante per questa perizia', action: 'dismiss' },
+      ],
+    }],
   },
   complicanza_non_gestita: {
     meaning: 'È stata rilevata una complicanza per la quale non risulta un trattamento o gestione documentata.',
     howToResolve: 'Controlla se esiste documentazione sulla gestione della complicanza non ancora caricata. Se la complicanza è stata gestita ma non documentata, annota nei tuoi appunti. Se è reale, confermala.',
+    questions: [{
+      question: 'La complicanza è stata gestita ma la documentazione non è stata caricata?',
+      options: [
+        { label: 'No, la complicanza non è stata gestita', action: 'confirm' },
+        { label: 'È stata gestita, manca solo il documento', action: 'dismiss' },
+      ],
+    }],
   },
   consenso_non_documentato: {
     meaning: 'Per una procedura invasiva non risulta il consenso informato nella documentazione.',
     howToResolve: 'Verifica se il modulo di consenso informato è disponibile e caricalo. Se non esiste, confermalo come anomalia — è un elemento rilevante per la perizia.',
+    questions: [{
+      question: 'Il consenso informato esiste ma non è stato caricato?',
+      options: [
+        { label: 'No, il consenso informato manca', action: 'confirm' },
+        { label: 'Il consenso c\'è, devo caricarlo', action: 'dismiss' },
+      ],
+    }],
   },
   diagnosi_contraddittoria: {
     meaning: 'Due o più documenti riportano diagnosi diverse o contrastanti per la stessa condizione.',
     howToResolve: 'Esamina i documenti coinvolti per capire se si tratta di un\'evoluzione diagnostica (normale) o di un errore. Se è un\'evoluzione, ignorala. Se è una contraddizione reale, confermala.',
+    questions: [{
+      question: 'Le diagnosi diverse rappresentano un\'evoluzione nel tempo o una contraddizione?',
+      options: [
+        { label: 'È una contraddizione reale', action: 'confirm' },
+        { label: 'È una normale evoluzione diagnostica', action: 'dismiss' },
+      ],
+    }],
   },
   terapia_senza_followup: {
     meaning: 'È stata prescritta una terapia senza successivi controlli documentati per valutarne l\'efficacia.',
     howToResolve: 'Verifica se esistono referti di controllo non ancora caricati. Se il follow-up è avvenuto altrove, annotalo. Se manca davvero, confermalo come anomalia.',
+    questions: [{
+      question: 'Esistono referti di controllo sulla terapia non ancora caricati?',
+      options: [
+        { label: 'No, il follow-up terapeutico manca', action: 'confirm' },
+        { label: 'Il follow-up è avvenuto, manca il documento', action: 'dismiss' },
+      ],
+    }],
   },
   valore_clinico_critico: {
     meaning: 'Un valore di laboratorio o parametro clinico risulta fuori range in modo significativo.',
     howToResolve: 'Verifica se il valore è stato gestito clinicamente (terapia aggiustata, ricovero, ecc.). Se la gestione è documentata altrove, carica il documento. Se il valore critico non è stato gestito, confermalo.',
+    questions: [{
+      question: 'Il valore critico è stato gestito clinicamente?',
+      options: [
+        { label: 'No, non risulta gestione documentata', action: 'confirm' },
+        { label: 'Sì, ma la documentazione non è caricata', action: 'dismiss' },
+      ],
+    }],
   },
   sequenza_temporale_violata: {
     meaning: 'L\'ordine cronologico degli eventi clinici presenta incongruenze (es. referto datato prima della visita).',
     howToResolve: 'Spesso si tratta di errori di data nei documenti. Verifica le date reali. Se è un errore di trascrizione, ignorala. Se la sequenza è effettivamente anomala, confermala.',
+    questions: [{
+      question: 'L\'incongruenza temporale è un errore di data o un\'anomalia reale?',
+      options: [
+        { label: 'È un\'anomalia reale nella sequenza clinica', action: 'confirm' },
+        { label: 'È solo un errore di data/trascrizione', action: 'dismiss' },
+      ],
+    }],
   },
 };
 
@@ -359,35 +433,74 @@ function AnomalyCard({
 
       {/* Action buttons — only for unresolved anomalies */}
       {!resolved && !isEditing && (
-        <div className="mt-3 flex items-center gap-2 pt-2 border-t border-dashed">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-            onClick={handleConfirm}
-            disabled={isConfirming}
-          >
-            {isConfirming ? (
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-            ) : (
-              <ThumbsUp className="mr-1 h-3 w-3" />
-            )}
-            Includi nel report
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs text-muted-foreground hover:text-foreground"
-            onClick={handleDismiss}
-            disabled={isDismissing}
-          >
-            {isDismissing ? (
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-            ) : (
-              <Archive className="mr-1 h-3 w-3" />
-            )}
-            Escludi
-          </Button>
+        <div className="mt-3 pt-2 border-t border-dashed space-y-2">
+          {/* Guided questions if available and guide is open */}
+          {showGuide && guidance?.questions && guidance.questions.length > 0 ? (
+            <>
+              {guidance.questions.map((q) => (
+                <div key={q.question} className="space-y-1.5">
+                  <p className="text-xs font-medium text-foreground">{q.question}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {q.options.map((opt) => (
+                      <Button
+                        key={opt.label}
+                        variant={opt.action === 'confirm' ? 'outline' : 'ghost'}
+                        size="sm"
+                        className={`h-auto py-1.5 px-3 text-xs whitespace-normal text-left ${
+                          opt.action === 'confirm'
+                            ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={opt.action === 'confirm' ? handleConfirm : handleDismiss}
+                        disabled={isConfirming || isDismissing}
+                      >
+                        {(opt.action === 'confirm' ? isConfirming : isDismissing) ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin shrink-0" />
+                        ) : opt.action === 'confirm' ? (
+                          <ThumbsUp className="mr-1 h-3 w-3 shrink-0" />
+                        ) : (
+                          <Archive className="mr-1 h-3 w-3 shrink-0" />
+                        )}
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            /* Fallback: classic buttons when no questions or guide is closed */
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                onClick={handleConfirm}
+                disabled={isConfirming}
+              >
+                {isConfirming ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <ThumbsUp className="mr-1 h-3 w-3" />
+                )}
+                Includi nel report
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                onClick={handleDismiss}
+                disabled={isDismissing}
+              >
+                {isDismissing ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Archive className="mr-1 h-3 w-3" />
+                )}
+                Escludi
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

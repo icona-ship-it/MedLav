@@ -788,23 +788,92 @@ function formatSingleDocOcr(doc: DocumentOcrContext): string {
 }
 
 /**
+ * Maximum OCR chars to include in synthesis prompt.
+ * ~200K tokens budget for OCR, leaving ~60K for system prompt + events + output.
+ * Ratio ~0.55 token/char for Italian medical text → 200K / 0.55 ≈ 360K chars.
+ */
+const MAX_OCR_CHARS = 360_000;
+
+/**
+ * Truncate OCR documents proportionally to fit within a character budget.
+ * Each document gets a budget proportional to its original size.
+ * Pages are truncated from the end; if a single page exceeds budget, its text is cut.
+ */
+export function truncateOcrProportionally(
+  docs: DocumentOcrContext[],
+  maxChars: number,
+): DocumentOcrContext[] {
+  const totalChars = docs.reduce((sum, d) => sum + d.totalChars, 0);
+  if (totalChars <= maxChars) return docs;
+
+  const ratio = maxChars / totalChars;
+
+  return docs.map((doc) => {
+    const docBudget = Math.floor(doc.totalChars * ratio);
+    let remaining = docBudget;
+    const truncatedPages: Array<{ pageNumber: number; ocrText: string }> = [];
+
+    for (const page of doc.pages) {
+      if (remaining <= 0) break;
+
+      if (page.ocrText.length <= remaining) {
+        truncatedPages.push(page);
+        remaining -= page.ocrText.length;
+      } else {
+        // Truncate this page's text to fit remaining budget
+        const truncatedText = page.ocrText.slice(0, remaining)
+          + `\n\n[... troncato, ${page.ocrText.length} chars originali ...]`;
+        truncatedPages.push({ pageNumber: page.pageNumber, ocrText: truncatedText });
+        remaining = 0;
+      }
+    }
+
+    const omittedPages = doc.pages.length - truncatedPages.length;
+    if (omittedPages > 0) {
+      const lastPage = doc.pages[doc.pages.length - 1];
+      truncatedPages.push({
+        pageNumber: lastPage.pageNumber,
+        ocrText: `[... ${omittedPages} pagine omesse per limiti di contesto, ${doc.totalChars - docBudget} chars non inclusi ...]`,
+      });
+    }
+
+    const newTotalChars = truncatedPages.reduce((sum, p) => sum + p.ocrText.length, 0);
+    return {
+      ...doc,
+      pages: truncatedPages,
+      totalChars: newTotalChars,
+    };
+  });
+}
+
+/**
  * Format OCR text from all documents, organized by category for the LLM.
  * Returns empty string if no OCR text is available.
+ * Applies proportional truncation if total OCR exceeds MAX_OCR_CHARS.
  */
 export function formatDocumentsOcrForPrompt(docs?: DocumentOcrContext[]): string {
   if (!docs || docs.length === 0) return '';
 
+  const totalChars = docs.reduce((sum, d) => sum + d.totalChars, 0);
+  const effectiveDocs = totalChars > MAX_OCR_CHARS
+    ? truncateOcrProportionally(docs, MAX_OCR_CHARS)
+    : docs;
+  const wasTruncated = totalChars > MAX_OCR_CHARS;
+
   const categorized = {
-    memorie: docs.filter((d) => categorizeDocumentType(d.documentType) === 'memorie'),
-    non_sanitario: docs.filter((d) => categorizeDocumentType(d.documentType) === 'non_sanitario'),
-    sanitario: docs.filter((d) => categorizeDocumentType(d.documentType) === 'sanitario'),
-    spese: docs.filter((d) => categorizeDocumentType(d.documentType) === 'spese'),
-    perizie: docs.filter((d) => categorizeDocumentType(d.documentType) === 'perizie'),
+    memorie: effectiveDocs.filter((d) => categorizeDocumentType(d.documentType) === 'memorie'),
+    non_sanitario: effectiveDocs.filter((d) => categorizeDocumentType(d.documentType) === 'non_sanitario'),
+    sanitario: effectiveDocs.filter((d) => categorizeDocumentType(d.documentType) === 'sanitario'),
+    spese: effectiveDocs.filter((d) => categorizeDocumentType(d.documentType) === 'spese'),
+    perizie: effectiveDocs.filter((d) => categorizeDocumentType(d.documentType) === 'perizie'),
   };
 
-  const totalChars = docs.reduce((sum, d) => sum + d.totalChars, 0);
+  const effectiveChars = effectiveDocs.reduce((sum, d) => sum + d.totalChars, 0);
   let result = `\n## TESTO OCR DEI DOCUMENTI ORIGINALI (${docs.length} documenti, ${totalChars} caratteri)\n\n`;
-  result += 'Di seguito il testo OCR completo dei documenti originali. Usa questo testo per TRASCRIVERE FEDELMENTE il contenuto nel report, nelle sezioni appropriate.\n\n';
+  if (wasTruncated) {
+    result += `**NOTA: Il testo OCR è stato troncato proporzionalmente da ${totalChars} a ~${effectiveChars} caratteri per rispettare i limiti di contesto. Ogni documento mantiene la proporzione originale.**\n\n`;
+  }
+  result += 'Di seguito il testo OCR dei documenti originali. Usa questo testo per TRASCRIVERE FEDELMENTE il contenuto nel report, nelle sezioni appropriate.\n\n';
 
   if (categorized.memorie.length > 0) {
     result += '### DOCUMENTI PER SEZIONE "PREMESSE" (memorie, ricorsi)\n\n';
@@ -844,4 +913,4 @@ export function formatDocumentsOcrForPrompt(docs?: DocumentOcrContext[]): string
   return result;
 }
 
-export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };
+export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS, MAX_OCR_CHARS };
