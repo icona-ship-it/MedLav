@@ -8,8 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { MarkdownPreview } from '@/components/markdown-preview';
+import { RichTextEditor } from '@/components/rich-text-editor';
 import { updateReportSynthesis } from '../../actions';
 import type { ReportRow } from './types';
 
@@ -60,7 +59,7 @@ export function ReportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[95vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>Modifica Report</DialogTitle>
@@ -86,27 +85,13 @@ export function ReportDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-hidden">
-          {/* Left: Editor */}
-          <div className="flex flex-col min-h-0">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Modifica (Markdown)</p>
-            <Textarea
-              className="flex-1 min-h-[60vh] font-mono text-sm resize-none"
-              value={editedSynthesis}
-              onChange={(e) => setEditedSynthesis(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          {/* Right: Preview in A4 style */}
-          <div className="flex flex-col min-h-0">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Anteprima</p>
-            <div className="flex-1 min-h-0 overflow-y-auto rounded-md border bg-muted/30">
-              <div className="report-a4-page !shadow-none !rounded-none">
-                <MarkdownPreview content={editedSynthesis} caseId={caseId} />
-              </div>
-            </div>
-          </div>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <RichTextEditor
+            content={editedSynthesis}
+            onChange={setEditedSynthesis}
+            caseId={caseId}
+            className="h-full"
+          />
         </div>
       </DialogContent>
     </Dialog>

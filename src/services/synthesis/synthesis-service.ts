@@ -12,6 +12,7 @@ import {
   buildSummarySystemPrompt,
   buildSummaryUserPrompt,
   CASE_TYPE_LABELS,
+  filterMedicalImages,
 } from './synthesis-prompts';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -322,8 +323,8 @@ function appendImageAppendix(
 ): string {
   if (!imageAnalysis || imageAnalysis.length === 0) return report;
 
-  // Only include images that have a storagePath (actually downloadable)
-  const withPaths = imageAnalysis.filter((img) => img.storagePath);
+  // Only include medical images that have a storagePath (actually downloadable)
+  const withPaths = filterMedicalImages(imageAnalysis).filter((img) => img.storagePath);
   if (withPaths.length === 0) return report;
 
   // Check if the LLM already generated an ALLEGATI section

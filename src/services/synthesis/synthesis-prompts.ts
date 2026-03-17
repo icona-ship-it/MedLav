@@ -599,7 +599,9 @@ function formatImageAnalysisForPrompt(
   imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number; storagePath?: string }>,
 ): string {
   if (!imageAnalysis || imageAnalysis.length === 0) return '';
-  const lines = imageAnalysis.map((img, index) => {
+  const filtered = filterMedicalImages(imageAnalysis);
+  if (filtered.length === 0) return '';
+  const lines = filtered.map((img, index) => {
     const figNum = index + 1;
     const pathRef = img.storagePath
       ? `\n  Sintassi per includere: ![Fig. ${figNum} — ${img.imageType}](ocr-image:${img.storagePath})`
@@ -620,6 +622,31 @@ REGOLE PER LE IMMAGINI:
 ${lines.join('\n')}
 
 `;
+}
+
+// ── Image filtering ──
+
+const ADMIN_IMAGE_KEYWORDS = [
+  'logo', 'intestazione', 'timbro', 'firma', 'header', 'footer',
+  'watermark', 'stemma', 'sigillo', 'letterhead', 'bollo',
+];
+
+/**
+ * Filter out non-medical images (logos, stamps, headers) keeping only
+ * diagnostic/clinical images (RX, TAC, RM, ecografia, endoscopia, foto cliniche).
+ */
+export function filterMedicalImages<T extends { imageType: string; description: string }>(
+  images: T[],
+): T[] {
+  return images.filter((img) => {
+    const typeLower = img.imageType.toLowerCase();
+    // Exclude explicitly non-medical types
+    if (typeLower === 'altro') return false;
+    // Exclude images whose description contains admin keywords
+    const descLower = img.description.toLowerCase();
+    if (ADMIN_IMAGE_KEYWORDS.some((kw) => descLower.includes(kw))) return false;
+    return true;
+  });
 }
 
 export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS };

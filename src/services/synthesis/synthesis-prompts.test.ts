@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildSynthesisSystemPrompt,
   buildSynthesisUserPrompt,
+  filterMedicalImages,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
@@ -253,6 +254,75 @@ describe('synthesis-prompts', () => {
       expect(prompt).toContain('IMMAGINI DIAGNOSTICHE DISPONIBILI');
       expect(prompt).toContain('Frattura del femore distale');
       expect(prompt).toContain('Pagina 5');
+    });
+
+    it('should exclude non-medical images from prompt', () => {
+      const prompt = buildSynthesisUserPrompt({
+        caseType: 'ortopedica',
+        patientInitials: 'M.R.',
+        caseRole: 'ctu',
+        events: [makeEvent()],
+        anomalies: [],
+        missingDocuments: [],
+        imageAnalysis: [
+          { pageNumber: 1, imageType: 'altro', description: 'Logo ospedale', confidence: 90 },
+          { pageNumber: 5, imageType: 'RX', description: 'Frattura femore', confidence: 85 },
+        ],
+      });
+
+      expect(prompt).toContain('Frattura femore');
+      expect(prompt).not.toContain('Logo ospedale');
+    });
+  });
+
+  describe('filterMedicalImages', () => {
+    it('should include medical image types', () => {
+      const images = [
+        { imageType: 'radiografia', description: 'RX ginocchio destro AP' },
+        { imageType: 'tac', description: 'TAC cranio senza mdc' },
+        { imageType: 'risonanza', description: 'RM colonna lombare' },
+        { imageType: 'ecografia', description: 'Ecografia addome' },
+      ];
+      expect(filterMedicalImages(images)).toHaveLength(4);
+    });
+
+    it('should exclude "altro" image type', () => {
+      const images = [
+        { imageType: 'altro', description: 'Immagine non classificata' },
+        { imageType: 'radiografia', description: 'RX torace' },
+      ];
+      const result = filterMedicalImages(images);
+      expect(result).toHaveLength(1);
+      expect(result[0].imageType).toBe('radiografia');
+    });
+
+    it('should exclude images with admin keywords in description', () => {
+      const images = [
+        { imageType: 'radiografia', description: 'Logo intestazione ospedale' },
+        { imageType: 'tac', description: 'Timbro e firma del medico' },
+        { imageType: 'risonanza', description: 'Header della pagina' },
+        { imageType: 'radiografia', description: 'RX ginocchio destro' },
+      ];
+      const result = filterMedicalImages(images);
+      expect(result).toHaveLength(1);
+      expect(result[0].description).toBe('RX ginocchio destro');
+    });
+
+    it('should return empty array for empty input', () => {
+      expect(filterMedicalImages([])).toEqual([]);
+    });
+
+    it('should handle mixed medical and non-medical images', () => {
+      const images = [
+        { imageType: 'radiografia', description: 'RX femore destro' },
+        { imageType: 'altro', description: 'Documento scansionato' },
+        { imageType: 'tac', description: 'Watermark pagina referti' },
+        { imageType: 'ecografia', description: 'Ecografia muscolo-tendinea' },
+        { imageType: 'risonanza', description: 'Stemma della ASL' },
+      ];
+      const result = filterMedicalImages(images);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.imageType)).toEqual(['radiografia', 'ecografia']);
     });
   });
 });

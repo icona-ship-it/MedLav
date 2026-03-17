@@ -57,30 +57,32 @@ export function ReportTocSidebar({ sections }: ReportTocSidebarProps) {
 
   return (
     <nav
-      className="sticky top-[140px] w-48 shrink-0 hidden xl:block"
+      className="w-48 shrink-0 hidden xl:block"
       aria-label="Indice sezioni report"
     >
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-        Indice
-      </p>
-      <ul className="space-y-0.5">
-        {navSections.map((section) => (
-          <li key={section.id}>
-            <button
-              type="button"
-              onClick={() => handleClick(section.id)}
-              className={cn(
-                'w-full text-left text-sm py-1.5 px-3 rounded-r-md border-l-2 transition-colors truncate',
-                activeId === section.id
-                  ? 'border-primary text-primary font-medium bg-primary/5'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30',
-              )}
-            >
-              {section.title}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="sticky top-[140px]">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Indice
+        </p>
+        <ul className="space-y-0.5">
+          {navSections.map((section) => (
+            <li key={section.id}>
+              <button
+                type="button"
+                onClick={() => handleClick(section.id)}
+                className={cn(
+                  'w-full text-left text-sm py-1.5 px-3 rounded-r-md border-l-2 transition-colors truncate',
+                  activeId === section.id
+                    ? 'border-primary text-primary font-medium bg-primary/5'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30',
+                )}
+              >
+                {section.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
   );
 }
