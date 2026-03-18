@@ -221,6 +221,49 @@ export async function getAverageRating(): Promise<{ avg: number | null; count: n
   return { avg: sum / data.length, count: data.length };
 }
 
+export interface RecentCosts {
+  totalCostUSD: number;
+  avgCostPerCase: number;
+  casesWithCostData: number;
+}
+
+export async function getRecentCosts(): Promise<RecentCosts> {
+  await verifyAdmin();
+  const admin = createAdminClient();
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const { data } = await admin
+    .from('audit_log')
+    .select('metadata')
+    .eq('action', 'case.processing.completed')
+    .gte('created_at', thirtyDaysAgo.toISOString());
+
+  if (!data || data.length === 0) {
+    return { totalCostUSD: 0, avgCostPerCase: 0, casesWithCostData: 0 };
+  }
+
+  let totalCost = 0;
+  let casesWithCost = 0;
+
+  for (const row of data) {
+    const meta = row.metadata as Record<string, unknown> | null;
+    const apiUsage = meta?.apiUsage as Record<string, unknown> | undefined;
+    const cost = apiUsage?.totalCostUSD;
+    if (typeof cost === 'number' && cost > 0) {
+      totalCost += cost;
+      casesWithCost++;
+    }
+  }
+
+  return {
+    totalCostUSD: totalCost,
+    avgCostPerCase: casesWithCost > 0 ? totalCost / casesWithCost : 0,
+    casesWithCostData: casesWithCost,
+  };
+}
+
 export async function getAuditLogs(page: number = 1) {
   await verifyAdmin();
   const admin = createAdminClient();

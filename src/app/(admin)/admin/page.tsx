@@ -5,6 +5,7 @@ import {
   getRecentErrors,
   getRecentCompletions,
   getAverageRating,
+  getRecentCosts,
 } from './actions';
 
 const statusLabels: Record<string, string> = {
@@ -18,12 +19,13 @@ const statusLabels: Record<string, string> = {
 };
 
 export default async function AdminDashboardPage() {
-  const [stats, processing, errors, completions, ratingStats] = await Promise.all([
+  const [stats, processing, errors, completions, ratingStats, costs] = await Promise.all([
     getSystemStats(),
     getProcessingDocuments(),
     getRecentErrors(),
     getRecentCompletions(),
     getAverageRating(),
+    getRecentCosts(),
   ]);
 
   return (
@@ -42,6 +44,29 @@ export default async function AdminDashboardPage() {
           suffix={ratingStats.count > 0 ? `(${ratingStats.count} valutazioni)` : 'N/D'}
         />
       </div>
+
+      {/* Costi API (ultimi 30 giorni) */}
+      {costs.casesWithCostData > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Costi API (ultimi 30 giorni)</h2>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            <StatCard
+              label="Costo totale"
+              value={Number(costs.totalCostUSD.toFixed(4))}
+              suffix="USD"
+            />
+            <StatCard
+              label="Costo medio/caso"
+              value={Number(costs.avgCostPerCase.toFixed(4))}
+              suffix="USD"
+            />
+            <StatCard
+              label="Casi con dati costo"
+              value={costs.casesWithCostData}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Link to analytics */}
       <div>

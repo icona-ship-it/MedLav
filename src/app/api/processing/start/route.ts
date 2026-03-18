@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
     // Send Inngest event to trigger processing
     await inngest.send({
-      name: 'case/process.requested',
+      name: 'case/pipeline.phase1',
       data: {
         caseId,
         userId: user.id,

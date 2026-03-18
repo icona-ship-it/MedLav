@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Send Inngest cancel event
     await inngest.send({
-      name: 'case/process.cancelled',
+      name: 'case/pipeline.cancelled',
       data: {
         caseId,
         userId: user.id,

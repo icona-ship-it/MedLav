@@ -11,5 +11,5 @@ export const { GET, POST, PUT } = serve({
     processCasePhase2,
     dataRetentionCleanup,
   ],
-  ...(process.env.INNGEST_SERVE_HOST ? { serveHost: process.env.INNGEST_SERVE_HOST } : {}),
+  serveHost: 'https://medlav.vercel.app',
 });

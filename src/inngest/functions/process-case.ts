@@ -66,7 +66,7 @@ async function handlePipelineFailure(event: { data: unknown }) {
 }
 
 // ─── PHASE 1: OCR + Classification ─────────────────────────────────
-// Triggers on case/process.requested.
+// Triggers on case/pipeline.phase1.
 // Ends after classification — user reviews, then confirms to trigger phase 2.
 
 export const processCasePhase1 = inngest.createFunction(
@@ -78,11 +78,11 @@ export const processCasePhase1 = inngest.createFunction(
       { limit: 2, key: 'event.data.userId' },
     ],
     cancelOn: [
-      { event: 'case/process.cancelled', match: 'data.caseId' },
+      { event: 'case/pipeline.cancelled', match: 'data.caseId' },
     ],
     onFailure: async ({ event }) => handlePipelineFailure(event),
   },
-  { event: 'case/process.requested' },
+  { event: 'case/pipeline.phase1' },
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
@@ -147,7 +147,7 @@ export const processCasePhase1 = inngest.createFunction(
     });
 
     // Phase 1 ends here. User reviews classification in the UI.
-    // When they confirm, the API sends 'case/classification.confirmed' which triggers phase 2.
+    // When they confirm, the API sends 'case/pipeline.phase2' which triggers phase 2.
     return {
       success: true,
       caseId,
@@ -158,7 +158,7 @@ export const processCasePhase1 = inngest.createFunction(
 );
 
 // ─── PHASE 2: Extraction → Report ──────────────────────────────────
-// Triggers on case/classification.confirmed (sent by confirm-classification API).
+// Triggers on case/pipeline.phase2 (sent by confirm-classification API).
 // Reads OCR results from DB, then does extraction, consolidation, synthesis.
 
 export const processCasePhase2 = inngest.createFunction(
@@ -170,11 +170,11 @@ export const processCasePhase2 = inngest.createFunction(
       { limit: 2, key: 'event.data.userId' },
     ],
     cancelOn: [
-      { event: 'case/process.cancelled', match: 'data.caseId' },
+      { event: 'case/pipeline.cancelled', match: 'data.caseId' },
     ],
     onFailure: async ({ event }) => handlePipelineFailure(event),
   },
-  { event: 'case/classification.confirmed' },
+  { event: 'case/pipeline.phase2' },
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
