@@ -4,7 +4,7 @@ import type { Mock } from 'vitest';
 vi.mock('@/lib/mistral/client', () => ({
   streamMistralChat: vi.fn(),
   MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
-  TIMEOUT_SYNTHESIS: 660_000,
+  TIMEOUT_SYNTHESIS: 240_000,
   DETERMINISTIC_SEED: 42,
 }));
 

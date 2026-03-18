@@ -11,8 +11,10 @@ import {
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { logger } from '@/lib/logger';
 
-/** Cases with more docs than this trigger map-reduce summarization */
-export const MAP_REDUCE_THRESHOLD_DOCS = 50;
+/** Cases with more docs than this trigger map-reduce summarization.
+ * Summaries replace raw OCR text in synthesis prompts, keeping them small
+ * enough to complete within Vercel's 300s function timeout. */
+export const MAP_REDUCE_THRESHOLD_DOCS = 10;
 
 /** Max chars of OCR text sent per-document summary call */
 export const OCR_PER_DOC_SUMMARY_LIMIT = 30_000;

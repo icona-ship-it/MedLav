@@ -4,11 +4,10 @@ import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 
 // ── Timeout per tipo di operazione ──
-// Vercel Pro maxDuration = 800s per Inngest step.
-// Each Mistral call runs in its own step, so it gets the full budget.
-// Leave ~100s margin for DB ops, RAG retrieval, retries.
-export const TIMEOUT_EXTRACTION = 300_000;  // 5 minuti
-export const TIMEOUT_SYNTHESIS  = 660_000;  // 11 minuti (max per singola chiamata in step dedicato)
+// Vercel Pro: each Inngest step is a single HTTP request with ~300s budget.
+// Keep Mistral calls under 240s to leave margin for DB ops + response.
+export const TIMEOUT_EXTRACTION = 240_000;  // 4 minuti
+export const TIMEOUT_SYNTHESIS  = 240_000;  // 4 minuti (map-reduce summaries keep prompts small)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (OCR e altro)
 
 // ── Retry ──
