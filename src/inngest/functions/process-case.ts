@@ -71,10 +71,10 @@ async function handlePipelineFailure(event: { data: unknown }) {
 
 export const processCasePhase1 = inngest.createFunction(
   {
-    id: 'process-case-phase1',
+    id: 'pipeline-phase1',
     retries: 1,
     concurrency: [
-      { limit: 25 },
+      { limit: 5 },
       { limit: 2, key: 'event.data.userId' },
     ],
     cancelOn: [
@@ -163,10 +163,10 @@ export const processCasePhase1 = inngest.createFunction(
 
 export const processCasePhase2 = inngest.createFunction(
   {
-    id: 'process-case-phase2',
+    id: 'pipeline-phase2',
     retries: 1,
     concurrency: [
-      { limit: 25 },
+      { limit: 5 },
       { limit: 2, key: 'event.data.userId' },
     ],
     cancelOn: [
