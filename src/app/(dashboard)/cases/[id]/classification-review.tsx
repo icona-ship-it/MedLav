@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  FileText, Loader2, CheckCircle2, Info, AlertTriangle,
+  FileText, Loader2, CheckCircle2, Info, AlertTriangle, RotateCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -56,6 +56,7 @@ function confidenceLabel(confidence: number): string {
 export function ClassificationReview({ caseId, documents }: ClassificationReviewProps) {
   const router = useRouter();
   const [isConfirming, setIsConfirming] = useState(false);
+  const [reclassifyingId, setReclassifyingId] = useState<string | null>(null);
 
   // Initialize selections from current document types
   const [selections, setSelections] = useState<DocTypeSelection[]>(() =>
@@ -65,6 +66,15 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
     })),
   );
 
+  // Track classification metadata locally so we can update after reclassification
+  const [metadataMap, setMetadataMap] = useState<Record<string, Document['classification_metadata']>>(() => {
+    const map: Record<string, Document['classification_metadata']> = {};
+    for (const doc of documents) {
+      map[doc.id] = doc.classification_metadata;
+    }
+    return map;
+  });
+
   const updateType = useCallback((documentId: string, documentType: string) => {
     setSelections((prev) =>
       prev.map((s) =>
@@ -72,6 +82,39 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
       ),
     );
   }, []);
+
+  const handleReclassify = useCallback(async (documentId: string) => {
+    setReclassifyingId(documentId);
+    try {
+      const response = await fetch('/api/processing/reclassify-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId, documentId }),
+      });
+      const result = await response.json() as {
+        success: boolean;
+        error?: string;
+        data?: {
+          documentId: string;
+          documentType: string;
+          classificationMetadata: { aiSuggestedType: string; confidence: number; reasoning: string };
+        };
+      };
+      if (!result.success) {
+        toast.error(result.error ?? 'Errore nella riclassificazione');
+        return;
+      }
+      const { documentType, classificationMetadata } = result.data!;
+      // Update local state with new classification
+      updateType(documentId, documentType);
+      setMetadataMap((prev) => ({ ...prev, [documentId]: classificationMetadata }));
+      toast.success('Documento riclassificato');
+    } catch {
+      toast.error('Errore di rete. Verifica la connessione.');
+    } finally {
+      setReclassifyingId(null);
+    }
+  }, [caseId, updateType]);
 
   const handleConfirm = useCallback(async () => {
     setIsConfirming(true);
@@ -116,7 +159,7 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
           {documents.map((doc) => {
             const selection = selections.find((s) => s.documentId === doc.id);
             const selectedType = selection?.documentType ?? 'altro';
-            const meta = doc.classification_metadata;
+            const meta = metadataMap[doc.id];
             const hasMismatch = meta
               && selectedType !== 'altro'
               && meta.aiSuggestedType !== selectedType
@@ -175,6 +218,16 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    title="Rianalizza con AI"
+                    disabled={reclassifyingId !== null}
+                    onClick={() => handleReclassify(doc.id)}
+                  >
+                    <RotateCw className={`h-4 w-4 ${reclassifyingId === doc.id ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
 
                 {hasMismatch && (
