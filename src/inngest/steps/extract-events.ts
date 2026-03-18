@@ -6,8 +6,9 @@ import { logger } from '@/lib/logger';
 
 export const PAGES_PER_CHUNK = 10;
 
-/** Number of chunk extraction jobs per Inngest step (batch) */
-export const EXTRACTION_BATCH_SIZE = 5;
+/** Number of chunk extraction jobs per Inngest step (batch).
+ * Each job calls Mistral LLM (30s-2min). Keep low to stay under Vercel 300s timeout. */
+export const EXTRACTION_BATCH_SIZE = 2;
 
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
