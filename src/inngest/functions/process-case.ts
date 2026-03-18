@@ -169,15 +169,24 @@ export const processCaseDocuments = inngest.createFunction(
     const postClassificationCount = await step.run('mark-elaborazione-post-classification', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-      const { count } = await supabase
+      await supabase
         .from('cases')
-        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() }, { count: 'exact' })
+        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
         .eq('id', caseId)
         .eq('processing_stage', 'revisione_classificazione');
-      if (count === 0) {
-        logger.info('pipeline', `Case ${caseId} no longer in revisione_classificazione — user likely cancelled`);
+
+      // Verify update worked — SELECT is always reliable
+      const { data: caseCheck } = await supabase
+        .from('cases')
+        .select('processing_stage')
+        .eq('id', caseId)
+        .single();
+
+      const wasUpdated = caseCheck?.processing_stage === 'elaborazione';
+      if (!wasUpdated) {
+        logger.info('pipeline', `Case ${caseId} stage is '${caseCheck?.processing_stage}', not 'elaborazione' — user likely cancelled`);
       }
-      return count ?? 0;
+      return wasUpdated ? 1 : 0;
     });
 
     if (postClassificationCount === 0) {
@@ -362,15 +371,24 @@ export const processCaseDocuments = inngest.createFunction(
     const generazioneCount = await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-      const { count } = await supabase
+      await supabase
         .from('cases')
-        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() }, { count: 'exact' })
+        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
         .eq('id', caseId)
         .not('processing_stage', 'eq', 'idle');
-      if (count === 0) {
-        logger.info('pipeline', `Case ${caseId} was cancelled, skipping generazione_report`);
+
+      // Verify update worked — SELECT is always reliable
+      const { data: caseCheck } = await supabase
+        .from('cases')
+        .select('processing_stage')
+        .eq('id', caseId)
+        .single();
+
+      const wasUpdated = caseCheck?.processing_stage === 'generazione_report';
+      if (!wasUpdated) {
+        logger.info('pipeline', `Case ${caseId} stage is '${caseCheck?.processing_stage}', not 'generazione_report' — user likely cancelled`);
       }
-      return count ?? 0;
+      return wasUpdated ? 1 : 0;
     });
 
     if (generazioneCount === 0) {
