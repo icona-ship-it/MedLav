@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     // Trigger Inngest
     await inngest.send({
-      name: 'case/pipeline.phase1',
+      name: 'case/pipeline.start',
       data: {
         caseId,
         userId: user.id,

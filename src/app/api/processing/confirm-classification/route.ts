@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     // Send Inngest event to resume pipeline
     await inngest.send({
-      name: 'case/pipeline.phase2',
+      name: 'case/classification.confirmed',
       data: {
         caseId,
         userId: user.id,
