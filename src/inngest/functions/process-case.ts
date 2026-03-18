@@ -18,11 +18,10 @@ import {
   generateAndSaveReport,
   generateChronologyPart,
   generateSummaryAndSaveReport,
-  fetchDocumentsOcrContext,
 } from '../steps/generate-report';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
-import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatch } from '@/services/synthesis/document-summarizer';
-import type { DocumentSummary } from '@/services/synthesis/document-summarizer';
+import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
+import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary } from '@/services/cost-tracking/cost-calculator';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
@@ -382,16 +381,20 @@ export const processCase = inngest.createFunction(
     });
 
     // ── Map-reduce summarization for large cases ─────────────────
+    // Each summarize-batch step fetches its own OCR text from DB,
+    // so large text is never serialized as Inngest step output.
     let documentSummaries: DocumentSummary[] | undefined;
     if (ocrResults.length >= MAP_REDUCE_THRESHOLD_DOCS) {
-      const summaryDocs = await step.run('fetch-ocr-for-summaries', () =>
-        fetchDocumentsOcrContext(caseId),
-      );
+      const docRefs: DocumentRef[] = ocrResults.map((r) => ({
+        documentId: r.documentId,
+        fileName: r.fileName,
+        documentType: r.documentType,
+      }));
       const SUMMARY_BATCH_SIZE = 5;
-      const summaryBatches = chunkArray(summaryDocs, SUMMARY_BATCH_SIZE);
+      const summaryBatches = chunkArray(docRefs, SUMMARY_BATCH_SIZE);
       const summaryResults = await Promise.all(
         summaryBatches.map((batch, idx) =>
-          step.run(`summarize-batch-${idx}`, () => summarizeDocumentBatch(batch)),
+          step.run(`summarize-batch-${idx}`, () => summarizeDocumentBatchByIds(batch)),
         ),
       );
       documentSummaries = summaryResults.flat();

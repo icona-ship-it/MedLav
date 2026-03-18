@@ -1,6 +1,6 @@
 /**
  * Document summarizer for map-reduce synthesis on large cases.
- * When a case has >50 documents, per-document summaries are generated
+ * When a case has >=10 documents, per-document summaries are generated
  * so the synthesis step can see 100% of the content instead of <1%.
  */
 import {
@@ -78,8 +78,61 @@ Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sani
   };
 }
 
+/** Lightweight doc reference for batch summarization (no OCR text). */
+export interface DocumentRef {
+  documentId: string;
+  fileName: string;
+  documentType: string;
+}
+
 /**
- * Summarize a batch of documents sequentially.
+ * Summarize a batch of documents by ID — fetches OCR text internally.
+ * Avoids serializing large OCR text as Inngest step output.
+ */
+export async function summarizeDocumentBatchByIds(
+  docRefs: DocumentRef[],
+): Promise<DocumentSummary[]> {
+  const { createAdminClient } = await import('@/lib/supabase/admin');
+  const supabase = createAdminClient();
+
+  const results: DocumentSummary[] = [];
+  for (const ref of docRefs) {
+    try {
+      const { data: pages } = await supabase
+        .from('pages')
+        .select('page_number, ocr_text')
+        .eq('document_id', ref.documentId)
+        .order('page_number', { ascending: true });
+
+      const pageList = (pages ?? []).filter((p) => p.ocr_text && (p.ocr_text as string).trim().length > 0);
+      const totalChars = pageList.reduce((sum, p) => sum + (p.ocr_text as string).length, 0);
+
+      const doc: DocumentOcrContext = {
+        documentId: ref.documentId,
+        fileName: ref.fileName,
+        documentType: ref.documentType,
+        pages: pageList.map((p) => ({ pageNumber: p.page_number as number, ocrText: p.ocr_text as string })),
+        totalChars,
+      };
+      const summary = await summarizeDocument(doc);
+      results.push(summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown';
+      logger.error('synthesis', `Failed to summarize doc ${ref.documentId}: ${message}`);
+      results.push({
+        documentId: ref.documentId,
+        fileName: ref.fileName,
+        documentType: ref.documentType,
+        summary: `[Riassunto non disponibile — errore: ${message}]`,
+        totalCharsOriginal: 0,
+      });
+    }
+  }
+  return results;
+}
+
+/**
+ * Summarize a batch of documents sequentially (legacy — receives full OCR text).
  * The Mistral semaphore serializes calls anyway, so sequential is correct.
  */
 export async function summarizeDocumentBatch(
