@@ -171,7 +171,7 @@ export const processCaseDocuments = inngest.createFunction(
       const supabase = createAdminClient();
       const { count } = await supabase
         .from('cases')
-        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() }, { count: 'exact' })
         .eq('id', caseId)
         .eq('processing_stage', 'revisione_classificazione');
       if (count === 0) {
@@ -364,7 +364,7 @@ export const processCaseDocuments = inngest.createFunction(
       const supabase = createAdminClient();
       const { count } = await supabase
         .from('cases')
-        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
+        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() }, { count: 'exact' })
         .eq('id', caseId)
         .not('processing_stage', 'eq', 'idle');
       if (count === 0) {
