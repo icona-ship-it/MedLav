@@ -27,19 +27,51 @@ import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary } from '@/services/cost-tracking/cost-calculator';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
 
-import type { OcrResult, ExtractionResult } from '../steps/types';
+import type { OcrResult, ExtractionResult, CaseMetadata } from '../steps/types';
+import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 
-/**
- * Main Inngest function that orchestrates the document processing pipeline.
- * Each step is independently retryable.
- *
- * Pipeline: fetch metadata -> OCR docs -> extract events (dual-pass) -> validate ->
- *           consolidate -> link images -> detect anomalies -> detect missing docs ->
- *           generate synthesis -> finalize
- */
-export const processCaseDocuments = inngest.createFunction(
+// ─── Shared onFailure handler ──────────────────────────────────────
+
+async function handlePipelineFailure(event: { data: unknown }) {
+  try {
+    const failureData = event.data as { event: { data: { caseId: string } }; error: unknown };
+    const { caseId } = failureData.event.data;
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { data: current, error: queryError } = await supabase
+      .from('cases')
+      .select('processing_stage')
+      .eq('id', caseId)
+      .single();
+    if (queryError) {
+      logger.error('pipeline', `onFailure: failed to read case ${caseId} stage`, { error: queryError.message });
+    }
+    const stage = (current?.processing_stage as string) ?? '';
+    if (stage === 'idle' || stage === 'completato') {
+      logger.info('pipeline', `Skipping errore for case ${caseId} (already ${stage})`);
+      return;
+    }
+
+    await supabase
+      .from('cases')
+      .update({ processing_stage: 'errore', updated_at: new Date().toISOString() })
+      .eq('id', caseId);
+    logger.error('pipeline', `Pipeline failed permanently for case ${caseId}`);
+  } catch (err) {
+    logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+  }
+}
+
+// ─── PHASE 1: OCR + Classification ─────────────────────────────────
+// Triggers on case/process.requested.
+// Ends after classification — user reviews, then confirms to trigger phase 2.
+
+export const processCasePhase1 = inngest.createFunction(
   {
-    id: 'process-case-documents-v2',
+    id: 'process-case-phase1',
     retries: 1,
     concurrency: [
       { limit: 25 },
@@ -48,39 +80,7 @@ export const processCaseDocuments = inngest.createFunction(
     cancelOn: [
       { event: 'case/process.cancelled', match: 'data.caseId' },
     ],
-    onFailure: async ({ event }) => {
-      try {
-        const failureData = event.data as { event: { data: { caseId: string } }; error: unknown };
-        const { caseId } = failureData.event.data;
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-
-        // Guard: don't overwrite 'idle' (user cancelled) or 'completato'
-        const { data: current, error: queryError } = await supabase
-          .from('cases')
-          .select('processing_stage')
-          .eq('id', caseId)
-          .single();
-        if (queryError) {
-          logger.error('pipeline', `onFailure: failed to read case ${caseId} stage`, { error: queryError.message });
-        }
-        const stage = (current?.processing_stage as string) ?? '';
-        if (stage === 'idle' || stage === 'completato') {
-          logger.info('pipeline', `Skipping errore for case ${caseId} (already ${stage})`);
-          return;
-        }
-
-        await supabase
-          .from('cases')
-          .update({ processing_stage: 'errore', updated_at: new Date().toISOString() })
-          .eq('id', caseId);
-        logger.error('pipeline', `Pipeline failed permanently for case ${caseId}`);
-      } catch (err) {
-        logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {
-          error: err instanceof Error ? err.message : 'unknown',
-        });
-      }
-    },
+    onFailure: async ({ event }) => handlePipelineFailure(event),
   },
   { event: 'case/process.requested' },
   async ({ event, step }) => {
@@ -94,19 +94,18 @@ export const processCaseDocuments = inngest.createFunction(
         .from('cases')
         .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
         .eq('id', caseId);
-      logger.info('pipeline', `Step 0: Marked case ${caseId} as elaborazione [v2-single-ocr]`);
+      logger.info('pipeline', `Phase1: Marked case ${caseId} as elaborazione`);
     });
 
     // Step 1: Fetch case metadata and documents list
     const caseData = await step.run('fetch-case-metadata', () => fetchCaseMetadata(caseId, userId));
-    const { metadata, documents } = caseData;
+    const { documents } = caseData;
 
     if (documents.length === 0) {
       throw new Error('No documents to process');
     }
 
     // Step 2: OCR each document as an independent Inngest step (parallel)
-    // Each doc gets its own step = independent retry, timeout, and progress tracking.
     const ocrResults: OcrResult[] = (await Promise.all(
       documents.map((doc) =>
         step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
@@ -117,8 +116,7 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('All documents failed OCR processing');
     }
 
-    // Step 2.5: Auto-classify documents with type 'altro'
-    // Classifications are applied outside step.run() so they survive Inngest memoization on retries.
+    // Step 2.5: Auto-classify documents
     const classifications = await step.run('classify-documents', () => classifyDocumentsStep(ocrResults));
     applyClassifications(ocrResults, classifications);
 
@@ -134,7 +132,7 @@ export const processCaseDocuments = inngest.createFunction(
           updated_at: new Date().toISOString(),
         })
         .in('id', docIds);
-      logger.info('pipeline', `Step 2.6: Marked ${docIds.length} documents for classification review`);
+      logger.info('pipeline', `Phase1: Marked ${docIds.length} documents for classification review`);
     });
 
     // Step 2.6.5: Mark case as waiting for classification review
@@ -145,73 +143,138 @@ export const processCaseDocuments = inngest.createFunction(
         .from('cases')
         .update({ processing_stage: 'revisione_classificazione', updated_at: new Date().toISOString() })
         .eq('id', caseId);
-      logger.info('pipeline', `Step 2.6.5: Marked case ${caseId} as revisione_classificazione`);
+      logger.info('pipeline', `Phase1: Case ${caseId} ready for classification review — phase 1 complete`);
     });
 
-    // Step 2.7: Wait for user to review and confirm classification (up to 7 days)
-    const confirmEvent = await step.waitForEvent(
-      'wait-for-classification-review',
-      {
-        event: 'case/classification.confirmed',
-        match: 'data.caseId',
-        timeout: '7d',
-      },
-    );
-    if (!confirmEvent) {
-      throw new Error('Classification review timed out after 7 days');
-    }
+    // Phase 1 ends here. User reviews classification in the UI.
+    // When they confirm, the API sends 'case/classification.confirmed' which triggers phase 2.
+    return {
+      success: true,
+      caseId,
+      phase: 1,
+      documentsOcr: ocrResults.length,
+    };
+  },
+);
 
-    // Resume active processing after classification review
-    // Guard: check if user cancelled (stage would be 'idle'). If not cancelled, proceed.
-    const wasCancelledPostClassification = await step.run('mark-elaborazione-post-classification', async () => {
+// ─── PHASE 2: Extraction → Report ──────────────────────────────────
+// Triggers on case/classification.confirmed (sent by confirm-classification API).
+// Reads OCR results from DB, then does extraction, consolidation, synthesis.
+
+export const processCasePhase2 = inngest.createFunction(
+  {
+    id: 'process-case-phase2',
+    retries: 1,
+    concurrency: [
+      { limit: 25 },
+      { limit: 2, key: 'event.data.userId' },
+    ],
+    cancelOn: [
+      { event: 'case/process.cancelled', match: 'data.caseId' },
+    ],
+    onFailure: async ({ event }) => handlePipelineFailure(event),
+  },
+  { event: 'case/classification.confirmed' },
+  async ({ event, step }) => {
+    const { caseId, userId } = event.data as { caseId: string; userId: string };
+
+    // Step 0: Mark as elaborazione (resuming after classification review)
+    await step.run('mark-elaborazione', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
 
-      // Read current stage FIRST — SELECT is always reliable
+      // Check if user cancelled
       const { data: caseCheck } = await supabase
         .from('cases')
         .select('processing_stage')
         .eq('id', caseId)
         .single();
 
-      const currentStage = caseCheck?.processing_stage as string | undefined;
-      if (currentStage === 'idle') {
-        logger.info('pipeline', `Case ${caseId} stage is 'idle' — user cancelled, stopping pipeline`);
-        return true;
+      if (caseCheck?.processing_stage === 'idle') {
+        throw new Error('Case was cancelled by user');
       }
 
-      // Not cancelled — update stage unconditionally
       await supabase
         .from('cases')
         .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
         .eq('id', caseId);
-      logger.info('pipeline', `Case ${caseId} resumed after classification review (was '${currentStage}')`);
-      return false;
+      logger.info('pipeline', `Phase2: Resumed case ${caseId} after classification review`);
     });
 
-    if (wasCancelledPostClassification) {
-      return { success: false, caseId, reason: 'cancelled_during_classification_review' };
-    }
-
-    // Step 2.8: Refresh document types from DB (user may have changed them)
-    const updatedTypes = await step.run('refresh-doc-types', async () => {
+    // Step 1: Re-fetch case metadata
+    const caseData = await step.run('fetch-case-metadata', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
+
+      const { data: caseRow } = await supabase
+        .from('cases')
+        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata')
+        .eq('id', caseId)
+        .single();
+      if (!caseRow) throw new Error(`Case not found: ${caseId}`);
+
       const { data: docs } = await supabase
         .from('documents')
-        .select('id, document_type')
-        .in('id', ocrResults.map((r) => r.documentId));
-      return docs ?? [];
+        .select('id, file_name, document_type, page_count, processing_status')
+        .eq('case_id', caseId)
+        .in('processing_status', ['classificazione_completata', 'estrazione_in_corso', 'completato']);
+
+      return { caseRow, docs: docs ?? [] };
     });
-    for (const ocrResult of ocrResults) {
-      const updated = updatedTypes.find((d) => d.id === ocrResult.documentId);
-      if (updated) {
-        ocrResult.documentType = updated.document_type as string;
+
+    const { caseRow, docs } = caseData;
+
+    // Build metadata
+    const rawCaseTypes = caseRow.case_types as string[] | null;
+    const metadata: CaseMetadata = {
+      caseId: caseRow.id as string,
+      caseType: caseRow.case_type as CaseType,
+      caseTypes: rawCaseTypes && rawCaseTypes.length > 0
+        ? rawCaseTypes as CaseType[]
+        : [caseRow.case_type as CaseType],
+      caseRole: caseRow.case_role as CaseRole,
+      patientInitials: caseRow.patient_initials as string | null,
+      userId: caseRow.user_id as string,
+      periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+    };
+
+    // Build OcrResults from DB (pages table has the text)
+    const ocrResults: OcrResult[] = await step.run('rebuild-ocr-results', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+
+      const results: OcrResult[] = [];
+      for (const doc of docs) {
+        const { data: pages } = await supabase
+          .from('pages')
+          .select('page_number, ocr_text, ocr_confidence')
+          .eq('document_id', doc.id)
+          .order('page_number', { ascending: true });
+
+        const pageList = pages ?? [];
+        const fullText = pageList.map((p) => p.ocr_text ?? '').join('\n');
+        const avgConf = pageList.length > 0
+          ? pageList.reduce((sum, p) => sum + (p.ocr_confidence ?? 0), 0) / pageList.length
+          : 0;
+
+        results.push({
+          documentId: doc.id as string,
+          fileName: doc.file_name as string,
+          documentType: (doc.document_type ?? 'altro') as string,
+          fullText,
+          pageCount: (doc.page_count ?? pageList.length) as number,
+          averageConfidence: avgConf,
+          ocrPages: pageList.length,
+        });
       }
+      return results;
+    });
+
+    if (ocrResults.length === 0) {
+      throw new Error('No documents with OCR results found');
     }
 
     // Step 3: Extract events per document (batched chunks)
-    // Plan all chunks synchronously (pure math, no DB call)
     const allChunkJobs: ChunkJob[] = [];
     for (const ocrResult of ocrResults) {
       const chunkRanges = planChunksSync(ocrResult.pageCount);
@@ -228,7 +291,6 @@ export const processCaseDocuments = inngest.createFunction(
       }
     }
 
-    // Mark all documents as estrazione_in_corso in a single step
     await step.run('mark-extraction-start', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
@@ -240,10 +302,9 @@ export const processCaseDocuments = inngest.createFunction(
           updated_at: new Date().toISOString(),
         }).in('id', docIds.slice(i, i + BATCH_SIZE));
       }
-      logger.info('pipeline', `Step 3: Marked ${docIds.length} docs as estrazione_in_corso, ${allChunkJobs.length} total chunks`);
+      logger.info('pipeline', `Phase2: Marked ${docIds.length} docs as estrazione_in_corso, ${allChunkJobs.length} total chunks`);
     });
 
-    // Batch chunk jobs and run in parallel Inngest steps
     const extractionBatches = chunkArray(allChunkJobs, EXTRACTION_BATCH_SIZE);
     const batchResults = await Promise.all(
       extractionBatches.map((batch, idx) =>
@@ -251,7 +312,6 @@ export const processCaseDocuments = inngest.createFunction(
       ),
     );
 
-    // Aggregate per-document event counts
     const docEventCounts: Record<string, number> = {};
     for (const result of batchResults) {
       for (const [docId, count] of Object.entries(result.perDoc)) {
@@ -259,7 +319,6 @@ export const processCaseDocuments = inngest.createFunction(
       }
     }
 
-    // Mark errors for docs with 0 events, build extractionResults
     const extractionResults: ExtractionResult[] = [];
     const markErrorJobs: Array<{ documentId: string; pageCount: number }> = [];
     for (const ocrResult of ocrResults) {
@@ -272,7 +331,6 @@ export const processCaseDocuments = inngest.createFunction(
       logger.info('pipeline', ` Doc ${ocrResult.documentId}: ${totalEvents} total events`);
     }
 
-    // Mark extraction errors in batched steps
     if (markErrorJobs.length > 0) {
       const errorBatches = chunkArray(markErrorJobs, 10);
       await Promise.all(
@@ -295,7 +353,7 @@ export const processCaseDocuments = inngest.createFunction(
     // Step 4.5: Link images to events
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
 
-    // Steps 4.6 + 5 + 6 + 7a: Run independent analysis steps in parallel
+    // Steps 4.6 + 5 + 6 + 7a: Independent analysis steps in parallel
     const [imageAnalysisResults, rawAnomalies, missingDocs, calculations] = await Promise.all([
       step.run('analyze-diagnostic-images', () =>
         analyzeDiagnosticImagesStep(caseId, metadata.caseType),
@@ -311,17 +369,15 @@ export const processCaseDocuments = inngest.createFunction(
       ),
     ]);
 
-    // Step 5.5: LLM Anomaly Resolution — verify anomalies against source OCR pages
-    // Must run after detect-anomalies completes (depends on rawAnomalies)
+    // Step 5.5: LLM Anomaly Resolution
     let anomalies = await step.run(
       'resolve-anomalies',
       () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
     );
 
-    // Step 7a.5: Anomaly review gate — pause if anomalies or missing docs exist
+    // Step 7a.5: Anomaly review gate
     const hasIssues = anomalies.length > 0 || missingDocs.length > 0;
     if (hasIssues) {
-      // Mark case as waiting for anomaly review
       await step.run('mark-revisione-anomalie', async () => {
         const { createAdminClient } = await import('@/lib/supabase/admin');
         const supabase = createAdminClient();
@@ -329,10 +385,9 @@ export const processCaseDocuments = inngest.createFunction(
           .from('cases')
           .update({ processing_stage: 'revisione_anomalie', updated_at: new Date().toISOString() })
           .eq('id', caseId);
-        logger.info('pipeline', `Step 7a.5: Pausing for anomaly review (${anomalies.length} anomalies, ${missingDocs.length} missing docs)`);
+        logger.info('pipeline', `Phase2: Pausing for anomaly review (${anomalies.length} anomalies, ${missingDocs.length} missing docs)`);
       });
 
-      // Wait for user to confirm anomaly review (up to 7 days)
       const anomalyConfirmEvent = await step.waitForEvent(
         'wait-for-anomaly-review',
         {
@@ -345,7 +400,6 @@ export const processCaseDocuments = inngest.createFunction(
         throw new Error('Anomaly review timed out after 7 days');
       }
 
-      // Refresh anomalies from DB (user may have archived some)
       anomalies = await step.run('refresh-anomalies-after-review', async () => {
         const { createAdminClient } = await import('@/lib/supabase/admin');
         const supabase = createAdminClient();
@@ -354,7 +408,6 @@ export const processCaseDocuments = inngest.createFunction(
           .select('*')
           .eq('case_id', caseId)
           .in('status', ['detected', 'llm_confirmed', 'user_confirmed']);
-        // Map to DetectedAnomaly shape
         return (data ?? []).map((row) => ({
           anomalyType: row.anomaly_type,
           severity: row.severity as 'critica' | 'alta' | 'media' | 'bassa',
@@ -366,37 +419,17 @@ export const processCaseDocuments = inngest.createFunction(
     }
 
     // Mark case as generating report
-    // Guard: check if user cancelled (stage would be 'idle'). If not cancelled, proceed.
-    const wasCancelledPreReport = await step.run('mark-generazione-report', async () => {
+    await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-
-      const { data: caseCheck } = await supabase
-        .from('cases')
-        .select('processing_stage')
-        .eq('id', caseId)
-        .single();
-
-      const currentStage = caseCheck?.processing_stage as string | undefined;
-      if (currentStage === 'idle') {
-        logger.info('pipeline', `Case ${caseId} stage is 'idle' — user cancelled, skipping report generation`);
-        return true;
-      }
-
       await supabase
         .from('cases')
         .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
         .eq('id', caseId);
-      logger.info('pipeline', `Case ${caseId} marked as generazione_report (was '${currentStage}')`);
-      return false;
+      logger.info('pipeline', `Phase2: Case ${caseId} marked as generazione_report`);
     });
 
-    if (wasCancelledPreReport) {
-      return { success: false, caseId, reason: 'cancelled_before_report_generation' };
-    }
-
-    // Map-reduce summarization for large cases (>50 documents)
-    // Generates per-document AI summaries so synthesis can see 100% of content
+    // Map-reduce summarization for large cases
     let documentSummaries: DocumentSummary[] | undefined;
     if (ocrResults.length >= MAP_REDUCE_THRESHOLD_DOCS) {
       const summaryDocs = await step.run('fetch-ocr-for-summaries', () =>
@@ -413,7 +446,7 @@ export const processCaseDocuments = inngest.createFunction(
       logger.info('pipeline', `Map-reduce: ${documentSummaries.length} document summaries generated`);
     }
 
-    // Build shared synthesis params
+    // Build synthesis params
     const synthesisParams = buildSynthesisParams(
       metadata,
       consolidationResult.allEvents,
@@ -424,15 +457,11 @@ export const processCaseDocuments = inngest.createFunction(
       documentSummaries,
     );
 
-    // Step 7b: Check if split mode is needed
     const needsSplit = await step.run(
       'check-synthesis-split',
       () => checkSynthesisSplit(synthesisParams, consolidationResult.allEvents.length),
     );
 
-    // Step 7c/d/e/f: Generate synthesis AND save report in a single step.
-    // The full synthesis text stays within the step — never serialized into
-    // Inngest step output, avoiding data loss on large reports.
     let synthesisResult: Awaited<ReturnType<typeof generateAndSaveReport>>;
 
     if (!needsSplit) {
@@ -449,7 +478,6 @@ export const processCaseDocuments = inngest.createFunction(
         'generate-summary-and-save-report',
         () => generateSummaryAndSaveReport(caseId, synthesisParams, chronologyResult.chronology, chronologyResult.ocrTotalChars),
       );
-      // Merge chronology usage into synthesis result if both present
       if (chronologyResult.usage && synthesisResult.usage) {
         synthesisResult = {
           ...synthesisResult,
@@ -464,11 +492,10 @@ export const processCaseDocuments = inngest.createFunction(
 
     const synthesisWordCount = synthesisResult.wordCount;
 
-    // Build pipeline cost summary from available usage data
+    // Build pipeline cost summary
     const costSteps: CostStep[] = [];
     const totalOcrPages = ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0);
 
-    // Add synthesis cost
     if (synthesisResult.usage && synthesisResult.usage.totalTokens > 0) {
       costSteps.push({
         step: 'synthesis',
@@ -479,7 +506,6 @@ export const processCaseDocuments = inngest.createFunction(
       });
     }
 
-    // Add image analysis costs
     for (const img of imageAnalysisResults) {
       if (img.usage && img.usage.totalTokens > 0) {
         costSteps.push({
@@ -513,6 +539,7 @@ export const processCaseDocuments = inngest.createFunction(
     return {
       success: true,
       caseId,
+      phase: 2,
       documentsProcessed: extractionResults.length,
       newEventsInserted: consolidationResult.newEventsCount,
       totalEvents: consolidationResult.allEvents.length,

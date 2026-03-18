@@ -1,15 +1,15 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/lib/inngest/client';
-import { processCaseDocuments, dataRetentionCleanup } from '@/inngest';
+import { processCasePhase1, processCasePhase2, dataRetentionCleanup } from '@/inngest';
 
 export const maxDuration = 800;
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
-    processCaseDocuments,
+    processCasePhase1,
+    processCasePhase2,
     dataRetentionCleanup,
   ],
-  // Explicit serve origin — ensures Inngest always calls the current production URL
   ...(process.env.INNGEST_SERVE_HOST ? { serveHost: process.env.INNGEST_SERVE_HOST } : {}),
 });
