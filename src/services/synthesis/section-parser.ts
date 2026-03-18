@@ -10,6 +10,15 @@ export interface ParsedSection {
 
 // Canonical section ID mapping from heading text keywords
 const SECTION_ID_MAP: Array<{ pattern: RegExp; id: string }> = [
+  // Sectional generation universal sections
+  { pattern: /premesse\s+e\s+profilo\s+metodologico|profilo\s+metodologico/i, id: 'intestazione' },
+  { pattern: /dati\s+della\s+documentazione\s+in\s+atti|documentazione\s+in\s+atti/i, id: 'documentazione_atti' },
+  { pattern: /premesse(?!\s+e\s+profilo)/i, id: 'premesse' },
+  { pattern: /dati\s+della\s+documentazione\s+sanitaria|documentazione\s+sanitaria/i, id: 'documentazione_sanitaria' },
+  { pattern: /spese\s+mediche/i, id: 'spese_mediche' },
+  { pattern: /precedenti\s+pareri\s+tecnici|pareri\s+tecnici/i, id: 'pareri_tecnici' },
+  { pattern: /sintesi\s+conclusiva/i, id: 'conclusioni' },
+  // Legacy/domain-knowledge sections
   { pattern: /riassunto\s+(del\s+)?caso/i, id: 'riassunto' },
   { pattern: /cronologia\s+medico/i, id: 'cronologia' },
   { pattern: /analisi\s+dell.intervento/i, id: 'analisi_intervento' },
@@ -28,7 +37,7 @@ const SECTION_ID_MAP: Array<{ pattern: RegExp; id: string }> = [
   { pattern: /gestione\s+terapeutica/i, id: 'gestione_terapeutica' },
   { pattern: /percorso\s+diagnostico/i, id: 'percorso_diagnostico' },
   { pattern: /analisi\s+dell.errore/i, id: 'analisi_errore' },
-  { pattern: /elementi\s+di\s+rilievo/i, id: 'elementi_rilievo' },
+  { pattern: /elementi\s+(di\s+rilievo|per\s+la\s+valutazione)/i, id: 'elementi_rilievo' },
   { pattern: /profili\s+di\s+responsabilit/i, id: 'profili_responsabilita' },
   { pattern: /valutazione\s+di\s+merito/i, id: 'valutazione_merito' },
 ];

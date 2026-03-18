@@ -14,11 +14,11 @@ import { resolveAnomaliesStep } from '../steps/resolve-anomalies';
 import {
   calculatePeriodsStep,
   buildSynthesisParams,
-  checkSynthesisSplit,
-  generateAndSaveReport,
-  generateChronologyPart,
-  generateSummaryAndSaveReport,
+  planReportSections,
+  generateSectionStep,
+  assembleSectionsAndSaveReport,
 } from '../steps/generate-report';
+import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
 import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
@@ -98,7 +98,7 @@ export const processCase = inngest.createFunction(
 
     // ── Step 1: Fetch case metadata ──────────────────────────────
     const caseData = await step.run('fetch-case-metadata', () => fetchCaseMetadata(caseId, userId));
-    const { metadata, documents } = caseData;
+    const { documents } = caseData;
 
     if (documents.length === 0) {
       throw new Error('No documents to process');
@@ -412,38 +412,37 @@ export const processCase = inngest.createFunction(
       documentSummaries,
     );
 
-    const needsSplit = await step.run(
-      'check-synthesis-split',
-      () => checkSynthesisSplit(synthesisParams, consolidationResult.allEvents.length),
+    // ── Sectional report generation ───────────────────────────────
+    // Generate report section by section, each in its own Inngest step.
+    // Each step < 4 min, eliminating Vercel timeouts for large cases.
+
+    // Gather actual document types from classified documents (not event sourceTypes)
+    const classifiedDocTypes = [...new Set(ocrResults.map((r) => r.documentType))];
+
+    const sectionPlan = await step.run('plan-report-sections', () =>
+      planReportSections(updatedMetadata, consolidationResult.allEvents, classifiedDocTypes),
     );
 
-    let synthesisResult: Awaited<ReturnType<typeof generateAndSaveReport>>;
-
-    if (!needsSplit) {
-      synthesisResult = await step.run(
-        'generate-and-save-report',
-        () => generateAndSaveReport(caseId, synthesisParams),
-      );
-    } else {
-      const chronologyResult = await step.run(
-        'generate-synthesis-chronology',
-        () => generateChronologyPart(caseId, synthesisParams),
-      );
-      synthesisResult = await step.run(
-        'generate-summary-and-save-report',
-        () => generateSummaryAndSaveReport(caseId, synthesisParams, chronologyResult.chronology, chronologyResult.ocrTotalChars),
-      );
-      if (chronologyResult.usage && synthesisResult.usage) {
-        synthesisResult = {
-          ...synthesisResult,
-          usage: {
-            promptTokens: synthesisResult.usage.promptTokens + chronologyResult.usage.promptTokens,
-            completionTokens: synthesisResult.usage.completionTokens + chronologyResult.usage.completionTokens,
-            totalTokens: synthesisResult.usage.totalTokens + chronologyResult.usage.totalTokens,
-          },
-        };
-      }
+    if (sectionPlan.length === 0) {
+      throw new Error('Section plan resulted in zero sections — cannot generate empty report');
     }
+
+    const accumulatedSections: GeneratedSection[] = [];
+    for (const spec of sectionPlan) {
+      const previousContext = accumulatedSections.map((s) => ({
+        id: s.id,
+        title: s.title,
+        contextSummary: s.contextSummary,
+      }));
+      const section = await step.run(`gen-section-${spec.id}`, () =>
+        generateSectionStep(caseId, spec, synthesisParams, previousContext),
+      );
+      accumulatedSections.push(section);
+    }
+
+    const synthesisResult = await step.run('assemble-and-save-report', () =>
+      assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams),
+    );
 
     const synthesisWordCount = synthesisResult.wordCount;
 

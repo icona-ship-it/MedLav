@@ -1,0 +1,93 @@
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
+
+/**
+ * Data source types that a section can require.
+ * Used by section-generator to determine what data to include in the prompt.
+ */
+export type SectionDataSource =
+  | 'events'              // all consolidated events
+  | 'events-non-medical'  // only non-medical events (doc_amministrativo, certificato)
+  | 'events-medical'      // only medical events
+  | 'events-expenses'     // only spesa_medica events
+  | 'events-perizie'      // only perizia/parere events
+  | 'anomalies'           // detected anomalies
+  | 'missing-docs'        // missing document warnings
+  | 'calculations'        // medico-legal calculations (ITT/ITP)
+  | 'image-analysis'      // diagnostic image analysis results
+  | 'perizia-metadata'    // perizia form data (tribunal, quesiti, etc.)
+  | 'context-summaries'   // context summaries from previous sections
+  | 'guidelines';         // RAG guidelines
+
+/**
+ * Specification for a single report section.
+ * Defines what to generate and how.
+ */
+export interface SectionSpec {
+  /** Canonical section ID (e.g., 'documentazione_sanitaria', 'conclusioni') */
+  id: string;
+  /** Section title for ## heading */
+  title: string;
+  /** Max tokens for LLM output */
+  maxTokens: number;
+  /** What data this section needs */
+  dataSources: SectionDataSource[];
+  /** Max chars for context summary passed to subsequent sections */
+  contextMaxChars: number;
+  /** Whether this section needs to fetch OCR text from DB */
+  needsOcr: boolean;
+  /** Condition for inclusion (undefined = always included) */
+  condition?: SectionCondition;
+  /** Section-specific prompt instructions */
+  promptDirective: string;
+}
+
+/**
+ * Condition types for conditional section inclusion.
+ */
+export type SectionCondition =
+  | 'has-perizia-metadata'
+  | 'has-non-medical-docs'
+  | 'has-legal-docs'
+  | 'has-expense-events'
+  | 'has-perizie-docs';
+
+/**
+ * Output of generating a single section.
+ */
+export interface GeneratedSection {
+  /** Section spec ID */
+  id: string;
+  /** Section title */
+  title: string;
+  /** Generated markdown content (without ## heading) */
+  content: string;
+  /** Compressed summary for passing to subsequent sections */
+  contextSummary: string;
+  /** Word count of generated content */
+  wordCount: number;
+  /** Token usage from LLM call */
+  usage?: TokenUsage;
+}
+
+/**
+ * Context from a previously generated section, passed to subsequent sections.
+ */
+export interface SectionContext {
+  id: string;
+  title: string;
+  contextSummary: string;
+}
+
+/**
+ * Final result of the sectional pipeline.
+ */
+export interface SectionPipelineResult {
+  /** All generated sections in order */
+  sections: GeneratedSection[];
+  /** Assembled full report markdown */
+  fullReport: string;
+  /** Total word count */
+  totalWordCount: number;
+  /** Combined token usage */
+  totalUsage: TokenUsage;
+}

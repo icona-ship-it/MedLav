@@ -642,7 +642,7 @@ export function buildSummaryUserPrompt(params: {
 
 // ── Formatting helpers ──
 
-function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
+export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events.map((e) => {
     const date = formatDate(e.eventDate);
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
@@ -673,7 +673,7 @@ function formatConfidenceQualifier(confidence: number): string {
   return '';
 }
 
-function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
+export function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
   if (anomalies.length === 0) return 'Nessuna anomalia rilevata.';
   return anomalies.map((a) => {
     const involvedDates = a.involvedEvents.map((e) => `${formatDate(e.date)} - ${e.title}`).join(', ');
@@ -681,12 +681,12 @@ function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
   }).join('\n');
 }
 
-function formatMissingDocsForPrompt(missingDocuments: MissingDocument[]): string {
+export function formatMissingDocsForPrompt(missingDocuments: MissingDocument[]): string {
   if (missingDocuments.length === 0) return 'Nessuna documentazione mancante rilevata.';
   return missingDocuments.map((d) => `- ${d.documentName}: ${d.reason}`).join('\n');
 }
 
-function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): string {
+export function formatCalculationsForPrompt(calculations?: MedicoLegalCalculation[]): string {
   if (!calculations || calculations.length === 0) return '';
   const lines = calculations.map((c) => {
     const dateRange = c.startDate && c.endDate ? ` (${formatDate(c.startDate)} — ${formatDate(c.endDate)})` : '';
@@ -706,7 +706,7 @@ Nella sezione "Valutazione del danno biologico" e nelle "Conclusioni", INTEGRA q
 - Se i calcoli includono riferimenti tabellari, citali esplicitamente nella valutazione del danno`;
 }
 
-function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): string {
+export function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): string {
   if (!periziaMetadata) return '';
 
   const lines: string[] = [];
@@ -751,7 +751,7 @@ function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata): stri
   return `\n## DATI PERIZIA FORMALE\n\n${lines.join('\n')}\n`;
 }
 
-function formatImageAnalysisForPrompt(
+export function formatImageAnalysisForPrompt(
   imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number; storagePath?: string }>,
 ): string {
   if (!imageAnalysis || imageAnalysis.length === 0) return '';
@@ -977,4 +977,10 @@ export function formatDocumentSummariesForPrompt(summaries?: DocumentSummary[]):
   return result;
 }
 
-export { CASE_TYPE_LABELS, SOURCE_TYPE_LABELS, MAX_OCR_CHARS };
+export {
+  CASE_TYPE_LABELS,
+  SOURCE_TYPE_LABELS,
+  MAX_OCR_CHARS,
+  ABSOLUTE_RULES,
+  CHRONOLOGY_SOURCES_GUIDE,
+};

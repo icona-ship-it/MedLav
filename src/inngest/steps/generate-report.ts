@@ -297,3 +297,143 @@ export async function generateSummaryAndSaveReport(
 
 // Keep for backward compatibility but mark as deprecated
 export { insertReport as saveReportStep };
+
+// ── Sectional report generation ─────────────────────────────────────
+
+import { resolveSectionPlan } from '@/services/synthesis/section-catalog';
+import { generateSingleSection } from '@/services/synthesis/section-generator';
+import { computeSectionalPromptVersion } from './prompt-version-sectional';
+import { validateReport } from '@/services/synthesis/report-validator';
+import type { ReportValidationContext } from '@/services/synthesis/report-validator';
+import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
+import { createEmptyUsage, mergeUsage } from '@/services/cost-tracking/cost-calculator';
+
+/** Escape special regex characters in a string. */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Plan which sections to generate based on case metadata.
+ * Returns serializable SectionSpec array for Inngest step output.
+ * @param documentTypes - actual document types from classification (NOT event sourceTypes)
+ */
+export function planReportSections(
+  metadata: CaseMetadata,
+  allEvents: ConsolidatedEvent[],
+  documentTypes: string[],
+): SectionSpec[] {
+
+  const plan = resolveSectionPlan({
+    caseType: metadata.caseType,
+    caseTypes: metadata.caseTypes.length > 1 ? metadata.caseTypes : undefined,
+    caseRole: metadata.caseRole,
+    periziaMetadata: metadata.periziaMetadata,
+    events: allEvents,
+    documentTypes,
+  });
+
+  logger.info('pipeline', `Section plan: ${plan.length} sections [${plan.map((s) => s.id).join(', ')}]`);
+  return plan;
+}
+
+/**
+ * Generate a single section inside an Inngest step.
+ * Fetches OCR text from DB if needed (avoids serialization between steps).
+ */
+export async function generateSectionStep(
+  caseId: string,
+  spec: SectionSpec,
+  synthesisParams: SynthesisParams,
+  previousContext: SectionContext[],
+): Promise<GeneratedSection> {
+  // Fetch OCR text inside the step if this section needs it
+  let documentsOcrText: DocumentOcrContext[] | undefined;
+  if (spec.needsOcr) {
+    const hasSummaries = synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0;
+    if (!hasSummaries) {
+      documentsOcrText = await fetchDocumentsOcrContext(caseId);
+    }
+  }
+
+  return generateSingleSection({
+    spec,
+    synthesisParams,
+    previousContext,
+    documentsOcrText,
+  });
+}
+
+/**
+ * Assemble all generated sections into a final report and save to DB.
+ * No LLM call — pure assembly + validation + DB insert.
+ */
+export async function assembleSectionsAndSaveReport(
+  caseId: string,
+  sections: GeneratedSection[],
+  synthesisParams: SynthesisParams,
+): Promise<SynthesisStepResult & { promptVersion?: string }> {
+  // Assemble full report markdown
+  // Strip any duplicate ## heading the LLM may have generated despite instructions
+  const reportParts = sections.map((s) => {
+    const headingPattern = new RegExp(`^##\\s+${escapeRegex(s.title)}\\s*\\n+`, 'i');
+    const cleanContent = s.content.replace(headingPattern, '').trim();
+    return `## ${s.title}\n\n${cleanContent}`;
+  });
+  const fullReport = reportParts.join('\n\n');
+
+  const totalWordCount = sections.reduce((sum, s) => sum + s.wordCount, 0);
+
+  // Compute prompt version from section system prompts
+  const promptVersion = computeSectionalPromptVersion({
+    caseType: synthesisParams.caseType,
+    caseRole: synthesisParams.caseRole,
+    caseTypes: synthesisParams.caseTypes,
+    sectionIds: sections.map((s) => s.id),
+  });
+
+  // Validate assembled report
+  const validationContext: ReportValidationContext = {
+    events: synthesisParams.events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
+    calculations: synthesisParams.calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+  };
+
+  const validation = validateReport(fullReport, synthesisParams.events.length, validationContext);
+  if (validation.issues.length > 0) {
+    const errors = validation.issues.filter((i) => i.severity === 'error');
+    const warnings = validation.issues.filter((i) => i.severity === 'warning');
+    if (errors.length > 0) {
+      logger.warn('pipeline', `Sectional report validation errors: ${errors.map((e) => e.message).join('; ')}`);
+    }
+    if (warnings.length > 0) {
+      logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
+    }
+  }
+
+  // Merge all token usage
+  let totalUsage: TokenUsage = createEmptyUsage();
+  for (const section of sections) {
+    if (section.usage) {
+      totalUsage = mergeUsage(totalUsage, section.usage);
+    }
+  }
+
+  // Build generation metadata
+  const generationMetadata: Record<string, unknown> = {
+    promptVersion,
+    generationMode: 'sectional',
+    sectionCount: sections.length,
+    sectionIds: sections.map((s) => s.id),
+    sectionWordCounts: Object.fromEntries(sections.map((s) => [s.id, s.wordCount])),
+    eventCoverage: Math.round(validation.eventCoverage),
+  };
+
+  logger.info('pipeline',
+    `Assembled report: ${sections.length} sections, ${totalWordCount} words, ` +
+    `${fullReport.length} chars, coverage: ${Math.round(validation.eventCoverage)}%`,
+  );
+
+  const result = await insertReportWithMetadata(caseId, fullReport, totalWordCount, generationMetadata);
+  return { ...result, promptVersion, usage: totalUsage };
+}
