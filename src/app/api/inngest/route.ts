@@ -10,4 +10,6 @@ export const { GET, POST, PUT } = serve({
     processCaseDocuments,
     dataRetentionCleanup,
   ],
+  // Explicit serve origin — ensures Inngest always calls the current production URL
+  ...(process.env.INNGEST_SERVE_HOST ? { serveHost: process.env.INNGEST_SERVE_HOST } : {}),
 });
