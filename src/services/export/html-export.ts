@@ -243,6 +243,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   .synthesis .report-image img { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 4px; }
   .synthesis .report-image figcaption { font-size: 12px; color: #64748b; margin-top: 6px; font-style: italic; }
   .expert-note { background: #eff6ff; border-left: 3px solid #2563eb; padding: 8px 12px; margin-top: 6px; font-size: 13px; }
+  .draft-banner { background: #dc2626; color: white; text-align: center; padding: 12px 20px; font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 20px; border-radius: 8px; }
   @media print {
     @page { margin: 2cm; }
     body { padding: 0; font-size: 11pt; max-width: 100%; color: #000; }
@@ -263,6 +264,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
 <body>
 <div class="watermark-wrapper">
 ${periziaMetadata ? buildFormalHeader(periziaMetadata, caseRole, patientInitials) : ''}
+${reportStatus === 'bozza' ? '<div class="draft-banner">⚠ DOCUMENTO IN BOZZA — NON UTILIZZARE IN SEDE GIUDIZIARIA SENZA REVISIONE DEL PERITO</div>' : ''}
 <h1>Report Medico-Legale</h1>
 <div class="header-info">
   <p><strong>Caso:</strong> ${escapeHtml(caseCode)}</p>

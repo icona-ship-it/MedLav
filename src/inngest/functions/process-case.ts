@@ -2,9 +2,11 @@ import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
 
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
-import { ocrSingleDocument } from '../steps/ocr-document';
+import { ocrDocumentBatch, OCR_BATCH_SIZE } from '../steps/ocr-document';
+import { chunkArray } from '@/lib/array-utils';
 import { classifyDocumentsStep, applyClassifications } from '../steps/classify-documents';
-import { planChunks, extractChunkEvents, markDocumentExtractionError } from '../steps/extract-events';
+import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
+import type { ChunkJob } from '../steps/extract-events';
 import { consolidateEventsStep } from '../steps/consolidate-events';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
 import { detectAnomaliesStep, detectMissingDocumentsStep } from '../steps/detect-issues';
@@ -16,8 +18,11 @@ import {
   generateAndSaveReport,
   generateChronologyPart,
   generateSummaryAndSaveReport,
+  fetchDocumentsOcrContext,
 } from '../steps/generate-report';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
+import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatch } from '@/services/synthesis/document-summarizer';
+import type { DocumentSummary } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary } from '@/services/cost-tracking/cost-calculator';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
@@ -97,15 +102,16 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2: OCR all documents in parallel
-    const ocrSettled = await Promise.all(
-      documents.map((doc) =>
-        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
+    // Step 2: OCR all documents in batched parallel steps
+    // Each batch processes OCR_BATCH_SIZE docs sequentially within one Inngest step,
+    // reducing total step count from N to N/OCR_BATCH_SIZE.
+    const ocrBatches = chunkArray(documents, OCR_BATCH_SIZE);
+    const ocrBatchResults = await Promise.all(
+      ocrBatches.map((batch, idx) =>
+        step.run(`ocr-batch-${idx}`, () => ocrDocumentBatch(batch)),
       ),
     );
-    const ocrResults: OcrResult[] = ocrSettled.filter(
-      (r): r is OcrResult => r !== null,
-    );
+    const ocrResults: OcrResult[] = ocrBatchResults.flat();
 
     if (ocrResults.length === 0) {
       throw new Error('All documents failed OCR processing');
@@ -157,7 +163,7 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Resume active processing after classification review
     // Guard: only update if still in revisione_classificazione (user may have cancelled)
-    await step.run('mark-elaborazione-post-classification', async () => {
+    const postClassificationCount = await step.run('mark-elaborazione-post-classification', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const { count } = await supabase
@@ -166,9 +172,15 @@ export const processCaseDocuments = inngest.createFunction(
         .eq('id', caseId)
         .eq('processing_stage', 'revisione_classificazione');
       if (count === 0) {
-        logger.info('pipeline', `Case ${caseId} no longer in revisione_classificazione, skipping`);
+        logger.info('pipeline', `Case ${caseId} no longer in revisione_classificazione — user likely cancelled`);
       }
+      return count ?? 0;
     });
+
+    if (postClassificationCount === 0) {
+      logger.info('pipeline', `Pipeline stopping: case ${caseId} was cancelled during classification review`);
+      return { success: false, caseId, reason: 'cancelled_during_classification_review' };
+    }
 
     // Step 2.8: Refresh document types from DB (user may have changed them)
     const updatedTypes = await step.run('refresh-doc-types', async () => {
@@ -187,43 +199,80 @@ export const processCaseDocuments = inngest.createFunction(
       }
     }
 
-    // Step 3: Extract events per document (chunks in parallel)
-    const extractionResults: ExtractionResult[] = [];
-
+    // Step 3: Extract events per document (batched chunks)
+    // Plan all chunks synchronously (pure math, no DB call)
+    const allChunkJobs: ChunkJob[] = [];
     for (const ocrResult of ocrResults) {
-      // Step 3a: Calculate chunk ranges
-      const chunkRanges = await step.run(
-        `plan-chunks-${ocrResult.documentId}`,
-        () => planChunks(ocrResult.documentId, ocrResult.pageCount),
-      );
+      const chunkRanges = planChunksSync(ocrResult.pageCount);
+      for (let i = 0; i < chunkRanges.length; i++) {
+        allChunkJobs.push({
+          caseId,
+          ocrResult,
+          range: chunkRanges[i],
+          chunkIndex: i,
+          totalChunks: chunkRanges.length,
+          caseType: metadata.caseType,
+          caseTypes: metadata.caseTypes,
+        });
+      }
+    }
 
-      // Step 3b: Extract each chunk IN PARALLEL
-      const chunkPromises = chunkRanges.map((range, i) =>
-        step.run(`extract-${ocrResult.documentId}-p${range.start}-${range.end}`, () =>
-          extractChunkEvents({
-            caseId,
-            ocrResult,
-            range,
-            chunkIndex: i,
-            totalChunks: chunkRanges.length,
-            caseType: metadata.caseType,
-            caseTypes: metadata.caseTypes,
-          }),
-        ),
-      );
+    // Mark all documents as estrazione_in_corso in a single step
+    await step.run('mark-extraction-start', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+      const docIds = ocrResults.map((r) => r.documentId);
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < docIds.length; i += BATCH_SIZE) {
+        await supabase.from('documents').update({
+          processing_status: 'estrazione_in_corso',
+          updated_at: new Date().toISOString(),
+        }).in('id', docIds.slice(i, i + BATCH_SIZE));
+      }
+      logger.info('pipeline', `Step 3: Marked ${docIds.length} docs as estrazione_in_corso, ${allChunkJobs.length} total chunks`);
+    });
 
-      const chunkResults = await Promise.all(chunkPromises);
-      const totalEvents = chunkResults.reduce((sum, r) => sum + r.count, 0);
+    // Batch chunk jobs and run in parallel Inngest steps
+    const extractionBatches = chunkArray(allChunkJobs, EXTRACTION_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      extractionBatches.map((batch, idx) =>
+        step.run(`extract-batch-${idx}`, () => extractChunkBatch(batch)),
+      ),
+    );
 
+    // Aggregate per-document event counts
+    const docEventCounts: Record<string, number> = {};
+    for (const result of batchResults) {
+      for (const [docId, count] of Object.entries(result.perDoc)) {
+        docEventCounts[docId] = (docEventCounts[docId] ?? 0) + count;
+      }
+    }
+
+    // Mark errors for docs with 0 events, build extractionResults
+    const extractionResults: ExtractionResult[] = [];
+    const markErrorJobs: Array<{ documentId: string; pageCount: number }> = [];
+    for (const ocrResult of ocrResults) {
+      const totalEvents = docEventCounts[ocrResult.documentId] ?? 0;
       if (totalEvents === 0) {
-        await step.run(`mark-error-${ocrResult.documentId}`, () =>
-          markDocumentExtractionError(ocrResult.documentId, ocrResult.pageCount),
-        );
+        markErrorJobs.push({ documentId: ocrResult.documentId, pageCount: ocrResult.pageCount });
       } else {
         extractionResults.push({ documentId: ocrResult.documentId });
       }
+      logger.info('pipeline', ` Doc ${ocrResult.documentId}: ${totalEvents} total events`);
+    }
 
-      logger.info('pipeline', ` Doc ${ocrResult.documentId}: ${totalEvents} total events from ${chunkRanges.length} chunks`);
+    // Mark extraction errors in batched steps
+    if (markErrorJobs.length > 0) {
+      const errorBatches = chunkArray(markErrorJobs, 10);
+      await Promise.all(
+        errorBatches.map((batch, idx) =>
+          step.run(`mark-error-batch-${idx}`, async () => {
+            for (const job of batch) {
+              await markDocumentExtractionError(job.documentId, job.pageCount);
+            }
+          }),
+        ),
+      );
     }
 
     // Step 4: Consolidate events
@@ -307,7 +356,7 @@ export const processCaseDocuments = inngest.createFunction(
 
     // Mark case as generating report
     // Guard: only update if not cancelled (stage could be 'idle' if user cancelled)
-    await step.run('mark-generazione-report', async () => {
+    const generazioneCount = await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const { count } = await supabase
@@ -318,7 +367,31 @@ export const processCaseDocuments = inngest.createFunction(
       if (count === 0) {
         logger.info('pipeline', `Case ${caseId} was cancelled, skipping generazione_report`);
       }
+      return count ?? 0;
     });
+
+    if (generazioneCount === 0) {
+      logger.info('pipeline', `Pipeline stopping: case ${caseId} was cancelled before report generation`);
+      return { success: false, caseId, reason: 'cancelled_before_report_generation' };
+    }
+
+    // Map-reduce summarization for large cases (>50 documents)
+    // Generates per-document AI summaries so synthesis can see 100% of content
+    let documentSummaries: DocumentSummary[] | undefined;
+    if (ocrResults.length >= MAP_REDUCE_THRESHOLD_DOCS) {
+      const summaryDocs = await step.run('fetch-ocr-for-summaries', () =>
+        fetchDocumentsOcrContext(caseId),
+      );
+      const SUMMARY_BATCH_SIZE = 5;
+      const summaryBatches = chunkArray(summaryDocs, SUMMARY_BATCH_SIZE);
+      const summaryResults = await Promise.all(
+        summaryBatches.map((batch, idx) =>
+          step.run(`summarize-batch-${idx}`, () => summarizeDocumentBatch(batch)),
+        ),
+      );
+      documentSummaries = summaryResults.flat();
+      logger.info('pipeline', `Map-reduce: ${documentSummaries.length} document summaries generated`);
+    }
 
     // Build shared synthesis params
     const synthesisParams = buildSynthesisParams(
@@ -328,6 +401,7 @@ export const processCaseDocuments = inngest.createFunction(
       missingDocs,
       calculations,
       imageAnalysisResults,
+      documentSummaries,
     );
 
     // Step 7b: Check if split mode is needed

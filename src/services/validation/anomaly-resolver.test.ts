@@ -26,7 +26,7 @@ const mockStreamMistralChat = vi.mocked(streamMistralChat);
 const emptyUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
 function mockChatResult(content: string) {
-  return { content, usage: emptyUsage };
+  return { content, usage: emptyUsage, finishReason: 'stop' as const };
 }
 
 function makeAnomaly(overrides?: Partial<DetectedAnomaly>): DetectedAnomaly {

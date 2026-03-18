@@ -5,8 +5,11 @@ import {
   filterMedicalImages,
   truncateOcrProportionally,
   formatDocumentsOcrForPrompt,
+  formatDocumentSummariesForPrompt,
+  buildChronologyUserPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import type { DocumentSummary } from './document-summarizer';
 
 function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   return {
@@ -127,6 +130,17 @@ describe('synthesis-prompts', () => {
 
       expect(prompt).toContain('ESCLUSIVAMENTE INLINE');
       expect(prompt).not.toContain('includile in DUE posizioni');
+    });
+
+    it('should contain OCR confidence handling instructions', () => {
+      const prompt = buildSynthesisSystemPrompt({
+        caseType: 'ortopedica',
+        caseRole: 'ctu',
+      });
+
+      expect(prompt).toContain('BASSA AFFIDABILITÀ OCR');
+      expect(prompt).toContain('Affidabilità OCR media');
+      expect(prompt).toContain('bassa affidabilità come fatti certi');
     });
 
     it('should contain anti-hallucination rules', () => {
@@ -259,6 +273,56 @@ describe('synthesis-prompts', () => {
       });
 
       expect(ctpPrompt).toContain('CTP - Consulente Tecnico di Parte');
+    });
+
+    it('should include low confidence qualifier for events below 50%', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, confidence: 30, title: 'Evento incerto' }),
+      ];
+      const prompt = buildSynthesisUserPrompt({
+        caseType: 'ortopedica',
+        patientInitials: null,
+        caseRole: 'ctu',
+        events,
+        anomalies: [],
+        missingDocuments: [],
+      });
+
+      expect(prompt).toContain('BASSA AFFIDABILITÀ OCR');
+      expect(prompt).toContain('verificare fonte');
+    });
+
+    it('should include medium confidence qualifier for events 50-69%', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, confidence: 60, title: 'Evento medio' }),
+      ];
+      const prompt = buildSynthesisUserPrompt({
+        caseType: 'ortopedica',
+        patientInitials: null,
+        caseRole: 'ctu',
+        events,
+        anomalies: [],
+        missingDocuments: [],
+      });
+
+      expect(prompt).toContain('Affidabilità OCR media');
+    });
+
+    it('should not include confidence qualifier for events 70%+', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, confidence: 85, title: 'Evento affidabile' }),
+      ];
+      const prompt = buildSynthesisUserPrompt({
+        caseType: 'ortopedica',
+        patientInitials: null,
+        caseRole: 'ctu',
+        events,
+        anomalies: [],
+        missingDocuments: [],
+      });
+
+      expect(prompt).not.toContain('BASSA AFFIDABILITÀ');
+      expect(prompt).not.toContain('Affidabilità OCR media');
     });
 
     it('should handle empty events gracefully', () => {
@@ -448,6 +512,93 @@ describe('synthesis-prompts', () => {
       const result = filterMedicalImages(images);
       expect(result).toHaveLength(2);
       expect(result.map((r) => r.imageType)).toEqual(['radiografia', 'ecografia']);
+    });
+  });
+
+  describe('formatDocumentSummariesForPrompt', () => {
+    it('should return empty string for undefined summaries', () => {
+      expect(formatDocumentSummariesForPrompt(undefined)).toBe('');
+    });
+
+    it('should return empty string for empty array', () => {
+      expect(formatDocumentSummariesForPrompt([])).toBe('');
+    });
+
+    it('should format summaries with header and document details', () => {
+      const summaries: DocumentSummary[] = [
+        {
+          documentId: 'doc-1',
+          fileName: 'referto.pdf',
+          documentType: 'referto_controllo',
+          summary: 'Visita ortopedica con diagnosi frattura femore.',
+          totalCharsOriginal: 5000,
+        },
+        {
+          documentId: 'doc-2',
+          fileName: 'cartella.pdf',
+          documentType: 'cartella_clinica',
+          summary: 'Ricovero ospedaliero per intervento chirurgico.',
+          totalCharsOriginal: 12000,
+        },
+      ];
+
+      const result = formatDocumentSummariesForPrompt(summaries);
+      expect(result).toContain('RIASSUNTI AI DEI DOCUMENTI ORIGINALI');
+      expect(result).toContain('2 documenti');
+      expect(result).toContain('17000 caratteri originali');
+      expect(result).toContain('referto.pdf');
+      expect(result).toContain('cartella.pdf');
+      expect(result).toContain('Visita ortopedica');
+      expect(result).toContain('Ricovero ospedaliero');
+    });
+  });
+
+  describe('buildChronologyUserPrompt with documentSummaries', () => {
+    it('should use document summaries instead of OCR when both provided', () => {
+      const summaries: DocumentSummary[] = [{
+        documentId: 'doc-1',
+        fileName: 'test.pdf',
+        documentType: 'referto_controllo',
+        summary: 'Summary content here',
+        totalCharsOriginal: 5000,
+      }];
+
+      const result = buildChronologyUserPrompt({
+        eventsFormatted: '1. [15/03/2024] visita',
+        caseTypeLabel: 'Ortopedica',
+        expertRole: 'CTU',
+        documentSummaries: summaries,
+        documentsOcrText: [{
+          documentId: 'doc-1',
+          fileName: 'test.pdf',
+          documentType: 'referto_controllo',
+          pages: [{ pageNumber: 1, ocrText: 'OCR text that should NOT appear' }],
+          totalChars: 5000,
+        }],
+      });
+
+      expect(result).toContain('RIASSUNTI AI');
+      expect(result).toContain('Summary content here');
+      expect(result).not.toContain('OCR text that should NOT appear');
+      expect(result).toContain('riassunti');
+    });
+
+    it('should fall back to OCR when no summaries provided', () => {
+      const result = buildChronologyUserPrompt({
+        eventsFormatted: '1. [15/03/2024] visita',
+        caseTypeLabel: 'Ortopedica',
+        expertRole: 'CTU',
+        documentsOcrText: [{
+          documentId: 'doc-1',
+          fileName: 'test.pdf',
+          documentType: 'referto_controllo',
+          pages: [{ pageNumber: 1, ocrText: 'OCR text present' }],
+          totalChars: 100,
+        }],
+      });
+
+      expect(result).toContain('TESTO OCR');
+      expect(result).not.toContain('RIASSUNTI AI');
     });
   });
 });

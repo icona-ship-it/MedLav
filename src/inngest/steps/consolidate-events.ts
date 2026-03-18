@@ -45,20 +45,39 @@ export async function consolidateEventsStep(
     sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
   }));
 
-  // Update order numbers in DB
-  for (const event of allEvents) {
-    const dbId = (existingRaw ?? [])[event.orderNumber - 1]?.id;
-    if (dbId) {
-      await supabase.from('events').update({ order_number: event.orderNumber }).eq('id', dbId);
+  // Update order numbers in DB (batched for scalability)
+  const BATCH_SIZE = 500;
+  const orderUpdates = allEvents
+    .map((event) => {
+      const dbRow = (existingRaw ?? [])[event.orderNumber - 1];
+      return dbRow ? { id: dbRow.id as string, order_number: event.orderNumber } : null;
+    })
+    .filter((u): u is { id: string; order_number: number } => u !== null);
+
+  for (let i = 0; i < orderUpdates.length; i += BATCH_SIZE) {
+    const batch = orderUpdates.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map((u) =>
+        supabase.from('events').update({ order_number: u.order_number }).eq('id', u.id),
+      ),
+    );
+    for (const result of results) {
+      if (result.error) {
+        throw new Error(`Failed to update event order_number: ${result.error.message}`);
+      }
     }
   }
 
-  // Update document statuses
-  for (const docResult of extractionResults) {
-    await supabase
+  // Update document statuses (batched with .in())
+  const docIds = extractionResults.map((r) => r.documentId);
+  for (let i = 0; i < docIds.length; i += BATCH_SIZE) {
+    const { error: docUpdateError } = await supabase
       .from('documents')
       .update({ processing_status: 'validazione_in_corso', updated_at: new Date().toISOString() })
-      .eq('id', docResult.documentId);
+      .in('id', docIds.slice(i, i + BATCH_SIZE));
+    if (docUpdateError) {
+      throw new Error(`Failed to update document statuses: ${docUpdateError.message}`);
+    }
   }
 
   if (expectedEvents && allEvents.length === 0) {

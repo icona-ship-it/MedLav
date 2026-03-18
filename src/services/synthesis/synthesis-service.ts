@@ -26,8 +26,9 @@ import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { validateReport } from './report-validator';
-import type { ReportValidationContext } from './report-validator';
+import type { ReportValidationContext, ReportIssue } from './report-validator';
 import { computePromptVersion } from './prompt-version';
+import type { DocumentSummary } from './document-summarizer';
 import { logger } from '@/lib/logger';
 
 export interface SynthesisResult {
@@ -52,6 +53,8 @@ export interface SynthesisParams {
   periziaMetadata?: PeriziaMetadata;
   /** Original OCR text for faithful transcription in report */
   documentsOcrText?: DocumentOcrContext[];
+  /** Per-document AI summaries for large cases (map-reduce mode) */
+  documentSummaries?: DocumentSummary[];
 }
 
 const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
@@ -60,10 +63,16 @@ const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;
  * Check if synthesis needs to be split into multiple Mistral calls.
  * Used by the Inngest pipeline to decide whether to use 1 or 2 steps.
  * Split is mandatory when OCR text is provided (faithful transcription is long).
+ * When documentSummaries are provided (map-reduce mode), OCR is NOT fetched,
+ * so the split decision is based purely on prompt size.
  */
 export function shouldSplitSynthesis(params: SynthesisParams): boolean {
-  // Always split when OCR text is available — transcription produces long output
-  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
+  // When using document summaries (map-reduce mode), don't force split for OCR
+  // because OCR text won't be fetched — summaries replace it
+  const hasSummaries = params.documentSummaries && params.documentSummaries.length > 0;
+
+  // Always split when OCR text is available AND we're not in summary mode
+  if (!hasSummaries && params.documentsOcrText && params.documentsOcrText.length > 0) {
     return true;
   }
   const eventsFormatted = formatEventsForPrompt(params.events);
@@ -85,6 +94,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
   const {
     caseType, caseTypes, caseRole, events, anomalies, missingDocuments,
     patientInitials, calculations, periziaMetadata, imageAnalysis, documentsOcrText,
+    documentSummaries,
   } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
@@ -115,8 +125,10 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
   let report: string;
   let totalUsage: TokenUsage = createEmptyUsage();
 
+  let lastFinishReason: 'stop' | 'length' | 'error' | 'tool_calls' | null = null;
+
   if (!needsSplit) {
-    const { content: fullReport, usage } = await streamMistralChat({
+    const { content: fullReport, usage, finishReason } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         {
@@ -137,6 +149,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
             periziaMetadata,
             imageAnalysis,
             documentsOcrText,
+            documentSummaries,
           }) + (guidelineContext ? `\n\n${guidelineContext}` : ''),
         },
       ],
@@ -148,13 +161,15 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     });
     report = fullReport;
     totalUsage = usage;
+    lastFinishReason = finishReason;
   } else {
     logger.info('synthesis', ` Split mode: generating chronology (OCR: ${ocrTotalChars} chars)...`);
 
-    const { content: chronology, usage: chronoUsage } = await streamMistralChat({
+    const hasSummaries = documentSummaries && documentSummaries.length > 0;
+    const { content: chronology, usage: chronoUsage, finishReason: chronoFinishReason } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
-        { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 }) },
+        { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 || hasSummaries }) },
         {
           role: 'user',
           content: buildChronologyUserPrompt({
@@ -163,6 +178,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
             expertRole,
             patientInitials: patientInitials ?? undefined,
             documentsOcrText,
+            documentSummaries,
           }),
         },
       ],
@@ -175,7 +191,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
 
     logger.info('synthesis', ` Chronology: ${chronology.length} chars. Generating summary...`);
 
-    const { content: summaryAndAnalysis, usage: summaryUsage } = await streamMistralChat({
+    const { content: summaryAndAnalysis, usage: summaryUsage, finishReason: summaryFinishReason } = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         {
@@ -206,6 +222,8 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     logger.info('synthesis', ` Summary: ${summaryAndAnalysis.length} chars. Assembling...`);
     report = assembleSplitReport(summaryAndAnalysis, chronology);
     totalUsage = mergeUsage(chronoUsage, summaryUsage);
+    // Track finishReason from either call — 'length' in any = truncation
+    lastFinishReason = chronoFinishReason === 'length' ? 'length' : summaryFinishReason;
   }
 
   const promptVersion = computePromptVersion({ caseType, caseRole, caseTypes: params.caseTypes });
@@ -214,7 +232,7 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
     ocrText: ocrTotalChars > 0 ? documentsOcrText : undefined,
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis, totalUsage);
+  return finalizeReport(report, events.length, promptVersion, validationContext, imageAnalysis, totalUsage, lastFinishReason);
 }
 
 /**
@@ -222,18 +240,19 @@ export async function generateSynthesis(params: SynthesisParams): Promise<Synthe
  * Runs in its own Inngest step with full 800s Vercel budget.
  */
 export async function generateSynthesisChronology(params: SynthesisParams): Promise<{ chronology: string; usage: TokenUsage }> {
-  const { events, caseType, caseRole, patientInitials, documentsOcrText } = params;
+  const { events, caseType, caseRole, patientInitials, documentsOcrText, documentSummaries } = params;
   const caseTypeLabel = params.caseTypeLabel ?? CASE_TYPE_LABELS[caseType] ?? caseType;
   const expertRole = params.expertRole ?? caseRole;
   const eventsFormatted = formatEventsForPrompt(events);
   const ocrTotalChars = documentsOcrText?.reduce((sum, d) => sum + d.totalChars, 0) ?? 0;
+  const hasSummaries = documentSummaries && documentSummaries.length > 0;
 
-  logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events, OCR: ${ocrTotalChars} chars)...`);
+  logger.info('synthesis', ` Split step 1: generating chronology (${events.length} events, OCR: ${ocrTotalChars} chars, summaries: ${hasSummaries ? documentSummaries!.length : 0})...`);
 
-  const { content: chronology, usage } = await streamMistralChat({
+  const { content: chronology, usage, finishReason } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
-      { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 }) },
+      { role: 'system', content: buildChronologySystemPrompt({ hasOcrText: ocrTotalChars > 0 || hasSummaries }) },
       {
         role: 'user',
         content: buildChronologyUserPrompt({
@@ -242,6 +261,7 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
           expertRole,
           patientInitials: patientInitials ?? undefined,
           documentsOcrText,
+          documentSummaries,
         }),
       },
     ],
@@ -251,6 +271,10 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
     randomSeed: DETERMINISTIC_SEED,
     label: 'synthesis:chronology',
   });
+
+  if (finishReason === 'length') {
+    logger.warn('synthesis', ` Chronology truncated (finishReason=length, ${chronology.length} chars)`);
+  }
 
   logger.info('synthesis', ` Chronology done: ${chronology.length} chars`);
   return { chronology, usage };
@@ -277,7 +301,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
 
   logger.info('synthesis', ` Split step 2: generating summary from ${chronology.length} char chronology...`);
 
-  const { content: summaryAndAnalysis, usage: summaryUsage } = await streamMistralChat({
+  const { content: summaryAndAnalysis, usage: summaryUsage, finishReason } = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       {
@@ -314,7 +338,7 @@ export async function generateSynthesisSummary(params: SynthesisParams & {
     calculations: calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
     ocrText: ocrTotalChars > 0 ? params.documentsOcrText : undefined,
   };
-  return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis, summaryUsage);
+  return finalizeReport(report, events.length, promptVersion, validationContext, params.imageAnalysis, summaryUsage, finishReason);
 }
 
 // ── Shared helpers ──
@@ -356,12 +380,25 @@ function finalizeReport(
   validationContext?: ReportValidationContext,
   imageAnalysis?: ImageAnalysisResult[],
   usage?: TokenUsage,
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls' | null,
 ): SynthesisResult {
   const withImages = appendImageAppendix(report, imageAnalysis);
   const cleaned = stripSectionMarkers(withImages);
   const wordCount = cleaned.split(/\s+/).filter((w) => w.length > 0).length;
 
   const validation = validateReport(cleaned, eventCount, validationContext);
+
+  // Add truncated_response issue if finishReason indicates truncation
+  if (finishReason === 'length') {
+    const truncationIssue: ReportIssue = {
+      type: 'truncated_response',
+      severity: 'error',
+      message: 'LLM response was truncated (hit maxTokens limit). Report may be incomplete.',
+    };
+    validation.issues.push(truncationIssue);
+    validation.valid = false;
+  }
+
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');

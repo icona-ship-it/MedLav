@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getPlanLimits } from '@/lib/stripe/config';
 import { validateCsrfToken } from '@/lib/csrf';
+import { validateCaseForProcessing } from '@/lib/pipeline-limits';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -105,9 +106,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check that there are documents to process — BEFORE cleanup to avoid data loss
+    const { count: docCount, error: countError } = await supabase
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('case_id', caseId);
+
+    if (countError || !docCount || docCount === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Nessun documento da elaborare. Carica almeno un documento.' },
+        { status: 400 },
+      );
+    }
+
+    // Validate document count limits — BEFORE cleanup to avoid data loss
+    const validation = validateCaseForProcessing({ documentCount: docCount });
+    if (!validation.valid) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 },
+      );
+    }
+
     // Re-processing cleanup: if the case was already processed, clean ALL derived data
     // including OCR pages — every analysis runs fresh for maximum quality
-    // This runs BEFORE the running check so that stuck documents from failed runs get cleaned up
+    // This runs AFTER validation so user doesn't lose data on rejected requests
     const isReprocessing = caseData.processing_stage !== 'idle';
     if (isReprocessing) {
       logger.info('processing/start', `Re-processing case ${caseId}: cleaning all data for fresh analysis`);
@@ -128,19 +151,6 @@ export async function POST(request: NextRequest) {
           docs.map((d) => supabase.from('pages').delete().eq('document_id', d.id)),
         );
       }
-    }
-
-    // Check that there are documents to process
-    const { count: docCount, error: countError } = await supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .eq('case_id', caseId);
-
-    if (countError || !docCount || docCount === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Nessun documento da elaborare. Carica almeno un documento.' },
-        { status: 400 },
-      );
     }
 
     // Reset document status for processing

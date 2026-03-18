@@ -55,6 +55,26 @@ async function saveOcrImagesToStorage(
   logger.info('pipeline', ` Step 2: Saved ${savedCount}/${imagesToSave.length} images to storage for doc ${documentId}`);
 }
 
+/** Number of documents to process per Inngest step (batch).
+ * Kept at 5 to stay well within Vercel's 800s timeout (5 × 80s = 400s worst case). */
+export const OCR_BATCH_SIZE = 5;
+
+/**
+ * OCR a batch of documents sequentially within a single Inngest step.
+ * Each doc is processed one at a time (Mistral semaphore serializes anyway).
+ * Returns only successful results (failures are logged and documents marked as errore).
+ */
+export async function ocrDocumentBatch(
+  docs: DocumentInfo[],
+): Promise<OcrResult[]> {
+  const results: OcrResult[] = [];
+  for (const doc of docs) {
+    const result = await ocrSingleDocument(doc);
+    if (result !== null) results.push(result);
+  }
+  return results;
+}
+
 /**
  * Step 2: OCR a single document.
  * Always runs fresh OCR to ensure maximum analysis quality.

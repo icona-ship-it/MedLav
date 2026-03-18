@@ -236,6 +236,7 @@ export type MistralResponseFormat = JsonObjectFormat | JsonSchemaFormat;
 export interface MistralChatResult {
   content: string;
   usage: TokenUsage;
+  finishReason: 'stop' | 'length' | 'error' | 'tool_calls' | null;
 }
 
 export async function streamMistralChat(params: {
@@ -318,14 +319,19 @@ async function _streamMistralChatInternal(params: {
     let lastLogAt = 0;
     let lastTokenAt = Date.now();
     let usage: TokenUsage = createEmptyUsage();
+    let finishReason: MistralChatResult['finishReason'] = null;
     const STALL_TIMEOUT_MS = 90_000;
 
     for await (const event of stream) {
       const data = event.data as {
-        choices?: Array<{ delta?: { content?: string } }>;
+        choices?: Array<{ delta?: { content?: string }; finishReason?: string }>;
         usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
       };
       const delta = data?.choices?.[0]?.delta?.content;
+      const chunkFinishReason = data?.choices?.[0]?.finishReason;
+      if (chunkFinishReason) {
+        finishReason = chunkFinishReason as MistralChatResult['finishReason'];
+      }
       if (typeof delta === 'string' && delta.length > 0) {
         content += delta;
         lastTokenAt = Date.now();
@@ -355,10 +361,17 @@ async function _streamMistralChatInternal(params: {
       throw new Error(`[mistral:${label}] Stream completed but content is empty`);
     }
 
+    if (finishReason === 'length') {
+      logger.error('mistral',
+        `[mistral:${label}] Response TRUNCATED: finishReason=length, ${content.length} chars. ` +
+        `Output hit maxTokens limit — report may be incomplete.`,
+      );
+    }
+
     logger.info('mistral',
-      `[mistral:${label}] Stream complete: ${content.length} chars in ${Date.now() - startMs}ms`,
+      `[mistral:${label}] Stream complete: ${content.length} chars in ${Date.now() - startMs}ms (finishReason: ${finishReason ?? 'unknown'})`,
     );
-    return { content, usage };
+    return { content, usage, finishReason };
   }, label);
 }
 
@@ -394,6 +407,7 @@ async function _completeMistralChatFallback(params: {
     );
 
     const content = response?.choices?.[0]?.message?.content;
+    const finishReason = (response?.choices?.[0]?.finishReason ?? null) as MistralChatResult['finishReason'];
 
     if (typeof content !== 'string' || content.length === 0) {
       throw new Error(`[mistral:${label}] chat.complete() returned empty content`);
@@ -407,9 +421,16 @@ async function _completeMistralChatFallback(params: {
       }
       : createEmptyUsage();
 
+    if (finishReason === 'length') {
+      logger.error('mistral',
+        `[mistral:${label}] Response TRUNCATED: finishReason=length, ${content.length} chars. ` +
+        `Output hit maxTokens limit — report may be incomplete.`,
+      );
+    }
+
     logger.info('mistral',
-      `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms`,
+      `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms (finishReason: ${finishReason ?? 'unknown'})`,
     );
-    return { content, usage };
+    return { content, usage, finishReason };
   }, label);
 }

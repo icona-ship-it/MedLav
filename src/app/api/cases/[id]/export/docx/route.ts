@@ -100,10 +100,12 @@ export async function GET(
     });
 
   const suffix = shouldAnonymize ? '-anonimizzato' : '';
+  const exportReportStatus = (data.report?.report_status as string | undefined) ?? 'bozza';
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="report-${data.caseData.code}${suffix}.docx"`,
+      'X-Report-Status': exportReportStatus,
     },
   });
 }

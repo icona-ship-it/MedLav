@@ -57,46 +57,67 @@ export function consolidateEvents(
 /**
  * Detect events that appear in multiple documents.
  * When the same event has discrepancies between sources, mark them.
+ *
+ * Uses O(n*k) grouping by date|eventType instead of O(n^2) pairwise comparison.
+ * k = average group size (typically 2-5 events share the same date+type).
  */
 function markDiscrepancies(
   events: Array<ExtractedEvent & { documentId: string }>,
 ): Array<ExtractedEvent & { documentId: string; discrepancyNote: string | null }> {
-  const result: Array<ExtractedEvent & { documentId: string; discrepancyNote: string | null }> = [];
-
+  // Index events by date|eventType for O(1) peer lookup.
+  // Events with null/undefined date get unique keys to avoid false grouping.
+  const groups = new Map<string, number[]>();
   for (let i = 0; i < events.length; i++) {
-    const current = events[i];
-    const discrepancy = findDiscrepancy(current, events, i);
-
-    result.push({
-      ...current,
-      discrepancyNote: discrepancy,
-    });
+    const key = events[i].eventDate
+      ? `${events[i].eventDate}|${events[i].eventType}`
+      : `__NO_DATE_${i}|${events[i].eventType}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(i);
+    } else {
+      groups.set(key, [i]);
+    }
   }
 
-  return result;
+  return events.map((event, i) => {
+    const key = event.eventDate
+      ? `${event.eventDate}|${event.eventType}`
+      : `__NO_DATE_${i}|${event.eventType}`;
+    const peers = groups.get(key) ?? [];
+    const discrepancy = findDiscrepancyInGroup(event, i, events, peers);
+    return { ...event, discrepancyNote: discrepancy };
+  });
 }
 
 /**
- * Check if an event has a potential duplicate in another document
- * with conflicting information.
+ * Check if an event has a potential duplicate within its date|type group
+ * from a different document, with conflicting information.
  */
-function findDiscrepancy(
+function findDiscrepancyInGroup(
   event: ExtractedEvent & { documentId: string },
-  allEvents: Array<ExtractedEvent & { documentId: string }>,
   currentIndex: number,
+  allEvents: Array<ExtractedEvent & { documentId: string }>,
+  peerIndices: number[],
 ): string | null {
+  // Early exit: no peers or only self → no discrepancy possible
+  if (peerIndices.length <= 1) return null;
+
+  // Early exit: all peers from the same document → no cross-doc discrepancy
+  const hasMultipleDocs = peerIndices.some(
+    (j) => j !== currentIndex && allEvents[j].documentId !== event.documentId,
+  );
+  if (!hasMultipleDocs) return null;
+
   const discrepancies: string[] = [];
 
-  for (let j = 0; j < allEvents.length; j++) {
+  for (const j of peerIndices) {
     if (j === currentIndex) continue;
 
     const other = allEvents[j];
 
-    // Different document, same date, similar event type
+    // Different document, same date+type (already guaranteed by grouping), similar content
     if (
       other.documentId !== event.documentId &&
-      other.eventDate === event.eventDate &&
-      other.eventType === event.eventType &&
       isSimilarEvent(event, other)
     ) {
       // Check for specific discrepancies

@@ -6,6 +6,9 @@ import { logger } from '@/lib/logger';
 
 export const PAGES_PER_CHUNK = 10;
 
+/** Number of chunk extraction jobs per Inngest step (batch) */
+export const EXTRACTION_BATCH_SIZE = 5;
+
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
   'visita', 'esame', 'diagnosi', 'intervento', 'terapia', 'ricovero',
@@ -98,6 +101,72 @@ export async function planChunks(
   }
   logger.info('pipeline', ` Doc ${documentId}: ${ranges.length} chunk(s) for ${pageCount} pages`);
   return ranges;
+}
+
+/**
+ * Pure math chunk planning — no DB call.
+ * Used in batched extraction to avoid separate Inngest steps for planning.
+ */
+export function planChunksSync(
+  pageCount: number,
+): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (let i = 1; i <= pageCount; i += PAGES_PER_CHUNK) {
+    ranges.push({ start: i, end: Math.min(i + PAGES_PER_CHUNK - 1, pageCount) });
+  }
+  return ranges;
+}
+
+export interface ChunkJob {
+  caseId: string;
+  ocrResult: OcrResult;
+  range: { start: number; end: number };
+  chunkIndex: number;
+  totalChunks: number;
+  caseType: CaseType;
+  caseTypes: CaseType[];
+}
+
+/**
+ * Extract events from a batch of chunk jobs sequentially within a single Inngest step.
+ * Each job is wrapped in try/catch to prevent duplicates on Inngest retry:
+ * if a batch partially succeeds then throws, Inngest retries the ENTIRE batch,
+ * re-inserting events from already-successful jobs. By catching per-job errors,
+ * we ensure partial success is preserved and only rethrow if ALL jobs fail.
+ */
+export async function extractChunkBatch(
+  jobs: ChunkJob[],
+): Promise<{ totalCount: number; perDoc: Record<string, number> }> {
+  let totalCount = 0;
+  let failedCount = 0;
+  const perDoc: Record<string, number> = {};
+
+  for (const job of jobs) {
+    try {
+      const result = await extractChunkEvents({
+        caseId: job.caseId,
+        ocrResult: job.ocrResult,
+        range: job.range,
+        chunkIndex: job.chunkIndex,
+        totalChunks: job.totalChunks,
+        caseType: job.caseType,
+        caseTypes: job.caseTypes,
+      });
+      totalCount += result.count;
+      perDoc[job.ocrResult.documentId] = (perDoc[job.ocrResult.documentId] ?? 0) + result.count;
+    } catch (error) {
+      failedCount++;
+      const message = error instanceof Error ? error.message : 'unknown';
+      logger.error('pipeline', `Chunk batch job failed (doc ${job.ocrResult.documentId} p${job.range.start}-${job.range.end}): ${message}`);
+    }
+  }
+
+  // Rethrow only if ALL jobs failed (systemic error — worth retrying the whole batch)
+  if (failedCount === jobs.length && jobs.length > 0) {
+    throw new Error(`All ${jobs.length} extraction chunk jobs in batch failed`);
+  }
+
+  return { totalCount, perDoc };
 }
 
 interface ExtractChunkParams {

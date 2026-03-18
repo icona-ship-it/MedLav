@@ -93,6 +93,7 @@ export async function GET(
 
   const headers: Record<string, string> = {
     'Content-Type': 'text/html; charset=utf-8',
+    'X-Report-Status': reportStatus ?? 'bozza',
   };
   const suffix = shouldAnonymize ? '-anonimizzato' : '';
   if (!isInline) {

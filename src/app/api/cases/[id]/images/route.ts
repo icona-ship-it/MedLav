@@ -18,9 +18,17 @@ export async function GET(
   }
 
   const { id: caseId } = await params;
-  const imagePath = request.nextUrl.searchParams.get('path');
+  const rawPath = request.nextUrl.searchParams.get('path');
 
-  if (!imagePath || !imagePath.startsWith('ocr-images/') || imagePath.includes('..')) {
+  // Decode first, then validate — prevents double-encoding bypasses (%252e%252e)
+  let imagePath: string;
+  try {
+    imagePath = rawPath ? decodeURIComponent(rawPath) : '';
+  } catch {
+    return NextResponse.json({ error: 'Percorso immagine non valido' }, { status: 400 });
+  }
+
+  if (!imagePath || !imagePath.startsWith('ocr-images/') || imagePath.includes('..') || imagePath.includes('\0')) {
     return NextResponse.json({ error: 'Percorso immagine non valido' }, { status: 400 });
   }
 

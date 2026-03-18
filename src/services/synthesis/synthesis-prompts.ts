@@ -4,6 +4,7 @@ import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
+import type { DocumentSummary } from './document-summarizer';
 import { formatDate } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
@@ -57,6 +58,11 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
 - Quando due fonti discordano, privilegia la fonte con affidabilità maggiore (punteggio più alto)
 - Quando citi un evento specifico dalla cronologia, includi il riferimento [Ev.N] dove N è il numero dell'evento (orderNumber). Questo è FONDAMENTALE per la tracciabilità in ambito giudiziario
+
+## EVENTI A BASSA AFFIDABILITÀ OCR
+- Gli eventi marcati con "⚠ BASSA AFFIDABILITÀ OCR" hanno un riconoscimento testuale incerto. Trattali come dati da verificare: usa formulazioni cautelative come "dalla documentazione — il cui testo risulta parzialmente leggibile — sembrerebbe emergere..." o "dato soggetto a verifica per qualità del documento originale"
+- Gli eventi marcati con "[Affidabilità OCR media]" vanno riportati ma con indicazione che il dato potrebbe necessitare di conferma sul documento originale
+- NON trattare mai dati a bassa affidabilità come fatti certi nel report
 
 ## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
 - Basa il report ESCLUSIVAMENTE sugli eventi forniti nella sezione "TUTTI GLI EVENTI CLINICI IN ORDINE CRONOLOGICO". NON aggiungere fatti, diagnosi, nomi di medici, strutture o date che non compaiono negli eventi.
@@ -308,8 +314,9 @@ export function buildSynthesisUserPrompt(params: {
   periziaMetadata?: PeriziaMetadata;
   imageAnalysis?: Array<{ pageNumber: number; imageType: string; description: string; confidence: number }>;
   documentsOcrText?: DocumentOcrContext[];
+  documentSummaries?: DocumentSummary[];
 }): string {
-  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata, imageAnalysis, documentsOcrText } = params;
+  const { caseType, patientInitials, caseRole, events, anomalies, missingDocuments, calculations, caseTypes, periziaMetadata, imageAnalysis, documentsOcrText, documentSummaries } = params;
 
   const eventsText = formatEventsForPrompt(events);
   const anomaliesText = formatAnomaliesForPrompt(anomalies);
@@ -325,6 +332,14 @@ export function buildSynthesisUserPrompt(params: {
 
   // Build perizia metadata section
   const periziaSection = formatPeriziaMetadataForPrompt(periziaMetadata);
+
+  // Use document summaries when available (map-reduce mode for large cases),
+  // otherwise use OCR text directly
+  const documentContextSection = documentSummaries && documentSummaries.length > 0
+    ? formatDocumentSummariesForPrompt(documentSummaries)
+    : formatDocumentsOcrForPrompt(documentsOcrText);
+  const hasOcr = documentsOcrText && documentsOcrText.length > 0;
+  const hasSummaries = documentSummaries && documentSummaries.length > 0;
 
   return `Genera il report medico-legale completo per il seguente caso.
 
@@ -346,10 +361,10 @@ ${anomaliesText}
 
 ${missingDocsText}
 ${calculationsText}
-${formatImageAnalysisForPrompt(imageAnalysis)}${formatDocumentsOcrForPrompt(documentsOcrText)}---
+${formatImageAnalysisForPrompt(imageAnalysis)}${documentContextSection}---
 
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
-IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.${documentsOcrText && documentsOcrText.length > 0 ? '\nIMPORTANTE: Il testo OCR fornito è la FONTE PRIMARIA. Trascrivi FEDELMENTE il contenuto dei documenti originali usando il testo OCR. Il testo tra virgolette deve corrispondere esattamente al testo OCR.' : ''}
+IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.${hasOcr && !hasSummaries ? '\nIMPORTANTE: Il testo OCR fornito è la FONTE PRIMARIA. Trascrivi FEDELMENTE il contenuto dei documenti originali usando il testo OCR. Il testo tra virgolette deve corrispondere esattamente al testo OCR.' : ''}${hasSummaries ? '\nIMPORTANTE: I riassunti AI dei documenti forniscono una visione completa del caso. Integra le informazioni dai riassunti con gli eventi strutturati per un report il più completo possibile.' : ''}
 IMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${roleLabel}) formulerà autonomamente le proprie valutazioni professionali.
 IMPORTANTE: Se sono disponibili immagini diagnostiche, inseriscile SOLO INLINE nella documentazione sanitaria nel punto cronologico appropriato. NON creare una sezione ALLEGATI ICONOGRAFICI separata.`;
 }
@@ -450,6 +465,7 @@ export function buildChronologyUserPrompt(
     expertRole: string;
     patientInitials?: string;
     documentsOcrText?: DocumentOcrContext[];
+    documentSummaries?: DocumentSummary[];
   },
   caseTypeLabel?: string,
   expertRole?: string,
@@ -457,7 +473,7 @@ export function buildChronologyUserPrompt(
 ): string {
   // Support both legacy positional args and new object params
   const params = typeof paramsOrEvents === 'string'
-    ? { eventsFormatted: paramsOrEvents, caseTypeLabel: caseTypeLabel!, expertRole: expertRole!, patientInitials, documentsOcrText: undefined }
+    ? { eventsFormatted: paramsOrEvents, caseTypeLabel: caseTypeLabel!, expertRole: expertRole!, patientInitials, documentsOcrText: undefined, documentSummaries: undefined }
     : paramsOrEvents;
 
   let prompt = `TIPO CASO: ${params.caseTypeLabel}\n`;
@@ -466,14 +482,25 @@ export function buildChronologyUserPrompt(
   prompt += '\nEVENTI ESTRATTI (indice cronologico):\n\n';
   prompt += params.eventsFormatted;
 
-  // Add OCR text if available
-  const ocrSection = formatDocumentsOcrForPrompt(params.documentsOcrText);
-  if (ocrSection) {
-    prompt += '\n\n' + ocrSection;
+  // Use document summaries when available (map-reduce mode for large cases),
+  // otherwise use OCR text directly
+  const hasSummaries = params.documentSummaries && params.documentSummaries.length > 0;
+  if (hasSummaries) {
+    const summariesSection = formatDocumentSummariesForPrompt(params.documentSummaries);
+    if (summariesSection) {
+      prompt += '\n\n' + summariesSection;
+    }
+  } else {
+    const ocrSection = formatDocumentsOcrForPrompt(params.documentsOcrText);
+    if (ocrSection) {
+      prompt += '\n\n' + ocrSection;
+    }
   }
 
   prompt += '\n\nGenera le sezioni documentali complete, includendo TUTTI gli eventi elencati sopra in forma dettagliata e fedele, nel formato specificato nelle istruzioni di sistema.';
-  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
+  if (hasSummaries) {
+    prompt += '\nIMPORTANTE: Usa i RIASSUNTI AI come fonte aggiuntiva per i dettagli clinici. Integra le informazioni dei riassunti con gli eventi strutturati per una cronologia completa.';
+  } else if (params.documentsOcrText && params.documentsOcrText.length > 0) {
     prompt += '\nIMPORTANTE: Usa il TESTO OCR come fonte primaria per la trascrizione. Il testo tra virgolette DEVE corrispondere al testo OCR originale. Gli eventi servono come indice cronologico.';
   }
   prompt += ' Ricorda di includere i marker <!-- SECTION:CRONOLOGIA --> e <!-- END:CRONOLOGIA -->.';
@@ -625,10 +652,25 @@ function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     const diagnosis = e.diagnosis ? `\n   Diagnosi: ${e.diagnosis}` : '';
     const doctor = e.doctor ? `\n   Medico: ${e.doctor}` : '';
     const facility = e.facility ? `\n   Struttura: ${e.facility}` : '';
-    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}
+    const confidenceQualifier = formatConfidenceQualifier(e.confidence);
+    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}${confidenceQualifier}
    TITOLO: ${e.title}
    DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}`;
   }).join('\n\n');
+}
+
+/**
+ * Format a confidence qualifier for events with low OCR confidence.
+ * Signals to the LLM that low-confidence events should be treated cautiously.
+ */
+function formatConfidenceQualifier(confidence: number): string {
+  if (confidence < 50) {
+    return ' | ⚠ BASSA AFFIDABILITÀ OCR — verificare fonte';
+  }
+  if (confidence < 70) {
+    return ' | [Affidabilità OCR media]';
+  }
+  return '';
 }
 
 function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
@@ -908,6 +950,28 @@ export function formatDocumentsOcrForPrompt(docs?: DocumentOcrContext[]): string
     for (const doc of categorized.perizie) {
       result += formatSingleDocOcr(doc);
     }
+  }
+
+  return result;
+}
+
+/**
+ * Format per-document AI summaries for the synthesis prompt.
+ * Used in map-reduce mode for large cases (>50 documents).
+ * Replaces OCR text with more comprehensive coverage.
+ */
+export function formatDocumentSummariesForPrompt(summaries?: DocumentSummary[]): string {
+  if (!summaries || summaries.length === 0) return '';
+
+  const totalOriginalChars = summaries.reduce((sum, s) => sum + s.totalCharsOriginal, 0);
+
+  let result = `\n## RIASSUNTI AI DEI DOCUMENTI ORIGINALI (${summaries.length} documenti, ${totalOriginalChars} caratteri originali)\n\n`;
+  result += '**NOTA: I seguenti riassunti sono stati generati da AI a partire dal testo OCR completo di ciascun documento. Coprono il 100% dei documenti del caso. Usa questi riassunti come base per il report, integrandoli con gli eventi strutturati sopra.**\n\n';
+
+  for (const summary of summaries) {
+    result += `### ${summary.fileName} (${summary.documentType})\n`;
+    result += `*${summary.totalCharsOriginal} caratteri OCR originali*\n\n`;
+    result += `${summary.summary}\n\n`;
   }
 
   return result;

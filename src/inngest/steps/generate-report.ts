@@ -96,6 +96,7 @@ export function buildSynthesisParams(
   missingDocs: MissingDocument[],
   calculations: MedicoLegalCalculation[],
   imageAnalysisResults: ImageAnalysisResult[],
+  documentSummaries?: import('@/services/synthesis/document-summarizer').DocumentSummary[],
 ): SynthesisParams {
   return {
     caseType: metadata.caseType,
@@ -108,6 +109,7 @@ export function buildSynthesisParams(
     calculations,
     periziaMetadata: metadata.periziaMetadata,
     imageAnalysis: imageAnalysisResults.length > 0 ? imageAnalysisResults : undefined,
+    documentSummaries,
   };
 }
 
@@ -199,18 +201,34 @@ export async function generateAndSaveReport(
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
   const startMs = Date.now();
 
-  // Fetch OCR text inside this step (avoids serialization between Inngest steps)
-  const documentsOcrText = await fetchDocumentsOcrContext(caseId);
-  const paramsWithOcr: SynthesisParams = { ...synthesisParams, documentsOcrText };
+  // When document summaries are available (map-reduce mode), skip OCR fetch —
+  // summaries already cover 100% of document content and are much smaller.
+  // Otherwise, fetch OCR text inside this step (avoids serialization between Inngest steps).
+  const hasSummaries = synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0;
+  let paramsForSynthesis: SynthesisParams;
+  let ocrChars: number;
 
-  const r = await generateSynthesis(paramsWithOcr);
-  const ocrChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+  if (hasSummaries) {
+    paramsForSynthesis = synthesisParams;
+    ocrChars = 0;
+    logger.info('pipeline', ` Using ${synthesisParams.documentSummaries!.length} document summaries (skipping OCR fetch)`);
+  } else {
+    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+    paramsForSynthesis = { ...synthesisParams, documentsOcrText };
+    ocrChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+  }
+
+  const r = await generateSynthesis(paramsForSynthesis);
   logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars, OCR: ${ocrChars} chars)`);
 
   const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
   if (ocrChars > 0) {
     generationMetadata.ocrTextProvided = true;
     generationMetadata.ocrTotalChars = ocrChars;
+  }
+  if (synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0) {
+    generationMetadata.useDocumentSummaries = true;
+    generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
   }
 
   const result = await insertReportWithMetadata(caseId, r.synthesis, r.wordCount, generationMetadata);
@@ -228,12 +246,23 @@ export async function generateChronologyPart(
 ): Promise<{ chronology: string; ocrTotalChars: number; usage?: import('@/services/cost-tracking/cost-calculator').TokenUsage }> {
   const startMs = Date.now();
 
-  // Fetch OCR text inside this step
-  const documentsOcrText = await fetchDocumentsOcrContext(caseId);
-  const paramsWithOcr: SynthesisParams = { ...synthesisParams, documentsOcrText };
-  const ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+  // When document summaries are available (map-reduce mode), skip OCR fetch —
+  // summaries replace OCR text in the prompt.
+  const hasSummaries = synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0;
+  let paramsForChronology: SynthesisParams;
+  let ocrTotalChars: number;
 
-  const { chronology, usage } = await generateSynthesisChronology(paramsWithOcr);
+  if (hasSummaries) {
+    paramsForChronology = synthesisParams;
+    ocrTotalChars = 0;
+    logger.info('pipeline', ` Chronology: using ${synthesisParams.documentSummaries!.length} document summaries (skipping OCR fetch)`);
+  } else {
+    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
+    paramsForChronology = { ...synthesisParams, documentsOcrText };
+    ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
+  }
+
+  const { chronology, usage } = await generateSynthesisChronology(paramsForChronology);
   logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${chronology.length} chars, OCR: ${ocrTotalChars} chars)`);
   return { chronology, ocrTotalChars, usage };
 }
@@ -256,6 +285,10 @@ export async function generateSummaryAndSaveReport(
   if (ocrTotalChars && ocrTotalChars > 0) {
     generationMetadata.ocrTextProvided = true;
     generationMetadata.ocrTotalChars = ocrTotalChars;
+  }
+  if (synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0) {
+    generationMetadata.useDocumentSummaries = true;
+    generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
   }
 
   const result = await insertReportWithMetadata(caseId, r.synthesis, r.wordCount, generationMetadata);

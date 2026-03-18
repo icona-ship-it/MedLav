@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateReport } from './report-validator';
-import type { ReportValidationContext } from './report-validator';
+import type { ReportValidationContext, ReportIssue } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
   const eventCount = overrides?.events ?? 5;
@@ -214,14 +214,36 @@ ${Array(100).fill('parola').join(' ')}`;
       expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
     });
 
-    it('should warn when less than 50% of events referenced', () => {
+    it('should error when less than 50% of events referenced', () => {
       const report = buildFullReport({ events: 2 });
       const result = validateReport(report, 10);
 
       expect(result.eventCoverage).toBe(20);
-      expect(result.issues.some((i) =>
-        i.type === 'low_event_coverage' && i.message.includes('20%'),
-      )).toBe(true);
+      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
+      expect(issue).toBeDefined();
+      expect(issue!.severity).toBe('error');
+      expect(issue!.message).toContain('20%');
+    });
+
+    it('should warn when 50-69% of events referenced', () => {
+      // 6 out of 10 = 60% → warning
+      const report = buildFullReport({ events: 6 });
+      const result = validateReport(report, 10);
+
+      expect(result.eventCoverage).toBe(60);
+      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
+      expect(issue).toBeDefined();
+      expect(issue!.severity).toBe('warning');
+      expect(issue!.message).toContain('60%');
+    });
+
+    it('should not flag when 70%+ of events referenced', () => {
+      // 7 out of 10 = 70% → ok
+      const report = buildFullReport({ events: 7 });
+      const result = validateReport(report, 10);
+
+      expect(result.eventCoverage).toBe(70);
+      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
     });
 
     it('should count unique event references only', () => {
@@ -251,7 +273,9 @@ ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 10);
 
       expect(result.eventCoverage).toBe(0);
-      expect(result.issues.some((i) => i.type === 'low_event_coverage')).toBe(true);
+      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
+      expect(issue).toBeDefined();
+      expect(issue!.severity).toBe('error');
     });
   });
 
@@ -470,6 +494,20 @@ Breve. 01/01/1900.`;
       expect(types).toContain('missing_section');
       expect(types).toContain('sentinel_date_leak');
       expect(types).toContain('low_event_coverage');
+    });
+  });
+
+  describe('truncated_response type', () => {
+    it('should accept truncated_response as a valid ReportIssue type', () => {
+      // truncated_response is added externally by synthesis-service when finishReason='length'
+      // This test validates the type is part of the ReportIssue union
+      const issue: ReportIssue = {
+        type: 'truncated_response',
+        severity: 'error',
+        message: 'LLM response was truncated',
+      };
+      expect(issue.type).toBe('truncated_response');
+      expect(issue.severity).toBe('error');
     });
   });
 

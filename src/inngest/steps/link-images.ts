@@ -106,16 +106,33 @@ export async function analyzeDiagnosticImagesStep(
   if (!docsForImages || docsForImages.length === 0) return [];
 
   const docIds = docsForImages.map((d) => d.id);
+
+  // Count total pages with images before limiting
+  const { count: totalImagesCount } = await supabase
+    .from('pages')
+    .select('id', { count: 'exact', head: true })
+    .in('document_id', docIds)
+    .not('image_path', 'is', null);
+
+  const MAX_DIAGNOSTIC_IMAGES = 3;
   const { data: pagesWithImages } = await supabase
     .from('pages')
     .select('page_number, image_path, document_id')
     .in('document_id', docIds)
     .not('image_path', 'is', null)
-    .limit(3); // Max 3 images to stay within Vercel timeout
+    .limit(MAX_DIAGNOSTIC_IMAGES);
 
   if (!pagesWithImages || pagesWithImages.length === 0) {
     logger.info('pipeline', ' Step 4.6: No images to analyze');
     return [];
+  }
+
+  const skippedCount = (totalImagesCount ?? 0) - pagesWithImages.length;
+  if (skippedCount > 0) {
+    logger.warn('pipeline',
+      ` Step 4.6: ${skippedCount} diagnostic images skipped (limit: ${MAX_DIAGNOSTIC_IMAGES}, total: ${totalImagesCount}). ` +
+      `Consider increasing MAX_DIAGNOSTIC_IMAGES for comprehensive analysis.`,
+    );
   }
 
   // Download images in parallel

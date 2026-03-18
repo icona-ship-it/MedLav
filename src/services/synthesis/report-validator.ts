@@ -15,7 +15,8 @@ export interface ReportIssue {
     | 'numerical_mismatch'
     | 'invalid_event_ref'
     | 'duplicate_content'
-    | 'unverified_citation';
+    | 'unverified_citation'
+    | 'truncated_response';
   severity: 'error' | 'warning';
   message: string;
 }
@@ -113,13 +114,19 @@ export function validateReport(
     }
   }
 
-  // 5. Event coverage
+  // 5. Event coverage: <50% → error, 50-69% → warning, ≥70% → ok
   const eventCoverage = computeEventCoverage(synthesis, eventCount);
   if (eventCount > 0 && eventCoverage < 50) {
     issues.push({
       type: 'low_event_coverage',
+      severity: 'error',
+      message: `Only ${Math.round(eventCoverage)}% of events referenced (${countReferencedEvents(synthesis)}/${eventCount}). Minimum 50% required.`,
+    });
+  } else if (eventCount > 0 && eventCoverage < 70) {
+    issues.push({
+      type: 'low_event_coverage',
       severity: 'warning',
-      message: `Only ${Math.round(eventCoverage)}% of events referenced (${countReferencedEvents(synthesis)}/${eventCount})`,
+      message: `Only ${Math.round(eventCoverage)}% of events referenced (${countReferencedEvents(synthesis)}/${eventCount}). Target: ≥70%.`,
     });
   }
 

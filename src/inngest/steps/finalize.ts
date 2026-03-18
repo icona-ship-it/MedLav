@@ -37,15 +37,17 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
 
   logger.info('pipeline', ` Step 8: Finalizing`);
 
-  // Mark all processed documents as completed
-  for (const docResult of extractionResults) {
+  // Mark all processed documents as completed (batched for scalability)
+  const docIds = extractionResults.map((r) => r.documentId);
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < docIds.length; i += BATCH_SIZE) {
     await supabase
       .from('documents')
       .update({
         processing_status: 'completato',
         updated_at: new Date().toISOString(),
       })
-      .eq('id', docResult.documentId);
+      .in('id', docIds.slice(i, i + BATCH_SIZE));
   }
 
   // Update case status and processing stage
