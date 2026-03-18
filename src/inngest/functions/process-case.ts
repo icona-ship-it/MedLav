@@ -39,7 +39,7 @@ import type { OcrResult, ExtractionResult } from '../steps/types';
  */
 export const processCaseDocuments = inngest.createFunction(
   {
-    id: 'process-case-documents',
+    id: 'process-case-documents-v2',
     retries: 1,
     concurrency: [
       { limit: 25 },
