@@ -2,7 +2,7 @@ import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
 
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
-import { ocrDocumentBatch, OCR_BATCH_SIZE } from '../steps/ocr-document';
+import { ocrSingleDocument } from '../steps/ocr-document';
 import { chunkArray } from '@/lib/array-utils';
 import { classifyDocumentsStep, applyClassifications } from '../steps/classify-documents';
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
@@ -105,16 +105,13 @@ export const processCaseDocuments = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // Step 2: OCR all documents in batched parallel steps
-    // Each batch processes OCR_BATCH_SIZE docs sequentially within one Inngest step,
-    // reducing total step count from N to N/OCR_BATCH_SIZE.
-    const ocrBatches = chunkArray(documents, OCR_BATCH_SIZE);
-    const ocrBatchResults = await Promise.all(
-      ocrBatches.map((batch, idx) =>
-        step.run(`ocr-batch-${idx}`, () => ocrDocumentBatch(batch)),
+    // Step 2: OCR each document as an independent Inngest step (parallel)
+    // Each doc gets its own step = independent retry, timeout, and progress tracking.
+    const ocrResults: OcrResult[] = (await Promise.all(
+      documents.map((doc) =>
+        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
       ),
-    );
-    const ocrResults: OcrResult[] = ocrBatchResults.flat();
+    )).filter((r): r is OcrResult => r !== null);
 
     if (ocrResults.length === 0) {
       throw new Error('All documents failed OCR processing');
@@ -165,32 +162,34 @@ export const processCaseDocuments = inngest.createFunction(
     }
 
     // Resume active processing after classification review
-    // Guard: only update if still in revisione_classificazione (user may have cancelled)
-    const postClassificationCount = await step.run('mark-elaborazione-post-classification', async () => {
+    // Guard: check if user cancelled (stage would be 'idle'). If not cancelled, proceed.
+    const wasCancelledPostClassification = await step.run('mark-elaborazione-post-classification', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-      await supabase
-        .from('cases')
-        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
-        .eq('id', caseId)
-        .eq('processing_stage', 'revisione_classificazione');
 
-      // Verify update worked — SELECT is always reliable
+      // Read current stage FIRST — SELECT is always reliable
       const { data: caseCheck } = await supabase
         .from('cases')
         .select('processing_stage')
         .eq('id', caseId)
         .single();
 
-      const wasUpdated = caseCheck?.processing_stage === 'elaborazione';
-      if (!wasUpdated) {
-        logger.info('pipeline', `Case ${caseId} stage is '${caseCheck?.processing_stage}', not 'elaborazione' — user likely cancelled`);
+      const currentStage = caseCheck?.processing_stage as string | undefined;
+      if (currentStage === 'idle') {
+        logger.info('pipeline', `Case ${caseId} stage is 'idle' — user cancelled, stopping pipeline`);
+        return true;
       }
-      return wasUpdated ? 1 : 0;
+
+      // Not cancelled — update stage unconditionally
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+      logger.info('pipeline', `Case ${caseId} resumed after classification review (was '${currentStage}')`);
+      return false;
     });
 
-    if (postClassificationCount === 0) {
-      logger.info('pipeline', `Pipeline stopping: case ${caseId} was cancelled during classification review`);
+    if (wasCancelledPostClassification) {
       return { success: false, caseId, reason: 'cancelled_during_classification_review' };
     }
 
@@ -367,32 +366,32 @@ export const processCaseDocuments = inngest.createFunction(
     }
 
     // Mark case as generating report
-    // Guard: only update if not cancelled (stage could be 'idle' if user cancelled)
-    const generazioneCount = await step.run('mark-generazione-report', async () => {
+    // Guard: check if user cancelled (stage would be 'idle'). If not cancelled, proceed.
+    const wasCancelledPreReport = await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-      await supabase
-        .from('cases')
-        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
-        .eq('id', caseId)
-        .not('processing_stage', 'eq', 'idle');
 
-      // Verify update worked — SELECT is always reliable
       const { data: caseCheck } = await supabase
         .from('cases')
         .select('processing_stage')
         .eq('id', caseId)
         .single();
 
-      const wasUpdated = caseCheck?.processing_stage === 'generazione_report';
-      if (!wasUpdated) {
-        logger.info('pipeline', `Case ${caseId} stage is '${caseCheck?.processing_stage}', not 'generazione_report' — user likely cancelled`);
+      const currentStage = caseCheck?.processing_stage as string | undefined;
+      if (currentStage === 'idle') {
+        logger.info('pipeline', `Case ${caseId} stage is 'idle' — user cancelled, skipping report generation`);
+        return true;
       }
-      return wasUpdated ? 1 : 0;
+
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+      logger.info('pipeline', `Case ${caseId} marked as generazione_report (was '${currentStage}')`);
+      return false;
     });
 
-    if (generazioneCount === 0) {
-      logger.info('pipeline', `Pipeline stopping: case ${caseId} was cancelled before report generation`);
+    if (wasCancelledPreReport) {
       return { success: false, caseId, reason: 'cancelled_before_report_generation' };
     }
 
