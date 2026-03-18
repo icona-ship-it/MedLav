@@ -94,7 +94,7 @@ export const processCaseDocuments = inngest.createFunction(
         .from('cases')
         .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
         .eq('id', caseId);
-      logger.info('pipeline', `Step 0: Marked case ${caseId} as elaborazione`);
+      logger.info('pipeline', `Step 0: Marked case ${caseId} as elaborazione [v2-single-ocr]`);
     });
 
     // Step 1: Fetch case metadata and documents list
