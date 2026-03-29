@@ -124,3 +124,28 @@
   - Hash completo — troppo lungo per display, 12 char sufficienti per unicità pratica
   - Salvataggio intero prompt — spreco di storage, il hash è sufficiente per identificazione
 - **Conseguenze**: Ogni report è tracciabile alla versione del prompt. Permette analisi di qualità per versione, rollback, e A/B testing futuro. Richiede migration DB per aggiungere colonna `generation_metadata`.
+
+---
+
+## ADR-012: Struttura report diversa per ruolo (CTU/CTP/Stragiudiziale)
+- **Data**: 2026-03-29
+- **Contesto**: Il report aveva struttura unica per tutti i ruoli (10 sezioni universali + specialty). Analisi di 4 benchmark reali del perito + questionario compilato ha rivelato: report 9x troppo lunghi, sezioni sbagliate, ridondanza estrema, sezioni specialistiche non volute dal perito.
+- **Decisione**: Tre strutture separate in `section-catalog.ts`: CTU (15 sezioni), CTP (14), Stragiudiziale (8). Sezioni placeholder per il perito (Verbale, Visita, Considerazioni ML, Bibliografia). Epicrisi sostituisce Riassunto. Rimosse sezioni specialistiche e Elementi di Rilievo. Rimossi [Ev.N] — citazioni per documento/autore/data.
+- **Alternative considerate**: Template singolo con flag per ruolo — troppo complesso, sezioni fondamentalmente diverse tra CTU e stragiudiziale.
+- **Conseguenze**: Token budget ridotto del 62% (~120K → ~45K). Target report 5-8K parole. Tempo generazione stimato 8-12 min (da 25-40).
+
+---
+
+## ADR-013: Data integrity safeguards nella pipeline
+- **Data**: 2026-03-29
+- **Contesto**: Audit ha rivelato 3 rischi critici: diagnosi discordanti auto-risolte silenziosamente, nomi medici hallucinated dal LLM accettati senza validazione, date inferite con confidence alta.
+- **Decisione**: (1) Diagnosi discordanti: mai auto-risolte, confidence cap 30%, requiresVerification=true. (2) Nomi medici/strutture: validati vs testo OCR — nullificati se non trovati. (3) Date inferite: confidence cap 25%, nota esplicita. (4) Report troncati: throw error invece di salvare.
+- **Conseguenze**: Pipeline piu' conservativa — preferisce segnalare incertezza al perito piuttosto che produrre dati potenzialmente errati. Allineato con requisiti medico-legali.
+
+---
+
+## ADR-014: Classificazione documenti parallela
+- **Data**: 2026-03-30
+- **Contesto**: La classificazione era sequenziale (for loop), ogni documento ~5s. Con 10 documenti: 50s di attesa.
+- **Decisione**: Classificazione parallelizzata con Promise.allSettled — uno step Inngest per documento.
+- **Conseguenze**: 10 documenti passano da ~50s a ~5s. Fault-tolerant: se un documento fallisce, gli altri procedono.

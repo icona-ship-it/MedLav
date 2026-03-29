@@ -66,25 +66,38 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 
 1. **fetch-case-metadata** → carica caso + documenti da DB
 2. **ocr-doc-{id}** → OCR tutti i documenti in parallelo (Mistral OCR, Promise.all) + salva immagini estratte su Supabase Storage (`ocr-images/{docId}/p{N}-f{M}.png`) + aggiorna `pages.image_path`
-3. **classify-documents** → auto-classificazione TUTTI i documenti per metadata, cambia tipo solo per "altro" (Mistral Large, step 2.5)
-4. **plan-chunks + extract-{id}-p{start}-{end}** → chunking + estrazione eventi per chunk (parallelo, streaming)
+3. **classify-doc-{id}** → auto-classificazione documenti in PARALLELO (un step per doc), cambia tipo solo per "altro" (Mistral Large, step 2.5)
+4. **plan-chunks + extract-batch-{idx}** → chunking (20 pagine/chunk, 30K chars max) + estrazione eventi per batch (parallelo, 3 chunk/batch)
 5. **consolidate-events** → ordina cronologicamente, dedup cross-doc, rinumera
 6. **link-images-to-events** → collega immagini a eventi via `sourcePages` ↔ `pages.image_path`, popola `event_images`
 7. **analyze-diagnostic-images** → analisi immagini diagnostiche con Pixtral (step 4.6), restituisce `storagePath` per embedding nel report
 8. **detect-anomalies** → 7 tipi anomalie (algoritmico, no LLM)
 9. **detect-missing-documents** → documenti mancanti attesi per tipo caso
 10. **calculate-periods** → calcoli medico-legali (ITT, ITP, giorni ricovero)
-11. **generate-synthesis** → report con ruolo adattivo + RAG linee guida + calcoli + immagini `![caption](ocr-image:path)` (split mode per casi grandi >40K chars) + validazione qualità post-generazione
+11. **generate-report** → report sezionale per ruolo (CTU 15 sez, CTP 14, Stragiudiziale 8) con placeholder per sezioni del perito. Epicrisi al posto di Riassunto. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).
 12. **finalize** → marca completato, audit log
 13. **send-notification** → email notifica completamento (Resend)
 
-### Sintesi adattiva per ruolo
+### Struttura report per ruolo (section-catalog.ts)
 
-| Ruolo | Tono | Anomalie | Conclusioni |
-|-------|------|----------|-------------|
-| CTU | Neutrale, bilanciate entrambe le parti | Criticità + giustificazioni | "A parere di questo CTU..." |
-| CTP | Assertivo pro-paziente | Enfatizzate, no giustificazioni controparte | "Risulta evidente che..." |
-| Stragiudiziale | Pragmatico, realistico | Valutate con solidità probatoria | "Il caso presenta fondatezza per..." |
+| Ruolo | Sezioni | LLM | Placeholder | Note |
+|-------|---------|-----|-------------|------|
+| CTU | 15 | 7-10 (condizionali) | 5 (Verbale, Visita, Considerazioni ML, Bibliografia, Osservazioni Bozza) | Include Quesiti + Risposte ai Quesiti |
+| CTP | 14 | 6-9 | 4 (come CTU senza Osservazioni Bozza) | Enfasi profili critici |
+| Stragiudiziale | 8 | 6 | 1 (Visita Clinica) | Piu' breve: Anamnesi, Fatto, Doc Sanitaria, Epicrisi, Conclusioni |
+
+**Epicrisi** = sintesi fatti + dati ITT/ITP (NO giudizi — perito li aggiunge). Sostituisce "Riassunto".
+**Placeholder sections** = testo statico con istruzioni, perito compila nell'editor. NO chiamata LLM.
+**NO [Ev.N]** = citazioni per tipo documento, autore e data.
+**Token budget**: 16K critico (doc sanitaria), 8K large, 4K medium, 2K small.
+
+### Data integrity safeguards (extraction + consolidation)
+
+- **Diagnosi discordanti**: mai auto-risolte, escalate al perito (confidence cap 30%)
+- **Nomi medici/strutture**: validati vs testo OCR originale (hallucination prevention)
+- **Date inferite**: confidence cap 25%, nota "[AUTO] INFERITA"
+- **Date formato**: normalizzazione DD.MM.YYYY → YYYY-MM-DD
+- **Report troncati**: bloccati dal salvataggio (throw error → Inngest retry)
 
 ## Principi
 
@@ -103,7 +116,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 ## Documentazione
 
 - `docs/REQUIREMENTS.md` — Requisiti funzionali completi
-- `docs/ARCHITECTURE-DECISIONS.md` — ADR (11 decisioni)
+- `docs/ARCHITECTURE-DECISIONS.md` — ADR
 - `docs/VISION.md` — Visione prodotto e obiettivi
 - `docs/CONSTRAINTS.md` — Vincoli tecnici e GDPR
 - `docs/DPIA.md` — Data Protection Impact Assessment (GDPR Art. 9)
