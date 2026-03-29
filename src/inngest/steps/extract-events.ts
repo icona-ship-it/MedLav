@@ -4,7 +4,7 @@ import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
-export const PAGES_PER_CHUNK = 20;
+export const PAGES_PER_CHUNK = 15;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
  * Each job calls Mistral LLM (30s-2min). Keep at 3 to stay under Vercel 300s timeout
