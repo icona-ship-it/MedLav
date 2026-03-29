@@ -220,6 +220,8 @@ export function CaseDetailClient({
           documents={localDocuments}
           hasProcessingDocs={hasProcessingDocs}
           hasUploadedDocs={hasUploadedDocs}
+          processingStage={processingStage}
+          lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
         />
         </div>
       )}

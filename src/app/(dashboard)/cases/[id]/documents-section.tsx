@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { FileUpload } from '@/components/file-upload';
 import { deleteDocument, retryDocument } from '../../actions';
+import { toUserMessage } from '@/lib/user-error-messages';
 import { formatFileSize, getFileIcon } from '@/lib/format';
 import { documentTypeLabels } from '@/lib/constants';
 import type { Document } from './types';
@@ -198,7 +199,7 @@ export function DocumentsSection({
                           <Badge variant="secondary">Pronto</Badge>
                         )}
                         {doc.processing_status === 'errore' && doc.processing_error && (
-                          <p className="mt-1 text-xs text-destructive max-w-[200px]">{doc.processing_error}</p>
+                          <p className="mt-1 text-xs text-destructive max-w-[200px]">{toUserMessage(doc.processing_error)}</p>
                         )}
                         {doc.processing_status === 'errore' && (
                           <Button

@@ -17,6 +17,7 @@ import {
 import { ProcessingProgress } from '@/components/processing-progress';
 import { ClassificationReview } from './classification-review';
 import { csrfHeaders } from '@/lib/csrf-client';
+import { toUserMessage } from '@/lib/user-error-messages';
 import type { Document } from './types';
 
 // --- Types ---
@@ -26,6 +27,8 @@ interface ProcessingSectionProps {
   documents: Document[];
   hasProcessingDocs: boolean;
   hasUploadedDocs: boolean;
+  processingStage?: string;
+  lastError?: string;
 }
 
 // --- Pipeline steps preview ---
@@ -44,6 +47,8 @@ export function ProcessingSection({
   documents,
   hasProcessingDocs,
   hasUploadedDocs,
+  processingStage,
+  lastError,
 }: ProcessingSectionProps) {
   const router = useRouter();
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
@@ -298,25 +303,46 @@ export function ProcessingSection({
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Nessun documento caricato. Torna al passaggio 1 per caricare i documenti.
                 </p>
-              ) : failedDocs.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-                    <span className="text-destructive">{failedDocs.length} documenti non elaborati</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="ml-auto shrink-0"
-                      onClick={handleRetryFailed}
-                      disabled={isRetrying}
-                    >
-                      {isRetrying ? (
-                        <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
-                      ) : (
-                        <><RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti</>
-                      )}
-                    </Button>
-                  </div>
+              ) : failedDocs.length > 0 || processingStage === 'errore' ? (
+                <div className="space-y-3">
+                  {/* Pipeline-level error message */}
+                  {processingStage === 'errore' && (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
+                      <div className="flex items-start gap-2">
+                        <XCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-destructive">Elaborazione non riuscita</p>
+                          <p className="text-sm text-muted-foreground">
+                            {lastError ? toUserMessage(lastError) : 'Si è verificato un errore durante l\'elaborazione. Riprova.'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Se il problema persiste, prova a rimuovere eventuali documenti corrotti o protetti da password e riavvia l&apos;analisi.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failed documents detail */}
+                  {failedDocs.length > 0 && (
+                    <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                      <span className="text-destructive">{failedDocs.length} {failedDocs.length === 1 ? 'documento non elaborato' : 'documenti non elaborati'}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-auto shrink-0"
+                        onClick={handleRetryFailed}
+                        disabled={isRetrying}
+                      >
+                        {isRetrying ? (
+                          <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
+                        ) : (
+                          <><RotateCcw className="mr-1 h-3 w-3" />Riprova</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">

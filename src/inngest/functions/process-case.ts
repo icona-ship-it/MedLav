@@ -53,11 +53,27 @@ async function handlePipelineFailure(event: { data: unknown }) {
       return;
     }
 
+    // Extract error message for user display
+    const errorObj = failureData.error as { message?: string; name?: string } | undefined;
+    const errorMessage = errorObj?.message ?? 'Errore sconosciuto durante l\'elaborazione';
+
+    // Save error in perizia_metadata.lastError so UI can show it
+    const { data: caseRow } = await supabase
+      .from('cases')
+      .select('perizia_metadata')
+      .eq('id', caseId)
+      .single();
+    const existingMetadata = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+
     await supabase
       .from('cases')
-      .update({ processing_stage: 'errore', updated_at: new Date().toISOString() })
+      .update({
+        processing_stage: 'errore',
+        perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', caseId);
-    logger.error('pipeline', `Pipeline failed permanently for case ${caseId}`);
+    logger.error('pipeline', `Pipeline failed permanently for case ${caseId}: ${errorMessage}`);
   } catch (err) {
     logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {
       error: err instanceof Error ? err.message : 'unknown',

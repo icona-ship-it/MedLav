@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Check, Clock, Loader2, AlertTriangle, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { toUserMessage } from '@/lib/user-error-messages';
 
 // --- Types ---
 
@@ -244,12 +245,12 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
                 {isDocHardError ? (
                   <Badge variant="destructive" className="flex items-center gap-1">
                     <XCircle className="h-3 w-3" />
-                    {doc.processing_error ?? 'Errore'}
+                    {doc.processing_error ? toUserMessage(doc.processing_error) : 'Errore'}
                   </Badge>
                 ) : isDocWarning ? (
                   <Badge variant="warning" className="flex items-center gap-1 max-w-[500px]">
                     <AlertTriangle className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{doc.processing_error}</span>
+                    <span className="truncate">{doc.processing_error ? toUserMessage(doc.processing_error) : ''}</span>
                   </Badge>
                 ) : isComplete ? (
                   <Badge variant="success" className="flex items-center gap-1">
