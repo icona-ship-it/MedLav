@@ -39,6 +39,10 @@ export interface SectionSpec {
   condition?: SectionCondition;
   /** Section-specific prompt instructions */
   promptDirective: string;
+  /** If true, emit placeholderText instead of calling LLM */
+  isPlaceholder?: boolean;
+  /** Static text to emit for placeholder sections (no LLM call) */
+  placeholderText?: string;
 }
 
 /**
@@ -49,7 +53,8 @@ export type SectionCondition =
   | 'has-non-medical-docs'
   | 'has-legal-docs'
   | 'has-expense-events'
-  | 'has-perizie-docs';
+  | 'has-perizie-docs'
+  | 'has-quesiti';
 
 /**
  * Output of generating a single section.

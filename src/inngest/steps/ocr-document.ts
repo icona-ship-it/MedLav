@@ -29,6 +29,13 @@ async function saveOcrImagesToStorage(
     }),
   );
 
+  // Log failed uploads for observability
+  for (const result of uploadResults) {
+    if (result.status === 'rejected') {
+      logger.warn('pipeline', `Image upload failed for doc ${documentId}: ${result.reason instanceof Error ? result.reason.message : 'unknown'}`);
+    }
+  }
+
   // Group successful uploads by page
   const byPage = new Map<number, string[]>();
   for (const result of uploadResults) {

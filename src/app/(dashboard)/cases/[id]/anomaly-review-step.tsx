@@ -106,7 +106,7 @@ export function AnomalyReviewStep({
     } finally {
       setIsConfirming(false);
     }
-  }, [caseId, router]);
+  }, [caseId, router, onGenerateStarted]);
 
   // Zero anomalies state
   if (hasNoIssues) {

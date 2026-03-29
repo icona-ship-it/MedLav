@@ -5,6 +5,7 @@ import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateCsvExport } from '@/services/export/csv-export';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   _request: NextRequest,
@@ -31,26 +32,38 @@ export async function GET(
   }
 
   const { id: caseId } = await params;
-  const data = await loadCaseDataForExport(caseId);
 
-  if (!data) {
-    return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
+  try {
+    const data = await loadCaseDataForExport(caseId);
+
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
+    }
+
+    logAccess({
+      userId: user.id,
+      action: 'report.exported',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: { format: 'csv' },
+    });
+
+    const csv = generateCsvExport(data.events);
+
+    return new NextResponse(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="eventi-${data.caseData.code}.csv"`,
+      },
+    });
+  } catch (error) {
+    logger.error('export', 'CSV export failed', {
+      caseId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return NextResponse.json(
+      { success: false, error: 'Errore durante l\'esportazione. Riprova.' },
+      { status: 500 },
+    );
   }
-
-  logAccess({
-    userId: user.id,
-    action: 'report.exported',
-    entityType: 'case',
-    entityId: caseId,
-    metadata: { format: 'csv' },
-  });
-
-  const csv = generateCsvExport(data.events);
-
-  return new NextResponse(csv, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="eventi-${data.caseData.code}.csv"`,
-    },
-  });
 }

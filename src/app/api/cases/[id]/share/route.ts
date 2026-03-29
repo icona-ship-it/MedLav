@@ -4,6 +4,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const createShareSchema = z.object({
   label: z.string().max(100).optional(),
@@ -27,6 +28,11 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    const rateCheck = await checkRateLimit({ key: `share:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
     }
 
     // Verify case ownership
@@ -95,6 +101,11 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
+    const rateCheck = await checkRateLimit({ key: `share:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
+    }
+
     const { data: shares } = await supabase
       .from('case_shares')
       .select('id, token, label, expires_at, view_count, created_at')
@@ -125,6 +136,11 @@ export async function DELETE(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    const rateCheck = await checkRateLimit({ key: `share:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
     }
 
     const token = request.nextUrl.searchParams.get('token');

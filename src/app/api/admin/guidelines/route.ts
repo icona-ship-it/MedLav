@@ -7,6 +7,7 @@ import { ingestGuideline, deleteGuideline } from '@/services/rag/ingestion-servi
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
+import { isAdminUser } from '@/lib/admin';
 
 export const maxDuration = 120; // ingestion can take time
 
@@ -30,6 +31,15 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  if (!isAdminUser(user.email ?? undefined)) {
+    return NextResponse.json({ success: false, error: 'Accesso negato' }, { status: 403 });
+  }
+
+  const rateCheck = await checkRateLimit({ key: `guidelines:${user.id}`, ...RATE_LIMITS.API });
+  if (!rateCheck.success) {
+    return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
   }
 
   const admin = createAdminClient();
@@ -58,6 +68,10 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  if (!isAdminUser(user.email ?? undefined)) {
+    return NextResponse.json({ success: false, error: 'Accesso negato' }, { status: 403 });
   }
 
   // Feature gate: guideline ingestion requires Pro
@@ -120,6 +134,10 @@ export async function DELETE(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  if (!isAdminUser(user.email ?? undefined)) {
+    return NextResponse.json({ success: false, error: 'Accesso negato' }, { status: 403 });
   }
 
   const body = await request.json() as unknown;

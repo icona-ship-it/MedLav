@@ -7,6 +7,7 @@ import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
+import { logger } from '@/lib/logger';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -34,78 +35,90 @@ export async function GET(
   }
 
   const { id: caseId } = await params;
-  const data = await loadCaseDataForExport(caseId);
 
-  if (!data) {
-    return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
-  }
+  try {
+    const data = await loadCaseDataForExport(caseId);
 
-  logAccess({
-    userId: user.id,
-    action: 'report.exported',
-    entityType: 'case',
-    entityId: caseId,
-    metadata: { format: 'docx' },
-  });
-
-  const pm = data.periziaMetadata as Record<string, unknown> | null;
-  const useProfessional = pm && (pm.tribunale || pm.ctuName);
-  const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
-
-  // Resolve ocr-image: placeholders to base64 data URIs
-  let synthesis = data.report?.synthesis as string | null ?? null;
-  if (synthesis) {
-    const images = await resolveOcrImages(synthesis);
-    if (images.size > 0) {
-      synthesis = replaceWithDataUris(synthesis, images);
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
-  }
 
-  // If anonymizing, anonymize the synthesis text before generating DOCX
-  if (shouldAnonymize && synthesis) {
-    const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
-    const result = anonymizeText({ text: synthesis, periziaMetadata });
-    synthesis = result.anonymizedText;
-  }
-
-  const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
-
-  const buffer = useProfessional
-    ? await generateProfessionalDocxReport({
-      caseCode: data.caseData.code as string,
-      caseType: data.caseData.case_type as string,
-      caseRole: data.caseData.case_role as string,
-      patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
-      synthesis,
-      events: data.events,
-      anomalies: data.anomalies,
-      missingDocs: data.missingDocs,
-      calculations: data.calculations,
-      periziaMetadata: pm,
-      documentsWithPages: data.documentsWithPages,
-      reportStatus,
-    })
-    : await generateDocxReport({
-      caseCode: data.caseData.code as string,
-      caseType: data.caseData.case_type as string,
-      caseRole: data.caseData.case_role as string,
-      patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
-      synthesis,
-      events: data.events,
-      anomalies: data.anomalies,
-      missingDocs: data.missingDocs,
-      calculations: data.calculations,
-      periziaMetadata: data.periziaMetadata,
-      reportStatus,
+    logAccess({
+      userId: user.id,
+      action: 'report.exported',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: { format: 'docx' },
     });
 
-  const suffix = shouldAnonymize ? '-anonimizzato' : '';
-  const exportReportStatus = (data.report?.report_status as string | undefined) ?? 'bozza';
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="report-${data.caseData.code}${suffix}.docx"`,
-      'X-Report-Status': exportReportStatus,
-    },
-  });
+    const pm = data.periziaMetadata as Record<string, unknown> | null;
+    const useProfessional = pm && (pm.tribunale || pm.ctuName);
+    const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
+
+    // Resolve ocr-image: placeholders to base64 data URIs
+    let synthesis = data.report?.synthesis as string | null ?? null;
+    if (synthesis) {
+      const images = await resolveOcrImages(synthesis);
+      if (images.size > 0) {
+        synthesis = replaceWithDataUris(synthesis, images);
+      }
+    }
+
+    // If anonymizing, anonymize the synthesis text before generating DOCX
+    if (shouldAnonymize && synthesis) {
+      const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const result = anonymizeText({ text: synthesis, periziaMetadata });
+      synthesis = result.anonymizedText;
+    }
+
+    const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
+
+    const buffer = useProfessional
+      ? await generateProfessionalDocxReport({
+        caseCode: data.caseData.code as string,
+        caseType: data.caseData.case_type as string,
+        caseRole: data.caseData.case_role as string,
+        patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+        synthesis,
+        events: data.events,
+        anomalies: data.anomalies,
+        missingDocs: data.missingDocs,
+        calculations: data.calculations,
+        periziaMetadata: pm,
+        documentsWithPages: data.documentsWithPages,
+        reportStatus,
+      })
+      : await generateDocxReport({
+        caseCode: data.caseData.code as string,
+        caseType: data.caseData.case_type as string,
+        caseRole: data.caseData.case_role as string,
+        patientInitials: shouldAnonymize ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+        synthesis,
+        events: data.events,
+        anomalies: data.anomalies,
+        missingDocs: data.missingDocs,
+        calculations: data.calculations,
+        periziaMetadata: data.periziaMetadata,
+        reportStatus,
+      });
+
+    const suffix = shouldAnonymize ? '-anonimizzato' : '';
+    const exportReportStatus = (data.report?.report_status as string | undefined) ?? 'bozza';
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="report-${data.caseData.code}${suffix}.docx"`,
+        'X-Report-Status': exportReportStatus,
+      },
+    });
+  } catch (error) {
+    logger.error('export', 'DOCX export failed', {
+      caseId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return NextResponse.json(
+      { success: false, error: 'Errore durante l\'esportazione. Riprova.' },
+      { status: 500 },
+    );
+  }
 }

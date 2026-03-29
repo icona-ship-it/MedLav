@@ -176,7 +176,8 @@ export async function extractEventsFromChunk(params: {
   logger.info('extraction', ` Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
 
   const result = parseExtractionResponse(content, chunkLabel);
-  const inferredEvents = inferMissingDates(result.events);
+  const validatedEvents = validateExtractedNamesAgainstOcr(result.events, chunkText);
+  const inferredEvents = inferMissingDates(validatedEvents);
   return { ...result, events: inferredEvents, usage };
 }
 
@@ -379,11 +380,12 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
     if (!donor) return event;
 
     inferredCount++;
-    const note = `[AUTO] Data ereditata da evento nella stessa pagina: "${donor.title}"`;
+    const note = `[AUTO] Data INFERITA (non presente nel documento originale) — ereditata da evento nella stessa pagina: "${donor.title}". Verificare sul documento originale.`;
     return {
       ...event,
       eventDate: donor.eventDate,
       datePrecision: 'sconosciuta' as const,
+      confidence: Math.min(event.confidence, 25),
       requiresVerification: true,
       reliabilityNotes: event.reliabilityNotes
         ? `${event.reliabilityNotes} | ${note}`
@@ -513,10 +515,12 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     // Handle missing/invalid dates — never invent dates
     // Use '1900-01-01' sentinel for missing dates (DB column is NOT NULL)
     const rawDate = e.eventDate ?? e.event_date;
-    const dateStr = rawDate != null ? String(rawDate) : '';
+    const dateStr = rawDate != null ? String(rawDate).trim() : '';
     const isDateMissing = !dateStr || dateStr === '1900-01-01' || dateStr === 'null' || dateStr === 'undefined';
-    const eventDate = isDateMissing ? '1900-01-01' : dateStr;
-    const datePrecision = isDateMissing
+    const normalizedDate = isDateMissing ? '1900-01-01' : normalizeDateFormat(dateStr);
+    const eventDate = normalizedDate ?? '1900-01-01';
+    const isDateInvalid = !isDateMissing && normalizedDate === null;
+    const datePrecision = (isDateMissing || isDateInvalid)
       ? 'sconosciuta'
       : String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');
 
@@ -542,10 +546,12 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
       doctor,
       facility,
       confidence: typeof e.confidence === 'number' ? Math.min(100, Math.max(0, e.confidence)) : 70,
-      requiresVerification: isDateMissing ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
+      requiresVerification: (isDateMissing || isDateInvalid) ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
       reliabilityNotes: isDateMissing
         ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Data non presente nel documento originale` : 'Data non presente nel documento originale')
-        : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
+        : isDateInvalid
+          ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Formato data non valido nel documento: "${dateStr}"` : `Formato data non valido nel documento: "${dateStr}"`)
+          : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
       sourceText: String(e.sourceText ?? e.source_text ?? ''),
       sourcePages: Array.isArray(e.sourcePages ?? e.source_pages) ? ((e.sourcePages ?? e.source_pages) as number[]) : [1],
     });
@@ -558,6 +564,120 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
   logger.info('extraction', ` Parsed ${validEvents.length}/${rawEvents.length} events`);
   return { events: validEvents, abbreviations };
+}
+
+// ── Date format normalization ──
+
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const EURO_DATE_REGEX = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/;
+
+/**
+ * Normalize a date string to ISO YYYY-MM-DD format.
+ * Accepts: YYYY-MM-DD (pass-through), DD.MM.YYYY, DD/MM/YYYY.
+ * Returns null if format is unrecognizable — caller should use sentinel.
+ */
+function normalizeDateFormat(dateStr: string): string | null {
+  // Already ISO format
+  if (ISO_DATE_REGEX.test(dateStr)) {
+    return dateStr;
+  }
+
+  // European format: DD.MM.YYYY or DD/MM/YYYY
+  const euroMatch = dateStr.match(EURO_DATE_REGEX);
+  if (euroMatch) {
+    const day = euroMatch[1].padStart(2, '0');
+    const month = euroMatch[2].padStart(2, '0');
+    const year = euroMatch[3];
+    const monthNum = parseInt(month, 10);
+    const dayNum = parseInt(day, 10);
+    // Basic sanity check
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // Unrecognizable format
+  logger.warn('extraction', `Unrecognizable date format: "${dateStr}" — using sentinel`);
+  return null;
+}
+
+// ── Post-extraction validation: verify names exist in OCR text ──
+
+/**
+ * Validate that extracted doctor/facility names actually appear in the source OCR text.
+ * Prevents LLM hallucination of names that don't exist in the original document.
+ * Names not found in OCR are nullified and confidence is lowered.
+ */
+function validateExtractedNamesAgainstOcr(
+  events: ExtractedEvent[],
+  ocrText: string,
+): ExtractedEvent[] {
+  if (!ocrText || ocrText.length === 0) return events;
+
+  const ocrLower = ocrText.toLowerCase();
+  let nullifiedCount = 0;
+
+  const validated = events.map((event) => {
+    let modified = false;
+    let newDoctor = event.doctor;
+    let newFacility = event.facility;
+    let newConfidence = event.confidence;
+    let newRequiresVerification = event.requiresVerification;
+    let notes = event.reliabilityNotes;
+
+    // Validate doctor name: must appear in OCR text (case-insensitive)
+    if (newDoctor && newDoctor.length >= 3) {
+      const doctorLower = newDoctor.toLowerCase();
+      // Check if at least the surname (last word, >= 3 chars) appears in OCR
+      const parts = doctorLower.split(/\s+/).filter((p) => p.length >= 3);
+      const surnameFound = parts.some((part) => ocrLower.includes(part));
+      if (!surnameFound) {
+        newDoctor = null;
+        newConfidence = Math.min(newConfidence, 50);
+        newRequiresVerification = true;
+        notes = notes
+          ? `${notes} | Nome medico non riscontrato nel testo OCR originale — rimosso per sicurezza`
+          : 'Nome medico non riscontrato nel testo OCR originale — rimosso per sicurezza';
+        modified = true;
+      }
+    }
+
+    // Validate facility name: must appear in OCR text (case-insensitive)
+    if (newFacility && newFacility.length >= 4) {
+      const facilityLower = newFacility.toLowerCase();
+      // Check if the main keyword (>= 4 chars) appears in OCR
+      const parts = facilityLower.split(/\s+/).filter((p) => p.length >= 4);
+      const facilityFound = parts.some((part) => ocrLower.includes(part));
+      if (!facilityFound) {
+        newFacility = null;
+        newConfidence = Math.min(newConfidence, 50);
+        newRequiresVerification = true;
+        notes = notes
+          ? `${notes} | Nome struttura non riscontrato nel testo OCR originale — rimosso per sicurezza`
+          : 'Nome struttura non riscontrato nel testo OCR originale — rimosso per sicurezza';
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      nullifiedCount++;
+      return {
+        ...event,
+        doctor: newDoctor,
+        facility: newFacility,
+        confidence: newConfidence,
+        requiresVerification: newRequiresVerification,
+        reliabilityNotes: notes,
+      };
+    }
+    return event;
+  });
+
+  if (nullifiedCount > 0) {
+    logger.warn('extraction', `Validated ${events.length} events against OCR: ${nullifiedCount} had names not found in source text (nullified for safety)`);
+  }
+
+  return validated;
 }
 
 // ── Sentinel value detection (prevent LLM from copying example placeholders) ──

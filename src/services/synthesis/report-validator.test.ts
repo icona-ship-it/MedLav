@@ -4,34 +4,23 @@ import type { ReportValidationContext, ReportIssue } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
   const eventCount = overrides?.events ?? 5;
-  const eventRefs = Array.from({ length: eventCount }, (_, i) =>
-    `In data 15.0${i + 1}.2024 il paziente veniva sottoposto a visita presso la struttura ospedaliera ove veniva riscontrata una condizione clinica meritevole di approfondimento diagnostico e terapeutico come da documentazione in atti [Ev.${i + 1}].`,
+  const eventLines = Array.from({ length: eventCount }, (_, i) =>
+    `In data 15.0${i + 1}.2024 il paziente veniva sottoposto a visita presso la struttura ospedaliera ove veniva riscontrata una condizione clinica meritevole di approfondimento diagnostico e terapeutico come da documentazione in atti.`,
   ).join('\n');
 
-  return `## Riassunto del caso
+  return `## Dati della Documentazione Sanitaria
+${eventLines}
+
+## Epicrisi
 Il paziente M.R. si presentava presso il Pronto Soccorso del Presidio Ospedaliero per dolore al ginocchio destro
 insorto a seguito di trauma contusivo. La documentazione analizzata comprende referti specialistici ortopedici,
 esami strumentali di imaging, cartella clinica del ricovero ordinario e lettere di dimissione ospedaliera.
-Si procede alla ricostruzione cronologica della vicenda clinica e alla valutazione medico-legale del caso
-con particolare attenzione ai profili di responsabilità professionale sanitaria e al nesso causale tra
-la condotta dei sanitari e il danno biologico permanente residuato al paziente.
-
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${eventRefs}
-
-## Elementi per la valutazione medico-legale
-Si rileva un ritardo diagnostico significativo nella gestione del paziente. La condotta clinica appare censurabile
-sotto il profilo della diligenza professionale per le ragioni ampiamente esposte nella documentazione sanitaria.
-In particolare si osserva che il paziente non veniva sottoposto tempestivamente agli accertamenti diagnostici
-indicati dalle linee guida di settore, con conseguente ritardo nella diagnosi e nel trattamento della patologia.
-Il nesso di causalità tra la condotta omissiva e il danno biologico permanente appare configurabile con
-ragionevole certezza medico-legale sulla base del criterio del più probabile che non.
+Si procede alla ricostruzione cronologica della vicenda clinica e alla valutazione medico-legale del caso.
 
 ## Conclusioni
-A parere di questo CTU, alla luce di quanto sopra esposto e dedotto, il nesso causale appare configurabile
-con ragionevole certezza medico-legale tra la condotta omissiva dei sanitari e il danno biologico permanente
-stimato nella misura del 15% secondo i criteri tabellari vigenti. I periodi di invalidità temporanea
-risultano congruenti con il decorso clinico documentato.`;
+Alla luce di quanto sopra esposto, dalla documentazione in atti risultano i seguenti elementi rilevanti.
+I periodi di invalidita temporanea risultano congruenti con il decorso clinico documentato.
+Il danno biologico permanente e stimato nella misura del 15% secondo i criteri tabellari vigenti.`;
 }
 
 describe('validateReport', () => {
@@ -75,7 +64,7 @@ describe('validateReport', () => {
 
   describe('too short', () => {
     it('should detect report with less than 200 words', () => {
-      const shortReport = '## Riassunto del caso\nBreve.\n## Cronologia medico-legale\nEvento.\n## Elementi di rilievo\nNulla.';
+      const shortReport = '## Documentazione Sanitaria\nBreve.\n## Epicrisi\nEvento.\n## Conclusioni\nNulla.';
       const result = validateReport(shortReport, 0);
 
       expect(result.valid).toBe(false);
@@ -91,11 +80,11 @@ describe('validateReport', () => {
   });
 
   describe('missing sections', () => {
-    it('should detect missing documentazione sanitaria/cronologia', () => {
-      const report = `## Riassunto del caso
+    it('should detect missing documentazione sanitaria', () => {
+      const report = `## Epicrisi
 ${Array(100).fill('parola').join(' ')}
 
-## Elementi per la valutazione
+## Conclusioni
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
@@ -104,68 +93,32 @@ ${Array(100).fill('parola').join(' ')}`;
       )).toBe(true);
     });
 
-    it('should detect missing riassunto', () => {
+    it('should detect missing epicrisi/conclusioni', () => {
+      const report = `## DATI DELLA DOCUMENTAZIONE SANITARIA
+${Array(100).fill('parola').join(' ')}`;
+      const result = validateReport(report, 0);
+
+      expect(result.issues.some((i) =>
+        i.type === 'missing_section' && i.message.includes('Epicrisi'),
+      )).toBe(true);
+    });
+
+    it('should accept "Conclusioni" as epicrisi variant', () => {
       const report = `## DATI DELLA DOCUMENTAZIONE SANITARIA
 ${Array(100).fill('parola').join(' ')}
 
-## Elementi per la valutazione
-${Array(100).fill('parola').join(' ')}`;
-      const result = validateReport(report, 0);
-
-      expect(result.issues.some((i) =>
-        i.type === 'missing_section' && i.message.includes('Riassunto'),
-      )).toBe(true);
-    });
-
-    it('should detect missing elementi di rilievo/valutazione', () => {
-      const report = `## Riassunto del caso
-${Array(100).fill('parola').join(' ')}
-
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${Array(100).fill('parola').join(' ')}`;
-      const result = validateReport(report, 0);
-
-      expect(result.issues.some((i) =>
-        i.type === 'missing_section' && i.message.includes('Elementi'),
-      )).toBe(true);
-    });
-
-    it('should accept alternative section names like "considerazioni medico"', () => {
-      const report = `## Riassunto del caso
-${Array(100).fill('parola').join(' ')}
-
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${Array(100).fill('parola').join(' ')}
-
-## Considerazioni medico-legali
+## Conclusioni
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
       expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
     });
 
-    it('should accept "valutazione di merito" as elementi variant', () => {
-      const report = `## Riassunto del caso
+    it('should accept "Sintesi Conclusiva" as epicrisi variant', () => {
+      const report = `## Documentazione Sanitaria
 ${Array(100).fill('parola').join(' ')}
 
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${Array(100).fill('parola').join(' ')}
-
-## Valutazione di merito
-${Array(100).fill('parola').join(' ')}`;
-      const result = validateReport(report, 0);
-
-      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
-    });
-
-    it('should accept "Elementi per la valutazione" as elementi variant', () => {
-      const report = `## Riassunto del caso
-${Array(100).fill('parola').join(' ')}
-
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${Array(100).fill('parola').join(' ')}
-
-## Elementi per la valutazione medico-legale
+## Sintesi Conclusiva
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 0);
 
@@ -206,76 +159,21 @@ ${Array(100).fill('parola').join(' ')}`;
   });
 
   describe('event coverage', () => {
-    it('should report 100% coverage when all events referenced', () => {
+    it('should always return 100% coverage (Ev.N references removed from report format)', () => {
       const report = buildFullReport({ events: 3 });
       const result = validateReport(report, 3);
-
       expect(result.eventCoverage).toBe(100);
       expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
     });
 
-    it('should error when less than 50% of events referenced', () => {
-      const report = buildFullReport({ events: 2 });
-      const result = validateReport(report, 10);
-
-      expect(result.eventCoverage).toBe(20);
-      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
-      expect(issue).toBeDefined();
-      expect(issue!.severity).toBe('error');
-      expect(issue!.message).toContain('20%');
-    });
-
-    it('should warn when 50-69% of events referenced', () => {
-      // 6 out of 10 = 60% → warning
-      const report = buildFullReport({ events: 6 });
-      const result = validateReport(report, 10);
-
-      expect(result.eventCoverage).toBe(60);
-      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
-      expect(issue).toBeDefined();
-      expect(issue!.severity).toBe('warning');
-      expect(issue!.message).toContain('60%');
-    });
-
-    it('should not flag when 70%+ of events referenced', () => {
-      // 7 out of 10 = 70% → ok
-      const report = buildFullReport({ events: 7 });
-      const result = validateReport(report, 10);
-
-      expect(result.eventCoverage).toBe(70);
-      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
-    });
-
-    it('should count unique event references only', () => {
-      const report = buildFullReport({ events: 3 }) + '\nRipeto [Ev.1] e [Ev.2] e [Ev.1].';
-      const result = validateReport(report, 3);
-
-      // Still 3 unique: Ev.1, Ev.2, Ev.3
-      expect(result.eventCoverage).toBe(100);
-    });
-
-    it('should return 100% coverage when eventCount is 0', () => {
-      const report = buildFullReport({ events: 0 });
-      const result = validateReport(report, 0);
-
-      expect(result.eventCoverage).toBe(100);
-    });
-
-    it('should report 0% when no events are referenced', () => {
-      const report = `## Riassunto del caso
+    it('should return 100% coverage even when no Ev references exist', () => {
+      const report = `## Documentazione Sanitaria
 ${Array(100).fill('parola').join(' ')}
 
-## DATI DELLA DOCUMENTAZIONE SANITARIA
-${Array(100).fill('parola').join(' ')}
-
-## Elementi per la valutazione
+## Epicrisi
 ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(report, 10);
-
-      expect(result.eventCoverage).toBe(0);
-      const issue = result.issues.find((i) => i.type === 'low_event_coverage');
-      expect(issue).toBeDefined();
-      expect(issue!.severity).toBe('error');
+      expect(result.eventCoverage).toBe(100);
     });
   });
 
@@ -400,48 +298,12 @@ ${Array(100).fill('parola').join(' ')}`;
     });
   });
 
-  describe('invalid event references', () => {
-    it('should detect [Ev.0] as invalid', () => {
+  describe('event references removed', () => {
+    it('should not check for [Ev.N] references (removed from report format)', () => {
       const report = buildFullReport() + '\nCome da [Ev.0] il paziente.';
       const result = validateReport(report, 5);
-
-      expect(result.issues.some((i) =>
-        i.type === 'invalid_event_ref' && i.message.includes('[Ev.0]'),
-      )).toBe(true);
-    });
-
-    it('should detect [Ev.N] where N > eventCount', () => {
-      const report = buildFullReport({ events: 3 }) + '\nCome evidenziato in [Ev.10].';
-      const result = validateReport(report, 3);
-
-      expect(result.issues.some((i) =>
-        i.type === 'invalid_event_ref' && i.message.includes('[Ev.10]'),
-      )).toBe(true);
-    });
-
-    it('should not flag valid event references', () => {
-      const report = buildFullReport({ events: 5 });
-      const result = validateReport(report, 5);
-
+      // invalid_event_ref check removed — reports now cite by document type, author, date
       expect(result.issues.filter((i) => i.type === 'invalid_event_ref')).toHaveLength(0);
-    });
-
-    it('should not duplicate error for same invalid ref', () => {
-      const report = buildFullReport() + '\n[Ev.99] e ancora [Ev.99] ripetuto.';
-      const result = validateReport(report, 5);
-
-      const invalidRefs = result.issues.filter((i) =>
-        i.type === 'invalid_event_ref' && i.message.includes('[Ev.99]'),
-      );
-      expect(invalidRefs).toHaveLength(1);
-    });
-
-    it('should flag invalid ref as error severity', () => {
-      const report = buildFullReport() + '\n[Ev.100]';
-      const result = validateReport(report, 5);
-
-      const issue = result.issues.find((i) => i.type === 'invalid_event_ref');
-      expect(issue?.severity).toBe('error');
     });
   });
 
@@ -488,12 +350,11 @@ Breve. 01/01/1900.`;
       const result = validateReport(report, 5);
 
       expect(result.valid).toBe(false);
-      // Should have: too_short, missing cronologia, missing elementi, sentinel, low coverage
+      // Should have: too_short, missing sections, sentinel date
       const types = result.issues.map((i) => i.type);
       expect(types).toContain('too_short');
       expect(types).toContain('missing_section');
       expect(types).toContain('sentinel_date_leak');
-      expect(types).toContain('low_event_coverage');
     });
   });
 

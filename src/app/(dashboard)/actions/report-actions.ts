@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidateCase } from '@/lib/cache';
+import { logger } from '@/lib/logger';
 
 /**
  * Fetch the latest report for a case.
@@ -21,7 +22,7 @@ export async function getCaseReport(caseId: string) {
     .maybeSingle();
 
   if (error) {
-    console.error(`[getCaseReport] Query failed for case ${caseId}:`, error.message, error.code);
+    logger.error('report', 'Query failed for getCaseReport', { caseId, errorMessage: error.message, errorCode: error.code });
     return null;
   }
 

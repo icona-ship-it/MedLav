@@ -284,6 +284,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
           source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
           extraction_pass: 'retry',
         }));
+        // Idempotency: delete existing events for this chunk range before retry insert
+        const retryOrderStart = (range.start - 1) * 100 + 1;
+        const retryOrderEnd = (range.start - 1) * 100 + 100;
+        await supabase.from('events')
+          .delete()
+          .eq('case_id', caseId)
+          .eq('document_id', ocrResult.documentId)
+          .gte('order_number', retryOrderStart)
+          .lte('order_number', retryOrderEnd);
+
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
@@ -298,6 +308,17 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     if (result.events.length === 0) {
       return { count: 0 };
     }
+
+    // Idempotency: delete any existing events for this chunk before inserting
+    // Prevents duplicates if Inngest retries a partially-succeeded step
+    const orderStart = (range.start - 1) * 100 + 1;
+    const orderEnd = (range.start - 1) * 100 + 100;
+    await supabase.from('events')
+      .delete()
+      .eq('case_id', caseId)
+      .eq('document_id', ocrResult.documentId)
+      .gte('order_number', orderStart)
+      .lte('order_number', orderEnd);
 
     // Save events directly to DB with enum normalization
     const eventRows = result.events.map((e, idx) => ({

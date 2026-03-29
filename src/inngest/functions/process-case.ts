@@ -71,7 +71,7 @@ async function handlePipelineFailure(event: { data: unknown }) {
 export const processCase = inngest.createFunction(
   {
     id: 'process-case',
-    retries: 1,
+    retries: 3,
     concurrency: [
       { limit: 5 },
       { limit: 2, key: 'event.data.userId' },
@@ -104,12 +104,21 @@ export const processCase = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // ── Step 2: OCR all documents (parallel) ─────────────────────
-    const ocrResults: OcrResult[] = (await Promise.all(
+    // ── Step 2: OCR all documents (parallel, fault-tolerant) ─────
+    const ocrSettled = await Promise.allSettled(
       documents.map((doc) =>
         step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
       ),
-    )).filter((r): r is OcrResult => r !== null);
+    );
+    for (const r of ocrSettled) {
+      if (r.status === 'rejected') {
+        logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+      }
+    }
+    const ocrResults: OcrResult[] = ocrSettled
+      .filter((r): r is PromiseFulfilledResult<OcrResult | null> => r.status === 'fulfilled')
+      .map((r) => r.value)
+      .filter((r): r is OcrResult => r !== null);
 
     if (ocrResults.length === 0) {
       throw new Error('All documents failed OCR processing');
@@ -257,16 +266,20 @@ export const processCase = inngest.createFunction(
     });
 
     const extractionBatches = chunkArray(allChunkJobs, EXTRACTION_BATCH_SIZE);
-    const batchResults = await Promise.all(
+    const batchSettled = await Promise.allSettled(
       extractionBatches.map((batch, idx) =>
         step.run(`extract-batch-${idx}`, () => extractChunkBatch(batch)),
       ),
     );
 
     const docEventCounts: Record<string, number> = {};
-    for (const result of batchResults) {
-      for (const [docId, count] of Object.entries(result.perDoc)) {
-        docEventCounts[docId] = (docEventCounts[docId] ?? 0) + count;
+    for (const result of batchSettled) {
+      if (result.status === 'fulfilled') {
+        for (const [docId, count] of Object.entries(result.value.perDoc)) {
+          docEventCounts[docId] = (docEventCounts[docId] ?? 0) + count;
+        }
+      } else {
+        logger.error('pipeline', `Extraction batch failed: ${result.reason instanceof Error ? result.reason.message : 'unknown'}`);
       }
     }
 
@@ -284,7 +297,7 @@ export const processCase = inngest.createFunction(
 
     if (markErrorJobs.length > 0) {
       const errorBatches = chunkArray(markErrorJobs, 10);
-      await Promise.all(
+      const errorSettled = await Promise.allSettled(
         errorBatches.map((batch, idx) =>
           step.run(`mark-error-batch-${idx}`, async () => {
             for (const job of batch) {
@@ -293,6 +306,11 @@ export const processCase = inngest.createFunction(
           }),
         ),
       );
+      for (const r of errorSettled) {
+        if (r.status === 'rejected') {
+          logger.warn('pipeline', `Failed to mark error documents: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+        }
+      }
     }
 
     // ── Step 4: Consolidate events ───────────────────────────────
@@ -304,8 +322,8 @@ export const processCase = inngest.createFunction(
     // ── Step 4.5: Link images to events ──────────────────────────
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
 
-    // ── Steps 4.6 + 5 + 6 + 7a: Parallel analysis ──────────────
-    const [imageAnalysisResults, rawAnomalies, missingDocs, calculations] = await Promise.all([
+    // ── Steps 4.6 + 5 + 6 + 7a: Parallel analysis (fault-tolerant) ──
+    const [imageSettled, anomalySettled, missingSettled, calcSettled] = await Promise.allSettled([
       step.run('analyze-diagnostic-images', () =>
         analyzeDiagnosticImagesStep(caseId, updatedMetadata.caseType),
       ),
@@ -319,6 +337,16 @@ export const processCase = inngest.createFunction(
         calculatePeriodsStep(consolidationResult.allEvents, updatedMetadata.caseType),
       ),
     ]);
+
+    const imageAnalysisResults = imageSettled.status === 'fulfilled' ? imageSettled.value : [];
+    const rawAnomalies = anomalySettled.status === 'fulfilled' ? anomalySettled.value : [];
+    const missingDocs = missingSettled.status === 'fulfilled' ? missingSettled.value : [];
+    const calculations = calcSettled.status === 'fulfilled' ? calcSettled.value : [];
+
+    if (imageSettled.status === 'rejected') logger.error('pipeline', `Image analysis failed: ${imageSettled.reason instanceof Error ? imageSettled.reason.message : 'unknown'}`);
+    if (anomalySettled.status === 'rejected') logger.error('pipeline', `Anomaly detection failed: ${anomalySettled.reason instanceof Error ? anomalySettled.reason.message : 'unknown'}`);
+    if (missingSettled.status === 'rejected') logger.error('pipeline', `Missing docs detection failed: ${missingSettled.reason instanceof Error ? missingSettled.reason.message : 'unknown'}`);
+    if (calcSettled.status === 'rejected') logger.error('pipeline', `Period calculation failed: ${calcSettled.reason instanceof Error ? calcSettled.reason.message : 'unknown'}`);
 
     // ── Step 5.5: LLM Anomaly Resolution ─────────────────────────
     let anomalies = await step.run(
@@ -392,12 +420,19 @@ export const processCase = inngest.createFunction(
       }));
       const SUMMARY_BATCH_SIZE = 5;
       const summaryBatches = chunkArray(docRefs, SUMMARY_BATCH_SIZE);
-      const summaryResults = await Promise.all(
+      const summarySettled = await Promise.allSettled(
         summaryBatches.map((batch, idx) =>
           step.run(`summarize-batch-${idx}`, () => summarizeDocumentBatchByIds(batch)),
         ),
       );
-      documentSummaries = summaryResults.flat();
+      documentSummaries = summarySettled
+        .filter((r): r is PromiseFulfilledResult<DocumentSummary[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value);
+      for (const r of summarySettled) {
+        if (r.status === 'rejected') {
+          logger.error('pipeline', `Summary batch failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+        }
+      }
       logger.info('pipeline', `Map-reduce: ${documentSummaries.length} document summaries generated`);
     }
 

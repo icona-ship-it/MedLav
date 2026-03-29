@@ -153,14 +153,14 @@ describe('synthesis-prompts', () => {
       expect(prompt).toContain('ANTI-HALLUCINATION');
     });
 
-    it('should contain event reference rule [Ev.N]', () => {
+    it('should instruct NOT to use [Ev.N] references', () => {
       const prompt = buildSynthesisSystemPrompt({
         caseType: 'ortopedica',
         caseRole: 'ctu',
       });
 
-      expect(prompt).toContain('[Ev.N]');
-      expect(prompt).toContain('tracciabilità');
+      expect(prompt).not.toContain('[Ev.N]');
+      expect(prompt).toContain('NON usare riferimenti numerati');
     });
 
     it('should include perizia metadata structure when provided', () => {

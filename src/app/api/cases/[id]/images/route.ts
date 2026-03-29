@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { downloadFile } from '@/lib/supabase/storage';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 /**
  * GET /api/cases/[id]/images?path=ocr-images/...
@@ -14,7 +15,12 @@ export async function GET(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: 'Non autenticato' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+  }
+
+  const rateCheck = await checkRateLimit({ key: `images:${user.id}`, ...RATE_LIMITS.API });
+  if (!rateCheck.success) {
+    return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
   }
 
   const { id: caseId } = await params;
@@ -25,11 +31,11 @@ export async function GET(
   try {
     imagePath = rawPath ? decodeURIComponent(rawPath) : '';
   } catch {
-    return NextResponse.json({ error: 'Percorso immagine non valido' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Percorso immagine non valido' }, { status: 400 });
   }
 
   if (!imagePath || !imagePath.startsWith('ocr-images/') || imagePath.includes('..') || imagePath.includes('\0')) {
-    return NextResponse.json({ error: 'Percorso immagine non valido' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Percorso immagine non valido' }, { status: 400 });
   }
 
   // Verify the user owns this case
@@ -41,7 +47,7 @@ export async function GET(
     .maybeSingle();
 
   if (!caseData) {
-    return NextResponse.json({ error: 'Caso non trovato' }, { status: 404 });
+    return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
   }
 
   // Verify the image belongs to a document in this case
@@ -55,7 +61,7 @@ export async function GET(
       .maybeSingle();
 
     if (!docData) {
-      return NextResponse.json({ error: 'Immagine non trovata' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Immagine non trovata' }, { status: 404 });
     }
   }
 
@@ -82,6 +88,6 @@ export async function GET(
       },
     });
   } catch {
-    return NextResponse.json({ error: 'Immagine non disponibile' }, { status: 404 });
+    return NextResponse.json({ success: false, error: 'Immagine non disponibile' }, { status: 404 });
   }
 }

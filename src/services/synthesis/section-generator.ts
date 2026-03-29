@@ -236,7 +236,9 @@ export async function generateSingleSection(params: {
   });
 
   if (finishReason === 'length') {
-    logger.warn('section-generator', `Section ${spec.id} truncated (finishReason=length, ${content.length} chars)`);
+    const msg = `Sezione "${spec.id}" TRONCATA dal LLM (finishReason=length, ${content.length} chars). Sezione incompleta — il sistema ritenterà.`;
+    logger.error('section-generator', msg);
+    throw new Error(msg);
   }
 
   const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;

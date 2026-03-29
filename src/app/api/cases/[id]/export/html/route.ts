@@ -6,6 +6,7 @@ import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/e
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { logAccess } from '@/lib/audit';
+import { logger } from '@/lib/logger';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -24,81 +25,93 @@ export async function GET(
   }
 
   const { id: caseId } = await params;
-  const data = await loadCaseDataForExport(caseId);
 
-  if (!data) {
-    return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
-  }
+  try {
+    const data = await loadCaseDataForExport(caseId);
 
-  logAccess({
-    userId: user.id,
-    action: 'report.exported',
-    entityType: 'case',
-    entityId: caseId,
-    metadata: { format: 'html' },
-  });
-
-  const pm = data.periziaMetadata as Record<string, unknown> | null;
-  const useProfessional = pm && (pm.tribunale || pm.ctuName);
-
-  const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
-
-  // Resolve ocr-image: placeholders to base64 data URIs for self-contained HTML
-  let synthesis = data.report?.synthesis as string | null ?? null;
-  if (synthesis) {
-    const images = await resolveOcrImages(synthesis);
-    if (images.size > 0) {
-      synthesis = replaceWithDataUris(synthesis, images);
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
-  }
 
-  const html = useProfessional
-    ? generateProfessionalHtmlReport({
-      caseCode: data.caseData.code as string,
-      caseType: data.caseData.case_type as string,
-      caseRole: data.caseData.case_role as string,
-      patientInitials: data.caseData.patient_initials as string | null,
-      synthesis,
-      events: data.events,
-      anomalies: data.anomalies,
-      missingDocs: data.missingDocs,
-      calculations: data.calculations,
-      periziaMetadata: pm,
-      documentsWithPages: data.documentsWithPages,
-      reportStatus,
-    })
-    : generateHtmlReport({
-      caseCode: data.caseData.code as string,
-      caseType: data.caseData.case_type as string,
-      caseRole: data.caseData.case_role as string,
-      patientInitials: data.caseData.patient_initials as string | null,
-      synthesis,
-      events: data.events,
-      anomalies: data.anomalies,
-      missingDocs: data.missingDocs,
-      calculations: data.calculations,
-      periziaMetadata: data.periziaMetadata,
-      reportStatus,
+    logAccess({
+      userId: user.id,
+      action: 'report.exported',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: { format: 'html' },
     });
 
-  const isInline = request.nextUrl.searchParams.get('inline') === 'true';
-  const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+    const pm = data.periziaMetadata as Record<string, unknown> | null;
+    const useProfessional = pm && (pm.tribunale || pm.ctuName);
 
-  let finalHtml = html;
-  if (shouldAnonymize) {
-    const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
-    const result = anonymizeText({ text: html, periziaMetadata });
-    finalHtml = result.anonymizedText;
+    const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
+
+    // Resolve ocr-image: placeholders to base64 data URIs for self-contained HTML
+    let synthesis = data.report?.synthesis as string | null ?? null;
+    if (synthesis) {
+      const images = await resolveOcrImages(synthesis);
+      if (images.size > 0) {
+        synthesis = replaceWithDataUris(synthesis, images);
+      }
+    }
+
+    const html = useProfessional
+      ? generateProfessionalHtmlReport({
+        caseCode: data.caseData.code as string,
+        caseType: data.caseData.case_type as string,
+        caseRole: data.caseData.case_role as string,
+        patientInitials: data.caseData.patient_initials as string | null,
+        synthesis,
+        events: data.events,
+        anomalies: data.anomalies,
+        missingDocs: data.missingDocs,
+        calculations: data.calculations,
+        periziaMetadata: pm,
+        documentsWithPages: data.documentsWithPages,
+        reportStatus,
+      })
+      : generateHtmlReport({
+        caseCode: data.caseData.code as string,
+        caseType: data.caseData.case_type as string,
+        caseRole: data.caseData.case_role as string,
+        patientInitials: data.caseData.patient_initials as string | null,
+        synthesis,
+        events: data.events,
+        anomalies: data.anomalies,
+        missingDocs: data.missingDocs,
+        calculations: data.calculations,
+        periziaMetadata: data.periziaMetadata,
+        reportStatus,
+      });
+
+    const isInline = request.nextUrl.searchParams.get('inline') === 'true';
+    const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+
+    let finalHtml = html;
+    if (shouldAnonymize) {
+      const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const result = anonymizeText({ text: html, periziaMetadata });
+      finalHtml = result.anonymizedText;
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Report-Status': reportStatus ?? 'bozza',
+    };
+    const suffix = shouldAnonymize ? '-anonimizzato' : '';
+    if (!isInline) {
+      headers['Content-Disposition'] = `attachment; filename="report-${data.caseData.code}${suffix}.html"`;
+    }
+
+    return new NextResponse(finalHtml, { headers });
+  } catch (error) {
+    logger.error('export', 'HTML export failed', {
+      caseId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return NextResponse.json(
+      { success: false, error: 'Errore durante l\'esportazione. Riprova.' },
+      { status: 500 },
+    );
   }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'text/html; charset=utf-8',
-    'X-Report-Status': reportStatus ?? 'bozza',
-  };
-  const suffix = shouldAnonymize ? '-anonimizzato' : '';
-  if (!isInline) {
-    headers['Content-Disposition'] = `attachment; filename="report-${data.caseData.code}${suffix}.html"`;
-  }
-
-  return new NextResponse(finalHtml, { headers });
 }

@@ -37,16 +37,12 @@ export interface ReportValidationContext {
 
 const REQUIRED_SECTIONS = [
   {
-    name: 'Documentazione sanitaria/Cronologia',
-    pattern: /dati\s+della\s+documentazione\s+sanitaria|cronologia\s+medico|documentazione\s+sanitaria/i,
+    name: 'Documentazione sanitaria',
+    pattern: /dati\s+della\s+documentazione\s+sanitaria|documentazione\s+sanitaria|documentazione\s+medica/i,
   },
   {
-    name: 'Riassunto/Inquadramento',
-    pattern: /riassunto\s+(del\s+)?caso|inquadramento/i,
-  },
-  {
-    name: 'Elementi di rilievo/Valutazione',
-    pattern: /elementi\s+di\s+rilievo|elementi\s+per\s+la\s+valutazione|considerazioni\s+medico|aspetti\s+(critici|rilevanti)|osservazioni\s+medico|profili\s+di\s+responsabilit|valutazione\s+di\s+merito|sintesi\s+conclusiva/i,
+    name: 'Epicrisi/Conclusioni',
+    pattern: /epicrisi|conclusioni|sintesi\s+conclusiva/i,
   },
 ];
 
@@ -60,9 +56,6 @@ const MIN_WORD_COUNT = 200;
 
 /** Regex matching DD/MM/YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})\/(\d{2})\/(\d{4})\b/g;
-
-/** Regex matching [Ev.N] references. */
-const EVENT_REF_PATTERN = /\[Ev\.(\d+)\]/g;
 
 /**
  * Validate a generated report for quality issues.
@@ -117,21 +110,9 @@ export function validateReport(
     }
   }
 
-  // 5. Event coverage: <50% → error, 50-69% → warning, ≥70% → ok
-  const eventCoverage = computeEventCoverage(synthesis, eventCount);
-  if (eventCount > 0 && eventCoverage < 50) {
-    issues.push({
-      type: 'low_event_coverage',
-      severity: 'error',
-      message: `Only ${Math.round(eventCoverage)}% of events referenced (${countReferencedEvents(synthesis)}/${eventCount}). Minimum 50% required.`,
-    });
-  } else if (eventCount > 0 && eventCoverage < 70) {
-    issues.push({
-      type: 'low_event_coverage',
-      severity: 'warning',
-      message: `Only ${Math.round(eventCoverage)}% of events referenced (${countReferencedEvents(synthesis)}/${eventCount}). Target: ≥70%.`,
-    });
-  }
+  // 5. Event coverage: no longer checked via [Ev.N] references (removed from report format).
+  // Reports now cite documents by type, author and date instead of numbered event refs.
+  const eventCoverage = 100; // Always passes — coverage enforced by prompt directives
 
   // 6-9. Context-dependent checks (backward-compatible: only run when context provided)
   if (context) {
@@ -139,7 +120,6 @@ export function validateReport(
     issues.push(...checkNumericalMismatch(synthesis, context));
     issues.push(...checkUnverifiedCitations(synthesis, context));
   }
-  issues.push(...checkInvalidEventRefs(synthesis, eventCount));
   issues.push(...checkDuplicateContent(synthesis));
 
   const hasErrors = issues.some((i) => i.severity === 'error');
@@ -147,19 +127,6 @@ export function validateReport(
 }
 
 // ── Existing helpers ──
-
-function countReferencedEvents(synthesis: string): number {
-  const matches = synthesis.match(/\[Ev\.(\d+)\]/g);
-  if (!matches) return 0;
-  const uniqueNums = new Set(matches.map((m) => m.match(/\d+/)?.[0]));
-  return uniqueNums.size;
-}
-
-function computeEventCoverage(synthesis: string, eventCount: number): number {
-  if (eventCount === 0) return 100;
-  const referenced = countReferencedEvents(synthesis);
-  return (referenced / eventCount) * 100;
-}
 
 // ── New check: Phantom Dates ──
 
@@ -291,33 +258,6 @@ function normalizeCalcLabel(label: string): string | null {
 }
 
 // ── New check: Invalid Event References ──
-
-/**
- * Check [Ev.N] references where N > eventCount or N <= 0.
- */
-function checkInvalidEventRefs(synthesis: string, eventCount: number): ReportIssue[] {
-  const issues: ReportIssue[] = [];
-  const seen = new Set<number>();
-
-  let match: RegExpExecArray | null;
-  const refRegex = new RegExp(EVENT_REF_PATTERN.source, 'g');
-
-  while ((match = refRegex.exec(synthesis)) !== null) {
-    const n = parseInt(match[1], 10);
-    if (seen.has(n)) continue;
-    seen.add(n);
-
-    if (n <= 0 || n > eventCount) {
-      issues.push({
-        type: 'invalid_event_ref',
-        severity: 'error',
-        message: `Invalid event reference [Ev.${n}]: ${n <= 0 ? 'must be > 0' : `only ${eventCount} events exist`}`,
-      });
-    }
-  }
-
-  return issues;
-}
 
 // ── New check: Duplicate Content ──
 

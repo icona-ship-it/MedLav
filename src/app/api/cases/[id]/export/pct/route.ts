@@ -32,42 +32,54 @@ export async function GET(
   }
 
   const { id: caseId } = await params;
-  const data = await loadCaseDataForExport(caseId);
 
-  if (!data) {
-    return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
-  }
+  try {
+    const data = await loadCaseDataForExport(caseId);
 
-  const periziaMetadata = (data.periziaMetadata ?? {}) as PeriziaMetadata;
-  const synthesis = (data.report?.synthesis as string | null) ?? '';
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
+    }
 
-  if (!synthesis) {
+    const periziaMetadata = (data.periziaMetadata ?? {}) as PeriziaMetadata;
+    const synthesis = (data.report?.synthesis as string | null) ?? '';
+
+    if (!synthesis) {
+      return NextResponse.json(
+        { success: false, error: 'Nessun report generato. Avvia prima l\'elaborazione.' },
+        { status: 400 },
+      );
+    }
+
+    const documents = data.documentsWithPages.map((doc) => ({
+      fileName: doc.fileName,
+      fileType: doc.documentType,
+    }));
+
+    const caseCode = data.caseData.code as string;
+
+    logger.info('pct-export', `Generating PCT XML for case ${caseId}`);
+
+    const xml = generatePctXml({
+      periziaMetadata,
+      synthesis,
+      documents,
+      caseCode,
+    });
+
+    return new NextResponse(xml, {
+      headers: {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Content-Disposition': `attachment; filename="pct-${caseCode}.xml"`,
+      },
+    });
+  } catch (error) {
+    logger.error('export', 'PCT export failed', {
+      caseId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
     return NextResponse.json(
-      { success: false, error: 'Nessun report generato. Avvia prima l\'elaborazione.' },
-      { status: 400 },
+      { success: false, error: 'Errore durante l\'esportazione. Riprova.' },
+      { status: 500 },
     );
   }
-
-  const documents = data.documentsWithPages.map((doc) => ({
-    fileName: doc.fileName,
-    fileType: doc.documentType,
-  }));
-
-  const caseCode = data.caseData.code as string;
-
-  logger.info('pct-export', `Generating PCT XML for case ${caseId}`);
-
-  const xml = generatePctXml({
-    periziaMetadata,
-    synthesis,
-    documents,
-    caseCode,
-  });
-
-  return new NextResponse(xml, {
-    headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
-      'Content-Disposition': `attachment; filename="pct-${caseCode}.xml"`,
-    },
-  });
 }

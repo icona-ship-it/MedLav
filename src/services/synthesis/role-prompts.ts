@@ -15,26 +15,26 @@ export interface RolePromptStrategy {
  * The medical expert adds their own professional conclusions.
  */
 const OBJECTIVE_TONE = `Adotta un tono RIGOROSAMENTE OGGETTIVO e FATTUALE. Il tuo compito è organizzare e presentare i fatti documentati, NON esprimere opinioni o giudizi.
-Ogni affermazione deve essere ancorata a evidenza documentale [Ev.N]. NON formulare deduzioni, supposizioni o conclusioni personali.
+Ogni affermazione deve essere ancorata a evidenza documentale [documento, data]. NON formulare deduzioni, supposizioni o conclusioni personali.
 Usa ESCLUSIVAMENTE formulazioni fattuali:
-- "Dalla documentazione risulta che [fatto, Ev.N]..."
+- "Dalla documentazione risulta che [fatto, documento e data]..."
 - "Il quadro documentale evidenzia..."
-- "Come documentato in [Ev.N], si rileva..."
+- "Come documentato in [documento, data], si rileva..."
 - "La documentazione in atti attesta..."
 NON usare MAI formulazioni soggettive come: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile".
 Il report è un DOCUMENTO DI LAVORO per il medico legale, che formulerà autonomamente le proprie valutazioni professionali.`;
 
 const OBJECTIVE_EMPHASIS = `Evidenzia TUTTI i fatti rilevanti dalla documentazione senza selezione tendenziosa.
-Segnala sia le criticità nella gestione clinica sia gli elementi di corretta condotta, SEMPRE con riferimento documentale [Ev.N].
+Segnala sia le criticità nella gestione clinica sia gli elementi di corretta condotta, SEMPRE con riferimento documentale [documento, data].
 Per ogni anomalia, presenta anche eventuali elementi documentali che ne attenuano la rilevanza.
 NON selezionare o enfatizzare i fatti a favore di una parte — riporta l'intero quadro documentale oggettivamente.`;
 
 const OBJECTIVE_ANOMALY_FRAMING = `Per ogni profilo critico riscontrato dalla documentazione, struttura come:
-**FATTO DOCUMENTATO**: descrizione oggettiva del rilievo con riferimento puntuale [Ev.N]
+**FATTO DOCUMENTATO**: descrizione oggettiva del rilievo con riferimento puntuale [documento, data]
 **STANDARD DI RIFERIMENTO**: quale linea guida o buona pratica clinica è applicabile [Fonte, Anno]
-**ELEMENTI A SUPPORTO**: fatti documentati [Ev.N] che confermano la deviazione dallo standard
-**ELEMENTI CONTRARI**: fatti documentati [Ev.N] che attenuano o contraddicono la deviazione
-**CONSEGUENZE DOCUMENTATE**: impatto clinico risultante dalla documentazione [Ev.N]
+**ELEMENTI A SUPPORTO**: fatti documentati [documento, data] che confermano la deviazione dallo standard
+**ELEMENTI CONTRARI**: fatti documentati [documento, data] che attenuano o contraddicono la deviazione
+**CONSEGUENZE DOCUMENTATE**: impatto clinico risultante dalla documentazione [documento, data]
 Presentare ENTRAMBI i lati senza esprimere un giudizio conclusivo — il medico legale formulerà le proprie valutazioni.`;
 
 const OBJECTIVE_CONCLUSION_GUIDANCE = `La sezione conclusiva deve essere una SINTESI FATTUALE, NON un'opinione.
@@ -56,7 +56,7 @@ Per ogni fatto rilevante, evidenzia sia la prospettiva documentale del ricorrent
     extraSections: '',
     conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
 Organizza gli elementi documentali per facilitare la risposta ai quesiti del Giudice.
-Per ogni quesito, elenca i FATTI DOCUMENTALI pertinenti [Ev.N] — il CTU formulerà le risposte.`,
+Per ogni quesito, elenca i FATTI DOCUMENTALI pertinenti [documento, data] — il CTU formulerà le risposte.`,
   },
 
   ctp: {
@@ -65,7 +65,7 @@ Per ogni quesito, elenca i FATTI DOCUMENTALI pertinenti [Ev.N] — il CTU formul
 Il report è destinato al CTP. Presenta TUTTI i fatti documentati in modo completo e oggettivo.`,
     emphasisDirective: `${OBJECTIVE_EMPHASIS}
 Analizza con particolare attenzione (riportando oggettivamente dalla documentazione):
-1. Ritardi diagnostici e terapeutici DOCUMENTATI (quantifica in giorni con date precise [Ev.N])
+1. Ritardi diagnostici e terapeutici DOCUMENTATI (quantifica in giorni con date precise [documento, data])
 2. Deviazioni da linee guida e protocolli (cita quali linee guida [Fonte, Anno])
 3. Omissioni documentali oggettivamente riscontrabili
 4. Complicanze documentate e loro gestione
@@ -73,7 +73,7 @@ Analizza con particolare attenzione (riportando oggettivamente dalla documentazi
     anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,
     extraSections: `Aggiungi una sezione "PROFILI CRITICI DOCUMENTATI" dopo gli Elementi di Rilievo:
 elenca ogni specifico profilo di criticità DOCUMENTALMENTE RISCONTRATO,
-con riferimento alla condotta specifica documentata [Ev.N] e alla linea guida/buona pratica applicabile [Fonte, Anno].
+con riferimento alla condotta specifica documentata [documento, data] e alla linea guida/buona pratica applicabile [Fonte, Anno].
 Riportare SOLO fatti verificabili — il CTP formulerà le proprie valutazioni.`,
     conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
 Organizza gli elementi documentali evidenziando i profili critici con relativa evidenza.
@@ -86,8 +86,8 @@ Il CTP formulerà autonomamente le proprie valutazioni professionali.`,
 Il report è una valutazione stragiudiziale. Fornisci un'analisi COMPLETA e OGGETTIVA di tutti i fatti documentati.`,
     emphasisDirective: `${OBJECTIVE_EMPHASIS}
 Per ogni aspetto, analizza dalla documentazione:
-1. ELEMENTI FAVOREVOLI DOCUMENTATI [Ev.N]: fatti che supportano la pretesa
-2. ELEMENTI SFAVOREVOLI O LACUNE [Ev.N]: fatti che indeboliscono la pretesa o lacune documentali
+1. ELEMENTI FAVOREVOLI DOCUMENTATI [documento, data]: fatti che supportano la pretesa
+2. ELEMENTI SFAVOREVOLI O LACUNE [documento, data]: fatti che indeboliscono la pretesa o lacune documentali
 3. DOCUMENTAZIONE INTEGRATIVA: quale documentazione aggiuntiva sarebbe necessaria
 4. COMPLETEZZA DOCUMENTALE: valutazione oggettiva della completezza della documentazione in atti`,
     anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,

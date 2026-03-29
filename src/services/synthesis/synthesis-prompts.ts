@@ -57,7 +57,7 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Lo stile deve essere quello di una perizia depositabile in tribunale: formale, giuridico, con periodi complessi e subordinate
 - Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
 - Quando due fonti discordano, privilegia la fonte con affidabilità maggiore (punteggio più alto)
-- Quando citi un evento specifico dalla cronologia, includi il riferimento [Ev.N] dove N è il numero dell'evento (orderNumber). Questo è FONDAMENTALE per la tracciabilità in ambito giudiziario
+- Cita i documenti per tipo, autore e data. NON usare riferimenti numerati agli eventi come [documento, data]
 
 ## EVENTI A BASSA AFFIDABILITÀ OCR
 - Gli eventi marcati con "⚠ BASSA AFFIDABILITÀ OCR" hanno un riconoscimento testuale incerto. Trattali come dati da verificare: usa formulazioni cautelative come "dalla documentazione — il cui testo risulta parzialmente leggibile — sembrerebbe emergere..." o "dato soggetto a verifica per qualità del documento originale"
@@ -77,7 +77,7 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - OGNI affermazione del report deve essere OGGETTIVAMENTE VERIFICABILE dalla documentazione in atti
 - NON esprimere MAI: opinioni, deduzioni, supposizioni, giudizi di merito, conclusioni su responsabilità o colpa
 - NON usare MAI espressioni soggettive come: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile", "è ragionevole concludere"
-- Usare SOLO formulazioni fattuali: "dalla documentazione risulta che...", "come documentato in [Ev.N]...", "la documentazione attesta..."
+- Usare SOLO formulazioni fattuali: "dalla documentazione risulta che...", "come documentato nel [tipo documento, data]...", "la documentazione attesta..."
 - Presentare i profili critici come FATTI DOCUMENTATI con evidenza a supporto e contraria, SENZA esprimere un giudizio
 - Il report è materiale legale: ogni parola deve descrivere un FATTO verificabile, non un'opinione
 
@@ -222,28 +222,28 @@ Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Co
 
 ### Profili critici documentati
 Presentazione OGGETTIVA dei profili critici emersi dalla documentazione. Scrivi in forma di paragrafi fattuali, NON elenchi puntati.
-Per OGNI criticità riscontrata, sviluppa nel paragrafo: il FATTO OGGETTIVO emerso dalla documentazione con riferimento specifico [Ev.N],
+Per OGNI criticità riscontrata, sviluppa nel paragrafo: il FATTO OGGETTIVO emerso dalla documentazione con riferimento specifico [documento, data],
 lo standard di riferimento applicabile (linee guida e buone pratiche cliniche [Fonte, Anno]),
-gli elementi documentali a supporto della deviazione [Ev.N],
-e gli elementi documentali contrari o attenuanti [Ev.N].
+gli elementi documentali a supporto della deviazione [documento, data],
+e gli elementi documentali contrari o attenuanti [documento, data].
 NON esprimere giudizi su responsabilità o colpa — presentare i fatti organizzati per la valutazione del medico legale.
 
 ### Elementi per la valutazione del nesso causale
 Presentazione dei fatti documentati rilevanti per la valutazione del nesso di causalità.
-Per ogni collegamento rilevante, indicare: (1) il FATTO documentato [Ev.N], (2) la CONSEGUENZA clinica documentata [Ev.N], (3) il CRITERIO giuridico applicabile.
-Formulazione: "Dalla documentazione risulta che [fatto, Ev.N]. La conseguenza clinica documentata è [conseguenza, Ev.N]. Il criterio giuridico applicabile è [criterio]."
+Per ogni collegamento rilevante, indicare: (1) il FATTO documentato [documento, data], (2) la CONSEGUENZA clinica documentata [documento, data], (3) il CRITERIO giuridico applicabile.
+Formulazione: "Dalla documentazione risulta che [fatto, documento e data]. La conseguenza clinica documentata e [conseguenza, documento e data]. Il criterio giuridico applicabile e [criterio]."
 NON formulare conclusioni sul nesso causale — presentare gli elementi documentali affinché il medico legale possa valutare autonomamente.
 
 ### Elementi per la quantificazione del danno
 Presentazione dei dati documentali rilevanti per la quantificazione del danno biologico.
-Indica: i periodi di ITT e ITP con date esatte documentate [Ev.N], i criteri tabellari di riferimento (DM 2024, Tabelle Milano),
-gli esiti clinici documentati rilevanti per la stima del danno permanente [Ev.N],
-le spese mediche documentate [Ev.N].
+Indica: i periodi di ITT e ITP con date esatte documentate [documento, data], i criteri tabellari di riferimento (DM 2024, Tabelle Milano),
+gli esiti clinici documentati rilevanti per la stima del danno permanente [documento, data],
+le spese mediche documentate [documento, data].
 NON formulare stime o quantificazioni definitive — presentare i dati affinché il medico legale possa effettuare autonomamente la propria valutazione.
 
 ${hasPeriziaData && periziaMetadata?.quesiti?.length ? `### ELEMENTI PER LA RISPOSTA AI QUESITI
 Per CIASCUN quesito del Giudice, NUMERATO corrispondentemente, presenta:
-- I FATTI DOCUMENTALI pertinenti con riferimenti specifici [Ev.N]
+- I FATTI DOCUMENTALI pertinenti con riferimenti specifici [documento, data]
 - Gli ELEMENTI a supporto e contrari emersi dalla documentazione
 - Le LACUNE DOCUMENTALI rilevanti per quel quesito
 NON formulare risposte conclusive ai quesiti — presentare gli elementi affinché il medico legale possa rispondere autonomamente.

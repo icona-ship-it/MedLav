@@ -273,7 +273,9 @@ export async function generateSynthesisChronology(params: SynthesisParams): Prom
   });
 
   if (finishReason === 'length') {
-    logger.warn('synthesis', ` Chronology truncated (finishReason=length, ${chronology.length} chars)`);
+    const msg = `Cronologia TRONCATA dal LLM (finishReason=length, ${chronology.length} chars). Cronologia incompleta non utilizzabile per la sintesi.`;
+    logger.error('synthesis', msg);
+    throw new Error(msg);
   }
 
   logger.info('synthesis', ` Chronology done: ${chronology.length} chars`);
@@ -402,8 +404,17 @@ function finalizeReport(
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');
+
+    // CRITICAL: truncated reports must NEVER be saved silently in a medical-legal context.
+    // A truncated report missing sections could mislead the expert and the court.
+    if (finishReason === 'length') {
+      const msg = `Report TRONCATO dal LLM (finishReason=length, ${wordCount} parole). Report incompleto — non salvato per sicurezza. Il sistema ritenterà la generazione.`;
+      logger.error('synthesis', msg);
+      throw new Error(msg);
+    }
+
     if (errors.length > 0) {
-      logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}. Using as-is.`);
+      logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}.`);
     }
     if (warnings.length > 0) {
       logger.info('synthesis', ` Validation warnings: ${warnings.map((w) => w.message).join('; ')}`);

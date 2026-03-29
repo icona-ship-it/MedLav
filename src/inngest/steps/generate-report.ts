@@ -348,6 +348,17 @@ export async function generateSectionStep(
   synthesisParams: SynthesisParams,
   previousContext: SectionContext[],
 ): Promise<GeneratedSection> {
+  // Placeholder sections emit static text — no LLM call needed
+  if (spec.isPlaceholder) {
+    return {
+      id: spec.id,
+      title: spec.title,
+      content: spec.placeholderText ?? '',
+      contextSummary: '',
+      wordCount: 0,
+    };
+  }
+
   // Fetch OCR text inside the step if this section needs it
   let documentsOcrText: DocumentOcrContext[] | undefined;
   if (spec.needsOcr) {

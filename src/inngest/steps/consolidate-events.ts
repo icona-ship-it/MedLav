@@ -56,15 +56,17 @@ export async function consolidateEventsStep(
 
   for (let i = 0; i < orderUpdates.length; i += BATCH_SIZE) {
     const batch = orderUpdates.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       batch.map((u) =>
         supabase.from('events').update({ order_number: u.order_number }).eq('id', u.id),
       ),
     );
-    for (const result of results) {
-      if (result.error) {
-        throw new Error(`Failed to update event order_number: ${result.error.message}`);
-      }
+    const failures = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
+    if (failures.length > batch.length * 0.1) {
+      throw new Error(`Too many order_number update failures: ${failures.length}/${batch.length}`);
+    }
+    if (failures.length > 0) {
+      logger.warn('pipeline', `${failures.length} order_number updates failed in batch (non-critical)`);
     }
   }
 
@@ -81,7 +83,7 @@ export async function consolidateEventsStep(
   }
 
   if (expectedEvents && allEvents.length === 0) {
-    logger.error('pipeline', ` Step 4: CRITICAL — extraction reported events but DB has 0! Insert likely failed silently.`);
+    throw new Error('CRITICAL: extraction reported events but DB has 0. Insert likely failed silently.');
   }
   logger.info('pipeline', ` Step 4: ${allEvents.length} total events in DB`);
   return { allEvents, newEventsCount: allEvents.length };

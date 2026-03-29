@@ -2,20 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripeClient } from '@/lib/stripe/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { z } from 'zod';
 import type Stripe from 'stripe';
+
+const uuidSchema = z.string().uuid();
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');
 
   if (!signature) {
-    return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Missing signature' }, { status: 400 });
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('stripe', 'STRIPE_WEBHOOK_SECRET is not configured');
-    return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Webhook not configured' }, { status: 500 });
   }
 
   let event: Stripe.Event;
@@ -25,7 +28,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';
     logger.error('stripe', `Webhook signature verification failed: ${message}`);
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Invalid signature' }, { status: 400 });
   }
 
   const supabase = createAdminClient();
@@ -34,8 +37,13 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
-        if (userId && session.subscription) {
+        const rawUserId = session.metadata?.userId;
+        const userId = uuidSchema.safeParse(rawUserId).success ? rawUserId : null;
+        if (!userId) {
+          logger.warn('stripe', `Invalid or missing userId in checkout metadata: ${rawUserId}`);
+          break;
+        }
+        if (session.subscription) {
           const stripe = getStripeClient();
           const subResponse = await stripe.subscriptions.retrieve(session.subscription as string);
           const sub = subResponse as unknown as { status: string; current_period_end: number };
@@ -86,7 +94,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown';
     logger.error('stripe', `Webhook handler error: ${message}`);
-    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Webhook handler failed' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

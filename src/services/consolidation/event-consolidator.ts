@@ -1,5 +1,4 @@
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
-import { getSourceReliabilityScore, getReliabilityLabel } from './source-reliability';
 
 export interface ConsolidatedEvent extends ExtractedEvent {
   orderNumber: number;
@@ -120,21 +119,21 @@ function findDiscrepancyInGroup(
       other.documentId !== event.documentId &&
       isSimilarEvent(event, other)
     ) {
-      // Check for specific discrepancies
+      // Check for specific discrepancies — NEVER auto-resolve, always escalate
       if (event.diagnosis && other.diagnosis && event.diagnosis !== other.diagnosis) {
-        const eventScore = getSourceReliabilityScore(event.sourceType);
-        const otherScore = getSourceReliabilityScore(other.sourceType);
-        const preferredSource = eventScore >= otherScore ? event.sourceType : other.sourceType;
-        const preferredLabel = getReliabilityLabel(Math.max(eventScore, otherScore));
         discrepancies.push(
-          `Diagnosi discordante tra fonti: "${event.diagnosis}" vs "${other.diagnosis}". Fonte preferita: ${preferredSource} (affidabilità ${preferredLabel}, ${Math.max(eventScore, otherScore)}/100)`,
+          `⚠ DIAGNOSI DISCORDANTE — richiede verifica del perito: Fonte 1 (${event.sourceType}): "${event.diagnosis}" vs Fonte 2 (${other.sourceType}): "${other.diagnosis}". Verificare sul documento originale quale diagnosi sia corretta.`,
         );
+        // Lower confidence and flag for expert review
+        event.confidence = Math.min(event.confidence, 30);
+        event.requiresVerification = true;
       }
 
       if (event.doctor && other.doctor && event.doctor !== other.doctor) {
         discrepancies.push(
-          `Medico diverso tra fonti: "${event.doctor}" vs "${other.doctor}"`,
+          `⚠ MEDICO DISCORDANTE — richiede verifica: "${event.doctor}" vs "${other.doctor}". Verificare sul documento originale.`,
         );
+        event.requiresVerification = true;
       }
 
       // Mark as cross-referenced even without discrepancy

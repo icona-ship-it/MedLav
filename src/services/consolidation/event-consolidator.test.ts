@@ -105,6 +105,110 @@ describe('consolidateEvents', () => {
     expect(withDiscrepancy.length).toBeGreaterThan(0);
   });
 
+  it('should cap confidence at 30 and flag requiresVerification for diagnosis conflicts (C1 fix)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-1',
+        events: [makeEvent({
+          eventDate: '2024-01-15',
+          eventType: 'intervento',
+          title: 'Intervento chirurgico ginocchio',
+          description: 'Artroscopia diagnostica e terapeutica',
+          diagnosis: 'Lesione meniscale',
+          confidence: 95,
+        })],
+      },
+      {
+        documentId: 'doc-2',
+        events: [makeEvent({
+          eventDate: '2024-01-15',
+          eventType: 'intervento',
+          title: 'Intervento chirurgico ginocchio artroscopia',
+          description: 'Artroscopia del ginocchio',
+          diagnosis: 'Rottura LCA',
+          confidence: 90,
+        })],
+      },
+    ]);
+
+    // At least one event should have diagnosis discrepancy flagged
+    const flagged = result.filter((e) => e.discrepancyNote?.includes('DIAGNOSI DISCORDANTE'));
+    expect(flagged.length).toBeGreaterThan(0);
+
+    // Flagged events must have lowered confidence and requiresVerification
+    for (const event of flagged) {
+      expect(event.confidence).toBeLessThanOrEqual(30);
+      expect(event.requiresVerification).toBe(true);
+      // Note must include both diagnoses for the expert
+      expect(event.discrepancyNote).toContain('Lesione meniscale');
+      expect(event.discrepancyNote).toContain('Rottura LCA');
+    }
+  });
+
+  it('should flag doctor name discrepancy with requiresVerification (C1 fix)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-1',
+        events: [makeEvent({
+          eventDate: '2024-02-10',
+          eventType: 'visita',
+          title: 'Visita ortopedica controllo',
+          description: 'Controllo post-operatorio',
+          doctor: 'Dott. Rossi',
+        })],
+      },
+      {
+        documentId: 'doc-2',
+        events: [makeEvent({
+          eventDate: '2024-02-10',
+          eventType: 'visita',
+          title: 'Visita ortopedica controllo follow-up',
+          description: 'Follow-up post intervento',
+          doctor: 'Dott. Bianchi',
+        })],
+      },
+    ]);
+
+    const flagged = result.filter((e) => e.discrepancyNote?.includes('MEDICO DISCORDANTE'));
+    expect(flagged.length).toBeGreaterThan(0);
+    for (const event of flagged) {
+      expect(event.requiresVerification).toBe(true);
+    }
+  });
+
+  it('should NOT flag discrepancy for same data across documents', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-1',
+        events: [makeEvent({
+          eventDate: '2024-01-15',
+          eventType: 'visita',
+          title: 'Visita ortopedica controllo',
+          description: 'Controllo regolare',
+          diagnosis: 'Frattura femore in via di guarigione',
+          doctor: 'Dott. Rossi',
+        })],
+      },
+      {
+        documentId: 'doc-2',
+        events: [makeEvent({
+          eventDate: '2024-01-15',
+          eventType: 'visita',
+          title: 'Visita ortopedica controllo follow-up',
+          description: 'Controllo post-operatorio regolare',
+          diagnosis: 'Frattura femore in via di guarigione',
+          doctor: 'Dott. Rossi',
+        })],
+      },
+    ]);
+
+    // Same diagnosis + same doctor → no conflict flags
+    const diagnosisFlags = result.filter((e) => e.discrepancyNote?.includes('DIAGNOSI DISCORDANTE'));
+    const doctorFlags = result.filter((e) => e.discrepancyNote?.includes('MEDICO DISCORDANTE'));
+    expect(diagnosisFlags).toHaveLength(0);
+    expect(doctorFlags).toHaveLength(0);
+  });
+
   it('should preserve document ID for each event', () => {
     const result = consolidateEvents([
       {

@@ -1,187 +1,23 @@
-import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
+import type { CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { SectionSpec, SectionCondition } from './section-generation-types';
-import { getExpectedSectionIds } from './case-type-templates';
-import { getCaseTypeKnowledge, getCombinedCaseTypeKnowledge } from '@/lib/domain-knowledge';
 
-// ── Token budget constants ──────────────────────────────────────────
-// Mistral Large max output: 32,768 tokens.
-// Each section runs in its own Inngest step with full Vercel budget (800s),
-// so there's no competition between sections. Max out critical sections.
+// ── Token budget constants (calibrated for 5,000-8,000 word reports) ──
 
-/** Max output for the most critical section (documentazione sanitaria). */
-const MAX_TOKENS_CRITICAL = 32_768;
+/** Documentazione sanitaria — the longest, ~50% of report. */
+const TOKENS_CRITICAL = 16_384;
 
-/** Max output for large content sections (atti, premesse, pareri, elementi). */
-const MAX_TOKENS_LARGE = 16_384;
+/** Large content sections: atti, premesse, pareri. */
+const TOKENS_LARGE = 8_192;
 
-/** Max output for medium sections (riassunto, specialty). */
-const MAX_TOKENS_MEDIUM = 8_192;
+/** Medium sections: epicrisi, conclusioni, spese. */
+const TOKENS_MEDIUM = 4_096;
 
-/** Max output for small sections (intestazione, spese, conclusioni). */
-const MAX_TOKENS_SMALL = 8_192;
+/** Small sections: intestazione, quesiti, profilo. */
+const TOKENS_SMALL = 2_048;
 
-// ── Universal section definitions ───────────────────────────────────
-
-const UNIVERSAL_SECTIONS: SectionSpec[] = [
-  {
-    id: 'intestazione',
-    title: 'Premesse e Profilo Metodologico',
-    maxTokens: MAX_TOKENS_SMALL,
-    dataSources: ['perizia-metadata'],
-    contextMaxChars: 500,
-    needsOcr: false,
-    condition: 'has-perizia-metadata',
-    promptDirective: `Genera le premesse formali della perizia medico-legale.
-Includi:
-- Conferimento dell'incarico (Tribunale, n. RG, Giudice)
-- Parti coinvolte (ricorrente, resistente, CTP nominati)
-- Date rilevanti (conferimento incarico, inizio operazioni, termine deposito)
-- Profilo metodologico: metodo di lavoro adottato (esame documentazione, criteri valutativi)
-Stile formale da perizia depositabile in tribunale.`,
-  },
-  {
-    id: 'documentazione_atti',
-    title: 'Dati della Documentazione in Atti',
-    maxTokens: MAX_TOKENS_LARGE,
-    dataSources: ['events-non-medical'],
-    contextMaxChars: 800,
-    needsOcr: true,
-    condition: 'has-non-medical-docs',
-    promptDirective: `Riproduci FEDELMENTE il contenuto rilevante dei documenti NON sanitari presenti nel fascicolo:
-ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice.
-Stile: riporta il contenuto essenziale virgolettato o in forma di riassunto fedele, con indicazione della fonte.
-FORMATO CITAZIONE per ogni documento:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."`,
-  },
-  {
-    id: 'premesse',
-    title: 'Premesse',
-    maxTokens: MAX_TOKENS_LARGE,
-    dataSources: ['events-non-medical'],
-    contextMaxChars: 800,
-    needsOcr: true,
-    condition: 'has-legal-docs',
-    promptDirective: `Riproduci FEDELMENTE il contenuto delle memorie difensive e dei ricorsi presenti nel fascicolo.
-Per ogni documento usa il FORMATO CITAZIONE:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
-Riporta le posizioni delle parti e le argomentazioni giuridiche presentate.`,
-  },
-  {
-    id: 'documentazione_sanitaria',
-    title: 'Dati della Documentazione Sanitaria',
-    maxTokens: MAX_TOKENS_CRITICAL,
-    dataSources: ['events-medical', 'image-analysis'],
-    contextMaxChars: 2000,
-    needsOcr: true,
-    promptDirective: `Genera la riproduzione DETTAGLIATA e FEDELE della documentazione sanitaria in ordine cronologico.
-Questa e la sezione PIU LUNGA e IMPORTANTE del report. OGNI evento fornito DEVE comparire.
-
-FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..." (X)
-
-Dove (X) e la categoria fonte: (A) Cartella Clinica, (B) Referti Controlli, (C) Radiologici/Strumentali, (D) Ematochimici.
-
-Regole:
-- Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
-- Diari clinici giornalieri: un bullet per ogni giorno con formato: DD.MM.YYYY: "..."
-- Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO (formato pipe markdown)
-- Verbali operatori: riprodurre INTEGRALMENTE
-- Scrivi in PROSA DISCORSIVA, MAI elenchi puntati per la narrazione clinica
-- Se sono disponibili immagini diagnostiche, inseriscile INLINE subito dopo la citazione pertinente
-- NON omettere NESSUN evento. NON sintetizzare.`,
-  },
-  {
-    id: 'spese_mediche',
-    title: 'Spese Mediche Esibite',
-    maxTokens: MAX_TOKENS_SMALL,
-    dataSources: ['events-expenses'],
-    contextMaxChars: 500,
-    needsOcr: true,
-    condition: 'has-expense-events',
-    promptDirective: `Elenca le spese mediche documentate in tabella markdown con colonne: Data | Descrizione | Struttura | Importo.
-Per ogni voce valuta congruita e necessita rispetto al quadro clinico documentato.
-Includi un totale a fine tabella.`,
-  },
-  {
-    id: 'pareri_tecnici',
-    title: 'Precedenti Pareri Tecnici',
-    maxTokens: MAX_TOKENS_LARGE,
-    dataSources: ['events-perizie'],
-    contextMaxChars: 800,
-    needsOcr: true,
-    condition: 'has-perizie-docs',
-    promptDirective: `Riproduci le conclusioni e l'analisi delle perizie precedenti (CTP, CTU, perizie precedenti) in forma virgolettata fedele.
-Per ogni perizia usa il FORMATO CITAZIONE:
-**Tipo perizia, autore, in data DD.MM.YYYY:** "... conclusioni e analisi ..."
-Se sono disponibili immagini diagnostiche citate nei pareri, inseriscile INLINE dopo la citazione pertinente.`,
-  },
-  {
-    id: 'riassunto',
-    title: 'Riassunto del Caso',
-    maxTokens: MAX_TOKENS_MEDIUM,
-    dataSources: ['context-summaries'],
-    contextMaxChars: 1000,
-    needsOcr: false,
-    promptDirective: `Scrivi una sintesi AMPIA e COMPLETA della vicenda clinica in 6-10 paragrafi.
-Questo e il quadro d'insieme che il medico legale legge per primo.
-Deve coprire:
-1. Presentazione del paziente e motivo del contenzioso
-2. Anamnesi remota rilevante (patologie pregresse, condizioni pre-esistenti)
-3. Evento indice (l'episodio clinico oggetto di valutazione) con cronologia essenziale
-4. Iter diagnostico-terapeutico principale
-5. Complicanze eventualmente insorte e loro gestione
-6. Esiti e situazione clinica attuale del paziente
-7. Documentazione esaminata e sua completezza
-Non ripetere dettagli gia esposti nelle sezioni documentali precedenti.
-Basa il riassunto ESCLUSIVAMENTE sui context summary delle sezioni precedenti e sugli eventi forniti.`,
-  },
-  // Slot 8: specialty sections are inserted here by resolveSectionPlan()
-  {
-    id: 'elementi_rilievo',
-    title: 'Elementi per la Valutazione Medico-Legale',
-    maxTokens: MAX_TOKENS_LARGE,
-    dataSources: ['anomalies', 'missing-docs', 'calculations', 'context-summaries', 'guidelines'],
-    contextMaxChars: 1500,
-    needsOcr: false,
-    promptDirective: `Genera la sezione "Elementi per la Valutazione Medico-Legale" con le seguenti sotto-sezioni:
-
-### Profili critici documentati
-Per OGNI criticita riscontrata, scrivi un paragrafo fattuale con:
-- FATTO OGGETTIVO dalla documentazione [Ev.N]
-- Standard di riferimento applicabile [Fonte, Anno]
-- Elementi documentali a supporto [Ev.N]
-- Elementi documentali contrari o attenuanti [Ev.N]
-NON esprimere giudizi su responsabilita.
-
-### Elementi per la valutazione del nesso causale
-Per ogni collegamento: (1) FATTO documentato [Ev.N], (2) CONSEGUENZA clinica [Ev.N], (3) CRITERIO giuridico.
-
-### Elementi per la quantificazione del danno
-Periodi ITT/ITP con date esatte [Ev.N], criteri tabellari, esiti clinici, spese mediche documentate.
-
-Includi anomalie e documenti mancanti rilevati dal sistema.
-Scrivi in prosa fattuale, NON elenchi puntati.`,
-  },
-  {
-    id: 'conclusioni',
-    title: 'Sintesi Conclusiva',
-    maxTokens: MAX_TOKENS_SMALL,
-    dataSources: ['context-summaries', 'calculations', 'perizia-metadata'],
-    contextMaxChars: 0, // last section, no need for context
-    needsOcr: false,
-    promptDirective: `Scrivi la sintesi conclusiva come paragrafo unico discorsivo.
-Stile FATTUALE: "Dalla documentazione in atti esaminata risultano i seguenti elementi rilevanti..."
-Includi:
-- Riepilogo dei fatti principali emersi dalla documentazione
-- Profili critici identificati con relativa evidenza documentale
-- Dati quantitativi: periodi ITT/ITP con date, criteri tabellari applicabili
-- Lacune documentali riscontrate e documentazione integrativa necessaria
-Se ci sono quesiti del Giudice, per CIASCUN quesito presenta i fatti documentali pertinenti [Ev.N].
-NON esprimere opinioni, giudizi o conclusioni su responsabilita o merito.
-La sintesi deve contenere SOLO fatti gia trattati nel report. NON introdurre elementi nuovi.`,
-  },
-];
+/** Placeholder sections — no LLM call. */
+const TOKENS_NONE = 0;
 
 // ── Document type classification for conditions ─────────────────────
 
@@ -205,6 +41,431 @@ const EXPENSE_EVENT_TYPES = new Set([
   'spesa_medica',
 ]);
 
+// ── Shared prompt fragments ─────────────────────────────────────────
+
+const NO_EVN_RULE = 'Cita i documenti per tipo, autore e data. NON usare riferimenti numerati agli eventi.';
+
+const CITATION_FORMAT = `FORMATO CITAZIONE per ogni documento:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."`;
+
+// ── CTU Giudiziale sections (15) ────────────────────────────────────
+
+const CTU_SECTIONS: SectionSpec[] = [
+  {
+    id: 'intestazione',
+    title: 'Intestazione',
+    maxTokens: TOKENS_SMALL,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 300,
+    needsOcr: false,
+    condition: 'has-perizia-metadata',
+    promptDirective: `Genera l'intestazione formale della perizia medico-legale.
+Includi:
+- Tribunale, Sezione, numero di Ruolo Generale
+- Giudice delegato/istruttore
+- Parti coinvolte: ricorrente (con dati identificativi), resistente, eventuali chiamati in causa
+- Consulenti Tecnici di Parte nominati da ciascuna parte
+- Data di conferimento dell'incarico, data di giuramento se disponibile
+- Termini per l'invio della bozza, per le osservazioni dei CTP e per il deposito definitivo
+Stile formale da perizia depositabile in tribunale, passato remoto.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'quesiti',
+    title: 'Quesiti',
+    maxTokens: TOKENS_SMALL,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 500,
+    needsOcr: false,
+    condition: 'has-quesiti',
+    promptDirective: `Riproduci FEDELMENTE e INTEGRALMENTE i quesiti del Giudice cosi come formulati nell'ordinanza di conferimento.
+Numera ciascun quesito progressivamente.
+NON modificare, riassumere o parafrasare il testo dei quesiti.
+Se un quesito contiene sotto-punti, riportali tutti fedelmente.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'profilo_metodologico',
+    title: 'Profilo Metodologico',
+    maxTokens: TOKENS_SMALL,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 200,
+    needsOcr: false,
+    promptDirective: `Genera una breve nota metodologica (1-2 paragrafi).
+Includi:
+- Metodo di lavoro adottato (esame della documentazione in atti, visita del periziando, criteri valutativi)
+- Riferimento alle linee guida e buone pratiche cliniche applicabili
+- Indicazione che le operazioni peritali si sono svolte in contraddittorio con i CTP (se nominati)
+Stile conciso e formale.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'documentazione_atti',
+    title: 'Dati della Documentazione in Atti',
+    maxTokens: TOKENS_LARGE,
+    dataSources: ['events-non-medical'],
+    contextMaxChars: 500,
+    needsOcr: true,
+    condition: 'has-non-medical-docs',
+    promptDirective: `Riproduci FEDELMENTE il contenuto rilevante dei documenti NON sanitari presenti nel fascicolo:
+ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice.
+${CITATION_FORMAT}
+Riporta il contenuto essenziale virgolettato, con indicazione della fonte.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'premesse',
+    title: 'Premesse',
+    maxTokens: TOKENS_LARGE,
+    dataSources: ['events-non-medical'],
+    contextMaxChars: 500,
+    needsOcr: true,
+    condition: 'has-legal-docs',
+    promptDirective: `Riproduci FEDELMENTE il contenuto delle memorie difensive e dei ricorsi presenti nel fascicolo.
+${CITATION_FORMAT}
+Riporta le posizioni delle parti e le argomentazioni giuridiche presentate.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'documentazione_sanitaria',
+    title: 'Dati della Documentazione Sanitaria',
+    maxTokens: TOKENS_CRITICAL,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1500,
+    needsOcr: true,
+    promptDirective: `Genera la riproduzione DETTAGLIATA e FEDELE della documentazione sanitaria in ordine cronologico.
+Questa e la sezione PIU LUNGA e IMPORTANTE del report. OGNI evento fornito DEVE comparire.
+
+FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."
+
+Regole:
+- Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
+- Diari clinici giornalieri: riportare solo i giorni con variazioni cliniche significative (interventi, complicanze, modifiche terapia). Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
+- Esami di laboratorio: riportare solo valori alterati e quelli rilevanti per il caso in tabella markdown. Aggiungere nota "restanti parametri nella norma" se applicabile
+- Verbali operatori: riprodurre INTEGRALMENTE, sempre
+- Referti radiologici e strumentali: riprodurre INTEGRALMENTE
+- Lettere di dimissione: riprodurre INTEGRALMENTE diagnosi e terapia prescritta
+- Certificati di visite pre e post-operatorie: riprodurre INTEGRALMENTE
+- Scrivi in PROSA DISCORSIVA, MAI elenchi puntati per la narrazione clinica
+- Se sono disponibili immagini diagnostiche, inseriscile INLINE subito dopo la citazione pertinente
+- NON omettere NESSUN evento
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'spese_mediche',
+    title: 'Spese Mediche Esibite',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['events-expenses'],
+    contextMaxChars: 300,
+    needsOcr: true,
+    condition: 'has-expense-events',
+    promptDirective: `Elenca le spese mediche documentate in tabella markdown con colonne: Data | Descrizione | Struttura | Importo.
+Per ogni voce valuta congruita e necessita rispetto al quadro clinico documentato.
+Includi un totale a fine tabella.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'pareri_tecnici',
+    title: 'Precedenti Pareri Tecnici',
+    maxTokens: TOKENS_LARGE,
+    dataSources: ['events-perizie'],
+    contextMaxChars: 500,
+    needsOcr: true,
+    condition: 'has-perizie-docs',
+    promptDirective: `Riproduci le conclusioni e l'analisi delle perizie precedenti (CTP, CTU, perizie precedenti) in forma virgolettata fedele.
+Per ogni perizia usa il formato:
+**Tipo perizia, autore, in data DD.MM.YYYY:** "... conclusioni e analisi ..."
+Se sono disponibili immagini diagnostiche citate nei pareri, inseriscile INLINE dopo la citazione pertinente.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'verbale_operazioni_peritali',
+    title: 'Verbale delle Operazioni Peritali',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui il verbale delle operazioni peritali, includendo:*
+*- Data, ora e luogo delle operazioni*
+*- Presenze: CTU, CTP delle parti, legali, periziando*
+*- Attivita svolte: esame documentazione, discussione, visita medico-legale*
+*- Eventuali richieste dei CTP*
+*- Termine assegnato per il deposito delle osservazioni alla bozza]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'visita_periziando',
+    title: 'Visita del Periziando',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui i risultati della visita medico-legale:*
+
+*SOGGETTIVAMENTE — Il/La periziando/a riferisce:*
+*- Sintomatologia attuale*
+*- Limitazioni funzionali riferite*
+*- Terapie in corso*
+
+*OBIETTIVAMENTE — All'esame obiettivo si rileva:*
+*- Esame obiettivo generale*
+*- Esame obiettivo locale/specialistico*
+*- Eventuali esami strumentali eseguiti in sede di visita]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'epicrisi',
+    title: 'Epicrisi',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['context-summaries', 'calculations'],
+    contextMaxChars: 800,
+    needsOcr: false,
+    promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica documentata.
+
+L'epicrisi deve contenere:
+1. **Sintesi della vicenda clinica**: ricostruzione sintetica ma completa dei fatti principali emersi dalla documentazione, in ordine cronologico (2-4 paragrafi)
+2. **Dati per la valutazione del danno temporaneo**: se disponibili nei calcoli, riporta i periodi di Invalidita Temporanea Totale (ITT) e Parziale (ITP) con le date esatte
+3. **Dati per la valutazione del danno permanente**: riporta gli esiti clinici documentati che il perito valutera secondo le tabelle di riferimento
+
+NON esprimere giudizi sul nesso causale — il perito li formulera autonomamente.
+NON esprimere percentuali di invalidita permanente — il perito le determinera secondo le tabelle SIMLA.
+NON ripetere in dettaglio fatti gia esposti nella documentazione sanitaria — sintetizzare.
+Scrivi in prosa discorsiva formale.
+${NO_EVN_RULE}
+
+*[Il perito completera questa sezione con le proprie valutazioni professionali su: nesso di causalita materiale e giuridica, quantificazione del danno biologico permanente (tabelle SIMLA), danno morale e esistenziale]*`,
+  },
+  {
+    id: 'considerazioni_ml',
+    title: 'Considerazioni Medico-Legali',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui le considerazioni medico-legali, includendo:*
+*- Valutazione del nesso di causalita materiale (criterio controfattuale) e giuridico (causalita adeguata, criterio del "piu probabile che non")*
+*- Analisi della condotta sanitaria alla luce delle linee guida e buone pratiche cliniche applicabili*
+*- Valutazione del danno biologico permanente con riferimento alle tabelle SIMLA*
+*- Eventuale danno morale e danno esistenziale*
+*- Personalizzazione del danno se applicabile]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'conclusioni_quesiti',
+    title: 'Conclusioni — Risposte ai Quesiti',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['context-summaries', 'calculations', 'perizia-metadata'],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-quesiti',
+    promptDirective: `Per CIASCUN quesito del Giudice (riportati nei dati perizia), genera un framework fattuale di risposta.
+
+Per ogni quesito:
+### Quesito N
+**Testo del quesito:** [riporta il quesito fedelmente]
+
+**Elementi documentali pertinenti:**
+- Elenca i fatti dalla documentazione rilevanti per rispondere al quesito
+- Includi date, documenti fonte e dati clinici pertinenti
+- Se disponibili, includi i dati quantitativi (periodi ITT/ITP, esiti documentati)
+
+*[Il perito inserira qui la propria risposta al quesito]*
+
+NON rispondere ai quesiti — presenta SOLO gli elementi documentali organizzati. Il perito formulera le risposte.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'bibliografia',
+    title: 'Bibliografia',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire bibliografia pertinente. Fonti tipiche:*
+*- Linee guida delle societa scientifiche di riferimento per la patologia in esame*
+*- Tabelle SIMLA per la valutazione del danno biologico*
+*- Letteratura medico-legale e giuridica rilevante*
+*- Protocolli e standard di buona pratica clinica applicabili al caso]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'osservazioni_bozza',
+    title: 'Osservazioni alla Bozza',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Spazio riservato per la valutazione delle osservazioni dei CTP alla bozza di relazione peritale.*
+
+*Dopo il deposito della bozza e la ricezione delle osservazioni dei Consulenti di Parte, inserire qui:*
+*- Sintesi delle osservazioni ricevute da ciascun CTP*
+*- Controdeduzioni puntuali a ciascuna osservazione*
+*- Eventuali modifiche apportate alla relazione a seguito delle osservazioni]*`,
+    promptDirective: '',
+  },
+];
+
+// ── CTP sections (derived from CTU, without osservazioni_bozza) ─────
+
+function buildCTPSections(): SectionSpec[] {
+  return CTU_SECTIONS
+    .filter((s) => s.id !== 'osservazioni_bozza')
+    .map((s) => {
+      if (s.id === 'epicrisi') {
+        return {
+          ...s,
+          promptDirective: s.promptDirective.replace(
+            'NON esprimere giudizi sul nesso causale',
+            'Evidenzia con particolare attenzione i profili critici documentati nella condotta sanitaria. NON esprimere giudizi sul nesso causale',
+          ),
+        };
+      }
+      return s;
+    });
+}
+
+const CTP_SECTIONS: SectionSpec[] = buildCTPSections();
+
+// ── Stragiudiziale sections (8, shorter structure) ──────────────────
+
+const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
+  {
+    id: 'intestazione_stragiudiziale',
+    title: 'Intestazione',
+    maxTokens: TOKENS_SMALL,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 200,
+    needsOcr: false,
+    promptDirective: `Genera l'intestazione della valutazione stragiudiziale.
+Includi:
+- Dati del professionista incaricato (nome, qualifica, specializzazione)
+- Dati del paziente/periziando (iniziali, data di nascita se disponibile)
+- Data della visita medico-legale (se disponibile)
+- Oggetto dell'incarico
+Stile formale e conciso.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'anamnesi',
+    title: 'Dati Anamnestici',
+    maxTokens: TOKENS_SMALL,
+    dataSources: ['events-medical'],
+    contextMaxChars: 400,
+    needsOcr: false,
+    promptDirective: `Genera una breve anamnesi del periziando basata sulla documentazione.
+Includi:
+- Condizioni patologiche pregresse rilevanti
+- Anamnesi familiare se pertinente e documentata
+- Anamnesi farmacologica se documentata
+- Peso, altezza, condizioni generali se documentati
+Stile sintetico (1-3 paragrafi). Riporta SOLO fatti documentati.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'fatto_storia_clinica',
+    title: 'Il Fatto e la Storia Clinica',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['events-medical', 'context-summaries'],
+    contextMaxChars: 600,
+    needsOcr: true,
+    promptDirective: `Genera la narrazione del fatto e della storia clinica in ordine cronologico.
+Riporta:
+- L'evento indice (sinistro, intervento, evento avverso) con data e circostanze
+- L'iter diagnostico-terapeutico successivo
+- Gli esiti documentati e la situazione clinica attuale
+Stile narrativo discorsivo. Piu sintetico rispetto a una CTU, ma fedele ai fatti documentati.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'documentazione_sanitaria',
+    title: 'La Documentazione Medica Prodotta',
+    maxTokens: TOKENS_CRITICAL,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1000,
+    needsOcr: true,
+    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+FORMATO CITAZIONE per OGNI documento:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+
+Regole:
+- OGNI evento fornito DEVE comparire
+- Diari clinici: solo giorni con variazioni significative
+- Esami lab: solo valori alterati e rilevanti
+- Verbali operatori: riprodurre INTEGRALMENTE
+- Referti radiologici: riprodurre INTEGRALMENTE
+- Scrivi in PROSA DISCORSIVA
+- Se disponibili immagini diagnostiche, inserirle INLINE
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'spese_mediche',
+    title: 'Spese Mediche',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['events-expenses'],
+    contextMaxChars: 200,
+    needsOcr: true,
+    condition: 'has-expense-events',
+    promptDirective: `Elenca le spese mediche documentate in tabella markdown: Data | Descrizione | Struttura | Importo.
+Includi totale a fine tabella.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'visita_clinica',
+    title: 'Visita Clinica',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui i risultati della visita medico-legale:*
+
+*SOGGETTIVAMENTE — Il/La periziando/a riferisce:*
+*- Sintomatologia attuale*
+*- Limitazioni funzionali*
+
+*OBIETTIVAMENTE — All'esame obiettivo:*
+*- Esame obiettivo generale e locale*
+*- Eventuali esami strumentali]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'epicrisi',
+    title: 'Epicrisi',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['context-summaries', 'calculations'],
+    contextMaxChars: 0,
+    needsOcr: false,
+    promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica.
+Includi:
+1. Sintesi cronologica dei fatti principali (1-2 paragrafi)
+2. Dati per il danno biologico: periodi ITT/ITP se calcolati, esiti documentati
+NON esprimere percentuali di invalidita ne giudizi sul nesso causale — il perito li formulera.
+Scrivi in prosa formale e concisa.
+${NO_EVN_RULE}
+
+*[Il perito completera questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
+  },
+  {
+    id: 'conclusioni',
+    title: 'Conclusioni',
+    maxTokens: TOKENS_MEDIUM,
+    dataSources: ['context-summaries', 'calculations'],
+    contextMaxChars: 0,
+    needsOcr: false,
+    promptDirective: `Genera una breve sintesi conclusiva (1-2 paragrafi).
+Riepiloga i fatti principali e i dati quantitativi emersi (periodi ITT/ITP, esiti documentati).
+NON esprimere giudizi, opinioni o conclusioni su responsabilita o merito.
+Stile fattuale e conciso. La sintesi deve contenere SOLO fatti gia trattati nel report.
+${NO_EVN_RULE}`,
+  },
+];
+
 // ── Condition evaluation ────────────────────────────────────────────
 
 interface ConditionContext {
@@ -227,6 +488,9 @@ export function evaluateCondition(
         (ctx.periziaMetadata.quesiti && ctx.periziaMetadata.quesiti.length > 0)
       ));
 
+    case 'has-quesiti':
+      return !!(ctx.periziaMetadata?.quesiti && ctx.periziaMetadata.quesiti.length > 0);
+
     case 'has-non-medical-docs':
       return ctx.documentTypes.some((t) => NON_MEDICAL_DOC_TYPES.has(t)) ||
         ctx.events.some((e) => e.eventType === 'documento_amministrativo' || e.eventType === 'certificato');
@@ -245,60 +509,22 @@ export function evaluateCondition(
   }
 }
 
-// ── Specialty section builder ───────────────────────────────────────
-
-/**
- * Build SectionSpec entries from domain-knowledge specialty sections.
- * These go into the "slot 8" position between riassunto and elementi_rilievo.
- */
-function buildSpecialtySections(
-  caseTypes: CaseType[],
-): SectionSpec[] {
-  const knowledge = caseTypes.length === 1
-    ? getCaseTypeKnowledge(caseTypes[0])
-    : getCombinedCaseTypeKnowledge(caseTypes);
-
-  // Filter out universal sections that we handle separately
-  const universalIds = new Set(['riassunto', 'cronologia', 'elementi_rilievo']);
-
-  return knowledge.reportSections
-    .filter((s) => !universalIds.has(s.id))
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      maxTokens: MAX_TOKENS_MEDIUM,
-      dataSources: ['events', 'anomalies', 'guidelines', 'context-summaries'] as SectionSpec['dataSources'],
-      contextMaxChars: 800,
-      needsOcr: false,
-      promptDirective: `Genera la sezione "${s.title}".
-${s.description}
-Basa l'analisi ESCLUSIVAMENTE sui fatti documentati [Ev.N].
-Scrivi in prosa fattuale e formale da perizia medico-legale.
-NON esprimere opinioni o giudizi.`,
-    }));
-}
-
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
  * Resolve the full section plan for a case.
- * Returns an ordered array of SectionSpec, including conditional sections
- * and specialty sections from domain-knowledge.
+ * Returns an ordered array of SectionSpec, with role-specific structure
+ * and conditional sections filtered by available data.
  */
 export function resolveSectionPlan(params: {
-  caseType: CaseType;
-  caseTypes?: CaseType[];
+  caseType: string;
+  caseTypes?: string[];
   caseRole: CaseRole;
   periziaMetadata?: PeriziaMetadata;
   events: ConsolidatedEvent[];
   documentTypes: string[];
 }): SectionSpec[] {
-  const {
-    caseType, periziaMetadata, events, documentTypes,
-  } = params;
-  const effectiveTypes = params.caseTypes && params.caseTypes.length > 1
-    ? params.caseTypes
-    : [caseType];
+  const { caseRole, periziaMetadata, events, documentTypes } = params;
 
   const conditionCtx: ConditionContext = {
     events,
@@ -306,35 +532,45 @@ export function resolveSectionPlan(params: {
     periziaMetadata,
   };
 
-  // 1. Filter universal sections by condition
-  const includedUniversal = UNIVERSAL_SECTIONS.filter((spec) => {
+  // Select role-specific section template
+  let baseSections: SectionSpec[];
+  switch (caseRole) {
+    case 'ctu':
+      baseSections = CTU_SECTIONS;
+      break;
+    case 'ctp':
+      baseSections = CTP_SECTIONS;
+      break;
+    case 'stragiudiziale':
+      baseSections = STRAGIUDIZIALE_SECTIONS;
+      break;
+    default:
+      baseSections = CTU_SECTIONS;
+  }
+
+  // Filter by conditions
+  return baseSections.filter((spec) => {
     if (!spec.condition) return true;
     return evaluateCondition(spec.condition, conditionCtx);
   });
-
-  // 2. Build specialty sections from domain-knowledge
-  const specialtySections = buildSpecialtySections(effectiveTypes);
-
-  // 3. Insert specialty sections between 'riassunto' and 'elementi_rilievo'
-  const result: SectionSpec[] = [];
-  for (const spec of includedUniversal) {
-    result.push(spec);
-    if (spec.id === 'riassunto') {
-      // Insert specialty sections after riassunto
-      result.push(...specialtySections);
-    }
-  }
-
-  return result;
 }
 
 /**
- * Get all possible section IDs (for validation/parsing).
+ * Get all possible section IDs for a given role (for validation/parsing).
  */
-export function getAllSectionIds(caseTypes: CaseType | CaseType[]): string[] {
-  const types = Array.isArray(caseTypes) ? caseTypes : [caseTypes];
-  const universalIds = UNIVERSAL_SECTIONS.map((s) => s.id);
-  const specialtyIds = getExpectedSectionIds(types)
-    .filter((id) => !universalIds.includes(id));
-  return [...universalIds, ...specialtyIds];
+export function getAllSectionIds(caseRole: CaseRole): string[] {
+  switch (caseRole) {
+    case 'ctu':
+      return CTU_SECTIONS.map((s) => s.id);
+    case 'ctp':
+      return CTP_SECTIONS.map((s) => s.id);
+    case 'stragiudiziale':
+      return STRAGIUDIZIALE_SECTIONS.map((s) => s.id);
+    default:
+      return CTU_SECTIONS.map((s) => s.id);
+  }
 }
+
+// ── Exports for testing ─────────────────────────────────────────────
+
+export { CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS };

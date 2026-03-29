@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSectionPlan, evaluateCondition, getAllSectionIds } from './section-catalog';
+import { resolveSectionPlan, evaluateCondition, getAllSectionIds, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS } from './section-catalog';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { CaseType, PeriziaMetadata } from '@/types';
 
@@ -26,14 +26,26 @@ function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   };
 }
 
-const BASE_PARAMS = {
+const CTU_PARAMS = {
   caseType: 'ortopedica' as CaseType,
   caseRole: 'ctu' as const,
   events: [makeEvent()],
   documentTypes: ['cartella_clinica'],
 };
 
+const STRAGIUDIZIALE_PARAMS = {
+  ...CTU_PARAMS,
+  caseRole: 'stragiudiziale' as const,
+};
+
+const CTP_PARAMS = {
+  ...CTU_PARAMS,
+  caseRole: 'ctp' as const,
+};
+
 describe('section-catalog', () => {
+  // ── evaluateCondition ─────────────────────────────────────────────
+
   describe('evaluateCondition', () => {
     it('should return true for has-perizia-metadata when tribunale is set', () => {
       const result = evaluateCondition('has-perizia-metadata', {
@@ -64,6 +76,32 @@ describe('section-catalog', () => {
 
     it('should return false for has-perizia-metadata when undefined', () => {
       const result = evaluateCondition('has-perizia-metadata', {
+        events: [],
+        documentTypes: [],
+      });
+      expect(result).toBe(false);
+    });
+
+    it('should return true for has-quesiti when quesiti present', () => {
+      const result = evaluateCondition('has-quesiti', {
+        events: [],
+        documentTypes: [],
+        periziaMetadata: { quesiti: ['Descrivano le lesioni...'] },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should return false for has-quesiti when empty array', () => {
+      const result = evaluateCondition('has-quesiti', {
+        events: [],
+        documentTypes: [],
+        periziaMetadata: { quesiti: [] },
+      });
+      expect(result).toBe(false);
+    });
+
+    it('should return false for has-quesiti when undefined', () => {
+      const result = evaluateCondition('has-quesiti', {
         events: [],
         documentTypes: [],
       });
@@ -127,49 +165,138 @@ describe('section-catalog', () => {
     });
   });
 
+  // ── Role-specific section arrays ──────────────────────────────────
+
+  describe('role-specific section arrays', () => {
+    it('should have 15 CTU sections', () => {
+      expect(CTU_SECTIONS).toHaveLength(15);
+    });
+
+    it('should have 14 CTP sections (CTU without osservazioni_bozza)', () => {
+      expect(CTP_SECTIONS).toHaveLength(14);
+      expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('osservazioni_bozza');
+    });
+
+    it('should have 8 stragiudiziale sections', () => {
+      expect(STRAGIUDIZIALE_SECTIONS).toHaveLength(8);
+    });
+
+    it('should have placeholder sections with isPlaceholder=true and maxTokens=0', () => {
+      const placeholders = CTU_SECTIONS.filter((s) => s.isPlaceholder);
+      expect(placeholders.length).toBeGreaterThanOrEqual(5);
+      for (const p of placeholders) {
+        expect(p.maxTokens).toBe(0);
+        expect(p.placeholderText).toBeTruthy();
+        expect(p.dataSources).toEqual([]);
+      }
+    });
+
+    it('should not contain specialty sections (analisi_intervento, complicanze, etc.)', () => {
+      const allIds = [
+        ...CTU_SECTIONS.map((s) => s.id),
+        ...CTP_SECTIONS.map((s) => s.id),
+        ...STRAGIUDIZIALE_SECTIONS.map((s) => s.id),
+      ];
+      expect(allIds).not.toContain('analisi_intervento');
+      expect(allIds).not.toContain('complicanze');
+      expect(allIds).not.toContain('danno_biologico');
+      expect(allIds).not.toContain('nesso_causale');
+      expect(allIds).not.toContain('timeline_diagnostica');
+    });
+
+    it('should not contain elementi_rilievo or riassunto (old section names)', () => {
+      const allIds = [
+        ...CTU_SECTIONS.map((s) => s.id),
+        ...STRAGIUDIZIALE_SECTIONS.map((s) => s.id),
+      ];
+      expect(allIds).not.toContain('elementi_rilievo');
+      expect(allIds).not.toContain('riassunto');
+    });
+
+    it('should contain epicrisi in all role arrays', () => {
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('epicrisi');
+      expect(CTP_SECTIONS.map((s) => s.id)).toContain('epicrisi');
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('epicrisi');
+    });
+
+    it('should not have [Ev.N] references in any promptDirective', () => {
+      const allSections = [...CTU_SECTIONS, ...CTP_SECTIONS, ...STRAGIUDIZIALE_SECTIONS];
+      for (const s of allSections) {
+        expect(s.promptDirective).not.toMatch(/\[Ev\.N\]/);
+        expect(s.promptDirective).not.toMatch(/\[Ev\.\d+\]/);
+      }
+    });
+  });
+
+  // ── resolveSectionPlan ────────────────────────────────────────────
+
   describe('resolveSectionPlan', () => {
-    it('should always include documentazione_sanitaria', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
+    it('should return CTU sections for ctu role', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('documentazione_sanitaria');
+      expect(ids).toContain('epicrisi');
+      expect(ids).toContain('profilo_metodologico');
     });
 
-    it('should always include riassunto', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
+    it('should return stragiudiziale sections for stragiudiziale role', () => {
+      const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
       const ids = plan.map((s) => s.id);
-      expect(ids).toContain('riassunto');
-    });
-
-    it('should always include elementi_rilievo', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
-      expect(ids).toContain('elementi_rilievo');
-    });
-
-    it('should always include conclusioni', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
+      expect(ids).toContain('intestazione_stragiudiziale');
+      expect(ids).toContain('anamnesi');
+      expect(ids).toContain('fatto_storia_clinica');
+      expect(ids).toContain('documentazione_sanitaria');
+      expect(ids).toContain('epicrisi');
       expect(ids).toContain('conclusioni');
+      // Should NOT have CTU-specific sections
+      expect(ids).not.toContain('profilo_metodologico');
+      expect(ids).not.toContain('quesiti');
+      expect(ids).not.toContain('conclusioni_quesiti');
     });
 
-    it('should not include intestazione without perizia metadata', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
+    it('should return CTP sections for ctp role', () => {
+      const plan = resolveSectionPlan(CTP_PARAMS);
+      const ids = plan.map((s) => s.id);
+      expect(ids).toContain('documentazione_sanitaria');
+      expect(ids).toContain('epicrisi');
+      expect(ids).not.toContain('osservazioni_bozza');
+    });
+
+    it('should not include intestazione without perizia metadata (CTU)', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).not.toContain('intestazione');
     });
 
-    it('should include intestazione with perizia metadata', () => {
+    it('should include intestazione with perizia metadata (CTU)', () => {
       const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
+        ...CTU_PARAMS,
         periziaMetadata: { tribunale: 'Tribunale di Brescia' },
       });
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('intestazione');
     });
 
+    it('should include quesiti section when quesiti present (CTU)', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { quesiti: ['Descrivano le lesioni...'] },
+      });
+      const ids = plan.map((s) => s.id);
+      expect(ids).toContain('quesiti');
+      expect(ids).toContain('conclusioni_quesiti');
+    });
+
+    it('should not include quesiti section without quesiti (CTU)', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
+      const ids = plan.map((s) => s.id);
+      expect(ids).not.toContain('quesiti');
+      expect(ids).not.toContain('conclusioni_quesiti');
+    });
+
     it('should include spese_mediche when expense events exist', () => {
       const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
+        ...CTU_PARAMS,
         events: [makeEvent({ eventType: 'spesa_medica' })],
       });
       const ids = plan.map((s) => s.id);
@@ -177,106 +304,18 @@ describe('section-catalog', () => {
     });
 
     it('should not include spese_mediche without expense events', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
+      const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).not.toContain('spese_mediche');
     });
 
-    it('should include specialty sections for ortopedica', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
-      expect(ids).toContain('analisi_intervento');
-      expect(ids).toContain('complicanze');
-      expect(ids).toContain('danno_biologico');
-      expect(ids).toContain('nesso_causale');
-    });
-
-    it('should include specialty sections for oncologica', () => {
-      const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
-        caseType: 'oncologica',
-      });
-      const ids = plan.map((s) => s.id);
-      expect(ids).toContain('timeline_diagnostica');
-      expect(ids).toContain('analisi_ritardo');
-      expect(ids).toContain('loss_of_chance');
-    });
-
-    it('should include specialty sections for ostetrica', () => {
-      const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
-        caseType: 'ostetrica',
-      });
-      const ids = plan.map((s) => s.id);
-      expect(ids).toContain('analisi_travaglio');
-      expect(ids).toContain('ctg_analisi');
-      expect(ids).toContain('esiti_neonatali');
-    });
-
-    it('should place specialty sections after riassunto and before elementi_rilievo', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
-      const riassuntoIdx = ids.indexOf('riassunto');
-      const elementiIdx = ids.indexOf('elementi_rilievo');
-      const specialtyIdx = ids.indexOf('analisi_intervento');
-
-      expect(specialtyIdx).toBeGreaterThan(riassuntoIdx);
-      expect(specialtyIdx).toBeLessThan(elementiIdx);
-    });
-
-    it('should place conclusioni last', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
-      expect(ids[ids.length - 1]).toBe('conclusioni');
-    });
-
-    it('should place documentazione_sanitaria before riassunto', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const ids = plan.map((s) => s.id);
-      const docIdx = ids.indexOf('documentazione_sanitaria');
-      const riassuntoIdx = ids.indexOf('riassunto');
-      expect(docIdx).toBeLessThan(riassuntoIdx);
-    });
-
-    it('should handle all 13 case types without errors', () => {
-      const caseTypes: CaseType[] = [
-        'ortopedica', 'oncologica', 'ostetrica', 'anestesiologica',
-        'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto',
-        'previdenziale', 'infortuni', 'perizia_assicurativa',
-        'analisi_spese_mediche', 'opinione_prognostica', 'generica',
-      ];
-
-      for (const ct of caseTypes) {
-        const plan = resolveSectionPlan({
-          ...BASE_PARAMS,
-          caseType: ct,
-        });
-        expect(plan.length).toBeGreaterThanOrEqual(4); // at minimum: doc_sanitaria, riassunto, elementi, conclusioni
-        expect(plan.map((s) => s.id)).toContain('documentazione_sanitaria');
-        expect(plan.map((s) => s.id)).toContain('riassunto');
-        expect(plan.map((s) => s.id)).toContain('conclusioni');
-      }
-    });
-
-    it('should handle multi-type cases', () => {
-      const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
-        caseType: 'ortopedica',
-        caseTypes: ['ortopedica', 'oncologica'],
-      });
-      const ids = plan.map((s) => s.id);
-      // Should have sections from both types
-      expect(ids).toContain('analisi_intervento'); // ortopedica
-      expect(ids).toContain('timeline_diagnostica'); // oncologica
-    });
-
-    it('should include all conditional sections when all conditions are met', () => {
+    it('should include all conditional sections when all conditions are met (CTU)', () => {
       const periziaMetadata: PeriziaMetadata = {
         tribunale: 'Tribunale di Brescia',
         quesiti: ['Quesito 1'],
       };
       const plan = resolveSectionPlan({
-        ...BASE_PARAMS,
+        ...CTU_PARAMS,
         periziaMetadata,
         events: [
           makeEvent({ eventType: 'spesa_medica' }),
@@ -286,39 +325,96 @@ describe('section-catalog', () => {
       });
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('intestazione');
+      expect(ids).toContain('quesiti');
       expect(ids).toContain('documentazione_atti');
       expect(ids).toContain('premesse');
       expect(ids).toContain('spese_mediche');
       expect(ids).toContain('pareri_tecnici');
+      expect(ids).toContain('conclusioni_quesiti');
     });
 
     it('should have needsOcr=true for documentazione_sanitaria', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
+      const plan = resolveSectionPlan(CTU_PARAMS);
       const docSan = plan.find((s) => s.id === 'documentazione_sanitaria');
       expect(docSan?.needsOcr).toBe(true);
     });
 
-    it('should have needsOcr=false for riassunto', () => {
-      const plan = resolveSectionPlan(BASE_PARAMS);
-      const riassunto = plan.find((s) => s.id === 'riassunto');
-      expect(riassunto?.needsOcr).toBe(false);
+    it('should have needsOcr=false for epicrisi', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
+      const epicrisi = plan.find((s) => s.id === 'epicrisi');
+      expect(epicrisi?.needsOcr).toBe(false);
+    });
+
+    it('should handle all case types for all roles without errors', () => {
+      const caseTypes: CaseType[] = [
+        'ortopedica', 'oncologica', 'ostetrica', 'anestesiologica',
+        'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto',
+        'previdenziale', 'infortuni', 'perizia_assicurativa',
+        'analisi_spese_mediche', 'opinione_prognostica', 'generica',
+      ];
+      const roles = ['ctu', 'ctp', 'stragiudiziale'] as const;
+
+      for (const role of roles) {
+        for (const ct of caseTypes) {
+          const plan = resolveSectionPlan({
+            ...CTU_PARAMS,
+            caseType: ct,
+            caseRole: role,
+          });
+          expect(plan.length).toBeGreaterThanOrEqual(3);
+          expect(plan.map((s) => s.id)).toContain('documentazione_sanitaria');
+          expect(plan.map((s) => s.id)).toContain('epicrisi');
+        }
+      }
+    });
+
+    it('should place documentazione_sanitaria before epicrisi (CTU)', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
+      const ids = plan.map((s) => s.id);
+      expect(ids.indexOf('documentazione_sanitaria')).toBeLessThan(ids.indexOf('epicrisi'));
+    });
+
+    it('should include placeholder sections in CTU plan', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
+      const placeholders = plan.filter((s) => s.isPlaceholder);
+      expect(placeholders.length).toBeGreaterThanOrEqual(4);
+      expect(placeholders.map((s) => s.id)).toContain('verbale_operazioni_peritali');
+      expect(placeholders.map((s) => s.id)).toContain('visita_periziando');
+      expect(placeholders.map((s) => s.id)).toContain('considerazioni_ml');
+      expect(placeholders.map((s) => s.id)).toContain('bibliografia');
+    });
+
+    it('should include visita_clinica placeholder in stragiudiziale plan', () => {
+      const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
+      const visita = plan.find((s) => s.id === 'visita_clinica');
+      expect(visita).toBeDefined();
+      expect(visita?.isPlaceholder).toBe(true);
     });
   });
 
+  // ── getAllSectionIds ──────────────────────────────────────────────
+
   describe('getAllSectionIds', () => {
-    it('should return universal and specialty section IDs', () => {
-      const ids = getAllSectionIds('ortopedica');
+    it('should return CTU section IDs for ctu role', () => {
+      const ids = getAllSectionIds('ctu');
       expect(ids).toContain('documentazione_sanitaria');
-      expect(ids).toContain('riassunto');
-      expect(ids).toContain('elementi_rilievo');
-      expect(ids).toContain('conclusioni');
-      expect(ids).toContain('analisi_intervento');
+      expect(ids).toContain('epicrisi');
+      expect(ids).toContain('conclusioni_quesiti');
+      expect(ids).toContain('osservazioni_bozza');
     });
 
-    it('should handle array of case types', () => {
-      const ids = getAllSectionIds(['ortopedica', 'oncologica']);
-      expect(ids).toContain('analisi_intervento');
-      expect(ids).toContain('timeline_diagnostica');
+    it('should return stragiudiziale section IDs', () => {
+      const ids = getAllSectionIds('stragiudiziale');
+      expect(ids).toContain('intestazione_stragiudiziale');
+      expect(ids).toContain('anamnesi');
+      expect(ids).toContain('fatto_storia_clinica');
+      expect(ids).not.toContain('quesiti');
+      expect(ids).not.toContain('conclusioni_quesiti');
+    });
+
+    it('should not return CTP osservazioni_bozza', () => {
+      const ids = getAllSectionIds('ctp');
+      expect(ids).not.toContain('osservazioni_bozza');
     });
   });
 });
