@@ -93,6 +93,63 @@ export async function classifyDocumentsStep(
 }
 
 /**
+ * Classify a SINGLE document. Designed to run as individual Inngest step
+ * in parallel (one step per document) for maximum speed.
+ */
+export async function classifySingleDocumentStep(
+  ocrResult: OcrResult,
+): Promise<DocumentClassification | null> {
+  if (ocrResult.fullText.trim().length === 0) return null;
+
+  const supabase = createAdminClient();
+
+  try {
+    const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
+
+    // Always save AI classification metadata
+    await supabase
+      .from('documents')
+      .update({
+        classification_metadata: {
+          aiSuggestedType: result.documentType,
+          confidence: result.confidence,
+          reasoning: result.reasoning,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', ocrResult.documentId);
+
+    // Only change document_type for "altro" docs with sufficient confidence
+    if (ocrResult.documentType === 'altro' && result.documentType !== 'altro' && result.confidence >= 50) {
+      await supabase
+        .from('documents')
+        .update({
+          document_type: result.documentType,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', ocrResult.documentId);
+
+      logger.info('pipeline', `Classify: Doc ${ocrResult.documentId} reclassified "altro" → "${result.documentType}" (confidence: ${result.confidence})`);
+
+      return {
+        documentId: ocrResult.documentId,
+        oldType: ocrResult.documentType,
+        newType: result.documentType,
+        confidence: result.confidence,
+        reasoning: result.reasoning,
+      };
+    }
+
+    logger.info('pipeline', `Classify: Doc ${ocrResult.documentId} type="${ocrResult.documentType}", AI suggests "${result.documentType}" (${result.confidence}%)`);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Classification failed';
+    logger.warn('pipeline', `Classify: Failed for doc ${ocrResult.documentId}: ${message}`);
+    return null;
+  }
+}
+
+/**
  * Apply classification results to ocrResults array.
  * Must be called OUTSIDE step.run() so it always executes, even on retries.
  */
