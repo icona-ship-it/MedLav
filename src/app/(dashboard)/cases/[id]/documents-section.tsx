@@ -156,7 +156,7 @@ export function DocumentsSection({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {documents.slice(0, 20).map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
@@ -244,20 +244,21 @@ export function DocumentsSection({
         </Card>
       )}
 
-      {/* Sticky footer — "Prosegui" always visible at bottom */}
+      {/* Proceed button — visible after uploads, non-sticky to avoid accidental clicks */}
       {hasUploadedDocs && (
-        <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
+        <div className="border rounded-lg px-4 py-4 mt-6 bg-muted/30">
+          <p className="text-sm text-muted-foreground text-center mb-3">
+            {uploadedCount} {uploadedCount === 1 ? 'documento caricato' : 'documenti caricati'} — carica tutti i documenti prima di procedere.
+          </p>
           <Button
             size="lg"
-            className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+            className="w-full text-base py-6"
+            variant="default"
             onClick={onProceedToNext}
           >
-            Ho caricato tutto — Prosegui
+            Ho caricato tutti i documenti — Prosegui
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
-          <p className="text-xs text-muted-foreground text-center mt-1">
-            {uploadedCount} {uploadedCount === 1 ? 'documento pronto' : 'documenti pronti'}
-          </p>
         </div>
       )}
 

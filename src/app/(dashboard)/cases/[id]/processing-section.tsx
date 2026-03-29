@@ -290,6 +290,9 @@ export function ProcessingSection({
                       <><Play className="mr-2 h-5 w-5" />Avvia Elaborazione</>
                     )}
                   </Button>
+                  <p className="text-xs text-muted-foreground text-center mt-2">
+                    Puoi avviare fino a 5 elaborazioni contemporaneamente.
+                  </p>
                 </>
               ) : documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
