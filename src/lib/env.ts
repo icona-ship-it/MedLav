@@ -11,12 +11,12 @@ const requiredEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   MISTRAL_API_KEY: z.string().min(1),
-  STRIPE_SECRET_KEY: z.string().min(1),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  RESEND_API_KEY: z.string().min(1),
 });
 
 const optionalEnvSchema = z.object({
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
   INNGEST_SIGNING_KEY: z.string().min(1).optional(),
   INNGEST_EVENT_KEY: z.string().min(1).optional(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
@@ -50,5 +50,11 @@ export function validateEnv(): void {
   }
   if (!process.env.ADMIN_EMAILS) {
     logger.warn('env', 'ADMIN_EMAILS not set — admin endpoints will deny all access');
+  }
+  if (!process.env.STRIPE_SECRET_KEY) {
+    logger.warn('env', 'STRIPE_SECRET_KEY not set — payments will not work');
+  }
+  if (!process.env.RESEND_API_KEY) {
+    logger.warn('env', 'RESEND_API_KEY not set — email notifications will not work');
   }
 }
