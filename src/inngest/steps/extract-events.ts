@@ -4,11 +4,12 @@ import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
-export const PAGES_PER_CHUNK = 10;
+export const PAGES_PER_CHUNK = 20;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
- * Each job calls Mistral LLM (30s-2min). Keep low to stay under Vercel 300s timeout. */
-export const EXTRACTION_BATCH_SIZE = 2;
+ * Each job calls Mistral LLM (30s-2min). Keep at 3 to stay under Vercel 300s timeout
+ * while reducing total number of Inngest steps. */
+export const EXTRACTION_BATCH_SIZE = 3;
 
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([

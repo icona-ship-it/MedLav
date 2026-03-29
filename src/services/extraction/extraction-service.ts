@@ -9,7 +9,7 @@ import { jsonrepair } from 'jsonrepair';
 import { logger } from '@/lib/logger';
 
 // Smaller chunks = faster per-chunk extraction + less risk of truncation
-const MAX_CHUNK_CHARS = 15_000;
+const MAX_CHUNK_CHARS = 30_000;
 
 // ── JSON Schema for structured extraction (enforced at token level by Mistral) ──
 const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {

@@ -422,8 +422,8 @@ describe('extraction-service', () => {
     });
 
     it('should split long text into multiple chunks', () => {
-      // Arrange — text exceeding MAX_CHUNK_CHARS (15_000)
-      const longText = 'Dato clinico importante. '.repeat(1000);
+      // Arrange — text exceeding MAX_CHUNK_CHARS (30_000)
+      const longText = 'Dato clinico importante. '.repeat(2000);
 
       // Act
       const { chunks } = prepareExtractionChunks({
@@ -436,7 +436,7 @@ describe('extraction-service', () => {
       // Assert
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
-        expect(chunk.length).toBeLessThanOrEqual(20_000);
+        expect(chunk.length).toBeLessThanOrEqual(40_000);
       }
     });
   });
