@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   FolderOpen,
+  FolderSearch,
   HelpCircle,
   Plus,
   Settings,
@@ -21,6 +22,7 @@ import { GlobalSearch } from '@/components/global-search';
 export const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
+  { name: 'Organizza Docs', href: '/document-organizer', icon: FolderSearch },
 ] as const;
 
 export const FOOTER_ITEMS = [

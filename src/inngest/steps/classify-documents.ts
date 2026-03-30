@@ -103,6 +103,18 @@ export async function classifySingleDocumentStep(
 
   const supabase = createAdminClient();
 
+  // Skip classification if document was already organized by the Document Organizer (Pro feature)
+  const { data: existingDoc } = await supabase
+    .from('documents')
+    .select('classification_metadata')
+    .eq('id', ocrResult.documentId)
+    .single();
+  const meta = existingDoc?.classification_metadata as Record<string, unknown> | null;
+  if (meta?.organizedBy === 'document_organizer') {
+    logger.info('pipeline', `Classify: Skipping doc ${ocrResult.documentId} — already organized by Document Organizer`);
+    return null;
+  }
+
   try {
     const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
 

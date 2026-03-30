@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedLav — Questionario Struttura Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --blue: #2563eb;
+    --blue-light: #eff6ff;
+    --blue-dark: #1e40af;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --green: #059669;
+    --green-light: #ecfdf5;
+    --amber: #d97706;
+    --amber-light: #fffbeb;
+    --red: #dc2626;
+    --red-light: #fef2f2;
+    --purple: #7c3aed;
+    --purple-light: #f5f3ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── Header ─────────────────────────────── */
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 2px solid var(--gray-200);
+  }
+  header .logo {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--blue);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  header h1 {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 10px;
+  }
+  header .subtitle {
+    font-size: 17px;
+    color: var(--gray-500);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* ── Intro boxes ────────────────────────── */
+  .intro-box {
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .intro-box h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .intro-box.blue { background: var(--blue-light); border: 1px solid #bfdbfe; }
+  .intro-box.blue h2 { color: var(--blue-dark); }
+  .intro-box.green { background: var(--green-light); border: 1px solid #a7f3d0; }
+  .intro-box.green h2 { color: var(--green); }
+  .intro-box.amber { background: var(--amber-light); border: 1px solid #fde68a; }
+  .intro-box.amber h2 { color: var(--amber); }
+  .intro-box ul { margin: 8px 0 0 20px; }
+  .intro-box li { margin-bottom: 4px; }
+
+  /* ── Sections ───────────────────────────── */
+  .section {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 28px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  .section-number {
+    background: var(--blue);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--gray-900);
+  }
+  .section-why {
+    font-size: 14px;
+    color: var(--gray-500);
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--gray-50);
+    border-radius: 8px;
+    border-left: 3px solid var(--blue);
+  }
+  .section-why strong { color: var(--blue-dark); }
+
+  /* ── Current state ──────────────────────── */
+  .current-state {
+    background: var(--amber-light);
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--gray-700);
+  }
+  .current-state strong { color: var(--amber); }
+
+  /* ── Questions ──────────────────────────── */
+  .question-group {
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .question-group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .question-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .question-hint {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+  }
+
+  /* ── Inputs ─────────────────────────────── */
+  textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 12px 16px;
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--gray-900);
+    resize: vertical;
+    transition: border-color 0.2s;
+    background: white;
+  }
+  textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  textarea.small { min-height: 50px; }
+  textarea.large { min-height: 120px; }
+
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 14px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .radio-option:hover {
+    background: var(--gray-50);
+    border-color: var(--blue);
+  }
+  .radio-option input[type="radio"],
+  .radio-option input[type="checkbox"] {
+    margin-top: 3px;
+    accent-color: var(--blue);
+    flex-shrink: 0;
+  }
+  .radio-option label { cursor: pointer; font-size: 14px; }
+  .radio-option .option-desc {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  .scale-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .scale-option {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+    padding: 10px 8px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+  .scale-option:hover { border-color: var(--blue); background: var(--blue-light); }
+  .scale-option input { display: block; margin: 0 auto 4px; accent-color: var(--blue); }
+
+  /* ── Custom notes box (the key addition) ── */
+  .custom-notes {
+    margin-top: 16px;
+    padding: 16px 18px;
+    background: var(--purple-light);
+    border: 1px solid #ddd6fe;
+    border-radius: 10px;
+  }
+  .custom-notes-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--purple);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .custom-notes-label::before {
+    content: "\270F";
+    font-size: 15px;
+  }
+  .custom-notes textarea {
+    background: white;
+    border-color: #c4b5fd;
+    min-height: 70px;
+  }
+  .custom-notes textarea:focus {
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+  .custom-notes .notes-hint {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-bottom: 8px;
+  }
+
+  /* ── Example box ────────────────────────── */
+  .example-box {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 10px 0;
+    font-size: 13px;
+    color: var(--gray-700);
+  }
+  .example-box code {
+    background: var(--gray-200);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+  }
+
+  /* ── Submit ─────────────────────────────── */
+  .submit-area {
+    text-align: center;
+    margin-top: 40px;
+    padding: 32px;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 14px;
+  }
+  .submit-area h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  .submit-area p {
+    font-size: 14px;
+    color: var(--gray-500);
+    margin-bottom: 20px;
+  }
+  .btn-primary {
+    background: var(--blue);
+    color: white;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-primary:hover { background: var(--blue-dark); }
+  .btn-secondary {
+    background: white;
+    color: var(--gray-700);
+    border: 1px solid var(--gray-300);
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-left: 12px;
+  }
+
+  /* ── TOC ─────────────────────────────────── */
+  .toc {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+  }
+  .toc h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 12px;
+  }
+  .toc ol {
+    list-style: none;
+    counter-reset: toc-counter;
+    padding: 0;
+  }
+  .toc li {
+    counter-increment: toc-counter;
+    padding: 6px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .toc li:last-child { border-bottom: none; }
+  .toc li::before {
+    content: counter(toc-counter) ".";
+    color: var(--blue);
+    font-weight: 600;
+    margin-right: 8px;
+  }
+  .toc li a {
+    color: var(--gray-700);
+    text-decoration: none;
+  }
+  .toc li a:hover { color: var(--blue); }
+  .toc .toc-time {
+    float: right;
+    font-size: 12px;
+    color: var(--gray-500);
+    font-weight: 400;
+  }
+
+  /* ── Responsive & Print ─────────────────── */
+  @media (max-width: 640px) {
+    .container { padding: 24px 16px 60px; }
+    .section { padding: 20px; }
+    .scale-group { flex-direction: column; }
+    .scale-option { min-width: unset; }
+  }
+  @media print {
+    body { background: white; font-size: 12px; }
+    .container { max-width: 100%; padding: 20px; }
+    .section { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    .submit-area { display: none; }
+    textarea { border: 1px solid #ccc; min-height: 50px; }
+    .toc { page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- HEADER -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<header>
+  <div class="logo">MedLav</div>
+  <h1>Come deve essere il tuo Report Ideale?</h1>
+  <p class="subtitle">Questionario per il medico legale. Le tue risposte guideranno la ristrutturazione del sistema di generazione dei report.</p>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- INTRO + ISTRUZIONI -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="intro-box blue">
+  <h2>Perch&eacute; questo questionario</h2>
+  <p>I report generati da MedLav sono <strong>troppo lunghi</strong> (12.000-20.000 parole, 30-50 pagine) e impiegano <strong>25-40 minuti</strong>. Prima di ottimizzare, dobbiamo capire esattamente cosa serve nella pratica quotidiana: quali sezioni, quale dettaglio, quale lunghezza. <strong>Non esiste una risposta sbagliata</strong> &mdash; serve la tua esperienza reale.</p>
+</div>
+
+<div class="intro-box green">
+  <h2>Come compilare</h2>
+  <ul>
+    <li><strong>Seleziona le opzioni</strong> che corrispondono alla tua preferenza</li>
+    <li><strong>Scrivi nelle aree di testo</strong> tutto quello che ritieni utile, con quanti dettagli vuoi</li>
+    <li>Ogni sezione ha un <strong>campo note viola</strong> in fondo: usalo per aggiungere qualsiasi cosa non coperta dalle domande</li>
+    <li>Se una domanda non &egrave; rilevante per te, salta pure</li>
+    <li><strong>Tempo stimato:</strong> 15-20 minuti</li>
+  </ul>
+</div>
+
+<div class="intro-box amber">
+  <h2>Richiesta importante</h2>
+  <p>Oltre a compilare questo questionario, sarebbe molto utile se potessi fornirci:</p>
+  <ul>
+    <li><strong>1-2 perizie tue</strong> che consideri ben fatte (il "gold standard" di riferimento)</li>
+    <li><strong>1 report generato da MedLav</strong> con annotazioni: cosa toglieresti, cosa va bene, cosa manca</li>
+  </ul>
+  <p style="margin-top:8px;">Questi esempi concreti, combinati con le risposte qui sotto, ci permettono di calibrare il sistema con precisione.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- INDICE -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="toc">
+  <h3>Indice del questionario</h3>
+  <ol>
+    <li><a href="#s1">Struttura Generale del Report</a> <span class="toc-time">~3 min</span></li>
+    <li><a href="#s2">Documentazione Sanitaria</a> <span class="toc-time">~3 min</span></li>
+    <li><a href="#s3">Lunghezza, Proporzioni e Controllo</a> <span class="toc-time">~2 min</span></li>
+    <li><a href="#s4">Ridondanza tra Sezioni</a> <span class="toc-time">~2 min</span></li>
+    <li><a href="#s5">Formato, Stile e Citazioni</a> <span class="toc-time">~2 min</span></li>
+    <li><a href="#s6">Sezioni Specialistiche per Tipo Caso</a> <span class="toc-time">~1 min</span></li>
+    <li><a href="#s7">Differenze per Ruolo (CTU / CTP / Stragiudiziale)</a> <span class="toc-time">~2 min</span></li>
+    <li><a href="#s8">Tempi e Performance</a> <span class="toc-time">~1 min</span></li>
+    <li><a href="#s9">Il tuo Workflow e la tua Esperienza</a> <span class="toc-time">~3 min</span></li>
+    <li><a href="#s10">Il Report Ideale &mdash; Visione d'Insieme</a> <span class="toc-time">~2 min</span></li>
+  </ol>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 1: STRUTTURA GENERALE -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s1">
+  <div class="section-header">
+    <div class="section-number">1</div>
+    <div class="section-title">Struttura Generale del Report</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Attualmente il report ha 9-13 sezioni. Dobbiamo capire quali sono davvero utili nella pratica e quali appesantiscono il documento senza valore aggiunto.
+  </div>
+
+  <div class="current-state">
+    <strong>Cosa fa oggi MedLav:</strong> Genera queste sezioni universali: (1) Premesse e Profilo Metodologico, (2) Documentazione in Atti, (3) Premesse legali, (4) Documentazione Sanitaria, (5) Spese Mediche, (6) Pareri Tecnici Precedenti, (7) Riassunto del Caso, (8) Sezioni specialistiche per tipo caso, (9) Elementi per la Valutazione Medico-Legale, (10) Sintesi Conclusiva. Alcune sezioni appaiono solo se ci sono i documenti relativi.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">1.1 Quali sezioni consideri indispensabili in ogni perizia?</span>
+    <p class="question-hint">Seleziona tutte le sezioni che devono SEMPRE essere presenti, indipendentemente dal tipo di caso.</p>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="checkbox" id="s-intestazione" name="sezioni" value="intestazione">
+        <div>
+          <label for="s-intestazione"><strong>Premesse e Profilo Metodologico</strong></label>
+          <div class="option-desc">Conferimento incarico, parti coinvolte, date rilevanti, metodo di lavoro adottato</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-atti" name="sezioni" value="atti">
+        <div>
+          <label for="s-atti"><strong>Documentazione in Atti (non sanitaria)</strong></label>
+          <div class="option-desc">Ricorsi, memorie difensive, atti di citazione, testimonianze, verbali di udienza</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-sanitaria" name="sezioni" value="sanitaria">
+        <div>
+          <label for="s-sanitaria"><strong>Documentazione Sanitaria</strong></label>
+          <div class="option-desc">Riproduzione cronologica della documentazione medica (cartelle cliniche, referti, esami)</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-spese" name="sezioni" value="spese">
+        <div>
+          <label for="s-spese"><strong>Spese Mediche</strong></label>
+          <div class="option-desc">Tabella spese documentate con valutazione di congruit&agrave; e necessit&agrave;</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-pareri" name="sezioni" value="pareri">
+        <div>
+          <label for="s-pareri"><strong>Pareri Tecnici Precedenti</strong></label>
+          <div class="option-desc">Riproduzione delle conclusioni di perizie CTP/CTU precedenti</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-riassunto" name="sezioni" value="riassunto">
+        <div>
+          <label for="s-riassunto"><strong>Riassunto del Caso</strong></label>
+          <div class="option-desc">Sintesi narrativa dell'intera vicenda clinica (quadro d'insieme)</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-specialty" name="sezioni" value="specialty">
+        <div>
+          <label for="s-specialty"><strong>Sezioni Specialistiche</strong> (per tipo caso)</label>
+          <div class="option-desc">Es. ortopedica: Analisi Intervento, Complicanze, Danno Biologico, Nesso Causale</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-elementi" name="sezioni" value="elementi">
+        <div>
+          <label for="s-elementi"><strong>Elementi per la Valutazione Medico-Legale</strong></label>
+          <div class="option-desc">Profili critici documentati, nesso causale, quantificazione danno (ITT/ITP)</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="s-conclusioni" name="sezioni" value="conclusioni">
+        <div>
+          <label for="s-conclusioni"><strong>Sintesi Conclusiva</strong></label>
+          <div class="option-desc">Riepilogo fattuale finale e organizzazione elementi per il Giudice / committente</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">1.2 Manca qualche sezione che vorresti vedere nel report?</span>
+    <p class="question-hint">Pensa alla struttura delle tue perizie: c'&egrave; qualcosa che scrivi sempre e che qui manca?</p>
+    <textarea placeholder="Es. 'Esame obiettivo', 'Risposte ai quesiti del Giudice punto per punto', 'Tabella riepilogativa ITT/ITP con i criteri tabellari', 'Anamnesi remota separata'..."></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">1.3 Ci sono sezioni che accorperesti o elimineresti?</span>
+    <p class="question-hint">Alcune sezioni possono sembrare ridondanti. Ad esempio: "Riassunto" e "Conclusioni" dicono cose simili? "Documentazione in Atti" e "Premesse legali" andrebbero fuse?</p>
+    <textarea placeholder="Es. 'Unirei Documentazione in Atti e Premesse legali in una sola sezione', 'Eliminerei il Riassunto perch&eacute; ripete la Documentazione Sanitaria'..."></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">1.4 In che ordine preferisci le sezioni?</span>
+    <p class="question-hint">L'ordine attuale &egrave; quello listato sopra. Va bene cos&igrave; o preferiresti un ordine diverso?</p>
+    <textarea class="small" placeholder="Es. 'Metterei il Riassunto all'inizio, prima della Documentazione Sanitaria' oppure 'L'ordine attuale va bene'..."></textarea>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sulla struttura generale</div>
+    <div class="notes-hint">Aggiungi qualsiasi considerazione non coperta dalle domande sopra. Come strutturi le tue perizie? Cosa funziona e cosa no?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 2: DOCUMENTAZIONE SANITARIA -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s2">
+  <div class="section-header">
+    <div class="section-number">2</div>
+    <div class="section-title">Documentazione Sanitaria</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Questa &egrave; la sezione pi&ugrave; lunga (spesso pi&ugrave; della met&agrave; del report). Riproduce ogni singolo evento clinico con citazione completa. Capire il livello di dettaglio giusto &egrave; la chiave per ridurre la lunghezza senza perdere valore.
+  </div>
+
+  <div class="current-state">
+    <strong>Cosa fa oggi MedLav:</strong> Riproduce OGNI evento clinico estratto, in ordine cronologico, con citazione virgolettata dal documento originale. Il prompt dice: "OGNI evento fornito DEVE comparire. NON sintetizzare &mdash; riprodurre fedelmente." Risultato: questa sezione da sola pu&ograve; superare le 8.000 parole (20+ pagine).
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">2.1 Quanto dettaglio serve nella riproduzione dei documenti sanitari?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="det-full" name="dettaglio-sanitaria" value="full">
+        <div>
+          <label for="det-full"><strong>Riproduzione integrale</strong></label>
+          <div class="option-desc">Ogni documento riprodotto fedelmente, parola per parola quando possibile. Come fa oggi il sistema.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="det-detailed" name="dettaglio-sanitaria" value="detailed">
+        <div>
+          <label for="det-detailed"><strong>Dettagliata ma con sintesi delle parti ripetitive</strong></label>
+          <div class="option-desc">Contenuto chiave riprodotto fedelmente, ma periodi stabili sintetizzati. Es: diari clinici giornalieri senza variazioni raggruppati come "Dal 15 al 20.03: decorso post-operatorio regolare, parametri nella norma".</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="det-summary" name="dettaglio-sanitaria" value="summary">
+        <div>
+          <label for="det-summary"><strong>Sintesi strutturata per documento</strong></label>
+          <div class="option-desc">Per ogni documento: tipo, data, struttura, diagnosi, terapia, esiti principali. Solo i passaggi critici (verbali operatori, diagnosi di dimissione) in citazione diretta.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="det-key" name="dettaglio-sanitaria" value="key-only">
+        <div>
+          <label for="det-key"><strong>Solo eventi clinicamente rilevanti</strong></label>
+          <div class="option-desc">Solo gli eventi significativi per la valutazione medico-legale. Visite di routine e esami nella norma omessi o menzionati in una riga.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">2.2 I diari clinici giornalieri (degenza ospedaliera) come vanno gestiti?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="diary-full" name="diari" value="full">
+        <div>
+          <label for="diary-full"><strong>Giorno per giorno, ogni entry riportata</strong></label>
+          <div class="option-desc">Ogni giornata del diario clinico con la sua entry, anche se simile al giorno prima</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="diary-events" name="diari" value="events-only">
+        <div>
+          <label for="diary-events"><strong>Solo giorni con eventi significativi</strong></label>
+          <div class="option-desc">Riporta solo le giornate con variazioni cliniche, interventi, complicanze. I periodi stabili raggruppati (es. "15-20.03: decorso regolare, parametri stabili")</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="diary-summary" name="diari" value="summary">
+        <div>
+          <label for="diary-summary"><strong>Un paragrafo riassuntivo per ricovero</strong></label>
+          <div class="option-desc">Sintesi della degenza con solo i momenti chiave (ammissione, intervento, complicanze, dimissione)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">2.3 Esami di laboratorio: cosa riportare?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="lab-all" name="lab" value="all">
+        <div>
+          <label for="lab-all"><strong>Tabella completa con tutti i valori</strong></label>
+          <div class="option-desc">Ogni prelievo in tabella markdown, tutti i parametri con range di riferimento</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="lab-abnormal" name="lab" value="abnormal">
+        <div>
+          <label for="lab-abnormal"><strong>Solo valori alterati + quelli rilevanti per il caso</strong></label>
+          <div class="option-desc">Valori fuori range evidenziati in tabella, con nota "restanti parametri nella norma"</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="lab-summary" name="lab" value="summary">
+        <div>
+          <label for="lab-summary"><strong>Descrizione discorsiva</strong></label>
+          <div class="option-desc">Es: "Esami del 15.03: leucocitosi (GB 15.000), PCR elevata (45 mg/L), restanti nella norma"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">2.4 Verbali operatori: vanno riprodotti integralmente?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="verb-full" name="verbali" value="full">
+        <div>
+          <label for="verb-full"><strong>S&igrave;, sempre riproduzione integrale</strong></label>
+          <div class="option-desc">Il verbale operatorio &egrave; un documento critico e va riportato per intero in ogni caso</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="verb-key" name="verbali" value="key-only">
+        <div>
+          <label for="verb-key"><strong>Integrale solo per l'intervento contestato, sintesi per gli altri</strong></label>
+          <div class="option-desc">Riproduzione completa dell'intervento oggetto di valutazione. Per interventi precedenti o successivi: sintesi con tecnica, durata, esito.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">2.5 Referti radiologici e strumentali: quanto dettaglio?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="rad-full" name="radiologici" value="full">
+        <div>
+          <label for="rad-full"><strong>Riproduzione integrale del referto</strong></label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="rad-conclusion" name="radiologici" value="conclusion">
+        <div>
+          <label for="rad-conclusion"><strong>Conclusione del referto + reperti significativi</strong></label>
+          <div class="option-desc">La conclusione sempre, la descrizione solo per i reperti patologici o rilevanti</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="rad-summary" name="radiologici" value="summary">
+        <div>
+          <label for="rad-summary"><strong>Solo la conclusione</strong></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sulla documentazione sanitaria</div>
+    <div class="notes-hint">Come gestisci tu la sezione documentale nelle tue perizie? Ci sono regole che segui sempre? Documenti che tratti in modo diverso?</div>
+    <textarea placeholder="Es. 'Nelle mie perizie la documentazione sanitaria occupa circa il 40% del totale. Riporto integralmente solo i verbali operatori e le diagnosi di dimissione. Per il resto faccio una sintesi strutturata per documento...'"></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 3: LUNGHEZZA E PROPORZIONI -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s3">
+  <div class="section-header">
+    <div class="section-number">3</div>
+    <div class="section-title">Lunghezza, Proporzioni e Controllo</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Il report attuale non ha limiti di lunghezza reali. Il sistema tende a produrre il massimo possibile. Definire target precisi per sezione ci permette di calibrare i prompt con precisione.
+  </div>
+
+  <div class="current-state">
+    <strong>Cosa fa oggi MedLav:</strong> Report tipico: 12.000-20.000 parole (30-50 pagine A4). Non ci sono limiti di parole per sezione &mdash; il sistema massimizza il dettaglio per ogni sezione. Il prompt dice: "Privilegia la completezza alla brevit&agrave;".
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">3.1 Per un caso di media complessit&agrave; (5-10 documenti, un ricovero, un intervento), quanto dovrebbe essere lungo il report?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="len-short" name="lunghezza" value="short">
+        <div>
+          <label for="len-short"><strong>3.000-5.000 parole</strong> (8-12 pagine A4)</label>
+          <div class="option-desc">Report snello, diretto. Base di lavoro da integrare a mano.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="len-medium" name="lunghezza" value="medium">
+        <div>
+          <label for="len-medium"><strong>5.000-8.000 parole</strong> (12-20 pagine A4)</label>
+          <div class="option-desc">Bilanciato tra completezza e leggibilit&agrave;.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="len-long" name="lunghezza" value="long">
+        <div>
+          <label for="len-long"><strong>8.000-15.000 parole</strong> (20-35 pagine A4)</label>
+          <div class="option-desc">Dettagliato, vicino alle perizie tradizionali estese.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="len-dynamic" name="lunghezza" value="dynamic">
+        <div>
+          <label for="len-dynamic"><strong>Dipende dal caso</strong></label>
+          <div class="option-desc">Casi semplici: breve. Casi complessi (20+ documenti, pi&ugrave; ricoveri): lungo.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">3.2 Vorresti poter scegliere il livello di dettaglio prima di generare il report?</span>
+    <p class="question-hint">Es. un selettore nella UI tipo: "Sintetico / Standard / Dettagliato"</p>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="ctrl-yes" name="controllo-lunghezza" value="yes">
+        <div>
+          <label for="ctrl-yes"><strong>S&igrave;, caso per caso</strong></label>
+          <div class="option-desc">Poter scegliere il livello di dettaglio per ogni caso sarebbe molto utile</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="ctrl-no" name="controllo-lunghezza" value="no">
+        <div>
+          <label for="ctrl-no"><strong>No, un buon default fisso basta</strong></label>
+          <div class="option-desc">Preferisco non doverci pensare &mdash; un default che funziona per la maggior parte dei casi</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="ctrl-settings" name="controllo-lunghezza" value="settings">
+        <div>
+          <label for="ctrl-settings"><strong>Impostazione nel profilo</strong></label>
+          <div class="option-desc">Lo imposto una volta nelle mie preferenze e vale per tutti i casi</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">3.3 Come distribuiresti le proporzioni tra sezioni?</span>
+    <p class="question-hint">Se il report totale fosse 100%, che peso daresti a ciascuna sezione? Non serve essere precisi &mdash; l'idea generale basta.</p>
+    <textarea placeholder="Es:
+- Documentazione Sanitaria: 40-50%
+- Elementi per la Valutazione: 20-25%
+- Riassunto: 10%
+- Premesse/Profilo: 5%
+- Conclusioni: 10%
+- Sezioni specialistiche: 10%
+- Spese: solo se presenti, 5%"></textarea>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note su lunghezza e proporzioni</div>
+    <div class="notes-hint">C'&egrave; una "regola" che segui per decidere quanto lunga fare una perizia? Dipende dal compenso, dal tipo di incarico, dal tribunale?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 4: RIDONDANZA -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s4">
+  <div class="section-header">
+    <div class="section-number">4</div>
+    <div class="section-title">Ridondanza tra Sezioni</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Lo stesso fatto clinico oggi compare 3-5 volte nel report (documentazione, riassunto, sezione specialistica, elementi di rilievo, conclusione). Questo &egrave; una delle cause principali della lunghezza eccessiva.
+  </div>
+
+  <div class="example-box">
+    <strong>Esempio concreto:</strong> L'evento "arresto cardiaco del 15.03.2021" oggi compare in:<br>
+    1. <strong>Documentazione Sanitaria</strong>: citazione completa dal documento<br>
+    2. <strong>Riassunto</strong>: "Durante il ricovero si verificava un arresto cardiaco..."<br>
+    3. <strong>Analisi Complicanze</strong>: "Tra le complicanze si documenta un arresto cardiaco..."<br>
+    4. <strong>Elementi di Rilievo</strong>: "L'arresto cardiaco [Ev.15] rappresenta un elemento..."<br>
+    5. <strong>Conclusioni</strong>: "Si rileva inoltre l'episodio di arresto cardiaco..."
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">4.1 Come preferisci che vengano gestite le ripetizioni?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="dup-ok" name="ridondanza" value="ok">
+        <div>
+          <label for="dup-ok"><strong>Ogni sezione deve essere autocontenuta</strong></label>
+          <div class="option-desc">Chi legge una sezione deve trovare tutti i fatti senza dover tornare indietro. Le ripetizioni sono accettabili.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="dup-reduce" name="ridondanza" value="reduce">
+        <div>
+          <label for="dup-reduce"><strong>Usare riferimenti incrociati</strong></label>
+          <div class="option-desc">Nelle sezioni analitiche, riferirsi alla documentazione con "come documentato nella Sez. Documentazione Sanitaria" senza riscrivere i fatti.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="dup-some" name="ridondanza" value="some">
+        <div>
+          <label for="dup-some"><strong>Massimo 2 apparizioni per fatto</strong></label>
+          <div class="option-desc">Dettaglio completo nella documentazione sanitaria, menzione sintetica (1 riga) nelle altre sezioni.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">4.2 Il "Riassunto del Caso" &egrave; utile se c'&egrave; gi&agrave; la documentazione sanitaria dettagliata?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="rias-yes" name="riassunto" value="yes">
+        <div>
+          <label for="rias-yes"><strong>S&igrave;, il riassunto d&agrave; il quadro d'insieme</strong></label>
+          <div class="option-desc">La documentazione &egrave; cronologia pura, il riassunto d&agrave; la narrazione della vicenda</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="rias-short" name="riassunto" value="short">
+        <div>
+          <label for="rias-short"><strong>S&igrave;, ma molto pi&ugrave; breve di oggi</strong> (1-2 paragrafi, non 6-10)</label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="rias-no" name="riassunto" value="no">
+        <div>
+          <label for="rias-no"><strong>No, ridondante</strong> &mdash; lo eliminerei o lo fonderei con le premesse</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sulla ridondanza</div>
+    <div class="notes-hint">Nelle tue perizie, ripeti i fatti tra sezioni diverse? Usi riferimenti? Come gestisci questo aspetto?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 5: FORMATO E STILE -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s5">
+  <div class="section-header">
+    <div class="section-number">5</div>
+    <div class="section-title">Formato, Stile e Citazioni</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Lo stile di scrittura influenza sia la leggibilit&agrave; sia la lunghezza. Dobbiamo capire come scrivi tu le perizie per replicare il tuo stile.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">5.1 Come preferisci che vengano citati i documenti sanitari?</span>
+    <div class="example-box">
+      <strong>Formato attuale di MedLav:</strong><br>
+      <code><strong>Cartella Clinica, Ospedale San Raffaele, in data 15.03.2021:</strong> "Il paziente giungeva in pronto soccorso lamentando dolore acuto in regione epigastrica..." (A)</code>
+    </div>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="cite-full" name="citazione" value="full">
+        <div>
+          <label for="cite-full"><strong>Formato attuale</strong> &mdash; intestazione bold + contenuto virgolettato + categoria fonte (A/B/C/D)</label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="cite-simple" name="citazione" value="simple">
+        <div>
+          <label for="cite-simple"><strong>Intestazione bold + contenuto discorsivo</strong> (senza virgolette e senza categoria)</label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="cite-other" name="citazione" value="other">
+        <div>
+          <label for="cite-other"><strong>Altro formato</strong> &mdash; lo descrivo sotto</label>
+        </div>
+      </div>
+    </div>
+    <textarea class="small" placeholder="Descrivi il formato di citazione che usi nelle tue perizie..." style="margin-top: 10px;"></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">5.2 Stile di scrittura: prosa vs. elenchi puntati</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="prose-full" name="prosa" value="full-prose">
+        <div>
+          <label for="prose-full"><strong>Prosa discorsiva ovunque</strong></label>
+          <div class="option-desc">Come una perizia tradizionale. Nessun bullet point o elenco numerato.</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="prose-mix" name="prosa" value="mixed">
+        <div>
+          <label for="prose-mix"><strong>Mix</strong>: prosa per la narrazione clinica, tabelle per esami, elenchi per anomalie</label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="prose-structured" name="prosa" value="structured">
+        <div>
+          <label for="prose-structured"><strong>Strutturato</strong>: uso frequente di elenchi, tabelle, grassetti per scansionabilit&agrave;</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">5.3 I riferimenti tracciabili [Ev.1], [Ev.2] sono utili?</span>
+    <p class="question-hint">Oggi ogni affermazione nel report ha un riferimento all'evento estratto dalla documentazione, per permettere la verifica.</p>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="ref-yes" name="riferimenti" value="yes">
+        <div><label for="ref-yes"><strong>S&igrave;, fondamentali</strong> &mdash; permettono di verificare ogni affermazione</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="ref-footnote" name="riferimenti" value="footnote">
+        <div><label for="ref-footnote"><strong>S&igrave;, ma come note a pi&egrave; pagina</strong>, non inline nel testo</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="ref-no" name="riferimenti" value="no">
+        <div><label for="ref-no"><strong>No, appesantiscono</strong> &mdash; basta che la documentazione sanitaria sia ben fatta</label></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">5.4 Che registro linguistico preferisci?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="tone-formal" name="tono" value="formal">
+        <div>
+          <label for="tone-formal"><strong>Molto formale</strong> &mdash; "Il paziente veniva sottoposto a..."</label>
+          <div class="option-desc">Linguaggio da perizia depositabile in tribunale, impersonale, passato remoto</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="tone-professional" name="tono" value="professional">
+        <div>
+          <label for="tone-professional"><strong>Professionale ma diretto</strong> &mdash; "Il paziente &egrave; stato sottoposto a..."</label>
+          <div class="option-desc">Chiaro, professionale, passato prossimo, senza formalismi eccessivi</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note su formato e stile</div>
+    <div class="notes-hint">Come scrivi tu le perizie? Hai un template o uno stile personale che vorresti fosse replicato? Ci sono espressioni o formule che usi abitualmente?</div>
+    <textarea placeholder="Es. 'Uso sempre il passato remoto nella documentazione sanitaria', 'Ogni sezione inizia con un paragrafo introduttivo', 'Uso i numerali romani per le sezioni'..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 6: SEZIONI SPECIALISTICHE -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s6">
+  <div class="section-header">
+    <div class="section-number">6</div>
+    <div class="section-title">Sezioni Specialistiche per Tipo Caso</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Per ogni tipo di caso (ortopedica, oncologica, ostetrica, etc.) il sistema aggiunge 3-5 sezioni specialistiche. Dobbiamo capire se aggiungono valore reale o sono sovrapposizioni con gli Elementi di Rilievo.
+  </div>
+
+  <div class="current-state">
+    <strong>Esempio per caso ortopedico:</strong> Vengono aggiunte: "Analisi dell'Intervento Chirurgico", "Analisi delle Complicanze", "Valutazione del Danno Biologico", "Nesso Causale". Ognuna 200-600 parole. Totale: 1.500-3.000 parole extra.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">6.1 Le sezioni specialistiche sono utili come sezioni separate?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="spec-yes" name="specialty" value="yes">
+        <div>
+          <label for="spec-yes"><strong>S&igrave;, come sezioni separate</strong></label>
+          <div class="option-desc">Guidano l'analisi specifica, rendono il report pi&ugrave; strutturato per tipo caso</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="spec-merged" name="specialty" value="merged">
+        <div>
+          <label for="spec-merged"><strong>Utili, ma come sotto-paragrafi degli Elementi di Rilievo</strong></label>
+          <div class="option-desc">Integrarle nella sezione di valutazione, non come sezioni autonome</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="spec-no" name="specialty" value="no">
+        <div>
+          <label for="spec-no"><strong>Non necessarie</strong></label>
+          <div class="option-desc">Preferisco scrivere io le analisi specialistiche. Il report deve darmi i fatti organizzati, non le analisi.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">6.2 Se le sezioni specialistiche restano, quanto devono essere lunghe?</span>
+    <div class="scale-group">
+      <div class="scale-option">
+        <input type="radio" name="spec-length" value="100-200">
+        <div><strong>100-200</strong></div>
+        <div style="font-size:11px;color:var(--gray-500)">1 paragrafo</div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="spec-length" value="200-400">
+        <div><strong>200-400</strong></div>
+        <div style="font-size:11px;color:var(--gray-500)">2-3 paragrafi</div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="spec-length" value="400-800">
+        <div><strong>400-800</strong></div>
+        <div style="font-size:11px;color:var(--gray-500)">&frac12; pagina</div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="spec-length" value="800+">
+        <div><strong>800+</strong></div>
+        <div style="font-size:11px;color:var(--gray-500)">1+ pagine</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sulle sezioni specialistiche</div>
+    <div class="notes-hint">Nelle tue perizie hai sezioni specialistiche? Quali? Come le strutturi?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 7: RUOLI -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s7">
+  <div class="section-header">
+    <div class="section-number">7</div>
+    <div class="section-title">Differenze per Ruolo (CTU / CTP / Stragiudiziale)</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Oggi il report cambia tono per ruolo ma la struttura e la lunghezza sono identiche. Un CTU depositato in tribunale potrebbe richiedere pi&ugrave; formalit&agrave;, uno stragiudiziale pi&ugrave; pragmatismo.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">7.1 La struttura del report deve cambiare in base al ruolo?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="role-same" name="ruolo-struttura" value="same">
+        <div>
+          <label for="role-same"><strong>No, stessa struttura per tutti</strong> &mdash; cambia solo il tono</label>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="role-different" name="ruolo-struttura" value="different">
+        <div>
+          <label for="role-different"><strong>S&igrave;, struttura diversa</strong></label>
+        </div>
+      </div>
+    </div>
+    <textarea class="small" style="margin-top: 10px;" placeholder="Se s&igrave;, descrivi le differenze. Es: 'Il CTU deve avere le risposte ai quesiti come sezione finale. Il CTP deve avere una sezione Profili Critici. Lo stragiudiziale pu&ograve; essere pi&ugrave; breve.'"></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">7.2 Lo stragiudiziale pu&ograve; essere pi&ugrave; breve?</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="extra-shorter" name="stragiudiziale-length" value="shorter">
+        <div>
+          <label for="extra-shorter"><strong>S&igrave;, decisamente pi&ugrave; breve</strong></label>
+          <div class="option-desc">Serve per una valutazione rapida di fondatezza, non va depositato in tribunale</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="extra-same" name="stragiudiziale-length" value="same">
+        <div>
+          <label for="extra-same"><strong>No, stessa lunghezza</strong></label>
+          <div class="option-desc">Anche lo stragiudiziale deve essere completo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sulle differenze per ruolo</div>
+    <div class="notes-hint">Scrivi perizie diverse come CTU e come CTP? Come cambia il tuo approccio?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 8: TEMPI -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s8">
+  <div class="section-header">
+    <div class="section-number">8</div>
+    <div class="section-title">Tempi e Performance</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Report pi&ugrave; brevi = generazione pi&ugrave; veloce. Ma dobbiamo capire qual &egrave; il tradeoff giusto per te tra velocit&agrave; e completezza.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">8.1 Tempo massimo di attesa accettabile per la generazione?</span>
+    <div class="scale-group">
+      <div class="scale-option">
+        <input type="radio" name="tempo-max" value="5min">
+        <div><strong>5 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-max" value="10min">
+        <div><strong>10 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-max" value="15min">
+        <div><strong>15 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-max" value="30min">
+        <div><strong>30 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-max" value="non-importa">
+        <div><strong>Non importa</strong></div>
+        <div style="font-size:11px;color:var(--gray-500)">Lancio e torno dopo</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">8.2 Il tradeoff velocit&agrave; vs. completezza</span>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" id="tradeoff-fast" name="tradeoff" value="fast">
+        <div>
+          <label for="tradeoff-fast"><strong>Report pi&ugrave; breve in 5 minuti</strong></label>
+          <div class="option-desc">Preferisco una buona base veloce e poi integro/modifico a mano</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="tradeoff-complete" name="tradeoff" value="complete">
+        <div>
+          <label for="tradeoff-complete"><strong>Report completo in 30 minuti</strong></label>
+          <div class="option-desc">Preferisco aspettare e avere un report che richiede meno revisione</div>
+        </div>
+      </div>
+      <div class="radio-option">
+        <input type="radio" id="tradeoff-choice" name="tradeoff" value="choice">
+        <div>
+          <label for="tradeoff-choice"><strong>Vorrei poter scegliere</strong> caso per caso</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sui tempi</div>
+    <div class="notes-hint">Come usi il tempo di attesa? Fai altro nel frattempo? Ti infastidisce aspettare?</div>
+    <textarea placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 9: WORKFLOW REALE -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s9">
+  <div class="section-header">
+    <div class="section-number">9</div>
+    <div class="section-title">Il tuo Workflow e la tua Esperienza</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Capire come lavori dopo aver ricevuto il report ci dice dove concentrare la qualit&agrave;. Se riscrivi sempre le conclusioni, forse devono essere generate diversamente. Se tagli sempre la documentazione, forse &egrave; troppo lunga.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">9.1 Quante pagine ha tipicamente una tua perizia scritta da zero?</span>
+    <div class="scale-group">
+      <div class="scale-option">
+        <input type="radio" name="pagine-tipiche" value="5-10">
+        <div><strong>5-10</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="pagine-tipiche" value="10-20">
+        <div><strong>10-20</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="pagine-tipiche" value="20-40">
+        <div><strong>20-40</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="pagine-tipiche" value="40+">
+        <div><strong>40+</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="pagine-tipiche" value="dipende">
+        <div><strong>Dipende</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">9.2 Cosa fai dopo aver ricevuto il report generato da MedLav?</span>
+    <p class="question-hint">Seleziona tutte le azioni che fai abitualmente.</p>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="checkbox" id="post-cut" name="post-gen" value="cut">
+        <div><label for="post-cut">Taglio parti troppo lunghe o ridondanti</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="post-edit" name="post-gen" value="edit">
+        <div><label for="post-edit">Modifico/riscrivo alcune parti</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="post-add" name="post-gen" value="add">
+        <div><label for="post-add">Aggiungo le mie conclusioni professionali / risposte ai quesiti</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="post-verify" name="post-gen" value="verify">
+        <div><label for="post-verify">Verifico la correttezza dei riferimenti ai documenti</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="post-style" name="post-gen" value="style">
+        <div><label for="post-style">Adatto il linguaggio e lo stile al mio</label></div>
+      </div>
+      <div class="radio-option">
+        <input type="checkbox" id="post-export" name="post-gen" value="export">
+        <div><label for="post-export">Esporto e uso quasi cos&igrave; com'&egrave;</label></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">9.3 Quale parte del report ti fa risparmiare pi&ugrave; tempo?</span>
+    <p class="question-hint">Qual &egrave; la parte che, senza MedLav, ti costa pi&ugrave; ore di lavoro?</p>
+    <textarea placeholder="Es. 'La cronologia della documentazione sanitaria &egrave; la parte pi&ugrave; noiosa e time-consuming da fare a mano. Solo quella mi fa risparmiare ore...'"></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">9.4 Quale parte del report trovi meno utile o pi&ugrave; problematica?</span>
+    <textarea placeholder="Es. 'Il riassunto ripete troppo la documentazione', 'Le sezioni specialistiche sono superficiali', 'Le conclusioni non mi servono perch&eacute; le scrivo sempre io'..."></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">9.5 Quanto tempo impieghi oggi per revisionare un report di MedLav prima di depositarlo/inviarlo?</span>
+    <div class="scale-group">
+      <div class="scale-option">
+        <input type="radio" name="tempo-revisione" value="15-30min">
+        <div><strong>15-30 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-revisione" value="30-60min">
+        <div><strong>30-60 min</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-revisione" value="1-2ore">
+        <div><strong>1-2 ore</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-revisione" value="2-4ore">
+        <div><strong>2-4 ore</strong></div>
+      </div>
+      <div class="scale-option">
+        <input type="radio" name="tempo-revisione" value="4+ore">
+        <div><strong>4+ ore</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Le tue note sul workflow</div>
+    <div class="notes-hint">Raccontaci come lavori con MedLav. Cosa funziona bene? Cosa ti frustra? Come potrebbe integrarsi meglio nel tuo flusso di lavoro?</div>
+    <textarea class="large" placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEZIONE 10: VISIONE D'INSIEME -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="s10">
+  <div class="section-header">
+    <div class="section-number">10</div>
+    <div class="section-title">Il Report Ideale &mdash; Visione d'Insieme</div>
+  </div>
+  <div class="section-why">
+    <strong>Perch&eacute; lo chiediamo:</strong> Questa sezione &egrave; la pi&ugrave; importante. Qui puoi dirci, con le tue parole, come deve essere il report perfetto per il tuo lavoro.
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">10.1 Se potessi descrivere il report ideale in 3-5 frasi, cosa diresti?</span>
+    <textarea class="large" placeholder="Es. 'Il report ideale &egrave; un documento di lavoro che mi d&agrave; tutta la cronologia clinica organizzata e fedele ai documenti, con le anomalie evidenziate, in modo che io possa poi scriverci sopra le mie valutazioni. Non deve essere troppo lungo, max 15-20 pagine. Deve essere scritto in modo formale ma leggibile...'"></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">10.2 Hai una perizia tua (o di un collega) che consideri il "gold standard"?</span>
+    <p class="question-hint">Se riesci a condividerne una (anche anonimizzata), possiamo analizzarla per calibrare il sistema. Altrimenti, descrivine la struttura qui sotto.</p>
+    <textarea class="large" placeholder="Descrivi la struttura della perizia di riferimento:
+- Quante pagine?
+- Quali sezioni, in che ordine?
+- Quanto lunga ogni sezione?
+- Che stile di scrittura?
+- Come sono citati i documenti?
+..."></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">10.3 Se avessi una bacchetta magica, cosa cambieresti del report attuale di MedLav?</span>
+    <textarea class="large" placeholder="Non ci sono limiti — dicci tutto. Cosa toglieresti? Cosa aggiungeresti? Cosa cambieresti? Qual &egrave; la frustrazione principale?"></textarea>
+  </div>
+
+  <div class="question-group">
+    <span class="question-label">10.4 C'&egrave; qualcosa che non ti abbiamo chiesto e che vorresti dirci?</span>
+    <textarea class="large" placeholder="Qualsiasi feedback, idea, esempio, frustrazione che non &egrave; emerso nelle domande sopra..."></textarea>
+  </div>
+
+  <div class="custom-notes">
+    <div class="custom-notes-label">Spazio libero finale</div>
+    <div class="notes-hint">Usa questo spazio per qualsiasi altra considerazione, link a risorse, riferimenti a perizie di esempio, o note per il team di sviluppo.</div>
+    <textarea class="large" placeholder="Scrivi liberamente..."></textarea>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SUBMIT -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="submit-area">
+  <h3>Grazie per il tuo tempo!</h3>
+  <p>Le tue risposte ci permetteranno di creare un report che funziona davvero per il tuo lavoro quotidiano.</p>
+  <button class="btn-primary" onclick="exportAnswers()">Copia risposte negli appunti</button>
+  <button class="btn-secondary" onclick="window.print()">Stampa / Salva PDF</button>
+  <p style="font-size:13px;color:var(--gray-500);margin-top:12px;">Il pulsante copia tutte le risposte come testo strutturato. Puoi incollarlo in un'email, un documento, o un messaggio.</p>
+</div>
+
+</div>
+
+<script>
+function exportAnswers() {
+  const sections = document.querySelectorAll('.section');
+  let output = '# Risposte Questionario Report MedLav\n';
+  output += `Data compilazione: ${new Date().toLocaleDateString('it-IT')}\n\n`;
+  output += '---\n\n';
+
+  sections.forEach((section) => {
+    const num = section.querySelector('.section-number')?.textContent;
+    const title = section.querySelector('.section-title')?.textContent;
+    output += `## ${num}. ${title}\n\n`;
+
+    const groups = section.querySelectorAll('.question-group');
+    groups.forEach((group) => {
+      const label = group.querySelector('.question-label')?.textContent;
+      output += `### ${label}\n`;
+
+      const checked = group.querySelectorAll('input:checked');
+      if (checked.length > 0) {
+        checked.forEach((input) => {
+          const option = input.closest('.radio-option, .scale-option');
+          const strong = option?.querySelector('strong');
+          const desc = option?.querySelector('.option-desc');
+          const optText = strong?.textContent || input.value;
+          output += `- [x] **${optText}**`;
+          if (desc) output += ` — ${desc.textContent}`;
+          output += '\n';
+        });
+      }
+
+      const textareas = group.querySelectorAll('textarea');
+      textareas.forEach((ta) => {
+        if (ta.value.trim()) {
+          output += `\n> ${ta.value.trim().replace(/\n/g, '\n> ')}\n`;
+        }
+      });
+
+      output += '\n';
+    });
+
+    // Custom notes
+    const customNotes = section.querySelector('.custom-notes textarea');
+    if (customNotes && customNotes.value.trim()) {
+      output += `### Note aggiuntive\n`;
+      output += `> ${customNotes.value.trim().replace(/\n/g, '\n> ')}\n\n`;
+    }
+
+    output += '---\n\n';
+  });
+
+  navigator.clipboard.writeText(output).then(() => {
+    const btn = document.querySelector('.btn-primary');
+    const original = btn.textContent;
+    btn.textContent = 'Copiato!';
+    btn.style.background = '#059669';
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.style.background = '';
+    }, 2000);
+  }).catch(() => {
+    const w = window.open('', '_blank');
+    w.document.write('<pre style="white-space:pre-wrap;font-family:monospace;padding:20px;">' + output.replace(/</g, '&lt;') + '</pre>');
+  });
+}
+</script>
+
+</body>
+</html>

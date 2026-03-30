@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 
-export type FeatureGate = 'processing' | 'export' | 'rag_guidelines' | 'section_regenerate';
+export type FeatureGate = 'processing' | 'export' | 'rag_guidelines' | 'section_regenerate' | 'document_organizer';
 
 interface FeatureAccessResult {
   allowed: boolean;
@@ -48,6 +48,7 @@ export async function checkFeatureAccess(
     export: false,
     rag_guidelines: false,
     section_regenerate: false,
+    document_organizer: false,
   };
 
   if (trialAllowed[feature]) {
