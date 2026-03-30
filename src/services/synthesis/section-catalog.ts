@@ -13,8 +13,8 @@ const TOKENS_LARGE = 16_384;
 /** Medium sections: epicrisi, conclusioni, spese, fatto_storia_clinica. */
 const TOKENS_MEDIUM = 8_192;
 
-/** Small sections: intestazione, quesiti, profilo. */
-const TOKENS_SMALL = 2_048;
+/** Small sections: intestazione, quesiti, profilo, anamnesi. */
+const TOKENS_SMALL = 8_192;
 
 /** Placeholder sections — no LLM call. */
 const TOKENS_NONE = 0;
