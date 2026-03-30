@@ -2,9 +2,9 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, Upload, FileText, ImageIcon, TestTube, Stethoscope } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText, ImageIcon, TestTube, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
