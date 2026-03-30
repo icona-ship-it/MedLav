@@ -162,12 +162,12 @@ export function CaseDetailClient({
         steps={WIZARD_STEPS.map((step) => ({
           ...step,
           subtitle:
-            step.number === 1 ? `${localDocuments.length} documenti`
+            step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
-            : step.number === 3 ? (processingStage === 'revisione_classificazione' || hasClassificationReview
-                ? 'Revisione classificazione'
-                : hasProcessingDocs || processingStage === 'elaborazione'
-                ? `${localDocuments.filter((d) => d.processing_status === 'completato').length}/${localDocuments.filter((d) => !['caricato'].includes(d.processing_status)).length} documenti`
+            : step.number === 3 ? (
+                hasProcessingDocs || processingStage === 'elaborazione'
+                ? 'In elaborazione...'
+                : processingStage === 'errore' ? 'Errore'
                 : 'Pronto')
             : step.number === 4 ? (processingStage === 'revisione_anomalie'
                 ? `${localAnomalies.length + missingDocs.length} da revisionare`

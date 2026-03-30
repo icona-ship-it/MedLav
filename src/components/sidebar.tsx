@@ -22,7 +22,7 @@ import { GlobalSearch } from '@/components/global-search';
 export const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
-  { name: 'Organizza Docs', href: '/document-organizer', icon: FolderSearch },
+  { name: 'Organizza Documenti', href: '/document-organizer', icon: FolderSearch },
 ] as const;
 
 export const FOOTER_ITEMS = [

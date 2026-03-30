@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { getCases } from './actions';
 import { statusConfig, caseTypeLabels } from '@/lib/constants';
+import { formatRelativeDate } from '@/lib/format-date';
 
 export default async function DashboardPage() {
   const allCases = await getCases();
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <div>{caseItem.document_count} documenti</div>
-                      <div>Aggiornato: {new Date(caseItem.updated_at ?? caseItem.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                      <div>Aggiornato {formatRelativeDate(caseItem.updated_at ?? caseItem.created_at)}</div>
                     </div>
                   </Link>
                 );

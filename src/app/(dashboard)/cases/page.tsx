@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
 import { statusConfig, caseTypeLabels, processingStageConfig } from '@/lib/constants';
+import { formatRelativeDate } from '@/lib/format-date';
 
 const STAGE_ICONS = {
   spinner: Loader2,
@@ -143,7 +144,7 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <div>{caseItem.document_count} documenti</div>
-                      <div>{new Date(caseItem.created_at).toLocaleDateString('it-IT')}</div>
+                      <div>{formatRelativeDate(caseItem.created_at)}</div>
                     </div>
                   </Link>
                 );

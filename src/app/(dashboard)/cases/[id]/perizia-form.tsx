@@ -24,9 +24,10 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'judgeName', 'fondoSpese'] },
-  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
+  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
   { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
   { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
+  { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
 ];
 
 // --- Component ---
@@ -48,6 +49,8 @@ export function PeriziaMetadataForm({
     judgeName: existing.judgeName ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
+    specialita: existing.specialita ?? '',
+    alboNumber: existing.alboNumber ?? '',
     ctpRicorrente: existing.ctpRicorrente ?? '',
     ctpResistente: existing.ctpResistente ?? '',
     parteRicorrente: existing.parteRicorrente ?? '',
@@ -56,6 +59,7 @@ export function PeriziaMetadataForm({
     dataOperazioni: existing.dataOperazioni ?? '',
     dataDeposito: existing.dataDeposito ?? '',
     fondoSpese: existing.fondoSpese ?? '',
+    esameObiettivo: existing.esameObiettivo ?? '',
   });
   const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? []);
   const [newQuesito, setNewQuesito] = useState('');
@@ -106,6 +110,8 @@ export function PeriziaMetadataForm({
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
+        ...(form.specialita ? { specialita: form.specialita } : {}),
+        ...(form.alboNumber ? { alboNumber: form.alboNumber } : {}),
         ...(form.ctpRicorrente ? { ctpRicorrente: form.ctpRicorrente } : {}),
         ...(form.ctpResistente ? { ctpResistente: form.ctpResistente } : {}),
         ...(form.parteRicorrente ? { parteRicorrente: form.parteRicorrente } : {}),
@@ -114,6 +120,7 @@ export function PeriziaMetadataForm({
         ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
+        ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
         ...(quesiti.length > 0 ? { quesiti } : {}),
       };
 
@@ -238,6 +245,18 @@ export function PeriziaMetadataForm({
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
+                        <Label>Specialita</Label>
+                        <Input value={form.specialita ?? ''} onChange={(e) => setForm({ ...form, specialita: e.target.value })} placeholder="es. Ortopedia, Medicina Legale" />
+                        <p className="text-xs text-muted-foreground mt-1">Specializzazione medica del perito</p>
+                      </div>
+                      <div>
+                        <Label>N. Iscrizione Albo</Label>
+                        <Input value={form.alboNumber ?? ''} onChange={(e) => setForm({ ...form, alboNumber: e.target.value })} placeholder="es. 12345 - Ordine Medici di Verona" />
+                        <p className="text-xs text-muted-foreground mt-1">Numero di iscrizione all&apos;Albo professionale</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
                         <Label>Parte Ricorrente</Label>
                         <Input value={form.parteRicorrente} onChange={(e) => setForm({ ...form, parteRicorrente: e.target.value })} placeholder="Nome parte ricorrente" />
                       </div>
@@ -273,6 +292,20 @@ export function PeriziaMetadataForm({
                       <Label>Termine deposito</Label>
                       <Input value={form.dataDeposito} onChange={(e) => setForm({ ...form, dataDeposito: e.target.value })} placeholder="es. 20/05/2025" />
                     </div>
+                  </div>
+                )}
+
+                {section.id === 'esameObiettivo' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
+                    </p>
+                    <Textarea
+                      value={form.esameObiettivo ?? ''}
+                      onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
+                      placeholder={"SOGGETTIVAMENTE — Il periziando riferisce:\n- Sintomatologia attuale...\n\nOBIETTIVAMENTE — All'esame obiettivo si rileva:\n- Esame obiettivo generale...\n- Esame locale/specialistico..."}
+                      className="min-h-[200px] font-mono text-sm"
+                    />
                   </div>
                 )}
 

@@ -5,6 +5,8 @@ export interface PeriziaMetadataUI {
   judgeName?: string;
   ctuName?: string;
   ctuTitle?: string;
+  specialita?: string;
+  alboNumber?: string;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;
