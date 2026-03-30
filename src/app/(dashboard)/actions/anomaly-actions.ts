@@ -106,6 +106,7 @@ export async function updateAnomaly(params: {
 export async function confirmAnomaly(params: {
   anomalyId: string;
   caseId: string;
+  resolutionNote?: string | null;
 }) {
   const parsed = anomalyIdSchema.safeParse(params);
   if (!parsed.success) return { error: 'Parametri non validi' };
@@ -144,6 +145,7 @@ export async function confirmAnomaly(params: {
     .from('anomalies')
     .update({
       status: 'user_confirmed',
+      resolution_note: params.resolutionNote ?? null,
       resolved_at: new Date().toISOString(),
     })
     .eq('id', parsed.data.anomalyId)
@@ -157,7 +159,7 @@ export async function confirmAnomaly(params: {
     action: 'anomaly.confirmed',
     entity_type: 'anomaly',
     entity_id: parsed.data.anomalyId,
-    metadata: { caseId: parsed.data.caseId },
+    metadata: { caseId: parsed.data.caseId, hasExpertNote: !!params.resolutionNote },
   });
 
   return { success: true };
@@ -169,6 +171,7 @@ export async function confirmAnomaly(params: {
 export async function dismissAnomaly(params: {
   anomalyId: string;
   caseId: string;
+  resolutionNote?: string | null;
 }) {
   const parsed = anomalyIdSchema.safeParse(params);
   if (!parsed.success) return { error: 'Parametri non validi' };
@@ -207,6 +210,7 @@ export async function dismissAnomaly(params: {
     .from('anomalies')
     .update({
       status: 'user_dismissed',
+      resolution_note: params.resolutionNote ?? null,
       resolved_at: new Date().toISOString(),
     })
     .eq('id', parsed.data.anomalyId)

@@ -284,6 +284,7 @@ function AnomalyCard({
   const [showGuide, setShowGuide] = useState(needsAction);
   const [editDescription, setEditDescription] = useState(anomaly.description);
   const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
+  const [expertNote, setExpertNote] = useState(anomaly.resolution_note ?? '');
   const [isSaving, startSave] = useTransition();
   const [isDismissing, startDismiss] = useTransition();
   const [isConfirming, startConfirm] = useTransition();
@@ -313,19 +314,19 @@ function AnomalyCard({
 
   const handleDismiss = useCallback(() => {
     startDismiss(async () => {
-      const result = await dismissAnomaly({ anomalyId: anomaly.id, caseId });
+      const result = await dismissAnomaly({ anomalyId: anomaly.id, caseId, resolutionNote: expertNote.trim() || null });
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success('Anomalia ignorata — non sara inclusa nel report');
+      toast.success('Anomalia ignorata');
       onChanged?.(anomaly.id);
     });
-  }, [anomaly.id, caseId, onChanged]);
+  }, [anomaly.id, caseId, expertNote, onChanged]);
 
   const handleConfirm = useCallback(() => {
     startConfirm(async () => {
-      const result = await confirmAnomaly({ anomalyId: anomaly.id, caseId });
+      const result = await confirmAnomaly({ anomalyId: anomaly.id, caseId, resolutionNote: expertNote.trim() || null });
       if (result.error) {
         toast.error(result.error);
         return;
@@ -333,7 +334,7 @@ function AnomalyCard({
       toast.success('Anomalia confermata — sara segnalata nel report');
       onChanged?.();
     });
-  }, [anomaly.id, caseId, onChanged]);
+  }, [anomaly.id, caseId, expertNote, onChanged]);
 
   return (
     <div className={`rounded-md border p-3 ${resolved ? 'opacity-60' : ''}`}>
@@ -431,76 +432,53 @@ function AnomalyCard({
         </div>
       )}
 
-      {/* Action buttons — only for unresolved anomalies */}
+      {/* Expert note + actions — only for unresolved anomalies */}
       {!resolved && !isEditing && (
-        <div className="mt-3 pt-2 border-t border-dashed space-y-2">
-          {/* Guided questions if available and guide is open */}
-          {showGuide && guidance?.questions && guidance.questions.length > 0 ? (
-            <>
-              {guidance.questions.map((q) => (
-                <div key={q.question} className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">{q.question}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {q.options.map((opt) => (
-                      <Button
-                        key={opt.label}
-                        variant={opt.action === 'confirm' ? 'outline' : 'ghost'}
-                        size="sm"
-                        className={`h-auto py-1.5 px-3 text-xs whitespace-normal text-left ${
-                          opt.action === 'confirm'
-                            ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={opt.action === 'confirm' ? handleConfirm : handleDismiss}
-                        disabled={isConfirming || isDismissing}
-                      >
-                        {(opt.action === 'confirm' ? isConfirming : isDismissing) ? (
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin shrink-0" />
-                        ) : opt.action === 'confirm' ? (
-                          <ThumbsUp className="mr-1 h-3 w-3 shrink-0" />
-                        ) : (
-                          <Archive className="mr-1 h-3 w-3 shrink-0" />
-                        )}
-                        {opt.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : (
-            /* Fallback: classic buttons when no questions or guide is closed */
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                onClick={handleConfirm}
-                disabled={isConfirming}
-              >
-                {isConfirming ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <ThumbsUp className="mr-1 h-3 w-3" />
-                )}
-                Includi nel report
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                onClick={handleDismiss}
-                disabled={isDismissing}
-              >
-                {isDismissing ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <Archive className="mr-1 h-3 w-3" />
-                )}
-                Escludi
-              </Button>
-            </div>
-          )}
+        <div className="mt-3 pt-2 border-t border-dashed space-y-3">
+          {/* Expert note textarea */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Nota del perito (opzionale — sara inclusa nel report)
+            </label>
+            <textarea
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
+              placeholder="Es: Il ritardo diagnostico non ha avuto impatto sull'esito clinico perche'..."
+              value={expertNote}
+              onChange={(e) => setExpertNote(e.target.value)}
+            />
+          </div>
+
+          {/* Clear action buttons — always the same 2 options */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              onClick={handleConfirm}
+              disabled={isConfirming}
+            >
+              {isConfirming ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <ThumbsUp className="mr-1 h-3 w-3" />
+              )}
+              Segnala nel report
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
+              onClick={handleDismiss}
+              disabled={isDismissing}
+            >
+              {isDismissing ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <Archive className="mr-1 h-3 w-3" />
+              )}
+              Escludi
+            </Button>
+          </div>
         </div>
       )}
     </div>
