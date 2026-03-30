@@ -277,7 +277,13 @@ export async function uploadSignature(formData: FormData): Promise<{ error?: str
     return { error: 'Formato non supportato. Usa PNG, JPG o WEBP.' };
   }
 
-  const ext = file.name.split('.').pop() ?? 'png';
+  // Derive extension from validated MIME type, not user filename (security)
+  const mimeToExt: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+  };
+  const ext = mimeToExt[file.type] ?? 'png';
   const storagePath = `signatures/${user.id}/signature.${ext}`;
 
   const admin = createAdminClient();

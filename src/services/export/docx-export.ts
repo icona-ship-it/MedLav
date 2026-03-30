@@ -924,14 +924,16 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   // Signature image (if uploaded)
   if (signatureImageBase64) {
     try {
+      const mimeMatch = signatureImageBase64.match(/^data:image\/(\w+);base64,/);
+      const imgType = mimeMatch?.[1] === 'jpeg' || mimeMatch?.[1] === 'jpg' ? 'jpg' : 'png';
       const base64Data = signatureImageBase64.replace(/^data:image\/\w+;base64,/, '');
-      const imgBuffer = Buffer.from(base64Data, 'base64');
+      const sigBuffer = Buffer.from(base64Data, 'base64');
       children.push(new Paragraph({
         children: [
           new ImageRun({
-            data: imgBuffer,
+            data: sigBuffer,
             transformation: { width: 200, height: 80 },
-            type: 'png',
+            type: imgType,
           }),
         ],
         spacing: { before: 400 },

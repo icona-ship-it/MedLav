@@ -56,11 +56,17 @@ export function ReportDialog({
   }
 
   // Autosave every 30 seconds while dialog is open
+  const dbContentRef = useRef(report?.synthesis ?? '');
+  useEffect(() => {
+    dbContentRef.current = report?.synthesis ?? '';
+  }, [report?.synthesis]);
+
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(() => {
-      if (editedRef.current) {
-        saveDraft(caseId, editedRef.current);
+      const current = editedRef.current;
+      if (current && current !== dbContentRef.current) {
+        saveDraft(caseId, current);
       }
     }, AUTOSAVE_INTERVAL_MS);
     return () => clearInterval(interval);

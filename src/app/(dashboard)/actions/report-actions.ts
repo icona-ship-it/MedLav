@@ -160,6 +160,10 @@ export async function updateReportSection(params: {
     params.sectionContent,
   );
 
+  if (updatedSynthesis === report.synthesis) {
+    return { error: 'Sezione non trovata nel report. Ricarica la pagina e riprova.' };
+  }
+
   const { error } = await supabase
     .from('reports')
     .update({
@@ -199,6 +203,7 @@ export async function getLastExport(caseId: string): Promise<{
     .from('audit_log')
     .select('metadata, created_at')
     .eq('action', 'report.exported')
+    .eq('entity_type', 'case')
     .eq('entity_id', caseId)
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })

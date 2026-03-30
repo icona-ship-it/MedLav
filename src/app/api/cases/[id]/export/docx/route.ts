@@ -89,10 +89,10 @@ export async function GET(
           .from('signatures')
           .download(data.signatureImagePath);
         if (fileData) {
-          const buffer = Buffer.from(await fileData.arrayBuffer());
+          const sigBytes = Buffer.from(await fileData.arrayBuffer());
           const ext = data.signatureImagePath.split('.').pop() ?? 'png';
           const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
-          signatureImageBase64 = `data:${mime};base64,${buffer.toString('base64')}`;
+          signatureImageBase64 = `data:${mime};base64,${sigBytes.toString('base64')}`;
         }
       } catch { /* signature missing — skip */ }
     }

@@ -317,9 +317,14 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'quesiti' && (
                   <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      I quesiti formulati dal giudice a cui il report deve rispondere punto per punto.
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        I quesiti formulati dal giudice a cui il report deve rispondere punto per punto.
+                      </p>
+                      <span className={`text-xs font-medium ${quesiti.length >= 20 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {quesiti.length}/20
+                      </span>
+                    </div>
                     {quesiti.map((q, i) => (
                       <div key={i} className="flex items-start gap-2 rounded-md border p-3">
                         <span className="text-sm font-medium text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
@@ -347,14 +352,14 @@ export function PeriziaMetadataForm({
                           variant="outline"
                           size="sm"
                           onClick={addQuesito}
-                          disabled={!newQuesito.trim()}
+                          disabled={!newQuesito.trim() || quesiti.length >= 20}
                         >
                           <Plus className="mr-1 h-3 w-3" />
                           Aggiungi quesito
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" disabled={quesiti.length >= 20}>
                               <FileText className="mr-1 h-3 w-3" />
                               Carica template
                             </Button>
@@ -366,8 +371,15 @@ export function PeriziaMetadataForm({
                                 onClick={() => {
                                   const templates = getQuestiTemplates(ct.value as CaseType);
                                   if (templates.length === 0) return;
-                                  setQuesiti([...quesiti, ...templates]);
-                                  toast.success(`${templates.length} quesiti caricati da "${ct.label}"`);
+                                  const newItems = [...templates].filter((t) => !quesiti.includes(t));
+                                  if (newItems.length === 0) {
+                                    toast.info('Questi quesiti sono già presenti');
+                                    return;
+                                  }
+                                  const remaining = 20 - quesiti.length;
+                                  const toAdd = newItems.slice(0, remaining);
+                                  setQuesiti([...quesiti, ...toAdd]);
+                                  toast.success(`${toAdd.length} quesiti caricati da "${ct.label}"`);
                                 }}
                               >
                                 {ct.label}
