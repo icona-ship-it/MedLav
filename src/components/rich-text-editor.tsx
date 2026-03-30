@@ -22,6 +22,8 @@ interface RichTextEditorProps {
   onChange: (markdown: string) => void;
   caseId?: string;
   className?: string;
+  /** Heading levels to allow. Default: [2, 3]. Use [3] in section editors to prevent ## conflicts. */
+  allowedHeadingLevels?: (1 | 2 | 3 | 4 | 5 | 6)[];
 }
 
 interface ToolbarButtonProps {
@@ -68,13 +70,13 @@ function unresolveOcrImageUrls(markdown: string, caseId?: string): string {
   );
 }
 
-export function RichTextEditor({ content, onChange, caseId, className }: RichTextEditorProps) {
+export function RichTextEditor({ content, onChange, caseId, className, allowedHeadingLevels = [2, 3] }: RichTextEditorProps) {
   const isUpdatingRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [2, 3] },
+        heading: { levels: allowedHeadingLevels as unknown as [1, 2, 3, 4, 5, 6] },
       }),
       Image.configure({ inline: false, allowBase64: true }),
       Table.configure({ resizable: false }),
@@ -145,20 +147,24 @@ export function RichTextEditor({ content, onChange, caseId, className }: RichTex
 
         <div className="w-px h-5 bg-border mx-1" />
 
-        <ToolbarButton
-          active={editor.isActive('heading', { level: 2 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          title="Intestazione 2"
-        >
-          <Heading2 className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          active={editor.isActive('heading', { level: 3 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          title="Intestazione 3"
-        >
-          <Heading3 className="h-4 w-4" />
-        </ToolbarButton>
+        {allowedHeadingLevels.includes(2) && (
+          <ToolbarButton
+            active={editor.isActive('heading', { level: 2 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            title="Intestazione 2"
+          >
+            <Heading2 className="h-4 w-4" />
+          </ToolbarButton>
+        )}
+        {allowedHeadingLevels.includes(3) && (
+          <ToolbarButton
+            active={editor.isActive('heading', { level: 3 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            title="Intestazione 3"
+          >
+            <Heading3 className="h-4 w-4" />
+          </ToolbarButton>
+        )}
 
         <div className="w-px h-5 bg-border mx-1" />
 

@@ -288,12 +288,17 @@ export async function uploadSignature(formData: FormData): Promise<{ error?: str
 
   const admin = createAdminClient();
 
+  // Ensure bucket exists (idempotent)
+  await admin.storage.createBucket('signatures', { public: false, fileSizeLimit: 500_000 }).catch(() => {
+    // Bucket already exists — ignore
+  });
+
   const { error: uploadError } = await admin.storage
     .from('signatures')
     .upload(storagePath, file, { upsert: true, contentType: file.type });
 
   if (uploadError) {
-    return { error: 'Errore durante il caricamento. Riprova.' };
+    return { error: 'Errore durante il caricamento della firma. Riprova.' };
   }
 
   const { error: updateError } = await supabase

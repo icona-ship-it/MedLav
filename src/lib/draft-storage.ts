@@ -1,13 +1,20 @@
 /**
  * Client-side draft storage using localStorage.
  * Saves report editor drafts for recovery after accidental page close.
+ * Includes tab-awareness to detect cross-tab editing conflicts.
  */
 
 const DRAFT_PREFIX = 'medlav-draft-';
 
+/** Unique ID for this browser tab, survives re-renders but not page reload. */
+const TAB_ID = typeof crypto !== 'undefined'
+  ? crypto.randomUUID()
+  : Math.random().toString(36).slice(2);
+
 interface Draft {
   content: string;
   savedAt: string; // ISO timestamp
+  tabId: string;
 }
 
 export function saveDraft(caseId: string, content: string): void {
@@ -15,6 +22,7 @@ export function saveDraft(caseId: string, content: string): void {
     const draft: Draft = {
       content,
       savedAt: new Date().toISOString(),
+      tabId: TAB_ID,
     };
     localStorage.setItem(DRAFT_PREFIX + caseId, JSON.stringify(draft));
   } catch {
@@ -50,4 +58,20 @@ export function isDraftNewer(caseId: string, dbUpdatedAt: string | null): boolea
   if (!draft) return false;
   if (!dbUpdatedAt) return true;
   return new Date(draft.savedAt) > new Date(dbUpdatedAt);
+}
+
+/**
+ * Check if a draft was saved by a different browser tab.
+ */
+export function isDraftFromOtherTab(caseId: string): boolean {
+  const draft = getDraft(caseId);
+  if (!draft) return false;
+  return !!draft.tabId && draft.tabId !== TAB_ID;
+}
+
+/**
+ * Get the current tab's ID for comparison.
+ */
+export function getTabId(): string {
+  return TAB_ID;
 }

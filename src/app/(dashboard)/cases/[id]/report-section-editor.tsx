@@ -19,12 +19,13 @@ interface ReportSectionEditorProps {
   sectionId: string;
   sectionTitle: string;
   sectionContent: string;
+  reportUpdatedAt?: string;
   onSaved: () => void;
 }
 
 export function ReportSectionEditor({
   open, onOpenChange, caseId, reportId,
-  sectionId, sectionTitle, sectionContent, onSaved,
+  sectionId, sectionTitle, sectionContent, reportUpdatedAt, onSaved,
 }: ReportSectionEditorProps) {
   const router = useRouter();
   const [editedContent, setEditedContent] = useState('');
@@ -52,6 +53,7 @@ export function ReportSectionEditor({
         reportId,
         sectionId,
         sectionContent: editedContent,
+        expectedUpdatedAt: reportUpdatedAt,
       });
       if (result.error) {
         toast.error(result.error);
@@ -63,7 +65,7 @@ export function ReportSectionEditor({
       onSaved();
       router.refresh();
     });
-  }, [caseId, reportId, sectionId, sectionTitle, editedContent, router, onOpenChange, onSaved]);
+  }, [caseId, reportId, sectionId, sectionTitle, editedContent, reportUpdatedAt, router, onOpenChange, onSaved]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -104,6 +106,7 @@ export function ReportSectionEditor({
             onChange={setEditedContent}
             caseId={caseId}
             className="h-full"
+            allowedHeadingLevels={[3]}
           />
         </div>
       </DialogContent>

@@ -99,4 +99,5 @@ export interface ReportRow {
   version: number;
   report_status: string;
   synthesis: string | null;
+  updated_at?: string;
 }

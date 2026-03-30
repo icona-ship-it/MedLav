@@ -229,6 +229,7 @@ export function ReportA4Viewer({
         sectionId={editingSection?.id ?? ''}
         sectionTitle={editingSection?.title ?? ''}
         sectionContent={editingSection?.content ?? ''}
+        reportUpdatedAt={report.updated_at}
         onSaved={() => {
           setEditingSection(null);
           router.refresh();

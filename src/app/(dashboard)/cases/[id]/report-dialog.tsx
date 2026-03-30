@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { RichTextEditor } from '@/components/rich-text-editor';
-import { saveDraft, getDraft, clearDraft } from '@/lib/draft-storage';
+import { saveDraft, getDraft, clearDraft, isDraftFromOtherTab } from '@/lib/draft-storage';
 import { updateReportSynthesis } from '../../actions';
 import type { ReportRow } from './types';
 
@@ -70,6 +70,19 @@ export function ReportDialog({
       }
     }, AUTOSAVE_INTERVAL_MS);
     return () => clearInterval(interval);
+  }, [open, caseId]);
+
+  // Detect cross-tab edits via storage event
+  useEffect(() => {
+    if (!open) return;
+    const key = `medlav-draft-${caseId}`;
+    const handler = (e: StorageEvent) => {
+      if (e.key === key && e.newValue && isDraftFromOtherTab(caseId)) {
+        toast.warning('Un\'altra scheda sta modificando questo report. Salva per evitare conflitti.');
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
   }, [open, caseId]);
 
   const handleOpenChange = (isOpen: boolean) => {

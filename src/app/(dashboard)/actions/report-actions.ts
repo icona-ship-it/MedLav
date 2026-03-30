@@ -129,6 +129,7 @@ export async function updateReportSection(params: {
   reportId: string;
   sectionId: string;
   sectionContent: string;
+  expectedUpdatedAt?: string;
 }) {
   const supabase = await createClient();
 
@@ -147,12 +148,21 @@ export async function updateReportSection(params: {
   // Fetch current report to get full synthesis
   const { data: report } = await supabase
     .from('reports')
-    .select('synthesis')
+    .select('synthesis, updated_at')
     .eq('id', params.reportId)
     .eq('case_id', params.caseId)
     .single();
 
   if (!report?.synthesis) return { error: 'Report non trovato' };
+
+  // Optimistic locking: reject if report was modified since editor opened
+  if (params.expectedUpdatedAt && report.updated_at) {
+    const expected = new Date(params.expectedUpdatedAt).getTime();
+    const actual = new Date(report.updated_at as string).getTime();
+    if (actual > expected) {
+      return { error: 'Il report è stato modificato da un\'altra operazione. Ricarica la pagina e riprova.' };
+    }
+  }
 
   const updatedSynthesis = replaceSectionContent(
     report.synthesis,

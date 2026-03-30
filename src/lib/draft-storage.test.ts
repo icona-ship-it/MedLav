@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { saveDraft, getDraft, clearDraft, isDraftNewer } from './draft-storage';
+import { saveDraft, getDraft, clearDraft, isDraftNewer, isDraftFromOtherTab, getTabId } from './draft-storage';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -29,12 +29,14 @@ describe('draft-storage', () => {
       );
     });
 
-    it('should include a timestamp', () => {
+    it('should include a timestamp and tabId', () => {
       saveDraft('case-123', 'Content');
       const call = localStorageMock.setItem.mock.calls[0][1];
       const parsed = JSON.parse(call);
       expect(parsed.savedAt).toBeDefined();
       expect(new Date(parsed.savedAt).getTime()).not.toBeNaN();
+      expect(parsed.tabId).toBeDefined();
+      expect(typeof parsed.tabId).toBe('string');
     });
   });
 
@@ -72,13 +74,49 @@ describe('draft-storage', () => {
 
     it('should return true when draft is newer than DB timestamp', () => {
       saveDraft('case-new', 'Content');
-      // Draft just saved (now) is newer than yesterday
       expect(isDraftNewer('case-new', '2025-01-01T00:00:00Z')).toBe(true);
     });
 
     it('should return true when dbUpdatedAt is null', () => {
       saveDraft('case-null', 'Content');
       expect(isDraftNewer('case-null', null)).toBe(true);
+    });
+  });
+
+  describe('isDraftFromOtherTab', () => {
+    it('should return false when no draft exists', () => {
+      expect(isDraftFromOtherTab('no-draft')).toBe(false);
+    });
+
+    it('should return false for draft from current tab', () => {
+      saveDraft('case-same', 'Content');
+      expect(isDraftFromOtherTab('case-same')).toBe(false);
+    });
+
+    it('should return true for draft from another tab', () => {
+      // Simulate a draft from another tab by writing directly
+      const otherDraft = JSON.stringify({
+        content: 'Other tab content',
+        savedAt: new Date().toISOString(),
+        tabId: 'other-tab-id',
+      });
+      localStorageMock.setItem('medlav-draft-case-other', otherDraft);
+      // Reset mock so getDraft reads from store
+      localStorageMock.getItem.mockImplementation((key: string) =>
+        key === 'medlav-draft-case-other' ? otherDraft : '',
+      );
+      expect(isDraftFromOtherTab('case-other')).toBe(true);
+    });
+  });
+
+  describe('getTabId', () => {
+    it('should return a non-empty string', () => {
+      expect(getTabId()).toBeTruthy();
+      expect(typeof getTabId()).toBe('string');
+    });
+
+    it('should return the same value on repeated calls', () => {
+      expect(getTabId()).toBe(getTabId());
     });
   });
 });
