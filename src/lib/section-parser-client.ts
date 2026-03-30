@@ -15,7 +15,7 @@ export interface ClientSection {
  * Deduplicates slugs by appending _2, _3, etc. to collisions.
  */
 export function parseSections(markdown: string): ClientSection[] {
-  if (!markdown || !markdown.trim()) return [];
+  if (!markdown || typeof markdown !== 'string' || !markdown.trim()) return [];
 
   const sections: ClientSection[] = [];
   const headingRegex = /^##\s+(.+)$/gm;
