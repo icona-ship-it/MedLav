@@ -21,6 +21,7 @@ import type { ReportRow } from './types';
 
 function formatTimeAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
+  if (Number.isNaN(diff) || diff < 0) return 'adesso';
   const minutes = Math.floor(diff / 60_000);
   if (minutes < 1) return 'adesso';
   if (minutes < 60) return `${minutes} min fa`;

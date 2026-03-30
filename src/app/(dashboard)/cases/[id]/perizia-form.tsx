@@ -98,7 +98,7 @@ export function PeriziaMetadataForm({
 
   const addQuesito = () => {
     const trimmed = newQuesito.trim();
-    if (!trimmed) return;
+    if (!trimmed || quesiti.length >= 20) return;
     setQuesiti([...quesiti, trimmed]);
     setNewQuesito('');
   };

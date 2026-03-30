@@ -67,7 +67,7 @@ export function replaceSectionContent(
   sectionId: string,
   newContent: string,
 ): string {
-  if (!markdown || !sectionId) return markdown;
+  if (!markdown || typeof markdown !== 'string' || !sectionId) return markdown ?? '';
 
   const headingRegex = /^##\s+(.+)$/gm;
   const matches: Array<{ title: string; index: number }> = [];

@@ -330,8 +330,12 @@ export async function deleteSignature(): Promise<{ error?: string; success?: boo
 
   const path = profile?.signature_image_path as string | null;
   if (path) {
-    const admin = createAdminClient();
-    await admin.storage.from('signatures').remove([path]);
+    try {
+      const admin = createAdminClient();
+      await admin.storage.from('signatures').remove([path]);
+    } catch {
+      // File may not exist in storage — proceed with DB cleanup
+    }
   }
 
   const { error } = await supabase
