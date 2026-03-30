@@ -130,7 +130,7 @@ export function DocumentsSection({
                   <span>Immagini diagnostiche</span>
                 </div>
               </div>
-              <div className="w-full max-w-md mt-2">
+              <div className="w-full max-w-2xl mt-2">
                 <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
               </div>
             </div>
