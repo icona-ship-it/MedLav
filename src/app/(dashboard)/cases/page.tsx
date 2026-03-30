@@ -53,6 +53,20 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
         </Button>
       </div>
 
+      {/* Active analyses info */}
+      {(() => {
+        const activeCount = cases.filter((c) => {
+          const stage = (c as Record<string, unknown>).processing_stage as string | undefined;
+          return stage && stage !== 'idle' && stage !== 'completato' && stage !== 'errore';
+        }).length;
+        return activeCount > 0 ? (
+          <div className="flex items-center gap-2 rounded-md border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-200">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span><strong>{activeCount}</strong> {activeCount === 1 ? 'analisi in corso' : 'analisi in corso'} su 5 disponibili in parallelo</span>
+          </div>
+        ) : null;
+      })()}
+
       {/* Cases List */}
       <Card>
         <CardHeader>
