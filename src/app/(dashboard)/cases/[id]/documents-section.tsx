@@ -98,146 +98,125 @@ export function DocumentsSection({
   return (
     <div className="space-y-4">
       {/* Upload area */}
-      {documents.length === 0 ? (
-        /* Empty state — guided first experience */
-        <Card className="border-2 border-dashed border-primary/30">
-          <CardContent className="pt-8 pb-8">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                <Upload className="h-8 w-8 text-primary" />
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium">
+              {documents.length === 0 ? 'Carica la documentazione clinica' : 'Aggiungi altri documenti'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              PDF, immagini (JPG, PNG, TIFF), documenti Word ed Excel
+            </p>
+          </div>
+
+          <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
+
+          {documents.length === 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border px-2.5 py-2">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                <span>Cartelle cliniche</span>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold">Carica la documentazione clinica</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Trascina i file qui o clicca per selezionarli
-                </p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border px-2.5 py-2">
+                <Stethoscope className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                <span>Referti medici</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-left w-full max-w-sm">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <FileText className="h-4 w-4 shrink-0 text-blue-500" />
-                  <span>Cartelle cliniche</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Stethoscope className="h-4 w-4 shrink-0 text-green-500" />
-                  <span>Referti medici</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <TestTube className="h-4 w-4 shrink-0 text-purple-500" />
-                  <span>Esami di laboratorio</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <ImageIcon className="h-4 w-4 shrink-0 text-orange-500" />
-                  <span>Immagini diagnostiche</span>
-                </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border px-2.5 py-2">
+                <TestTube className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                <span>Esami laboratorio</span>
               </div>
-              <div className="w-full max-w-2xl mt-2">
-                <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border px-2.5 py-2">
+                <ImageIcon className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                <span>Immagini diagnostiche</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Carica Documentazione</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Documents list — show all (capped at 20) */}
+      {/* Documents list — same card style as classification review */}
       {documents.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Documenti Caricati</span>
-              <Badge variant="secondary">{documents.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6 space-y-4">
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium">Documenti caricati</p>
+              <p className="text-xs text-muted-foreground">{documents.length} {documents.length === 1 ? 'documento' : 'documenti'}</p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {documents.slice(0, 20).map((doc) => {
+              {documents.slice(0, 30).map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
                 const isUploaded = doc.processing_status === 'caricato';
                 const isComplete = doc.processing_status === 'completato';
+                const isError = doc.processing_status === 'errore';
                 return (
                   <div
                     key={doc.id}
-                    className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                      isComplete ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' : ''
+                    className={`rounded-lg border p-3 space-y-2 ${
+                      isComplete ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' :
+                      isError ? 'border-destructive/30 bg-destructive/5' : ''
                     }`}
                   >
-                    <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="flex items-center gap-3">
                       {isComplete ? (
                         <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
                       ) : (
                         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="truncate text-sm font-medium">{doc.file_name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" title={doc.file_name}>{doc.file_name}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</span>
                           {doc.document_type && doc.document_type !== 'altro' && (
-                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                               {documentTypeLabels[doc.document_type] ?? doc.document_type}
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        {!isUploaded && !isComplete && (
-                          <Badge variant={processingVariant(doc.processing_status)}>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isUploaded && <Badge variant="secondary" className="text-xs">Pronto</Badge>}
+                        {!isUploaded && !isComplete && !isError && (
+                          <Badge variant={processingVariant(doc.processing_status)} className="text-xs">
                             {processingLabels[doc.processing_status] ?? doc.processing_status}
                           </Badge>
                         )}
-                        {isUploaded && (
-                          <Badge variant="secondary">Pronto</Badge>
-                        )}
-                        {doc.processing_status === 'errore' && doc.processing_error && (
-                          <p className="mt-1 text-xs text-destructive max-w-[200px]">{toUserMessage(doc.processing_error)}</p>
-                        )}
-                        {doc.processing_status === 'errore' && (
+                        {isError && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="mt-1 h-6 px-2 text-xs"
+                            className="h-7 px-2 text-xs text-destructive"
                             onClick={() => handleRetryDocument(doc.id)}
                             disabled={retryingDocId === doc.id}
                           >
-                            {retryingDocId === doc.id ? (
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            ) : (
-                              <RotateCcw className="mr-1 h-3 w-3" />
-                            )}
-                            Riprova
+                            {retryingDocId === doc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                            <span className="ml-1">Riprova</span>
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteTarget({ id: doc.id, name: doc.file_name })}
+                            disabled={isDeletingDoc}
+                            aria-label={`Elimina ${doc.file_name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
                       </div>
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteTarget({ id: doc.id, name: doc.file_name })}
-                          disabled={isDeletingDoc}
-                          title="Elimina documento"
-                          aria-label={`Elimina documento ${doc.file_name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
                     </div>
+                    {isError && doc.processing_error && (
+                      <p className="text-xs text-destructive">{toUserMessage(doc.processing_error)}</p>
+                    )}
                   </div>
                 );
               })}
-              {documents.length > 20 && (
-                <p className="text-xs text-muted-foreground text-center py-1">
-                  ...e altri {documents.length - 20} documenti
+              {documents.length > 30 && (
+                <p className="text-xs text-muted-foreground text-center py-1 col-span-2">
+                  ...e altri {documents.length - 30} documenti
                 </p>
               )}
             </div>
