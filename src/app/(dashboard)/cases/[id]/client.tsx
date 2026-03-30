@@ -51,15 +51,14 @@ function isDocProcessing(status: string): boolean {
 function computeAutoStep(
   processingStage: string,
   hasProcessingDocs: boolean,
-  hasClassificationReview: boolean,
+  _hasClassificationReview: boolean,
   hasReport: boolean,
   hasEvents: boolean,
 ): number {
-  // Stage-based routing (new pipeline)
+  // Stage-based routing (new pipeline — no classification review gate)
   if (processingStage === 'completato') return 5;
   if (processingStage === 'generazione_report') return 5; // step 5 with spinner
   if (processingStage === 'revisione_anomalie') return 4;
-  if (processingStage === 'revisione_classificazione') return 3;
   if (processingStage === 'elaborazione') return 3;
   if (processingStage === 'errore') {
     if (hasReport) return 5;  // Report saved before failure (e.g. finalize failed)
@@ -70,7 +69,7 @@ function computeAutoStep(
   // Fallback for legacy cases (processing_stage = 'idle')
   if (hasReport) return 5;
   if (hasEvents) return 4;
-  if (hasProcessingDocs || hasClassificationReview) return 3;
+  if (hasProcessingDocs) return 3;
   return 1;
 }
 

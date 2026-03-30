@@ -157,47 +157,8 @@ export const processCase = inngest.createFunction(
     }
     applyClassifications(ocrResults, classifications);
 
-    // ── Step 2.6: Mark ready for classification review ───────────
-    await step.run('mark-classification-ready', async () => {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const supabase = createAdminClient();
-      const docIds = ocrResults.map((r) => r.documentId);
-      await supabase
-        .from('documents')
-        .update({
-          processing_status: 'classificazione_completata',
-          updated_at: new Date().toISOString(),
-        })
-        .in('id', docIds);
-      logger.info('pipeline', `Marked ${docIds.length} documents for classification review`);
-    });
-
-    await step.run('mark-revisione-classificazione', async () => {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const supabase = createAdminClient();
-      await supabase
-        .from('cases')
-        .update({ processing_stage: 'revisione_classificazione', updated_at: new Date().toISOString() })
-        .eq('id', caseId);
-      logger.info('pipeline', `Case ${caseId} ready for classification review`);
-    });
-
-    // ── Classification review gate ───────────────────────────────
-    // Pipeline pauses here. User reviews in UI, then confirms via API.
-    const classificationEvent = await step.waitForEvent(
-      'wait-for-classification-review',
-      {
-        event: 'case/classification.confirmed',
-        match: 'data.caseId',
-        timeout: '7d',
-      },
-    );
-    if (!classificationEvent) {
-      throw new Error('Classification review timed out after 7 days');
-    }
-
-    // ── Step 3.0: Resume — refresh document types from DB ────────
-    // User may have changed document types during review
+    // ── Step 3.0: Refresh document types from DB ──────────────────
+    // Document types may have been set by Document Organizer (Pro) or by user during upload
     const refreshedTypes = await step.run('refresh-document-types', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();

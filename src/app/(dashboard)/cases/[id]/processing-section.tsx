@@ -15,7 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ProcessingProgress } from '@/components/processing-progress';
-import { ClassificationReview } from './classification-review';
+// Classification review removed — now handled by Document Organizer (Pro) or skipped
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
 import type { Document } from './types';
@@ -65,12 +65,6 @@ export function ProcessingSection({
     const err = (d.processing_error ?? '').toLowerCase();
     return !err.includes('nessun evento');
   });
-
-  // Documents waiting for classification review
-  const classificationDocs = documents.filter(
-    (d) => d.processing_status === 'classificazione_completata',
-  );
-  const hasClassificationReview = classificationDocs.length > 0;
 
   const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
 
@@ -158,15 +152,6 @@ export function ProcessingSection({
       setIsRetrying(false);
     }
   }, [caseId, router]);
-
-  // Show classification review when pipeline is paused
-  if (hasClassificationReview) {
-    return (
-      <div className="space-y-4">
-        <ClassificationReview caseId={caseId} documents={classificationDocs} />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">

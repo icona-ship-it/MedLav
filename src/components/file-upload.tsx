@@ -237,11 +237,10 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
           })}
           </div>
           {files.length > 0 && files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
-            <div className="flex items-start gap-2 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
+            <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/20 p-3 text-sm text-yellow-800 dark:text-yellow-200">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Consiglio: seleziona il tipo di documento per un&apos;analisi più precisa.
-                L&apos;AI proverà comunque a classificarli automaticamente.
+                Consiglio: seleziona il tipo di documento per un&apos;analisi piu precisa.
               </span>
             </div>
           )}
