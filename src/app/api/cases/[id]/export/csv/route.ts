@@ -3,12 +3,14 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateCsvExport } from '@/services/export/csv-export';
+import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
+import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
@@ -48,12 +50,20 @@ export async function GET(
       metadata: { format: 'csv' },
     });
 
-    const csv = generateCsvExport(data.events);
+    let csv = generateCsvExport(data.events);
 
+    const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+    if (shouldAnonymize) {
+      const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const result = anonymizeText({ text: csv, periziaMetadata });
+      csv = result.anonymizedText;
+    }
+
+    const suffix = shouldAnonymize ? '-anonimizzato' : '';
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="eventi-${data.caseData.code}.csv"`,
+        'Content-Disposition': `attachment; filename="eventi-${data.caseData.code}${suffix}.csv"`,
       },
     });
   } catch (error) {

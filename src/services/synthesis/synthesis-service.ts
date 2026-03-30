@@ -362,7 +362,8 @@ async function fetchGuidelineContext(
     return ctx;
   } catch (ragError) {
     logger.warn('synthesis', ` RAG retrieval failed (non-blocking): ${ragError instanceof Error ? ragError.message : 'unknown'}`);
-    return '';
+    // Return a warning note so the LLM and perito know guidelines were not available
+    return '[NOTA: Le linee guida cliniche non sono state recuperate per un errore tecnico. Il report è stato generato senza il supporto delle linee guida RAG.]';
   }
 }
 

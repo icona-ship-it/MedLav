@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { validateCsrfToken } from '@/lib/csrf';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
@@ -24,6 +25,11 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    const rateCheck = await checkRateLimit({ key: `ratings:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
     }
 
     const body = await request.json();

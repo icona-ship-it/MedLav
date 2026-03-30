@@ -89,6 +89,8 @@ export default function SettingsPage() {
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletePasswordError, setDeletePasswordError] = useState('');
 
   useEffect(() => {
     getProfile()
@@ -535,17 +537,46 @@ export default function SettingsPage() {
                     Elimina il mio account
                   </Button>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 space-y-3">
                     <p className="text-sm font-semibold text-destructive">
                       Sei sicuro? Tutti i dati verranno eliminati permanentemente.
                     </p>
+                    <div className="space-y-2">
+                      <label htmlFor="delete-password" className="text-sm text-muted-foreground">
+                        Inserisci la tua password per confermare:
+                      </label>
+                      <input
+                        id="delete-password"
+                        type="password"
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                        value={deletePassword}
+                        onChange={(e) => { setDeletePassword(e.target.value); setDeletePasswordError(''); }}
+                        placeholder="La tua password"
+                      />
+                      {deletePasswordError && (
+                        <p className="text-xs text-destructive">{deletePasswordError}</p>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         variant="destructive"
                         size="sm"
-                        disabled={deleting}
+                        disabled={deleting || !deletePassword}
                         onClick={async () => {
                           setDeleting(true);
+                          setDeletePasswordError('');
+                          // Verify password by attempting sign-in
+                          const { createClient: createBrowserClient } = await import('@/lib/supabase/client');
+                          const supabase = createBrowserClient();
+                          const { error: signInError } = await supabase.auth.signInWithPassword({
+                            email: profile?.email ?? '',
+                            password: deletePassword,
+                          });
+                          if (signInError) {
+                            setDeletePasswordError('Password non corretta.');
+                            setDeleting(false);
+                            return;
+                          }
                           await deleteMyAccount();
                         }}
                       >
@@ -554,7 +585,7 @@ export default function SettingsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setShowDeleteConfirm(false)}
+                        onClick={() => { setShowDeleteConfirm(false); setDeletePassword(''); setDeletePasswordError(''); }}
                       >
                         Annulla
                       </Button>

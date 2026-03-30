@@ -203,6 +203,7 @@ export async function generateSingleSection(params: {
       });
     } catch {
       logger.warn('section-generator', `RAG retrieval failed for section ${spec.id} (non-blocking)`);
+      guidelineContext = '[NOTA: Le linee guida cliniche non sono state recuperate per un errore tecnico.]';
     }
   }
 

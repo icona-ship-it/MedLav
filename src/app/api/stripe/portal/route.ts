@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStripeClient } from '@/lib/stripe/client';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function POST() {
   try {
@@ -9,6 +10,11 @@ export async function POST() {
 
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
+    }
+
+    const rateCheck = await checkRateLimit({ key: `portal:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
     }
 
     const { data: profile } = await supabase

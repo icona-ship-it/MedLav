@@ -119,11 +119,12 @@ export async function summarizeDocumentBatchByIds(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
       logger.error('synthesis', `Failed to summarize doc ${ref.documentId}: ${message}`);
+      // Mark as failed with clear warning — synthesis will see this and know the summary is missing
       results.push({
         documentId: ref.documentId,
         fileName: ref.fileName,
         documentType: ref.documentType,
-        summary: `[Riassunto non disponibile — errore: ${message}]`,
+        summary: `[ATTENZIONE: Riassunto di "${ref.fileName}" non disponibile per errore di elaborazione. Il report potrebbe essere incompleto per questo documento. Errore: ${message}]`,
         totalCharsOriginal: 0,
       });
     }
