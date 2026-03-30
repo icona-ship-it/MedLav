@@ -190,51 +190,48 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
       {files.length > 0 && !isUploading && progress.length === 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">{files.length} file selezionati</p>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[500px] overflow-y-auto">
           {files.map((file, index) => {
             const Icon = getFileIcon(file.type);
             const fileKey = `${file.name}-${file.size}`;
             return (
               <div
                 key={fileKey}
-                className="flex items-center gap-2 rounded-md border px-3 py-2"
+                className="rounded-md border px-3 py-2 space-y-1.5"
               >
-                <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm block">{file.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-sm">{file.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
                       {formatFileSize(file.size)}
                     </span>
                   </div>
-                </div>
-                <div className="shrink-0">
-                  <label className="text-xs text-muted-foreground mb-1 block">Tipo documento</label>
-                  <Select
-                    value={fileTypes[fileKey] || 'altro'}
-                    onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                    aria-label={`Rimuovi ${file.name}`}
                   >
-                    <SelectTrigger className="w-[220px] h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DOCUMENT_TYPES.map((dt) => (
-                        <SelectItem key={dt.value} value={dt.value}>
-                          {dt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <X className="h-3 w-3" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); removeFile(index); }}
-                  aria-label={`Rimuovi ${file.name}`}
+                <Select
+                  value={fileTypes[fileKey] || 'altro'}
+                  onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
                 >
-                  <X className="h-3 w-3" />
-                </Button>
+                  <SelectTrigger className="w-full h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENT_TYPES.map((dt) => (
+                      <SelectItem key={dt.value} value={dt.value}>
+                        {dt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             );
           })}
