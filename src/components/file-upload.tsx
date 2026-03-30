@@ -249,7 +249,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
             <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Alcuni file sono molto grandi. Se un PDF contiene tipi diversi di documenti (es. cartelle cliniche + atti legali), separali in file distinti per un&apos;analisi piu precisa.
+                Alcuni file sono molto grandi. Se un PDF contiene tipi diversi di documenti (es. cartelle cliniche + atti legali), seleziona &quot;Documento Misto&quot; come tipo oppure usa il servizio &quot;Organizza Documenti&quot; per separarli automaticamente.
               </span>
             </div>
           )}

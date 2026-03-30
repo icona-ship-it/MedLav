@@ -4,8 +4,7 @@ import { logger } from '@/lib/logger';
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
 import { ocrSingleDocument } from '../steps/ocr-document';
 import { chunkArray } from '@/lib/array-utils';
-import { classifySingleDocumentStep, applyClassifications } from '../steps/classify-documents';
-import type { DocumentClassification } from '../steps/classify-documents';
+// Classification removed from pipeline — handled by Document Organizer (Pro) or user manual selection
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
 import type { ChunkJob } from '../steps/extract-events';
 import { consolidateEventsStep } from '../steps/consolidate-events';
@@ -140,25 +139,9 @@ export const processCase = inngest.createFunction(
       throw new Error('All documents failed OCR processing');
     }
 
-    // ── Step 2.5: Auto-classify documents (parallel, one per doc) ─
-    const classSettled = await Promise.allSettled(
-      ocrResults.map((ocr) =>
-        step.run(`classify-doc-${ocr.documentId}`, () => classifySingleDocumentStep(ocr)),
-      ),
-    );
-    const classifications: DocumentClassification[] = classSettled
-      .filter((r): r is PromiseFulfilledResult<DocumentClassification | null> => r.status === 'fulfilled')
-      .map((r) => r.value)
-      .filter((c): c is DocumentClassification => c !== null);
-    for (const r of classSettled) {
-      if (r.status === 'rejected') {
-        logger.warn('pipeline', `Classification step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
-      }
-    }
-    applyClassifications(ocrResults, classifications);
-
     // ── Step 3.0: Refresh document types from DB ──────────────────
-    // Document types may have been set by Document Organizer (Pro) or by user during upload
+    // Document types set by user during upload or by Document Organizer (Pro)
+    // No automatic classification — user selects types manually or uses Document Organizer
     const refreshedTypes = await step.run('refresh-document-types', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();

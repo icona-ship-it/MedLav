@@ -333,17 +333,20 @@ function filterOcrForSection(
   spec: SectionSpec,
   docs: DocumentOcrContext[],
 ): DocumentOcrContext[] {
+  // "misto" and "altro" documents are included in ALL sections — they may contain any type of content
+  const isUniversal = (d: DocumentOcrContext) => d.documentType === 'altro' || d.documentType === 'misto';
+
   if (spec.dataSources.includes('events-medical') || spec.id === 'documentazione_sanitaria') {
-    return docs.filter((d) => MEDICAL_DOC_TYPES.has(d.documentType) || d.documentType === 'altro');
+    return docs.filter((d) => MEDICAL_DOC_TYPES.has(d.documentType) || isUniversal(d));
   }
   if (spec.dataSources.includes('events-non-medical') || spec.id === 'documentazione_atti' || spec.id === 'premesse') {
-    return docs.filter((d) => NON_MEDICAL_DOC_TYPES.has(d.documentType));
+    return docs.filter((d) => NON_MEDICAL_DOC_TYPES.has(d.documentType) || isUniversal(d));
   }
   if (spec.dataSources.includes('events-perizie') || spec.id === 'pareri_tecnici') {
-    return docs.filter((d) => PERIZIA_DOC_TYPES.has(d.documentType));
+    return docs.filter((d) => PERIZIA_DOC_TYPES.has(d.documentType) || isUniversal(d));
   }
   if (spec.dataSources.includes('events-expenses') || spec.id === 'spese_mediche') {
-    return docs.filter((d) => d.documentType === 'spese_mediche');
+    return docs.filter((d) => d.documentType === 'spese_mediche' || isUniversal(d));
   }
   // Default: return all
   return docs;
