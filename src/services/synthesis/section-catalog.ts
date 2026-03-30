@@ -10,8 +10,8 @@ const TOKENS_CRITICAL = 32_768;
 /** Large content sections: atti, premesse, pareri — must reproduce faithfully, need full budget. */
 const TOKENS_LARGE = 16_384;
 
-/** Medium sections: epicrisi, conclusioni, spese. */
-const TOKENS_MEDIUM = 4_096;
+/** Medium sections: epicrisi, conclusioni, spese, fatto_storia_clinica. */
+const TOKENS_MEDIUM = 8_192;
 
 /** Small sections: intestazione, quesiti, profilo. */
 const TOKENS_SMALL = 2_048;
