@@ -70,6 +70,30 @@ describe('parseSections', () => {
     expect(result[0].id).toBe('analisi_dellintervento_chirurgico');
   });
 
+  it('should deduplicate slugs for sections with same title', () => {
+    const md = [
+      '## Analisi',
+      '',
+      'Prima analisi.',
+      '',
+      '## Analisi',
+      '',
+      'Seconda analisi.',
+      '',
+      '## Analisi',
+      '',
+      'Terza analisi.',
+    ].join('\n');
+    const result = parseSections(md);
+    expect(result).toHaveLength(3);
+    expect(result[0].id).toBe('analisi');
+    expect(result[1].id).toBe('analisi_2');
+    expect(result[2].id).toBe('analisi_3');
+    expect(result[0].content).toBe('Prima analisi.');
+    expect(result[1].content).toBe('Seconda analisi.');
+    expect(result[2].content).toBe('Terza analisi.');
+  });
+
   it('should handle 8+ sections (typical report)', () => {
     const sectionNames = [
       'Riassunto del Caso',
@@ -157,5 +181,43 @@ describe('replaceSectionContent', () => {
     expect(result).toContain('## Cronologia Medica');
     expect(result).toContain('Contenuto aggiornato.');
     expect(result).not.toContain('Testo cronologia originale.');
+  });
+
+  it('should correctly replace the second of two sections with same slug', () => {
+    const md = [
+      '## Analisi',
+      '',
+      'Prima analisi.',
+      '',
+      '## Analisi',
+      '',
+      'Seconda analisi.',
+    ].join('\n');
+
+    // Replace the second occurrence (analisi_2)
+    const result = replaceSectionContent(md, 'analisi_2', 'Seconda aggiornata.');
+    const sections = parseSections(result);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].content).toBe('Prima analisi.');
+    expect(sections[1].content).toBe('Seconda aggiornata.');
+  });
+
+  it('should correctly replace the first of two sections with same slug', () => {
+    const md = [
+      '## Analisi',
+      '',
+      'Prima analisi.',
+      '',
+      '## Analisi',
+      '',
+      'Seconda analisi.',
+    ].join('\n');
+
+    // Replace the first occurrence (analisi)
+    const result = replaceSectionContent(md, 'analisi', 'Prima aggiornata.');
+    const sections = parseSections(result);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].content).toBe('Prima aggiornata.');
+    expect(sections[1].content).toBe('Seconda analisi.');
   });
 });

@@ -4,8 +4,26 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 
+/** Block dangerous URL protocols (XSS prevention). */
+export function isSafeUrl(url: string | undefined): boolean {
+  if (!url) return true;
+  const trimmed = url.trim().toLowerCase();
+  if (trimmed.startsWith('javascript:') || trimmed.startsWith('vbscript:') || trimmed.startsWith('data:text/html')) {
+    return false;
+  }
+  return true;
+}
+
 const markdownComponents: Components = {
+  a: ({ href, children, ...props }) => {
+    if (!isSafeUrl(href)) {
+      return <span>{children}</span>;
+    }
+    return <a href={href} rel="noopener noreferrer" {...props}>{children}</a>;
+  },
   img: ({ src, alt, ...props }) => {
+    const srcStr = typeof src === 'string' ? src : undefined;
+    if (!isSafeUrl(srcStr)) return null;
     // ocr-image: protocol is not resolved here — it should be pre-resolved
     // by replaceWithProxyUrls before passing to this component.
     // This handler ensures images render nicely in the preview.

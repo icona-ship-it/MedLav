@@ -12,6 +12,7 @@ export interface ClientSection {
 
 /**
  * Parse a markdown synthesis into sections using ## headings.
+ * Deduplicates slugs by appending _2, _3, etc. to collisions.
  */
 export function parseSections(markdown: string): ClientSection[] {
   if (!markdown || !markdown.trim()) return [];
@@ -36,6 +37,8 @@ export function parseSections(markdown: string): ClientSection[] {
     sections.push({ id: 'preamble', title: 'Intestazione', content: preamble });
   }
 
+  const slugCounts = new Map<string, number>();
+
   for (let i = 0; i < matches.length; i++) {
     const startIndex = matches[i].index;
     const endIndex = i < matches.length - 1 ? matches[i + 1].index : markdown.length;
@@ -43,7 +46,10 @@ export function parseSections(markdown: string): ClientSection[] {
     const headingEndIndex = fullContent.indexOf('\n');
     const content = headingEndIndex >= 0 ? fullContent.slice(headingEndIndex + 1).trim() : '';
 
-    const id = slugifyHeading(matches[i].title);
+    const baseSlug = slugifyHeading(matches[i].title);
+    const count = (slugCounts.get(baseSlug) ?? 0) + 1;
+    slugCounts.set(baseSlug, count);
+    const id = count > 1 ? `${baseSlug}_${count}` : baseSlug;
 
     sections.push({ id, title: matches[i].title, content });
   }
@@ -54,6 +60,7 @@ export function parseSections(markdown: string): ClientSection[] {
 /**
  * Replace the content of a specific section in the full markdown,
  * preserving the heading and all other sections unchanged.
+ * Uses the same dedup logic as parseSections to match section IDs.
  */
 export function replaceSectionContent(
   markdown: string,
@@ -80,9 +87,15 @@ export function replaceSectionContent(
     return newContent.trim();
   }
 
-  // Find the target section by slug
+  // Find the target section by slug (with dedup logic matching parseSections)
+  const slugCounts = new Map<string, number>();
+
   for (let i = 0; i < matches.length; i++) {
-    const id = slugifyHeading(matches[i].title);
+    const baseSlug = slugifyHeading(matches[i].title);
+    const count = (slugCounts.get(baseSlug) ?? 0) + 1;
+    slugCounts.set(baseSlug, count);
+    const id = count > 1 ? `${baseSlug}_${count}` : baseSlug;
+
     if (id !== sectionId) continue;
 
     const headingLine = `## ${matches[i].title}`;
