@@ -190,6 +190,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
       {files.length > 0 && !isUploading && progress.length === 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">{files.length} file selezionati</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {files.map((file, index) => {
             const Icon = getFileIcon(file.type);
             const fileKey = `${file.name}-${file.size}`;
@@ -237,6 +238,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
               </div>
             );
           })}
+          </div>
 
           {files.length > 0 && files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
             <div className="flex items-start gap-2 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
