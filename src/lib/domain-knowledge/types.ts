@@ -43,5 +43,6 @@ export interface CaseTypeKnowledge {
   readonly commonAnomalyPatterns: readonly string[];
   readonly evaluationFrameworks: readonly string[];
   readonly keyTerminology: readonly TermDefinition[];
+  readonly commonQuesiti: readonly string[];
   readonly synthesisGuidance: string;
 }

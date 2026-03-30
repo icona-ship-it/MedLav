@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "signature_image_path" text;

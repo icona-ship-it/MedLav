@@ -92,6 +92,11 @@ export const ANALISI_SPESE_MEDICHE_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Nomenclatore tariffario', definition: 'Elenco ufficiale delle prestazioni sanitarie con i relativi costi massimi rimborsabili, stabilito a livello regionale o nazionale. Costituisce il parametro di riferimento per la valutazione della congruita economica.' },
     { term: 'Spese future', definition: 'Costi sanitari ragionevolmente prevedibili in relazione all\'evoluzione attesa della patologia. Devono essere stimati con ragionevole certezza medico-legale e supportati da evidenze cliniche.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU la congruità e la pertinenza delle spese mediche sostenute dal periziando in relazione alle lesioni riportate e alle terapie necessarie.',
+    'Indichi quali spese siano da ritenersi necessarie e quali superflue o non correlate ai fatti per cui è causa.',
+    'Quantifichi le spese mediche future ragionevolmente prevedibili per il completamento delle cure e la stabilizzazione clinica.',
+  ],
   synthesisGuidance: `Nell'analisi delle spese mediche, procedere con un approccio sistematico voce per voce.
 Per ogni prestazione o spesa documentata, valutare tre aspetti distinti: la necessita medica
 (la prestazione era clinicamente indicata?), la pertinenza (la prestazione e correlata alla

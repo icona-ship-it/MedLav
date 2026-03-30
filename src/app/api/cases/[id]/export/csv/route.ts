@@ -42,17 +42,22 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
 
+    const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+
     logAccess({
       userId: user.id,
       action: 'report.exported',
       entityType: 'case',
       entityId: caseId,
-      metadata: { format: 'csv' },
+      metadata: {
+        format: 'csv',
+        anonymized: shouldAnonymize,
+        reportVersion: data.report?.version ?? null,
+        reportStatus: data.report?.report_status ?? null,
+      },
     });
 
     let csv = generateCsvExport(data.events);
-
-    const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
     if (shouldAnonymize) {
       const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
       const result = anonymizeText({ text: csv, periziaMetadata });

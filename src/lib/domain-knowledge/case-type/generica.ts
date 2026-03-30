@@ -56,6 +56,12 @@ export const GENERICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Linee guida SNLG', definition: 'Raccomandazioni cliniche pubblicate nel Sistema Nazionale Linee Guida dell\'Istituto Superiore di Sanita, che costituiscono il riferimento per la valutazione della condotta sanitaria ai sensi della L. 24/2017.' },
     { term: 'Responsabilita sanitaria', definition: 'Responsabilita della struttura sanitaria (contrattuale, art. 1218 c.c.) e del professionista sanitario (extracontrattuale, art. 2043 c.c.) per i danni derivanti da prestazioni sanitarie, come disciplinato dalla L. 24/2017.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU, visitato il periziando ed esaminata la documentazione in atti, la natura e l\'entità delle lesioni riportate e il nesso causale con l\'evento in oggetto.',
+    'Indichi se nella condotta dei sanitari vi siano stati profili di colpa professionale per negligenza, imprudenza o imperizia.',
+    'Quantifichi il danno biologico permanente e temporaneo (ITT e ITP) patito dal periziando.',
+    'Valuti la necessità di cure future e la relativa spesa prevedibile.',
+  ],
   synthesisGuidance: `Nell'analisi del caso generico di responsabilita sanitaria, procedere con un approccio sistematico
 senza focus specialistico predefinito. Ricostruire la cronologia completa degli eventi clinici
 e identificare i momenti critici in cui la condotta sanitaria si e discostata dalle linee guida SNLG

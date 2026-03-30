@@ -10,6 +10,8 @@ export const profiles = pgTable('profiles', {
   subscriptionStatus: text('subscription_status').default('trial'),
   subscriptionPlan: text('subscription_plan'),
   subscriptionPeriodEnd: timestamp('subscription_period_end', { withTimezone: true }),
+  // Signature image
+  signatureImagePath: text('signature_image_path'),
   // User preferences
   emailNotifications: boolean('email_notifications').default(true),
   isActive: boolean('is_active').default(true),

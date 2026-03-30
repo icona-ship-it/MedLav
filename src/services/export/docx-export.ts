@@ -545,6 +545,7 @@ interface ProfessionalDocxExportParams {
   periziaMetadata: PeriziaMetadataExport;
   documentsWithPages: DocumentWithPages[];
   reportStatus?: string;
+  signatureImageBase64?: string;
 }
 
 /**
@@ -806,7 +807,7 @@ function buildDocxHeaderContent(
  * full OCR documentation, and assembled sections.
  */
 export async function generateProfessionalDocxReport(params: ProfessionalDocxExportParams): Promise<Buffer> {
-  const { caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus } = params;
+  const { caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus, signatureImageBase64 } = params;
 
   const pm = periziaMetadata as AssemblerPeriziaMetadata;
   const assembled = assembleFullReport({
@@ -918,6 +919,24 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
     const sectionParagraphs = markdownToDocxParagraphs(section.content);
     children.push(...sectionParagraphs);
     children.push(new Paragraph({ text: '' }));
+  }
+
+  // Signature image (if uploaded)
+  if (signatureImageBase64) {
+    try {
+      const base64Data = signatureImageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const imgBuffer = Buffer.from(base64Data, 'base64');
+      children.push(new Paragraph({
+        children: [
+          new ImageRun({
+            data: imgBuffer,
+            transformation: { width: 200, height: 80 },
+            type: 'png',
+          }),
+        ],
+        spacing: { before: 400 },
+      }));
+    } catch { /* skip if image fails */ }
   }
 
   // Signature block

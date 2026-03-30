@@ -90,6 +90,12 @@ export const INFEZIONE_NOSOCOMIALE_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Shock settico', definition: 'Sottocategoria della sepsi con grave compromissione circolatoria e metabolica: ipotensione persistente nonostante adeguata rianimazione volemica, con necessita di vasopressori e lattato > 2 mmol/L.' },
     { term: 'Bundle sepsi', definition: 'Insieme di interventi diagnostico-terapeutici da attuare entro tempi definiti (1 ora e 3 ore) nella gestione della sepsi: emocolture, lattato, antibiotici empirici, rianimazione volemica.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU se l\'infezione contratta dal periziando sia di origine nosocomiale, indicando il microrganismo responsabile e la presunta modalità di trasmissione.',
+    'Indichi se la struttura sanitaria abbia adottato le misure di prevenzione e controllo delle infezioni previste dalle linee guida nazionali e internazionali.',
+    'Valuti se la terapia antibiotica sia stata tempestiva e appropriata, anche alla luce dell\'antibiogramma.',
+    'Quantifichi il danno biologico permanente e temporaneo conseguente all\'infezione nosocomiale.',
+  ],
   synthesisGuidance: `Nell'analisi del caso di infezione nosocomiale, ricostruire con precisione la cronologia dell'infezione:
 data di insorgenza dei primi segni clinici, tempistica delle indagini microbiologiche, momento
 della diagnosi e avvio della terapia. Verificare l'adeguatezza della profilassi antibiotica preoperatoria

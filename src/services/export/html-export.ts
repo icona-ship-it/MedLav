@@ -359,6 +359,7 @@ interface ProfessionalHtmlExportParams {
   periziaMetadata: PeriziaMetadataExport;
   documentsWithPages: DocumentWithPages[];
   reportStatus?: string;
+  signatureImageBase64?: string;
 }
 
 function escapeHtmlPro(text: string): string {
@@ -424,7 +425,7 @@ function buildDraftWatermarkCss(reportStatus?: string): string {
  * and professional typography suitable for court submission.
  */
 export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportParams): string {
-  const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus } = params;
+  const { caseCode, caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus, signatureImageBase64 } = params;
 
   const pm = periziaMetadata as AssemblerPeriziaMetadata;
   const assembled = assembleFullReport({
@@ -1109,6 +1110,15 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
      REPORT SECTIONS
      ═══════════════════════════════════════════════ -->
 ${sectionsHtml}
+
+${signatureImageBase64 ? `
+<!-- ═══ Signature ═══ -->
+<div style="margin-top: 60px; page-break-inside: avoid;">
+  <div style="border-top: 1px solid #ccc; width: 300px; padding-top: 8px;">
+    <img src="${signatureImageBase64}" alt="Firma" style="max-width: 250px; max-height: 100px;" />
+    ${pm.ctuName ? `<p style="margin: 4px 0 0; font-size: 12px; color: #555;">${escapeHtmlPro(pm.ctuName)}</p>` : ''}
+  </div>
+</div>` : ''}
 
 <!-- ═══ Screen footer ═══ -->
 <footer class="screen-footer">

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidateCase } from '@/lib/cache';
+import { replaceSectionContent } from '@/lib/section-parser-client';
 import { logger } from '@/lib/logger';
 
 /**
@@ -118,6 +119,99 @@ export async function updateReportSynthesis(params: {
 
   revalidateCase(params.caseId);
   return { success: true };
+}
+
+/**
+ * Update a single section of the report synthesis by sectionId.
+ */
+export async function updateReportSection(params: {
+  caseId: string;
+  reportId: string;
+  sectionId: string;
+  sectionContent: string;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  // Fetch current report to get full synthesis
+  const { data: report } = await supabase
+    .from('reports')
+    .select('synthesis')
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId)
+    .single();
+
+  if (!report?.synthesis) return { error: 'Report non trovato' };
+
+  const updatedSynthesis = replaceSectionContent(
+    report.synthesis,
+    params.sectionId,
+    params.sectionContent,
+  );
+
+  const { error } = await supabase
+    .from('reports')
+    .update({
+      synthesis: updatedSynthesis,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore aggiornamento sezione' };
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'report.section_edited',
+    entity_type: 'report',
+    entity_id: params.reportId,
+    metadata: { caseId: params.caseId, sectionId: params.sectionId },
+  });
+
+  revalidateCase(params.caseId);
+  return { success: true };
+}
+
+/**
+ * Fetch the most recent export audit entry for a case.
+ */
+export async function getLastExport(caseId: string): Promise<{
+  format: string;
+  exportedAt: string;
+} | null> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from('audit_log')
+    .select('metadata, created_at')
+    .eq('action', 'report.exported')
+    .eq('entity_id', caseId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  const metadata = data.metadata as Record<string, unknown> | null;
+  return {
+    format: (metadata?.format as string) ?? 'unknown',
+    exportedAt: data.created_at as string,
+  };
 }
 
 /**

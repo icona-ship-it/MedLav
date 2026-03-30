@@ -40,6 +40,7 @@ export interface ProfileData {
   stripeCustomerId: string | null;
   dataRetentionDays: number | null;
   emailNotifications: boolean;
+  signatureImagePath: string | null;
 }
 
 export async function getProfile(): Promise<ProfileData> {
@@ -52,7 +53,7 @@ export async function getProfile(): Promise<ProfileData> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, studio, email, subscription_status, subscription_plan, stripe_customer_id, data_retention_days, email_notifications')
+    .select('full_name, studio, email, subscription_status, subscription_plan, stripe_customer_id, data_retention_days, email_notifications, signature_image_path')
     .eq('id', user.id)
     .single();
 
@@ -65,6 +66,7 @@ export async function getProfile(): Promise<ProfileData> {
     stripeCustomerId: (profile?.stripe_customer_id as string) ?? null,
     dataRetentionDays: (profile?.data_retention_days as number) ?? 365,
     emailNotifications: (profile?.email_notifications as boolean) ?? true,
+    signatureImagePath: (profile?.signature_image_path as string) ?? null,
   };
 }
 
@@ -254,6 +256,83 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
   };
 
   return { data: JSON.stringify(exportData, null, 2) };
+}
+
+/**
+ * Upload a digital signature image to Supabase Storage.
+ * Max 500KB, images only (PNG/JPG/WEBP).
+ */
+export async function uploadSignature(formData: FormData): Promise<{ error?: string; path?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const file = formData.get('signature') as File | null;
+  if (!file) return { error: 'Nessun file selezionato' };
+
+  if (file.size > 500_000) return { error: 'Il file è troppo grande. Massimo 500KB.' };
+
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    return { error: 'Formato non supportato. Usa PNG, JPG o WEBP.' };
+  }
+
+  const ext = file.name.split('.').pop() ?? 'png';
+  const storagePath = `signatures/${user.id}/signature.${ext}`;
+
+  const admin = createAdminClient();
+
+  const { error: uploadError } = await admin.storage
+    .from('signatures')
+    .upload(storagePath, file, { upsert: true, contentType: file.type });
+
+  if (uploadError) {
+    return { error: 'Errore durante il caricamento. Riprova.' };
+  }
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      signature_image_path: storagePath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (updateError) return { error: 'Errore durante il salvataggio. Riprova.' };
+
+  return { path: storagePath };
+}
+
+/**
+ * Delete the user's digital signature.
+ */
+export async function deleteSignature(): Promise<{ error?: string; success?: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('signature_image_path')
+    .eq('id', user.id)
+    .single();
+
+  const path = profile?.signature_image_path as string | null;
+  if (path) {
+    const admin = createAdminClient();
+    await admin.storage.from('signatures').remove([path]);
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      signature_image_path: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (error) return { error: 'Errore durante la rimozione. Riprova.' };
+  return { success: true };
 }
 
 /**

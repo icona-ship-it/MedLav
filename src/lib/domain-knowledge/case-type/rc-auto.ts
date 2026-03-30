@@ -100,6 +100,13 @@ export const RC_AUTO_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'ITT/ITP', definition: 'Invalidita Temporanea Totale (impossibilita completa di attendere alle ordinarie occupazioni) e Parziale (riduzione percentuale). In RC Auto, i periodi devono essere strettamente correlati alle lesioni da sinistro e documentati clinicamente.' },
     { term: 'Danno differenziale', definition: 'Differenza tra il danno biologico complessivo attuale e quello preesistente al sinistro. Fondamentale quando il periziando presenta patologie pregresse nella stessa sede anatomica interessata dal trauma.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU la natura e l\'entità delle lesioni riportate dal periziando in conseguenza del sinistro stradale per cui è causa.',
+    'Quantifichi i periodi di invalidità temporanea totale e parziale (ITT e ITP) e il danno biologico permanente residuato.',
+    'Valuti il nesso causale tra il sinistro e le lesioni riscontrate, tenendo conto di eventuali patologie preesistenti.',
+    'Indichi se il periziando necessiti di cure future e quantifichi la relativa spesa prevedibile.',
+    'Accerti se residui un danno estetico e/o una limitazione funzionale incidente sulla capacità lavorativa specifica.',
+  ],
   synthesisGuidance: `Nell'analisi del caso RC Auto, l'attenzione primaria va posta sulla congruita tra la dinamica
 del sinistro descritta e le lesioni documentate. Verificare la compatibilita biomeccanica (velocita
 dell'impatto, direzione, deformazione veicoli) con le lesioni riportate. Analizzare la tempestivita

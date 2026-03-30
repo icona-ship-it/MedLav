@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSections } from './section-parser-client';
+import { parseSections, replaceSectionContent } from './section-parser-client';
 
 describe('parseSections', () => {
   it('should return empty array for empty input', () => {
@@ -85,5 +85,77 @@ describe('parseSections', () => {
     const result = parseSections(md);
     expect(result).toHaveLength(8);
     expect(result.map((s) => s.title)).toEqual(sectionNames);
+  });
+});
+
+describe('replaceSectionContent', () => {
+  const multiSectionMd = [
+    'Preamble text',
+    '',
+    '## Riassunto del Caso',
+    '',
+    'Testo riassunto originale.',
+    '',
+    '## Cronologia Medica',
+    '',
+    'Testo cronologia originale.',
+    '',
+    '## Conclusioni',
+    '',
+    'Testo conclusioni originale.',
+  ].join('\n');
+
+  it('should replace content of a middle section', () => {
+    const result = replaceSectionContent(multiSectionMd, 'cronologia_medica', 'Nuovo testo cronologia.');
+    const sections = parseSections(result);
+    expect(sections).toHaveLength(4); // preamble + 3
+    expect(sections[2].title).toBe('Cronologia Medica');
+    expect(sections[2].content).toBe('Nuovo testo cronologia.');
+    // Other sections unchanged
+    expect(sections[1].content).toBe('Testo riassunto originale.');
+    expect(sections[3].content).toBe('Testo conclusioni originale.');
+  });
+
+  it('should replace content of the first section', () => {
+    const result = replaceSectionContent(multiSectionMd, 'riassunto_del_caso', 'Nuovo riassunto.');
+    const sections = parseSections(result);
+    expect(sections[1].content).toBe('Nuovo riassunto.');
+    expect(sections[0].id).toBe('preamble');
+  });
+
+  it('should replace content of the last section', () => {
+    const result = replaceSectionContent(multiSectionMd, 'conclusioni', 'Nuove conclusioni.');
+    const sections = parseSections(result);
+    expect(sections[3].content).toBe('Nuove conclusioni.');
+  });
+
+  it('should replace preamble', () => {
+    const result = replaceSectionContent(multiSectionMd, 'preamble', 'Nuovo preamble');
+    const sections = parseSections(result);
+    expect(sections[0].id).toBe('preamble');
+    expect(sections[0].content).toBe('Nuovo preamble');
+  });
+
+  it('should handle full_report (no headings)', () => {
+    const md = 'Solo testo senza sezioni.';
+    const result = replaceSectionContent(md, 'full_report', 'Testo completamente nuovo.');
+    expect(result).toBe('Testo completamente nuovo.');
+  });
+
+  it('should return unchanged markdown when section not found', () => {
+    const result = replaceSectionContent(multiSectionMd, 'sezione_inesistente', 'Nuovo contenuto.');
+    expect(result).toBe(multiSectionMd);
+  });
+
+  it('should return unchanged on empty input', () => {
+    expect(replaceSectionContent('', 'any', 'content')).toBe('');
+    expect(replaceSectionContent('text', '', 'content')).toBe('text');
+  });
+
+  it('should preserve heading title when replacing content', () => {
+    const result = replaceSectionContent(multiSectionMd, 'cronologia_medica', 'Contenuto aggiornato.');
+    expect(result).toContain('## Cronologia Medica');
+    expect(result).toContain('Contenuto aggiornato.');
+    expect(result).not.toContain('Testo cronologia originale.');
   });
 });

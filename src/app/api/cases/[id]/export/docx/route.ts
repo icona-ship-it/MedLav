@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
@@ -43,17 +44,23 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
 
+    const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
+
     logAccess({
       userId: user.id,
       action: 'report.exported',
       entityType: 'case',
       entityId: caseId,
-      metadata: { format: 'docx' },
+      metadata: {
+        format: 'docx',
+        anonymized: shouldAnonymize,
+        reportVersion: data.report?.version ?? null,
+        reportStatus: data.report?.report_status ?? null,
+      },
     });
 
     const pm = data.periziaMetadata as Record<string, unknown> | null;
     const useProfessional = pm && (pm.tribunale || pm.ctuName);
-    const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
 
     // Resolve ocr-image: placeholders to base64 data URIs
     let synthesis = data.report?.synthesis as string | null ?? null;
@@ -73,6 +80,23 @@ export async function GET(
 
     const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
 
+    // Resolve signature image to base64
+    let signatureImageBase64: string | undefined;
+    if (data.signatureImagePath) {
+      try {
+        const admin = createAdminClient();
+        const { data: fileData } = await admin.storage
+          .from('signatures')
+          .download(data.signatureImagePath);
+        if (fileData) {
+          const buffer = Buffer.from(await fileData.arrayBuffer());
+          const ext = data.signatureImagePath.split('.').pop() ?? 'png';
+          const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+          signatureImageBase64 = `data:${mime};base64,${buffer.toString('base64')}`;
+        }
+      } catch { /* signature missing — skip */ }
+    }
+
     const buffer = useProfessional
       ? await generateProfessionalDocxReport({
         caseCode: data.caseData.code as string,
@@ -87,6 +111,7 @@ export async function GET(
         periziaMetadata: pm,
         documentsWithPages: data.documentsWithPages,
         reportStatus,
+        signatureImageBase64,
       })
       : await generateDocxReport({
         caseCode: data.caseData.code as string,

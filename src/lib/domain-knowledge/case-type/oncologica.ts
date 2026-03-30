@@ -103,6 +103,12 @@ export const ONCOLOGICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Performance status', definition: 'Scala di valutazione (ECOG/Karnofsky) delle condizioni generali del paziente oncologico, che misura l\'autonomia funzionale e influenza le decisioni terapeutiche.' },
     { term: 'Sopravvivenza libera da malattia', definition: 'Periodo di tempo dalla fine del trattamento al momento della recidiva o dell\'ultimo follow-up negativo. Parametro fondamentale per valutare l\'efficacia del trattamento e quantificare la perdita di chance.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU se vi sia stato un ritardo diagnostico nella individuazione della patologia oncologica e, in caso affermativo, quantifichi la perdita di chance di sopravvivenza o guarigione.',
+    'Indichi se le terapie oncologiche praticate (chirurgiche, chemioterapiche, radioterapiche) siano state conformi alle linee guida e alle buone pratiche cliniche vigenti al momento dei fatti.',
+    'Valuti il nesso causale tra l\'eventuale ritardo diagnostico-terapeutico e il peggioramento prognostico della malattia.',
+    'Quantifichi il danno biologico permanente e temporaneo subito dal periziando, comprensivo del danno da riduzione delle chance di sopravvivenza.',
+  ],
   synthesisGuidance: `Nell'analisi del caso oncologico, ricostruire con precisione la timeline diagnostica quantificando
 in giorni ogni ritardo tra il primo sospetto clinico e la diagnosi definitiva. Confrontare la stadiazione
 al momento della diagnosi effettiva con quella attesa in caso di diagnosi tempestiva, utilizzando

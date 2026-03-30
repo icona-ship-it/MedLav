@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { getProfile, updateProfile, changePassword, updateRetentionPolicy, updateEmailNotifications, exportMyData, deleteMyAccount } from './actions';
+import { getProfile, updateProfile, changePassword, updateRetentionPolicy, updateEmailNotifications, exportMyData, deleteMyAccount, uploadSignature, deleteSignature } from './actions';
 import type { ProfileData } from './actions';
-import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail } from 'lucide-react';
+import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail, Pen, Trash2, Upload } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 
@@ -67,6 +67,107 @@ function SubscriptionButton({
         isActive ? 'Gestisci abbonamento' : 'Gestisci pagamento'
       )}
     </Button>
+  );
+}
+
+function SignatureCard({
+  signaturePath,
+  onUploaded,
+  onDeleted,
+}: {
+  signaturePath: string | null;
+  onUploaded: (path: string) => void;
+  onDeleted: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setMessage(null);
+    const formData = new FormData();
+    formData.set('signature', file);
+    const result = await uploadSignature(formData);
+    if (result.error) {
+      setMessage({ type: 'error', text: result.error });
+    } else if (result.path) {
+      onUploaded(result.path);
+      setMessage({ type: 'success', text: 'Firma caricata' });
+    }
+    setUploading(false);
+    e.target.value = '';
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setMessage(null);
+    const result = await deleteSignature();
+    if (result.error) {
+      setMessage({ type: 'error', text: result.error });
+    } else {
+      onDeleted();
+      setMessage({ type: 'success', text: 'Firma rimossa' });
+    }
+    setDeleting(false);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Firma digitale</CardTitle>
+        <CardDescription>
+          Carica un&apos;immagine della tua firma per includerla automaticamente nei report esportati (DOCX/HTML)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {message && (
+          <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-700 dark:text-green-400'}`}>
+            {message.text}
+          </div>
+        )}
+        <div className="flex items-center justify-between rounded-md border p-4">
+          <div className="flex items-center gap-3">
+            <Pen className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">
+                {signaturePath ? 'Firma caricata' : 'Nessuna firma caricata'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                PNG, JPG o WEBP — max 500KB
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {signaturePath && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+                Rimuovi
+              </Button>
+            )}
+            <Button variant="outline" size="sm" disabled={uploading} asChild>
+              <label className="cursor-pointer">
+                {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+                {signaturePath ? 'Sostituisci' : 'Carica'}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleUpload}
+                  className="hidden"
+                />
+              </label>
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -305,6 +406,13 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Digital Signature */}
+      <SignatureCard
+        signaturePath={profile?.signatureImagePath ?? null}
+        onUploaded={(path) => setProfile((prev) => prev ? { ...prev, signatureImagePath: path } : prev)}
+        onDeleted={() => setProfile((prev) => prev ? { ...prev, signatureImagePath: null } : prev)}
+      />
 
       {/* Subscription */}
       <Card>

@@ -97,6 +97,12 @@ export const OSTETRICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Distocia', definition: 'Difficolta nell\'espletamento del parto per cause materne (distocia dinamica, distocia del canale) o fetali (distocia di spalla, presentazione anomala).' },
     { term: 'Presentazione podalica', definition: 'Presentazione fetale con l\'estremo pelvico (natiche o piedi) rivolto verso il canale del parto, associata a maggior rischio di complicanze e spesso indicazione al taglio cesareo elettivo.' },
   ],
+  commonQuesiti: [
+    'Accerti il CTU se la gestione del travaglio e del parto sia stata conforme alle linee guida e alle buone pratiche clinico-assistenziali, con particolare riguardo al monitoraggio cardiotocografico.',
+    'Indichi se vi siano stati profili di colpa nella gestione delle emergenze ostetriche e se un intervento più tempestivo avrebbe evitato o ridotto il danno.',
+    'Quantifichi il danno biologico permanente e temporaneo riportato dalla madre e/o dal neonato in conseguenza dei fatti per cui è causa.',
+    'Valuti il nesso causale tra la condotta sanitaria e i danni lamentati, specificando le concause eventualmente presenti.',
+  ],
   synthesisGuidance: `Nell'analisi del caso ostetrico, focalizzare l'attenzione sull'interpretazione del tracciato
 cardiotocografico secondo la classificazione FIGO (normale, sospetto, patologico), verificando
 se le azioni intraprese sono state coerenti con il quadro CTG osservato. Analizzare con precisione

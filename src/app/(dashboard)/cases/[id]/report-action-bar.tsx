@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useTransition, useState } from 'react';
+import { useCallback, useTransition, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Download, Pencil, Printer, GitCompare, ShieldCheck,
@@ -13,9 +13,22 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { updateReportStatus, getCaseReportVersions } from '../../actions';
+import { updateReportStatus, getCaseReportVersions, getLastExport } from '../../actions';
 import { QualityGateDialog } from './quality-gate-dialog';
 import type { ReportRow } from './types';
+
+// --- Helpers ---
+
+function formatTimeAgo(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'adesso';
+  if (minutes < 60) return `${minutes} min fa`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'ora' : 'ore'} fa`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? 'giorno' : 'giorni'} fa`;
+}
 
 // --- Types ---
 
@@ -50,8 +63,14 @@ export function ReportActionBar({
   const [isPending, startTransition] = useTransition();
   const [qualityGateOpen, setQualityGateOpen] = useState(false);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [lastExportInfo, setLastExportInfo] = useState<{ format: string; exportedAt: string } | null>(null);
   // Treat legacy "in_revisione" as "bozza"
   const effectiveStatus = report.report_status === 'in_revisione' ? 'bozza' : report.report_status;
+
+  // Fetch last export info
+  useEffect(() => {
+    getLastExport(caseId).then((info) => setLastExportInfo(info)).catch(() => {});
+  }, [caseId]);
 
   const handleStatusChange = useCallback((newStatus: string) => {
     startTransition(async () => {
@@ -85,7 +104,7 @@ export function ReportActionBar({
     <>
       <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Left: Status badge */}
+          {/* Left: Status badge + last export */}
           <div className="flex items-center gap-2">
             {effectiveStatus === 'definitivo' ? (
               <Badge variant="success" className="text-xs">Definitivo</Badge>
@@ -93,6 +112,12 @@ export function ReportActionBar({
               <Badge variant="secondary" className="text-xs">Bozza</Badge>
             )}
             <span className="text-xs text-muted-foreground">v{report.version}</span>
+            {lastExportInfo && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                · Ultimo export: {lastExportInfo.format.toUpperCase()},{' '}
+                {formatTimeAgo(lastExportInfo.exportedAt)}
+              </span>
+            )}
           </div>
 
           {/* Right: Actions */}

@@ -3,12 +3,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { parseSections } from '@/lib/section-parser-client';
 import type { ReportRow, EventRow } from './types';
+
+const ReportSectionEditor = dynamic(
+  () => import('./report-section-editor').then((m) => ({ default: m.ReportSectionEditor })),
+  { loading: () => null },
+);
 
 const VersionCompare = dynamic(
   () => import('@/components/version-compare').then((m) => ({ default: m.VersionCompare })),
@@ -46,6 +53,13 @@ export function ReportA4Viewer({
     title: e.title,
     eventDate: e.event_date,
   }));
+
+  // Section editing state
+  const [editingSection, setEditingSection] = useState<{
+    id: string;
+    title: string;
+    content: string;
+  } | null>(null);
 
   // Rating state
   const [existingRating, setExistingRating] = useState<number | null>(null);
@@ -118,13 +132,26 @@ export function ReportA4Viewer({
               id={`section-${section.id}`}
               className={`group ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}${!isFirst ? ' mt-10 pt-8 border-t border-border/40' : ''}`}
             >
-              {/* Section heading with regenerate button */}
+              {/* Section heading with edit + regenerate buttons */}
               {showRegenerate && (
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <h2 className="text-xl font-bold tracking-tight leading-tight">
                     {section.title}
                   </h2>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title={`Modifica "${section.title}"`}
+                      onClick={() => setEditingSection({
+                        id: section.id,
+                        title: section.title,
+                        content: section.content,
+                      })}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <SectionRegenerateButton
                       caseId={caseId}
                       sectionId={section.id}
@@ -192,6 +219,21 @@ export function ReportA4Viewer({
           <VersionCompare currentReport={report} versions={versions} />
         </div>
       )}
+
+      {/* Section editor dialog */}
+      <ReportSectionEditor
+        open={editingSection !== null}
+        onOpenChange={(open) => { if (!open) setEditingSection(null); }}
+        caseId={caseId}
+        reportId={report.id}
+        sectionId={editingSection?.id ?? ''}
+        sectionTitle={editingSection?.title ?? ''}
+        sectionContent={editingSection?.content ?? ''}
+        onSaved={() => {
+          setEditingSection(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

@@ -107,6 +107,15 @@ export async function loadCaseDataForExport(caseId: string) {
     })),
   );
 
+  // Load user's signature image path
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('signature_image_path')
+    .eq('id', user.id)
+    .single();
+
+  const signatureImagePath = (profileRow?.signature_image_path as string | null) ?? null;
+
   return {
     caseData: caseRow,
     events: eventsList,
@@ -116,5 +125,6 @@ export async function loadCaseDataForExport(caseId: string) {
     calculations,
     periziaMetadata: (caseRow.perizia_metadata ?? null) as Record<string, unknown> | null,
     documentsWithPages,
+    signatureImagePath,
   };
 }

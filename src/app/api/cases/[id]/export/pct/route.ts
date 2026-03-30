@@ -4,6 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generatePctXml } from '@/services/export/pct-export';
 import { checkFeatureAccess } from '@/lib/subscription';
+import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import type { PeriziaMetadata } from '@/types';
 
@@ -56,6 +57,18 @@ export async function GET(
     }));
 
     const caseCode = data.caseData.code as string;
+
+    logAccess({
+      userId: user.id,
+      action: 'report.exported',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: {
+        format: 'pct',
+        reportVersion: data.report?.version ?? null,
+        reportStatus: data.report?.report_status ?? null,
+      },
+    });
 
     logger.info('pct-export', `Generating PCT XML for case ${caseId}`);
 

@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from 'react';
 import {
-  Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info,
+  Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { updateCase } from '../../actions';
+import { getQuestiTemplates } from '@/lib/domain-knowledge';
+import { CASE_TYPES } from '@/lib/constants';
+import type { CaseType } from '@/types';
 import type { CaseData, PeriziaMetadataUI } from './types';
 
 // --- Section config ---
@@ -336,15 +342,40 @@ export function PeriziaMetadataForm({
                         placeholder={`Quesito ${quesiti.length + 1}: inserisci il testo del quesito...`}
                         className="min-h-[80px]"
                       />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addQuesito}
-                        disabled={!newQuesito.trim()}
-                      >
-                        <Plus className="mr-1 h-3 w-3" />
-                        Aggiungi quesito
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addQuesito}
+                          disabled={!newQuesito.trim()}
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Aggiungi quesito
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <FileText className="mr-1 h-3 w-3" />
+                              Carica template
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-72 max-h-64 overflow-y-auto">
+                            {CASE_TYPES.map((ct) => (
+                              <DropdownMenuItem
+                                key={ct.value}
+                                onClick={() => {
+                                  const templates = getQuestiTemplates(ct.value as CaseType);
+                                  if (templates.length === 0) return;
+                                  setQuesiti([...quesiti, ...templates]);
+                                  toast.success(`${templates.length} quesiti caricati da "${ct.label}"`);
+                                }}
+                              >
+                                {ct.label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </div>
                 )}

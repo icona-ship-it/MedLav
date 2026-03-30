@@ -120,6 +120,7 @@ export function getCombinedCaseTypeKnowledge(caseTypes: CaseType[]): CaseTypeKno
     commonAnomalyPatterns: [...new Set(knowledges.flatMap(k => [...k.commonAnomalyPatterns]))],
     evaluationFrameworks: [...new Set(knowledges.flatMap(k => [...k.evaluationFrameworks]))],
     keyTerminology: deduplicateByTerm(knowledges.flatMap(k => [...k.keyTerminology])),
+    commonQuesiti: [...new Set(knowledges.flatMap(k => [...k.commonQuesiti]))],
     synthesisGuidance: knowledges.map(k => k.synthesisGuidance).join('\n\n'),
   };
 }
@@ -152,6 +153,13 @@ export function formatCombinedTimelinesForPrompt(caseTypes: CaseType[]): string 
     `ritardo critico oltre ${t.criticalDelayThresholdDays}gg (${t.source})`,
   );
   return `## TEMPISTICHE DI RIFERIMENTO\n${lines.join('\n')}`;
+}
+
+/**
+ * Get common quesiti templates for a case type.
+ */
+export function getQuestiTemplates(caseType: CaseType): readonly string[] {
+  return getCaseTypeKnowledge(caseType).commonQuesiti;
 }
 
 function deduplicateByTerm(terms: TermDefinition[]): TermDefinition[] {
