@@ -5,10 +5,10 @@ import type { SectionSpec, SectionCondition } from './section-generation-types';
 // ── Token budget constants (calibrated for 5,000-8,000 word reports) ──
 
 /** Documentazione sanitaria — the longest, ~50% of report. */
-const TOKENS_CRITICAL = 16_384;
+const TOKENS_CRITICAL = 32_768;
 
-/** Large content sections: atti, premesse, pareri. */
-const TOKENS_LARGE = 8_192;
+/** Large content sections: atti, premesse, pareri — must reproduce faithfully, need full budget. */
+const TOKENS_LARGE = 16_384;
 
 /** Medium sections: epicrisi, conclusioni, spese. */
 const TOKENS_MEDIUM = 4_096;
