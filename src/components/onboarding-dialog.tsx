@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Scale, FileUp, Brain, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { Scale, FileUp, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,44 +15,32 @@ const STEPS = [
   {
     icon: Scale,
     title: 'Benvenuto in LegMed',
-    description: 'LegMed analizza la documentazione clinica e genera automaticamente report medico-legali strutturati per le tue perizie.',
+    description: 'LegMed ti aiuta ad analizzare la documentazione clinica e a preparare elaborati medico-legali.',
     details: [
-      'Supporta 10 tipologie di caso (ortopedica, oncologica, RC auto, ecc.)',
-      'Report adattivo per ruolo: CTU, CTP o Stragiudiziale',
+      'Analisi documentale: estrai la cronistoria degli eventi da qualsiasi documento',
+      'Perizie e CTU: genera bozze di report strutturati per ogni tipo di incarico',
       'Conforme GDPR — dati crittografati, server EU',
     ],
   },
   {
     icon: FileUp,
     title: 'Come funziona',
-    description: 'Il flusso è semplice: crea un caso, carica i documenti, avvia l\'elaborazione.',
+    description: 'Tre passi semplici per ottenere il tuo elaborato.',
     details: [
-      '1. Crea un nuovo caso scegliendo tipo incarico e tipologia',
-      '2. Carica PDF, immagini o DOCX (cartelle cliniche, referti, esami)',
-      '3. Clicca "Avvia Elaborazione" e attendi il report',
-      '4. Rivedi, modifica e esporta in HTML, DOCX o CSV',
-    ],
-  },
-  {
-    icon: Brain,
-    title: 'Tipo Incarico — Fondamentale',
-    description: 'Il tipo di incarico cambia radicalmente il tono e la prospettiva del report.',
-    details: [
-      'CTU (Consulente del Giudice): tono neutrale e imparziale, analizza pro e contro',
-      'CTP (Consulente di Parte): tono assertivo a favore del paziente, enfatizza criticità',
-      'Stragiudiziale: tono pragmatico, valuta i meriti reali e la fondatezza del caso',
+      '1. Scegli il tipo di elaborato dalla dashboard',
+      '2. Carica i documenti (PDF, immagini, Word)',
+      '3. Avvia l\'elaborazione e attendi il risultato',
     ],
   },
   {
     icon: FileText,
-    title: 'Tipologia Caso — Guida l\'Analisi',
-    description: 'La tipologia determina cosa l\'AI cerca nei documenti e come struttura il report.',
+    title: 'Pronto per iniziare',
+    description: 'Dalla dashboard puoi scegliere tra diversi moduli in base al tipo di lavoro che devi fare.',
     details: [
-      'Ortopedica: analisi intervento, complicanze, danno biologico',
-      'Oncologica: timeline diagnostica, ritardo, perdita di chance',
-      'Ostetrica: analisi CTG, travaglio, esiti neonatali',
-      'RC Auto: dinamica sinistro, congruità lesioni',
-      'Ogni tipo ha sezioni report, tempistiche e criteri specifici',
+      'Analisi documenti sanitari: cronistoria estrattiva dei fatti clinici',
+      'Perizia medico legale: per privati, studi legali, assicurazioni',
+      'CTU/ATP: in ambito civile, previdenziale o INAIL',
+      'E molto altro: pareri, analisi spese, anonimizzazione',
     ],
   },
 ];

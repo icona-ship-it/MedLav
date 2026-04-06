@@ -15,6 +15,17 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser();
   const isAdmin = isAdminUser(user?.email);
 
+  // Check if user has any cases — onboarding only for brand new users
+  let caseCount = 0;
+  if (user) {
+    const { count } = await supabase
+      .from('cases')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    caseCount = count ?? 0;
+  }
+  const showOnboarding = caseCount === 0;
+
   return (
     <div className="flex h-screen">
       <Suspense>
@@ -35,7 +46,7 @@ export default async function DashboardLayout({
           </div>
         </main>
       </div>
-      <OnboardingDialog />
+      {showOnboarding && <OnboardingDialog />}
     </div>
   );
 }
