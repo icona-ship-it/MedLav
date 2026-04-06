@@ -5,7 +5,9 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
 import { generateTimelineDocx } from '@/services/export/timeline-export';
+import { generateExpenseDocx } from '@/services/export/expense-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
 import { getModule } from '@/types/modules';
 import type { ModuleId } from '@/types/modules';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
@@ -47,12 +49,12 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
 
-    // --- Timeline-only export for extraction_only / expenses_only pipelines ---
+    // --- Timeline / Expense export for extraction_only / expenses_only pipelines ---
     const pipelineMode = (data.caseData.pipeline_mode as string | null) ?? 'full';
     if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
       if (!data.events || data.events.length === 0) {
         return NextResponse.json(
-          { success: false, error: 'Nessun evento trovato per questo caso. Impossibile generare la cronistoria.' },
+          { success: false, error: 'Nessun evento trovato per questo caso. Impossibile generare il documento.' },
           { status: 404 },
         );
       }
@@ -61,14 +63,6 @@ export async function GET(
       const moduleName = moduleId ? getModule(moduleId).label : undefined;
 
       const shouldAnonymizeTimeline = _request.nextUrl.searchParams.get('anonymize') === 'true';
-
-      logAccess({
-        userId: user.id,
-        action: 'report.exported',
-        entityType: 'case',
-        entityId: caseId,
-        metadata: { format: 'docx-timeline', anonymized: shouldAnonymizeTimeline },
-      });
 
       const timelineEvents = data.events.map((e: Record<string, unknown>) => ({
         order_number: (e.order_number as number) ?? 0,
@@ -80,6 +74,46 @@ export async function GET(
         doctor: (e.doctor as string | null) ?? null,
         facility: (e.facility as string | null) ?? null,
       }));
+
+      // For expenses_only, use dedicated expense export if analysis data is available
+      if (pipelineMode === 'expenses_only') {
+        const periziaMetaRaw = (data.periziaMetadata ?? {}) as Record<string, unknown>;
+        const expenseResult = periziaMetaRaw.expenseAnalysis as ExpenseAnalysisResult | undefined;
+
+        if (expenseResult && expenseResult.items) {
+          logAccess({
+            userId: user.id,
+            action: 'report.exported',
+            entityType: 'case',
+            entityId: caseId,
+            metadata: { format: 'docx-expenses', anonymized: shouldAnonymizeTimeline },
+          });
+
+          const expenseBuffer = await generateExpenseDocx({
+            caseCode: data.caseData.code as string,
+            patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+            expenseResult,
+            events: timelineEvents,
+            moduleName,
+          });
+
+          return new NextResponse(new Uint8Array(expenseBuffer), {
+            headers: {
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'Content-Disposition': `attachment; filename="spese-mediche-${data.caseData.code}.docx"`,
+            },
+          });
+        }
+        // Fallback to timeline export if no expense analysis data
+      }
+
+      logAccess({
+        userId: user.id,
+        action: 'report.exported',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: { format: 'docx-timeline', anonymized: shouldAnonymizeTimeline },
+      });
 
       const timelineBuffer = await generateTimelineDocx({
         caseCode: data.caseData.code as string,

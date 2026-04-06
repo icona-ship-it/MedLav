@@ -41,6 +41,12 @@ const ReportDialog = dynamic(
 
 // --- Types ---
 
+export interface GenerationProgress {
+  currentSection: number;
+  totalSections: number;
+  currentSectionTitle: string;
+}
+
 interface ReportStepProps {
   caseId: string;
   report: ReportRow | null;
@@ -52,6 +58,7 @@ interface ReportStepProps {
   eventImages: Record<string, string[]>;
   processingStage: string;
   onNavigateToStep: (step: number) => void;
+  generationProgress?: GenerationProgress | null;
 }
 
 // --- Component ---
@@ -67,6 +74,7 @@ export function ReportStep({
   eventImages,
   processingStage,
   onNavigateToStep,
+  generationProgress,
 }: ReportStepProps) {
   const router = useRouter();
 
@@ -132,13 +140,36 @@ export function ReportStep({
   // --- No report yet ---
   if (!report) {
     if (processingStage === 'generazione_report') {
+      const progressPct = generationProgress
+        ? Math.round((generationProgress.currentSection / generationProgress.totalSections) * 100)
+        : 0;
       return (
         <Card className="border-primary/30">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4 py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <div className="text-center">
-                <p className="text-base font-semibold">Generazione report in corso...</p>
+              <div className="text-center space-y-2">
+                {generationProgress ? (
+                  <>
+                    <p className="text-base font-semibold">
+                      Generazione report: sezione {generationProgress.currentSection} di {generationProgress.totalSections}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {generationProgress.currentSectionTitle}
+                    </p>
+                    <div className="mx-auto mt-3 w-64">
+                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-700"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{progressPct}%</p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-base font-semibold">Generazione report in corso...</p>
+                )}
                 <p className="mt-1 text-sm text-muted-foreground">
                   L&apos;AI sta analizzando {events.length} eventi e generando il report medico-legale.
                 </p>

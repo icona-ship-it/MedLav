@@ -7,6 +7,7 @@ import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
 import { PeriziaMetadataForm } from './perizia-form';
 import { ReportStep } from './report-step';
+import type { GenerationProgress } from './report-step';
 import { AnonymizeStep } from './anonymize-step';
 import { WizardStepBar } from './wizard-step-bar';
 import type {
@@ -153,6 +154,11 @@ export function CaseDetailClient({
   const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
   const processingStage = caseData.processing_stage ?? 'idle';
 
+  // Extract generation progress from perizia_metadata (updated per section during report generation)
+  const generationProgress = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.generationProgress as GenerationProgress | undefined
+  ) ?? null;
+
   const autoStep = isAnonymizeOnly
     ? computeAnonymizeAutoStep(localDocuments)
     : isExtractionOnly
@@ -229,7 +235,9 @@ export function CaseDetailClient({
                 : processingStage === 'errore' ? 'Errore'
                 : 'Pronto')
             : processingStage === 'generazione_report'
-                ? 'Generazione in corso...'
+                ? (generationProgress
+                    ? `Sezione ${generationProgress.currentSection}/${generationProgress.totalSections}`
+                    : 'Generazione in corso...')
                 : hasReport ? 'Report pronto' : 'In attesa'),
           hint: activeStep === step.number ? step.hint : undefined,
         }))}
@@ -313,6 +321,7 @@ export function CaseDetailClient({
                 eventImages={eventImages}
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
+                generationProgress={generationProgress}
               />
             </div>
           )}
@@ -375,6 +384,7 @@ export function CaseDetailClient({
                 eventImages={eventImages}
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
+                generationProgress={generationProgress}
               />
             </div>
           )}

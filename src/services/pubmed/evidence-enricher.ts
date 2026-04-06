@@ -25,7 +25,6 @@ export interface PubMedSearchResult {
 
 const MAX_DIAGNOSIS_SEARCHES = 2;
 const MAX_TREATMENT_SEARCHES = 2;
-const MAX_CAUSAL_NEXUS_SEARCHES = 1;
 const MAX_TOTAL_SEARCHES = 5;
 
 /**

@@ -22,6 +22,8 @@ import type { GeneratedSection } from '@/services/synthesis/section-generation-t
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
 import { enrichWithFullEvidence } from '@/services/pubmed/evidence-enricher';
 import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
+import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
 import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
@@ -328,7 +330,47 @@ export const processCase = inngest.createFunction(
 
     // ── Pipeline branching by module type ───────────────────────
     // extraction_only: stop here, finalize with just the timeline
+    // expenses_only: run expense analysis, save to metadata, then finalize
     if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
+      // For expenses_only, run dedicated expense analysis
+      let expenseResult: ExpenseAnalysisResult | undefined;
+      if (pipelineMode === 'expenses_only') {
+        expenseResult = await step.run('analyze-expenses', () => {
+          const eventsForAnalysis = consolidationResult.allEvents.map((e) => ({
+            event_type: e.eventType,
+            title: e.title,
+            description: e.description,
+            event_date: e.eventDate,
+            facility: e.facility,
+            source_type: e.sourceType,
+          }));
+          return analyzeExpenses(eventsForAnalysis);
+        });
+
+        // Save expense analysis to perizia_metadata
+        await step.run('save-expense-analysis', async () => {
+          const { createAdminClient } = await import('@/lib/supabase/admin');
+          const supabase = createAdminClient();
+
+          const { data: caseRow } = await supabase
+            .from('cases')
+            .select('perizia_metadata')
+            .eq('id', caseId)
+            .single();
+
+          const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+          await supabase
+            .from('cases')
+            .update({
+              perizia_metadata: { ...existingMeta, expenseAnalysis: expenseResult },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', caseId);
+
+          logger.info('pipeline', `Expense analysis saved for case ${caseId}: ${expenseResult?.totalItems ?? 0} items, total ${expenseResult?.totalAmount ?? 'N/A'}`);
+        });
+      }
+
       await step.run('finalize', () => finalizeStep({
         caseId,
         userId,
@@ -352,6 +394,7 @@ export const processCase = inngest.createFunction(
         totalEvents: consolidationResult.allEvents.length,
         anomaliesDetected: 0,
         missingDocuments: 0,
+        ...(expenseResult ? { expenseTotalItems: expenseResult.totalItems, expenseTotalAmount: expenseResult.totalAmount } : {}),
       };
     }
 
@@ -468,15 +511,37 @@ export const processCase = inngest.createFunction(
     }
 
     const accumulatedSections: GeneratedSection[] = [];
-    for (const spec of sectionPlan) {
+    for (let i = 0; i < sectionPlan.length; i++) {
+      const spec = sectionPlan[i];
       const previousContext = accumulatedSections.map((s) => ({
         id: s.id,
         title: s.title,
         contextSummary: s.contextSummary,
       }));
-      const section = await step.run(`gen-section-${spec.id}`, () =>
-        generateSectionStep(caseId, spec, synthesisParams, previousContext),
-      );
+      const section = await step.run(`gen-section-${spec.id}`, async () => {
+        // Update generation progress in DB so the UI can show section-by-section status
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const { data: caseRow } = await supabase
+          .from('cases')
+          .select('perizia_metadata')
+          .eq('id', caseId)
+          .single();
+        const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('cases').update({
+          perizia_metadata: {
+            ...existingMeta,
+            generationProgress: {
+              currentSection: i + 1,
+              totalSections: sectionPlan.length,
+              currentSectionTitle: spec.title,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        }).eq('id', caseId);
+
+        return generateSectionStep(caseId, spec, synthesisParams, previousContext);
+      });
       accumulatedSections.push(section);
     }
 

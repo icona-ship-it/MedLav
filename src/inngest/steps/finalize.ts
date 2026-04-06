@@ -50,10 +50,21 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
       .in('id', docIds.slice(i, i + BATCH_SIZE));
   }
 
-  // Update case status and processing stage
+  // Update case status and processing stage, clear generation progress
+  const { data: caseRow } = await supabase
+    .from('cases')
+    .select('perizia_metadata')
+    .eq('id', caseId)
+    .single();
+  const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+  const { generationProgress: _, ...cleanedMeta } = existingMeta;
   await supabase
     .from('cases')
-    .update({ processing_stage: 'completato', updated_at: new Date().toISOString() })
+    .update({
+      processing_stage: 'completato',
+      perizia_metadata: cleanedMeta,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', caseId);
 
   // Audit log (no sensitive data)
