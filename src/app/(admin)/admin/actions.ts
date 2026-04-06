@@ -162,6 +162,93 @@ export async function getRecentCompletions() {
 }
 
 /**
+ * Get cases stuck in processing (elaborazione/generazione_report) for admin reset.
+ */
+export async function getStuckCases() {
+  await verifyAdmin();
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from('cases')
+    .select('id, code, processing_stage, patient_initials, updated_at, user_id')
+    .in('processing_stage', ['elaborazione', 'generazione_report', 'revisione_classificazione', 'revisione_anomalie'])
+    .order('updated_at', { ascending: true });
+
+  if (error) {
+    logger.error('admin', `Failed to fetch stuck cases: ${error.message}`);
+    return [];
+  }
+
+  return (data ?? []).map((c) => ({
+    id: c.id as string,
+    code: c.code as string,
+    processingStage: c.processing_stage as string,
+    patientInitials: c.patient_initials as string | null,
+    updatedAt: c.updated_at as string,
+  }));
+}
+
+/**
+ * Force-reset a stuck case back to idle or errore.
+ */
+export async function forceResetCase(caseId: string, targetStage: 'idle' | 'errore' = 'idle') {
+  const user = await verifyAdmin();
+  const admin = createAdminClient();
+
+  const { data: caseRow, error: fetchError } = await admin
+    .from('cases')
+    .select('id, code, processing_stage')
+    .eq('id', caseId)
+    .single();
+
+  if (fetchError || !caseRow) {
+    return { success: false, error: 'Caso non trovato' };
+  }
+
+  const { error: updateError } = await admin
+    .from('cases')
+    .update({
+      processing_stage: targetStage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', caseId);
+
+  if (updateError) {
+    logger.error('admin', `Failed to reset case ${caseId}: ${updateError.message}`);
+    return { success: false, error: 'Errore durante il reset' };
+  }
+
+  logger.info('admin', `Case ${caseRow.code} force-reset from ${caseRow.processing_stage} to ${targetStage} by admin ${user.id}`);
+  return { success: true };
+}
+
+/**
+ * Force-reset ALL stuck cases back to idle.
+ */
+export async function forceResetAllStuckCases() {
+  const user = await verifyAdmin();
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from('cases')
+    .update({
+      processing_stage: 'idle',
+      updated_at: new Date().toISOString(),
+    })
+    .in('processing_stage', ['elaborazione', 'generazione_report', 'revisione_classificazione', 'revisione_anomalie'])
+    .select('id, code');
+
+  if (error) {
+    logger.error('admin', `Failed to reset all stuck cases: ${error.message}`);
+    return { success: false, count: 0 };
+  }
+
+  const count = data?.length ?? 0;
+  logger.info('admin', `Force-reset ${count} stuck cases by admin ${user.id}`);
+  return { success: true, count };
+}
+
+/**
  * Reset all data EXCEPT user accounts.
  * Deletes: events, anomalies, missing_documents, reports, pages,
  * event_images, documents, cases, audit_log.
