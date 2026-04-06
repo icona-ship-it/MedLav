@@ -134,6 +134,13 @@ export function DocumentsSection({
         </CardContent>
       </Card>
 
+      {/* Upload status info — shown above the document list */}
+      {hasUploadedDocs && (
+        <p className="text-sm text-muted-foreground text-center">
+          {uploadedCount} {uploadedCount === 1 ? 'documento caricato' : 'documenti caricati'} — carica tutti i documenti prima di procedere.
+        </p>
+      )}
+
       {/* Documents list — same card style as classification review */}
       {documents.length > 0 && (
         <Card>
@@ -224,12 +231,9 @@ export function DocumentsSection({
         </Card>
       )}
 
-      {/* Proceed button — visible after uploads, non-sticky to avoid accidental clicks */}
+      {/* Proceed button — sticky footer, always visible when docs uploaded */}
       {hasUploadedDocs && (
-        <div className="border rounded-lg px-4 py-4 mt-6 bg-muted/30">
-          <p className="text-sm text-muted-foreground text-center mb-3">
-            {uploadedCount} {uploadedCount === 1 ? 'documento caricato' : 'documenti caricati'} — carica tutti i documenti prima di procedere.
-          </p>
+        <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
           <Button
             size="lg"
             className="w-full text-base py-6"

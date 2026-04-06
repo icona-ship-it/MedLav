@@ -214,6 +214,29 @@ export function ProcessingSection({
             <div className="space-y-4">
               {hasUploadedDocs ? (
                 <>
+                  {/* Error/warning banners — shown first so user sees them immediately */}
+                  {processingError && <p className="text-sm text-destructive text-center">{processingError}</p>}
+
+                  {failedDocs.length > 0 && (
+                    <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                      <span className="text-destructive">{failedDocs.length} documenti non elaborati</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-auto shrink-0"
+                        onClick={handleRetryFailed}
+                        disabled={isRetrying}
+                      >
+                        {isRetrying ? (
+                          <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
+                        ) : (
+                          <><RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Pipeline preview — visual stepper */}
                   <div className="space-y-3">
                     <p className="text-sm font-medium text-center">
@@ -245,44 +268,24 @@ export function ProcessingSection({
                     </div>
                   </div>
 
-                  {processingError && <p className="mt-1 text-sm text-destructive text-center">{processingError}</p>}
-
-                  {/* Retry failed docs button */}
-                  {failedDocs.length > 0 && (
-                    <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-                      <span className="text-destructive">{failedDocs.length} documenti non elaborati</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="ml-auto shrink-0"
-                        onClick={handleRetryFailed}
-                        disabled={isRetrying}
-                      >
-                        {isRetrying ? (
-                          <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
-                        ) : (
-                          <><RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti</>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
-                  <Button
-                    size="lg"
-                    className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleStartProcessing}
-                    disabled={isStartingProcessing || !hasUploadedDocs}
-                  >
-                    {isStartingProcessing ? (
-                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso...</>
-                    ) : (
-                      <><Play className="mr-2 h-5 w-5" />Avvia Elaborazione</>
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center mt-2">
-                    Puoi avviare fino a 5 elaborazioni contemporaneamente.
-                  </p>
+                  {/* Sticky action bar */}
+                  <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
+                    <Button
+                      size="lg"
+                      className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+                      onClick={handleStartProcessing}
+                      disabled={isStartingProcessing || !hasUploadedDocs}
+                    >
+                      {isStartingProcessing ? (
+                        <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso...</>
+                      ) : (
+                        <><Play className="mr-2 h-5 w-5" />Avvia Elaborazione</>
+                      )}
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Puoi avviare fino a 5 elaborazioni contemporaneamente.
+                    </p>
+                  </div>
                 </>
               ) : documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">

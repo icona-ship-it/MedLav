@@ -161,6 +161,20 @@ export function ReportStep({
   // --- Report available ---
   return (
     <div className="flex flex-col">
+      {/* Action bar - toolbar at top for immediate visibility */}
+      <ReportActionBar
+        caseId={caseId}
+        report={report}
+        anomalyCount={anomalies.length}
+        missingDocsCount={missingDocs.length}
+        isRegenerating={isRegenerating}
+        onRegenerate={handleRegenerate}
+        onEdit={() => setEditDialogOpen(true)}
+        onVersionsToggle={handleVersionsToggle}
+        alertCount={alertCount}
+        onOpenQualitySheet={() => setQualitySheetOpen(true)}
+      />
+
       {/* Tabs: Report + Timeline */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
@@ -223,20 +237,6 @@ export function ReportStep({
           />
         </TabsContent>
       </Tabs>
-
-      {/* Action bar - always visible */}
-      <ReportActionBar
-        caseId={caseId}
-        report={report}
-        anomalyCount={anomalies.length}
-        missingDocsCount={missingDocs.length}
-        isRegenerating={isRegenerating}
-        onRegenerate={handleRegenerate}
-        onEdit={() => setEditDialogOpen(true)}
-        onVersionsToggle={handleVersionsToggle}
-        alertCount={alertCount}
-        onOpenQualitySheet={() => setQualitySheetOpen(true)}
-      />
 
       {/* Mobile: Quality sidebar as Sheet */}
       <Sheet open={qualitySheetOpen} onOpenChange={setQualitySheetOpen}>
