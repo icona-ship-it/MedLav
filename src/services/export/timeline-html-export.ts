@@ -219,6 +219,9 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .timeline-table thead {
+      display: table-header-group;
+    }
     .timeline-table th {
       background: #1e40af !important;
       color: #fff !important;
@@ -227,11 +230,15 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     }
     .timeline-table tr { page-break-inside: avoid; }
     .timeline-table tr:hover td { background: inherit !important; }
+    .timeline-table td {
+      border-color: #999 !important;
+    }
     .event-type-badge, .source-badge {
       background: none !important;
       border: 1px solid #999;
       color: #000 !important;
     }
+    .footer { page-break-before: avoid; }
   }
 </style>
 </head>

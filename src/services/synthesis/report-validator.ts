@@ -47,15 +47,15 @@ const REQUIRED_SECTIONS = [
 ];
 
 const SENTINEL_PATTERNS = [
-  /\b01\/01\/1900\b/,
+  /\b01[./]01[./]1900\b/,
   /\b1900-01-01\b/,
   /Data non documentata/,
 ];
 
 const MIN_WORD_COUNT = 200;
 
-/** Regex matching DD/MM/YYYY dates in report text. */
-const DATE_PATTERN = /\b(\d{2})\/(\d{2})\/(\d{4})\b/g;
+/** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
+const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
 
 /**
  * Validate a generated report for quality issues.
@@ -155,11 +155,14 @@ function checkPhantomDates(
   const dateRegex = new RegExp(DATE_PATTERN.source, 'g');
 
   while ((match = dateRegex.exec(synthesis)) !== null) {
-    const dateStr = match[0]; // DD/MM/YYYY
+    const rawDateStr = match[0]; // DD/MM/YYYY or DD.MM.YYYY
     const year = match[3];
 
     // Skip sentinel dates (handled by sentinel check)
     if (year === '1900') continue;
+
+    // Normalize to canonical DD/MM/YYYY for comparison
+    const dateStr = normalizeToSlashDate(rawDateStr) ?? rawDateStr;
 
     // Skip if already reported
     if (seenPhantoms.has(dateStr)) continue;
@@ -169,7 +172,7 @@ function checkPhantomDates(
       issues.push({
         type: 'phantom_date',
         severity: 'warning',
-        message: `Date ${dateStr} in report not found in any event`,
+        message: `Date ${rawDateStr} in report not found in any event`,
       });
     }
   }
@@ -177,11 +180,11 @@ function checkPhantomDates(
   return issues;
 }
 
-/** Convert YYYY-MM-DD or DD/MM/YYYY to DD/MM/YYYY. */
+/** Convert YYYY-MM-DD, DD/MM/YYYY, or DD.MM.YYYY to a canonical DD/MM/YYYY for set comparison. */
 function normalizeToSlashDate(dateStr: string): string | null {
-  // Already DD/MM/YYYY
-  const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (slashMatch) return dateStr;
+  // DD/MM/YYYY or DD.MM.YYYY
+  const dmyMatch = dateStr.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
+  if (dmyMatch) return `${dmyMatch[1]}/${dmyMatch[2]}/${dmyMatch[3]}`;
 
   // ISO format YYYY-MM-DD
   const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);

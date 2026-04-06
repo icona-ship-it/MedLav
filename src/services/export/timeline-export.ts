@@ -86,28 +86,36 @@ function buildDescriptionParagraphs(ev: TimelineEvent): Paragraph[] {
 // Header row for the table
 // ---------------------------------------------------------------------------
 
+const TABLE_BORDERS = {
+  top: { style: BorderStyle.SINGLE, size: 1, color: 'B0B0B0' },
+  bottom: { style: BorderStyle.SINGLE, size: 1, color: 'B0B0B0' },
+  left: { style: BorderStyle.SINGLE, size: 1, color: 'B0B0B0' },
+  right: { style: BorderStyle.SINGLE, size: 1, color: 'B0B0B0' },
+};
+
+const COLUMN_WIDTHS = [
+  { text: 'N.', pct: 500 },       // 5%
+  { text: 'Data', pct: 1200 },    // 12%
+  { text: 'Tipo', pct: 1200 },    // 12%
+  { text: 'Titolo / Descrizione', pct: 5600 }, // 56%
+  { text: 'Fonte', pct: 1500 },   // 15%
+];
+
 function buildHeaderRow(): TableRow {
   const headerStyle = { bold: true, size: 20, color: 'FFFFFF', font: 'Calibri' };
-  const shading = { type: ShadingType.SOLID, fill: '2B579A', color: '2B579A' };
-
-  const cells = [
-    { text: 'N.', width: 600 },
-    { text: 'Data', width: 1400 },
-    { text: 'Tipo', width: 1400 },
-    { text: 'Titolo / Descrizione', width: 4200 },
-    { text: 'Fonte', width: 1900 },
-  ];
+  const shading = { type: ShadingType.SOLID, fill: '1B3A6B', color: '1B3A6B' };
 
   return new TableRow({
     tableHeader: true,
-    children: cells.map((c) => new TableCell({
+    children: COLUMN_WIDTHS.map((c) => new TableCell({
       children: [new Paragraph({
         children: [new TextRun({ ...headerStyle, text: c.text })],
         alignment: AlignmentType.CENTER,
+        spacing: { before: 40, after: 40 },
       })],
       shading,
-      width: { size: c.width, type: WidthType.DXA },
-      verticalAlign: 'center' as unknown as undefined,
+      width: { size: c.pct, type: WidthType.PERCENTAGE },
+      borders: TABLE_BORDERS,
     })),
   });
 }
@@ -121,8 +129,9 @@ function buildEventRow(ev: TimelineEvent, isEven: boolean): TableRow {
     ? { type: ShadingType.SOLID, fill: 'F2F6FC', color: 'F2F6FC' }
     : undefined;
 
-  const cellOpts = (width: number) => ({
-    width: { size: width, type: WidthType.DXA },
+  const cellOpts = (pct: number) => ({
+    width: { size: pct, type: WidthType.PERCENTAGE },
+    borders: TABLE_BORDERS,
     ...(shading ? { shading } : {}),
   });
 
@@ -133,31 +142,31 @@ function buildEventRow(ev: TimelineEvent, isEven: boolean): TableRow {
           children: [new TextRun({ text: String(ev.order_number), size: 18, font: 'Calibri' })],
           alignment: AlignmentType.CENTER,
         })],
-        ...cellOpts(600),
+        ...cellOpts(COLUMN_WIDTHS[0].pct),
       }),
       new TableCell({
         children: [new Paragraph({
           children: [new TextRun({ text: formatDate(ev.event_date), size: 18, font: 'Calibri' })],
           alignment: AlignmentType.CENTER,
         })],
-        ...cellOpts(1400),
+        ...cellOpts(COLUMN_WIDTHS[1].pct),
       }),
       new TableCell({
         children: [new Paragraph({
           children: [new TextRun({ text: eventTypeLabel(ev.event_type), size: 18, font: 'Calibri' })],
           alignment: AlignmentType.CENTER,
         })],
-        ...cellOpts(1400),
+        ...cellOpts(COLUMN_WIDTHS[2].pct),
       }),
       new TableCell({
         children: buildDescriptionParagraphs(ev),
-        ...cellOpts(4200),
+        ...cellOpts(COLUMN_WIDTHS[3].pct),
       }),
       new TableCell({
         children: [new Paragraph({
           children: [new TextRun({ text: sourceLabel(ev.source_type), size: 16, font: 'Calibri' })],
         })],
-        ...cellOpts(1900),
+        ...cellOpts(COLUMN_WIDTHS[4].pct),
       }),
     ],
   });
@@ -234,7 +243,7 @@ export async function generateTimelineDocx(params: TimelineDocxParams): Promise<
 
     children.push(new Table({
       rows: tableRows,
-      width: { size: 9500, type: WidthType.DXA },
+      width: { size: 10000, type: WidthType.PERCENTAGE },
     }));
   }
 

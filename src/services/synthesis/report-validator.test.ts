@@ -178,10 +178,14 @@ ${Array(100).fill('parola').join(' ')}`;
   });
 
   describe('phantom dates', () => {
+    // buildFullReport() generates dates 15.01–15.05.2024, so context must include them all
     const context: ReportValidationContext = {
       events: [
         { orderNumber: 1, eventDate: '2024-01-15' },
-        { orderNumber: 2, eventDate: '2024-03-20' },
+        { orderNumber: 2, eventDate: '2024-02-15' },
+        { orderNumber: 3, eventDate: '2024-03-15' },
+        { orderNumber: 4, eventDate: '2024-04-15' },
+        { orderNumber: 5, eventDate: '2024-05-15' },
       ],
     };
 
@@ -225,7 +229,15 @@ ${Array(100).fill('parola').join(' ')}`;
 
     it('should handle ISO event dates correctly', () => {
       const ctx: ReportValidationContext = {
-        events: [{ orderNumber: 1, eventDate: '2024-05-10' }],
+        events: [
+          // buildFullReport() generates dates 15.01–15.05.2024
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-15' },
+          { orderNumber: 3, eventDate: '2024-03-15' },
+          { orderNumber: 4, eventDate: '2024-04-15' },
+          { orderNumber: 5, eventDate: '2024-05-15' },
+          { orderNumber: 6, eventDate: '2024-05-10' },
+        ],
       };
       const report = buildFullReport() + '\nIn data 10/05/2024 il controllo.';
       const result = validateReport(report, 5, ctx);

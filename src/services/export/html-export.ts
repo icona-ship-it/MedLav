@@ -257,6 +257,9 @@ export function generateHtmlReport(params: HtmlExportParams): string {
     .event-type, .event-source, .severity { background: none !important; border: 1px solid #999; color: #000 !important; }
     a { color: #000; text-decoration: none; }
     .synthesis { background: none !important; border: 1px solid #ddd; }
+    .synthesis .ocr-table thead { display: table-header-group; }
+    .synthesis .ocr-table th { background: #e2e8f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .synthesis .ocr-table tr { page-break-inside: avoid; }
   }
   ${buildWatermarkCss(reportStatus)}
 </style>

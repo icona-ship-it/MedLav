@@ -206,8 +206,8 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
    - Anno deducibile (da protocollo, contesto, "nel corso del 2023") → usa YYYY-01-01, datePrecision="anno"
    - NESSUN indizio → solo allora NULL, datePrecision="sconosciuta"
 4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
-5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro, 50-79 per testo parzialmente leggibile, 10-49 per manoscritto o illeggibile.
-6. **VERIFICA**: Imposta requiresVerification=true per: testo manoscritto, dati numerici incerti, date approssimate, informazioni contraddittorie.
+5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro e PDF digitali, 60-79 per scansioni leggibili, 40-59 per testo parzialmente leggibile, 10-39 per manoscritto o illeggibile.
+6. **VERIFICA**: Imposta requiresVerification=true SOLO per: testo manoscritto ILLEGGIBILE, dati numerici che POTREBBERO essere errati (OCR ha letto male un numero), informazioni CONTRADDITTORIE tra documenti diversi. NON marcare come "da verificare" eventi con date approssimate (mese/anno) — quelle sono normali e vanno gestite con datePrecision. NON marcare come "da verificare" eventi da PDF digitali stampati chiaramente.
 
 7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
    - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
@@ -268,6 +268,20 @@ Cerca con particolare cura:
 - "altro" — SOLO se nessuna delle categorie sopra è applicabile
 
 IMPORTANTE: Classifica SEMPRE l'evento nella categoria più specifica possibile. "altro" deve essere l'eccezione, NON la regola.
+
+GUIDA RAPIDA ALLA CATEGORIZZAZIONE:
+- Paziente va dal medico → "visita"
+- Paziente fa RX/TAC/RM/ECG/ecografia → "esame"
+- Paziente fa analisi del sangue/urine → "esame" (sourceType: "esame_ematochimico")
+- Medico comunica una diagnosi → "diagnosi"
+- Paziente viene operato/biopsia → "intervento"
+- Medico prescrive farmaco/fisioterapia/chemio → "terapia"
+- Paziente viene ricoverato → "ricovero"
+- Visita di controllo post-intervento → "follow-up"
+- Lettera di dimissione/referto → "referto"
+- Fattura/ricevuta con importo → "spesa_medica"
+- Atto giudiziario/memoria/PEC → "documento_amministrativo"
+- Certificato medico/INAIL → "certificato"
 
 ## VALORI AMMESSI PER sourceType (USA SOLO QUESTI)
 - "cartella_clinica" — cartelle cliniche, diari, lettere dimissione, descrizioni operatorie

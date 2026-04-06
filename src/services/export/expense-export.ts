@@ -37,7 +37,7 @@ const EVEN_ROW_FILL = 'F2F6FC';
 const FONT = 'Calibri';
 
 function formatCurrency(amount: number): string {
-  return `€ ${amount.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${amount.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} \u20AC`;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 import { FileText, Image, FileSpreadsheet, File } from 'lucide-react';
 
 /**
- * Format ISO date string (YYYY-MM-DD) to Italian format (DD/MM/YYYY).
+ * Format ISO date string (YYYY-MM-DD) to Italian medical-legal format (DD.MM.YYYY).
  * Returns the original string if parsing fails.
  */
 export function formatDate(isoDate: string): string {
@@ -13,7 +13,7 @@ export function formatDate(isoDate: string): string {
   const parts = isoDate.split('-');
   if (parts.length !== 3) return isoDate;
   const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
+  return `${day}.${month}.${year}`;
 }
 
 /**
