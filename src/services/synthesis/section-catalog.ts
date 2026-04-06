@@ -216,7 +216,7 @@ ${NO_EVN_RULE}`,
     id: 'epicrisi',
     title: 'Epicrisi',
     maxTokens: TOKENS_MAX,
-    dataSources: ['context-summaries', 'calculations'],
+    dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 800,
     needsOcr: false,
     promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica documentata.
@@ -231,6 +231,7 @@ NON esprimere percentuali di invalidita permanente — il perito le determinera 
 NON ripetere in dettaglio fatti gia esposti nella documentazione sanitaria — sintetizzare.
 Scrivi in prosa discorsiva formale.
 ${NO_EVN_RULE}
+Quando disponibili, cita le evidenze scientifiche pertinenti [Autore, Rivista, Anno] a supporto dei fatti documentati.
 
 *[Il perito completera questa sezione con le proprie valutazioni professionali su: nesso di causalita materiale e giuridica, quantificazione del danno biologico permanente (tabelle SIMLA), danno morale e esistenziale]*`,
   },
@@ -254,7 +255,7 @@ ${NO_EVN_RULE}
     id: 'conclusioni_quesiti',
     title: 'Conclusioni — Risposte ai Quesiti',
     maxTokens: TOKENS_MAX,
-    dataSources: ['context-summaries', 'calculations', 'perizia-metadata'],
+    dataSources: ['context-summaries', 'calculations', 'perizia-metadata', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
     condition: 'has-quesiti',
@@ -272,7 +273,8 @@ Per ogni quesito:
 *[Il perito inserira qui la propria risposta al quesito]*
 
 NON rispondere ai quesiti — presenta SOLO gli elementi documentali organizzati. Il perito formulera le risposte.
-${NO_EVN_RULE}`,
+${NO_EVN_RULE}
+Se disponibili evidenze scientifiche (PubMed), citale a supporto degli elementi fattuali rilevanti per le risposte ai quesiti.`,
   },
   {
     id: 'bibliografia',
@@ -438,7 +440,7 @@ ${NO_EVN_RULE}`,
     id: 'epicrisi',
     title: 'Epicrisi',
     maxTokens: TOKENS_MAX,
-    dataSources: ['context-summaries', 'calculations'],
+    dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
     promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica.
@@ -448,6 +450,7 @@ Includi:
 NON esprimere percentuali di invalidita ne giudizi sul nesso causale — il perito li formulera.
 Scrivi in prosa formale e concisa.
 ${NO_EVN_RULE}
+Quando disponibili, cita le evidenze scientifiche pertinenti [Autore, Rivista, Anno] a supporto dei fatti documentati.
 
 *[Il perito completera questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
   },

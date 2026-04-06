@@ -20,7 +20,7 @@ import {
 } from '../steps/generate-report';
 import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
-import { enrichWithPubMedEvidence } from '@/services/pubmed/evidence-enricher';
+import { enrichWithFullEvidence } from '@/services/pubmed/evidence-enricher';
 import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
 import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
@@ -395,7 +395,7 @@ export const processCase = inngest.createFunction(
     let pubmedResults: PubMedSearchResult[] = [];
     try {
       pubmedResults = await step.run('search-pubmed', () =>
-        enrichWithPubMedEvidence(consolidationResult.allEvents, updatedMetadata.caseType),
+        enrichWithFullEvidence(consolidationResult.allEvents, anomalies, updatedMetadata.caseType),
       );
     } catch {
       logger.warn('pipeline', `PubMed search failed (non-blocking) for case ${caseId}`);

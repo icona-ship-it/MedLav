@@ -24,6 +24,7 @@ import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { PubMedSearchResult } from '../pubmed/evidence-enricher';
+import { formatCausalNexusForPrompt } from '@/lib/domain-knowledge/causal-nexus';
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -373,17 +374,50 @@ function filterOcrForSection(
 
 // ── PubMed formatting ─────────────────────────────────────────────
 
+const CATEGORY_LABELS: Record<string, string> = {
+  diagnosis: 'Diagnosi e linee guida',
+  treatment: 'Trattamento e outcomes',
+  causal_nexus: 'Nesso causale ed evidenze prognostiche',
+};
+
 function formatPubMedReferencesForPrompt(results: PubMedSearchResult[]): string {
   if (results.length === 0) return '';
 
-  const parts: string[] = ['## RIFERIMENTI SCIENTIFICI PUBMED\n'];
+  // Group articles by category
+  const grouped = new Map<string, PubMedSearchResult[]>();
   for (const result of results) {
-    parts.push(`### Diagnosi: ${result.query}\n`);
-    for (const article of result.articles) {
-      const doi = article.doi ? ` DOI: ${article.doi}.` : '';
-      parts.push(`- ${article.authors}. ${article.title}. ${article.journal}. ${article.year}.${doi} PMID: ${article.pmid}`);
+    const key = result.category ?? 'diagnosis';
+    const existing = grouped.get(key) ?? [];
+    existing.push(result);
+    grouped.set(key, existing);
+  }
+
+  const parts: string[] = ['## EVIDENZE SCIENTIFICHE PUBMED\n'];
+  const categoryOrder = ['diagnosis', 'treatment', 'causal_nexus'];
+
+  for (const category of categoryOrder) {
+    const categoryResults = grouped.get(category);
+    if (!categoryResults || categoryResults.length === 0) continue;
+
+    const label = CATEGORY_LABELS[category] ?? category;
+    parts.push(`### ${label}`);
+    for (const result of categoryResults) {
+      parts.push(`Ricerca: "${result.query}"`);
+      for (const article of result.articles) {
+        const doi = article.doi ? ` DOI: ${article.doi}.` : '';
+        parts.push(`- ${article.authors}. ${article.title}. ${article.journal}. ${article.year}.${doi} PMID: ${article.pmid}`);
+      }
     }
     parts.push('');
   }
+
+  // Append causal nexus legal criteria
+  const causalNexusText = formatCausalNexusForPrompt();
+  if (causalNexusText) {
+    parts.push('## CRITERI MEDICO-LEGALI PER IL NESSO CAUSALE');
+    parts.push(causalNexusText);
+    parts.push('');
+  }
+
   return parts.join('\n');
 }

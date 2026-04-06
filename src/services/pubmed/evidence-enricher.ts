@@ -3,33 +3,47 @@
  * for relevant scientific evidence.
  *
  * Non-blocking: all errors are caught and result in empty arrays.
- * Budget: max 3 PubMed searches per case (~9 seconds worst case).
+ * Budget: max 5 PubMed searches per case (~15 seconds worst case).
+ *
+ * Categories:
+ * - diagnosis (max 2): top diagnoses by frequency
+ * - treatment (max 2): procedures from intervention/therapy events
+ * - causal_nexus (max 1): only when anomalies exist
  */
 
 import { searchPubMed } from './pubmed-client';
 import type { PubMedArticle } from './pubmed-client';
 import { logger } from '@/lib/logger';
 
+export type EvidenceCategory = 'diagnosis' | 'treatment' | 'causal_nexus';
+
 export interface PubMedSearchResult {
   query: string;
+  category: EvidenceCategory;
   articles: PubMedArticle[];
 }
 
-const MAX_SEARCHES = 3;
+const MAX_DIAGNOSIS_SEARCHES = 2;
+const MAX_TREATMENT_SEARCHES = 2;
+const MAX_CAUSAL_NEXUS_SEARCHES = 1;
+const MAX_TOTAL_SEARCHES = 5;
 
 /**
- * Enrich a case with PubMed evidence based on diagnoses found in events.
+ * Enrich a case with full PubMed evidence across 3 categories.
  *
- * 1. Extracts unique non-null diagnoses from events
- * 2. Ranks by frequency (most mentioned first)
- * 3. Searches PubMed for top 3 diagnoses
- * 4. Returns results grouped by query
+ * 1. Diagnosis (max 2): top diagnoses by frequency
+ * 2. Treatment (max 2): procedures from intervento/terapia events
+ * 3. Causal nexus (max 1): only if anomalies present, combines primary diagnosis + anomaly
  */
-export async function enrichWithPubMedEvidence(
-  events: Array<{ title: string; description: string; diagnosis: string | null }>,
+export async function enrichWithFullEvidence(
+  events: Array<{ title: string; description: string; diagnosis: string | null; event_type?: string }>,
+  anomalies: Array<{ anomalyType: string; description: string }>,
   caseType: string,
 ): Promise<PubMedSearchResult[]> {
-  // Extract unique diagnoses, count frequency
+  const results: PubMedSearchResult[] = [];
+  let searchCount = 0;
+
+  // --- 1. Diagnosis searches (max 2) ---
   const diagnosisCounts = new Map<string, number>();
   for (const event of events) {
     if (!event.diagnosis || typeof event.diagnosis !== 'string') continue;
@@ -38,37 +52,90 @@ export async function enrichWithPubMedEvidence(
     diagnosisCounts.set(normalized, (diagnosisCounts.get(normalized) ?? 0) + 1);
   }
 
-  if (diagnosisCounts.size === 0) {
-    logger.info('pubmed', 'No diagnoses found in events — skipping PubMed search');
-    return [];
-  }
-
-  // Sort by frequency (most mentioned first), take top MAX_SEARCHES
   const topDiagnoses = [...diagnosisCounts.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_SEARCHES)
+    .slice(0, MAX_DIAGNOSIS_SEARCHES)
     .map(([diagnosis]) => diagnosis);
 
-  logger.info('pubmed', `Searching PubMed for ${topDiagnoses.length} diagnoses (from ${diagnosisCounts.size} unique)`);
+  if (topDiagnoses.length > 0) {
+    logger.info('pubmed', `Searching PubMed for ${topDiagnoses.length} diagnoses (from ${diagnosisCounts.size} unique)`);
+  }
 
-  // Search sequentially to respect NCBI rate limit (<3 req/sec)
-  const results: PubMedSearchResult[] = [];
   for (const diagnosis of topDiagnoses) {
+    if (searchCount >= MAX_TOTAL_SEARCHES) break;
     const query = buildSearchQuery(diagnosis, caseType);
     try {
       const articles = await searchPubMed(query, 5);
+      searchCount++;
       if (articles.length > 0) {
-        results.push({ query: diagnosis, articles });
-        logger.info('pubmed', `Found ${articles.length} articles for "${diagnosis}"`);
+        results.push({ query: diagnosis, category: 'diagnosis', articles });
+        logger.info('pubmed', `Found ${articles.length} articles for diagnosis "${diagnosis}"`);
       }
     } catch (error) {
-      logger.warn('pubmed', `Search failed for "${diagnosis}": ${error instanceof Error ? error.message : 'unknown'}`);
-      // Continue with next diagnosis — non-blocking
+      logger.warn('pubmed', `Search failed for diagnosis "${diagnosis}": ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  // --- 2. Treatment searches (max 2) ---
+  const procedureCounts = new Map<string, number>();
+  for (const event of events) {
+    if (event.event_type !== 'intervento' && event.event_type !== 'terapia') continue;
+    const normalized = event.title.trim().toLowerCase();
+    if (normalized.length < 3) continue;
+    procedureCounts.set(normalized, (procedureCounts.get(normalized) ?? 0) + 1);
+  }
+
+  const topProcedures = [...procedureCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_TREATMENT_SEARCHES)
+    .map(([procedure]) => procedure);
+
+  for (const procedure of topProcedures) {
+    if (searchCount >= MAX_TOTAL_SEARCHES) break;
+    const query = `"${procedure}" AND (outcomes OR complications OR "evidence based")`;
+    try {
+      const articles = await searchPubMed(query, 5);
+      searchCount++;
+      if (articles.length > 0) {
+        results.push({ query: procedure, category: 'treatment', articles });
+        logger.info('pubmed', `Found ${articles.length} articles for treatment "${procedure}"`);
+      }
+    } catch (error) {
+      logger.warn('pubmed', `Search failed for treatment "${procedure}": ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  // --- 3. Causal nexus search (max 1, only if anomalies exist) ---
+  if (anomalies.length > 0 && topDiagnoses.length > 0 && searchCount < MAX_TOTAL_SEARCHES) {
+    const primaryDiagnosis = topDiagnoses[0];
+    const anomalyDescription = anomalies[0].description;
+    const query = `"${primaryDiagnosis}" AND ("delayed diagnosis" OR "medical malpractice" OR "causal relationship" OR prognosis)`;
+    try {
+      const articles = await searchPubMed(query, 5);
+      searchCount++;
+      if (articles.length > 0) {
+        results.push({ query: `${primaryDiagnosis} — ${anomalyDescription}`, category: 'causal_nexus', articles });
+        logger.info('pubmed', `Found ${articles.length} articles for causal nexus`);
+      }
+    } catch (error) {
+      logger.warn('pubmed', `Search failed for causal nexus: ${error instanceof Error ? error.message : 'unknown'}`);
     }
   }
 
   logger.info('pubmed', `PubMed enrichment complete: ${results.length} queries returned results, ${results.reduce((s, r) => s + r.articles.length, 0)} total articles`);
   return results;
+}
+
+/**
+ * @deprecated Use enrichWithFullEvidence() instead. Kept for backward compatibility.
+ *
+ * Enrich a case with PubMed evidence based on diagnoses found in events.
+ */
+export async function enrichWithPubMedEvidence(
+  events: Array<{ title: string; description: string; diagnosis: string | null }>,
+  caseType: string,
+): Promise<PubMedSearchResult[]> {
+  return enrichWithFullEvidence(events, [], caseType);
 }
 
 /**
