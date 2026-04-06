@@ -16,7 +16,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { deleteCase, updateCaseStatus } from '../../actions';
-import { caseTypeLabels, moduleLabels, getModuleFullLabel } from '@/lib/constants';
+import { caseTypeLabels, getModuleFullLabel } from '@/lib/constants';
 import type { ModuleId } from '@/types/modules';
 import { formatDate } from '@/lib/format';
 import { EditCaseDialog } from './edit-case-dialog';

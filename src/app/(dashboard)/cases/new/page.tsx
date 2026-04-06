@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,7 +9,6 @@ import {
   Scale,
   Shield,
   HardHat,
-  FileCheck,
   FileSearch,
   Search,
   BookOpen,
@@ -65,7 +64,6 @@ function getModulesForCategory(categoryId: number): ModuleDefinition[] {
 
 export default function NewCasePage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const moduleId = searchParams.get('module');
   const categoryId = searchParams.get('category');
 
@@ -91,12 +89,14 @@ export default function NewCasePage() {
     return <ModuleNewCase moduleDef={moduleDef} category={category} />;
   }
 
-  // No valid param → redirect to dashboard
-  useEffect(() => {
-    router.replace('/');
-  }, [router]);
-
-  return null;
+  // No valid param → show redirect link (useEffect cannot be conditional)
+  return (
+    <div className="flex items-center justify-center py-20">
+      <p className="text-muted-foreground">
+        Nessun modulo selezionato. <Link href="/" className="text-primary underline">Torna alla dashboard</Link>
+      </p>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

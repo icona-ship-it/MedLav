@@ -137,7 +137,6 @@ export default async function DashboardPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {otherCategories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat.id];
-            const count = getModuleCount(cat.id);
             const href = getCategoryHref(cat.id);
 
             return (

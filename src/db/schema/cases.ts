@@ -1,7 +1,7 @@
 import { pgTable, uuid, text, timestamp, integer, pgEnum, jsonb } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
 import type { PeriziaMetadata } from '@/types';
-import type { ModuleId, PipelineMode } from '@/types/modules';
+import type { ModuleId } from '@/types/modules';
 
 // --- Legacy enums (kept for backward compatibility) ---
 
