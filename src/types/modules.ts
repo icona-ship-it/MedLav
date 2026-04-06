@@ -95,6 +95,8 @@ export interface ModuleDefinition {
   legacyCaseTypes: CaseType[];
   /** Priority module (bold in spec = "cavallo di battaglia") */
   priority: boolean;
+  /** Hide from catalog (not ready yet) */
+  hidden?: boolean;
 }
 
 export const MODULE_CATALOG: readonly ModuleDefinition[] = [
@@ -346,6 +348,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     pipelineMode: 'anonymize_only',
     legacyCaseTypes: [],
     priority: false,
+    hidden: true,
   },
 ] as const;
 

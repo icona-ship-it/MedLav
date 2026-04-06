@@ -4,7 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
+import { generateTimelineDocx } from '@/services/export/timeline-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { getModule } from '@/types/modules';
+import type { ModuleId } from '@/types/modules';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
@@ -42,6 +45,55 @@ export async function GET(
 
     if (!data) {
       return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
+    }
+
+    // --- Timeline-only export for extraction_only / expenses_only pipelines ---
+    const pipelineMode = (data.caseData.pipeline_mode as string | null) ?? 'full';
+    if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
+      if (!data.events || data.events.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Nessun evento trovato per questo caso. Impossibile generare la cronistoria.' },
+          { status: 404 },
+        );
+      }
+
+      const moduleId = data.caseData.module_id as ModuleId | null;
+      const moduleName = moduleId ? getModule(moduleId).label : undefined;
+
+      const shouldAnonymizeTimeline = _request.nextUrl.searchParams.get('anonymize') === 'true';
+
+      logAccess({
+        userId: user.id,
+        action: 'report.exported',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: { format: 'docx-timeline', anonymized: shouldAnonymizeTimeline },
+      });
+
+      const timelineEvents = data.events.map((e: Record<string, unknown>) => ({
+        order_number: (e.order_number as number) ?? 0,
+        event_date: (e.event_date as string) ?? '',
+        event_type: (e.event_type as string) ?? 'altro',
+        title: (e.title as string) ?? '',
+        description: (e.description as string) ?? '',
+        source_type: (e.source_type as string) ?? 'altro',
+        doctor: (e.doctor as string | null) ?? null,
+        facility: (e.facility as string | null) ?? null,
+      }));
+
+      const timelineBuffer = await generateTimelineDocx({
+        caseCode: data.caseData.code as string,
+        patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
+        events: timelineEvents,
+        moduleName,
+      });
+
+      return new NextResponse(new Uint8Array(timelineBuffer), {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': `attachment; filename="cronistoria-${data.caseData.code}.docx"`,
+        },
+      });
     }
 
     const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';

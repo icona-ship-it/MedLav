@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
-import { statusConfig, caseTypeLabels, processingStageConfig } from '@/lib/constants';
+import { statusConfig, caseTypeLabels, processingStageConfig, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
 
 const STAGE_ICONS = {
@@ -108,6 +108,8 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
             <div className="space-y-3">
               {cases.map((caseItem) => {
                 const status = statusConfig[caseItem.status] ?? statusConfig.bozza;
+                const moduleId = (caseItem as Record<string, unknown>).module_id as string | null;
+                const label = moduleId ? moduleLabels[moduleId] : caseTypeLabels[caseItem.case_type as string];
                 return (
                   <Link
                     key={caseItem.id}
@@ -133,13 +135,15 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                             </Badge>
                           );
                         })()}
-                        <Badge variant="outline">
-                          {(caseItem.case_role as string).toUpperCase()}
-                        </Badge>
+                        {!moduleId && (
+                          <Badge variant="outline">
+                            {(caseItem.case_role as string).toUpperCase()}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {caseItem.patient_initials || 'N/D'} &mdash;{' '}
-                        {caseTypeLabels[caseItem.case_type as string] ?? caseItem.case_type}
+                        {label ?? caseItem.case_type}
                       </p>
                     </div>
                     <div className="text-right text-sm text-muted-foreground">

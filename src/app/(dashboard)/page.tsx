@@ -44,19 +44,29 @@ const CATEGORY_ICONS: Record<ModuleCategoryId, React.ElementType> = {
 
 const PRIORITY_CATEGORY_IDS: ReadonlySet<ModuleCategoryId> = new Set([1, 7, 8]);
 
-/** Count of sub-modules per category */
+/** Visible (non-hidden) modules for a category */
+function getVisibleModules(categoryId: ModuleCategoryId) {
+  return MODULE_CATALOG.filter((m) => m.categoryId === categoryId && !m.hidden);
+}
+
+/** Count of visible sub-modules per category */
 function getModuleCount(categoryId: ModuleCategoryId): number {
-  return MODULE_CATALOG.filter((m) => m.categoryId === categoryId).length;
+  return getVisibleModules(categoryId).length;
 }
 
 /** For single-module categories, return the direct module link */
 function getCategoryHref(categoryId: ModuleCategoryId): string {
-  const modules = MODULE_CATALOG.filter((m) => m.categoryId === categoryId);
+  const modules = getVisibleModules(categoryId);
   if (modules.length === 1) {
     return `/cases/new?module=${modules[0].id}`;
   }
   // Multi-module: go to category picker page
   return `/cases/new?category=${categoryId}`;
+}
+
+/** True if category has at least one visible module */
+function isCategoryVisible(categoryId: ModuleCategoryId): boolean {
+  return getVisibleModules(categoryId).length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +78,8 @@ export default async function DashboardPage() {
   const cases = allCases.filter((c) => c.status !== 'archiviato');
   const recentCases = cases.slice(0, 5);
 
-  const priorityCategories = MODULE_CATEGORIES.filter((c) => PRIORITY_CATEGORY_IDS.has(c.id));
-  const otherCategories = MODULE_CATEGORIES.filter((c) => !PRIORITY_CATEGORY_IDS.has(c.id));
+  const priorityCategories = MODULE_CATEGORIES.filter((c) => PRIORITY_CATEGORY_IDS.has(c.id) && isCategoryVisible(c.id));
+  const otherCategories = MODULE_CATEGORIES.filter((c) => !PRIORITY_CATEGORY_IDS.has(c.id) && isCategoryVisible(c.id));
 
   return (
     <div className="space-y-10">

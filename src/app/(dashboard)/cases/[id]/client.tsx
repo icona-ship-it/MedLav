@@ -30,7 +30,7 @@ interface CaseDetailClientProps {
 
 // --- Constants ---
 
-const POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = 5000;
 
 const FULL_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },

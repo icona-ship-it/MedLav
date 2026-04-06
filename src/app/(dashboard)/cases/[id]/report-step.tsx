@@ -3,13 +3,18 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -144,6 +149,54 @@ export function ReportStep({
             </div>
           </CardContent>
         </Card>
+      );
+    }
+
+    // Extraction-only case: no report but events available after completion
+    if (events.length > 0 && processingStage === 'completato') {
+      return (
+        <div className="flex flex-col">
+          {/* Export toolbar for timeline data */}
+          <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3 mb-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Cronistoria con {events.length} eventi estratti
+              </p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    Esporta Cronistoria
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/cases/${caseId}/export/docx`} download>
+                      <Download className="mr-2 h-3.5 w-3.5" />
+                      Esporta DOCX
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/cases/${caseId}/export/csv`} download>
+                      <Download className="mr-2 h-3.5 w-3.5" />
+                      Esporta CSV
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Events tab only — no report tab */}
+          <EventsTab
+            caseId={caseId}
+            events={events}
+            eventImages={eventImages}
+            onImageClick={() => {}}
+            highlightedEventOrderNumber={highlightedEventId}
+            onViewInReport={() => {}}
+          />
+        </div>
       );
     }
 
