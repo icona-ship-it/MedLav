@@ -358,53 +358,12 @@ export const processCase = inngest.createFunction(
     if (calcSettled.status === 'rejected') logger.error('pipeline', `Period calculation failed: ${calcSettled.reason instanceof Error ? calcSettled.reason.message : 'unknown'}`);
 
     // ── Step 5.5: LLM Anomaly Resolution ─────────────────────────
-    let anomalies = await step.run(
+    // Anomalies are resolved and saved to DB, but NO pause for user review.
+    // The report generates immediately. User reviews anomalies after seeing the report.
+    const anomalies = await step.run(
       'resolve-anomalies',
       () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
     );
-
-    // ── Anomaly review gate ──────────────────────────────────────
-    const hasIssues = anomalies.length > 0 || missingDocs.length > 0;
-    if (hasIssues) {
-      await step.run('mark-revisione-anomalie', async () => {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-        await supabase
-          .from('cases')
-          .update({ processing_stage: 'revisione_anomalie', updated_at: new Date().toISOString() })
-          .eq('id', caseId);
-        logger.info('pipeline', `Pausing for anomaly review (${anomalies.length} anomalies, ${missingDocs.length} missing docs)`);
-      });
-
-      const anomalyConfirmEvent = await step.waitForEvent(
-        'wait-for-anomaly-review',
-        {
-          event: 'case/anomaly-review.confirmed',
-          match: 'data.caseId',
-          timeout: '7d',
-        },
-      );
-      if (!anomalyConfirmEvent) {
-        throw new Error('Anomaly review timed out after 7 days');
-      }
-
-      anomalies = await step.run('refresh-anomalies-after-review', async () => {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-        const { data } = await supabase
-          .from('anomalies')
-          .select('*')
-          .eq('case_id', caseId)
-          .in('status', ['detected', 'llm_confirmed', 'user_confirmed']);
-        return (data ?? []).map((row) => ({
-          anomalyType: row.anomaly_type,
-          severity: row.severity as 'critica' | 'alta' | 'media' | 'bassa',
-          description: row.description as string,
-          involvedEvents: row.involved_events ? JSON.parse(row.involved_events as string) as Array<{ eventId: string | null; orderNumber: number; date: string; title: string }> : [],
-          suggestion: (row.suggestion as string) ?? '',
-        }));
-      });
-    }
 
     // ── Mark generating report ───────────────────────────────────
     await step.run('mark-generazione-report', async () => {

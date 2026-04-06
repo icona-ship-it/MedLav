@@ -2,14 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
 import { CaseHeader } from './case-header';
 import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
 import { PeriziaMetadataForm } from './perizia-form';
 import { ReportStep } from './report-step';
 import { WizardStepBar } from './wizard-step-bar';
-import { AnomalyReviewStep } from './anomaly-review-step';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
 } from './types';
@@ -38,8 +36,7 @@ const FULL_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },
   { number: 2, label: 'Info Perizia', hint: 'Compila i dati della perizia (facoltativo)' },
   { number: 3, label: 'Elaborazione', hint: 'Avvia l\'analisi AI dei documenti' },
-  { number: 4, label: 'Revisione', hint: 'Rivedi le segnalazioni trovate' },
-  { number: 5, label: 'Report', hint: 'Il tuo report è pronto' },
+  { number: 4, label: 'Report', hint: 'Il tuo report è pronto' },
 ] as const;
 
 const EXTRACTION_WIZARD_STEPS = [
@@ -78,19 +75,19 @@ function computeAutoStep(
   hasReport: boolean,
   hasEvents: boolean,
 ): number {
-  // Stage-based routing (new pipeline — no classification review gate)
-  if (processingStage === 'completato') return 5;
-  if (processingStage === 'generazione_report') return 5; // step 5 with spinner
-  if (processingStage === 'revisione_anomalie') return 4;
+  // 4-step wizard: 1=Documenti, 2=Info Perizia, 3=Elaborazione, 4=Report
+  // No more separate anomaly review step — anomalies shown inside report step
+  if (processingStage === 'completato') return 4;
+  if (processingStage === 'generazione_report') return 4;
+  if (processingStage === 'revisione_anomalie') return 4; // legacy: treat as report step
   if (processingStage === 'elaborazione') return 3;
   if (processingStage === 'errore') {
-    if (hasReport) return 5;  // Report saved before failure (e.g. finalize failed)
-    if (hasEvents) return 4;  // Partial results available
-    return 3;                 // Early failure — step 3 shows retry button
+    if (hasReport) return 4;
+    if (hasEvents) return 4;
+    return 3;
   }
 
-  // Fallback for legacy cases (processing_stage = 'idle')
-  if (hasReport) return 5;
+  if (hasReport) return 4;
   if (hasEvents) return 4;
   if (hasProcessingDocs) return 3;
   return 1;
@@ -206,11 +203,6 @@ export function CaseDetailClient({
                 ? 'In elaborazione...'
                 : processingStage === 'errore' ? 'Errore'
                 : 'Pronto')
-            : step.number === 4 ? (processingStage === 'revisione_anomalie'
-                ? `${localAnomalies.length + missingDocs.length} da revisionare`
-                : localAnomalies.length > 0 || missingDocs.length > 0
-                ? `${localAnomalies.length + missingDocs.length} segnalazioni`
-                : 'Nessuna anomalia')
             : processingStage === 'generazione_report'
                 ? 'Generazione in corso...'
                 : hasReport ? 'Report pronto' : 'In attesa'),
@@ -274,7 +266,8 @@ export function CaseDetailClient({
         </>
       ) : (
         <>
-          {/* === Full pipeline: 5-step wizard === */}
+          {/* === Full pipeline: 4-step wizard === */}
+          {/* No separate anomaly review step — anomalies shown inside report */}
 
           {/* STEP 1: Documenti */}
           {activeStep === 1 && (
@@ -315,39 +308,9 @@ export function CaseDetailClient({
             </div>
           )}
 
-          {/* STEP 4: Revisione Anomalie */}
+          {/* STEP 4: Report (includes anomalies) */}
           {activeStep === 4 && (
             <div key="step-4" className="animate-step-in">
-              {processingStage === 'revisione_anomalie' || hasEvents || localAnomalies.length > 0 ? (
-                <AnomalyReviewStep
-                  caseId={caseId}
-                  anomalies={localAnomalies}
-                  missingDocs={missingDocs}
-                  events={events}
-                  documents={localDocuments}
-                  documentPages={documentPages}
-                  processingStage={processingStage}
-                  onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
-                  onGenerateStarted={() => {
-                    userNavigatedRef.current = false;
-                    setActiveStep(5);
-                  }}
-                />
-              ) : (
-                <Card>
-                  <CardContent className="pt-6">
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      In attesa dell&apos;elaborazione. Carica i documenti e avvia l&apos;elaborazione.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* STEP 5: Report */}
-          {activeStep === 5 && (
-            <div key="step-5" className="animate-step-in">
               <ReportStep
                 caseId={caseId}
                 report={report}
