@@ -103,8 +103,8 @@ export const processCase = inngest.createFunction(
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
-    // ── Step 0: Mark as elaborazione ──────────────────────────────
-    await step.run('mark-elaborazione', async () => {
+    // ── Step 0+1: Init pipeline + fetch metadata (combined to reduce overhead) ──
+    const caseData = await step.run('init-pipeline', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       await supabase
@@ -112,10 +112,8 @@ export const processCase = inngest.createFunction(
         .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
         .eq('id', caseId);
       logger.info('pipeline', `Marked case ${caseId} as elaborazione`);
+      return fetchCaseMetadata(caseId, userId);
     });
-
-    // ── Step 1: Fetch case metadata ──────────────────────────────
-    const caseData = await step.run('fetch-case-metadata', () => fetchCaseMetadata(caseId, userId));
     const { documents } = caseData;
 
     if (documents.length === 0) {
@@ -142,10 +140,8 @@ export const processCase = inngest.createFunction(
       throw new Error('All documents failed OCR processing');
     }
 
-    // ── Step 3.0: Refresh document types from DB ──────────────────
-    // Document types set by user during upload or by Document Organizer (Pro)
-    // No automatic classification — user selects types manually or uses Document Organizer
-    const refreshedTypes = await step.run('refresh-document-types', async () => {
+    // ── Step 3.0: Refresh types + metadata (combined to reduce step overhead) ──
+    const { updatedMetadata, pipelineMode, refreshedTypes } = await step.run('refresh-metadata', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
 
@@ -159,12 +155,7 @@ export const processCase = inngest.createFunction(
         throw new Error('Case was cancelled by user');
       }
 
-      await supabase
-        .from('cases')
-        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
-        .eq('id', caseId);
-
-      // Read updated document types
+      // Refresh document types
       const docIds = ocrResults.map((r) => r.documentId);
       const { data: docs } = await supabase
         .from('documents')
@@ -175,23 +166,11 @@ export const processCase = inngest.createFunction(
       for (const doc of docs ?? []) {
         typeMap[doc.id as string] = (doc.document_type ?? 'altro') as string;
       }
-      return typeMap;
-    });
 
-    // Apply updated types to in-memory OCR results
-    for (const ocr of ocrResults) {
-      if (refreshedTypes[ocr.documentId]) {
-        ocr.documentType = refreshedTypes[ocr.documentId];
-      }
-    }
-
-    // Refresh metadata with updated case info
-    const { metadata: updatedMetadata, pipelineMode } = await step.run('refresh-case-metadata', async () => {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const supabase = createAdminClient();
+      // Refresh case metadata
       const { data: caseRow } = await supabase
         .from('cases')
-        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata, pipeline_mode')
+        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata, pipeline_mode, module_id')
         .eq('id', caseId)
         .single();
       if (!caseRow) throw new Error(`Case not found: ${caseId}`);
@@ -207,12 +186,21 @@ export const processCase = inngest.createFunction(
         patientInitials: caseRow.patient_initials as string | null,
         userId: caseRow.user_id as string,
         periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+        moduleId: (caseRow as Record<string, unknown>).module_id as string | undefined,
       };
       return {
-        metadata,
+        updatedMetadata: metadata,
         pipelineMode: ((caseRow as Record<string, unknown>).pipeline_mode ?? 'full') as PipelineMode,
+        refreshedTypes: typeMap,
       };
     });
+
+    // Apply updated types to in-memory OCR results
+    for (const ocr of ocrResults) {
+      if (refreshedTypes[ocr.documentId]) {
+        ocr.documentType = refreshedTypes[ocr.documentId];
+      }
+    }
 
     // ── Pipeline branching: anonymize_only stops after OCR ───────
     if (pipelineMode === 'anonymize_only') {
@@ -267,18 +255,18 @@ export const processCase = inngest.createFunction(
       }
     }
 
-    await step.run('mark-extraction-start', async () => {
+    // Mark docs as extracting (inline, no separate step to reduce overhead)
+    await step.run('start-extraction', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const docIds = ocrResults.map((r) => r.documentId);
-      const BATCH_SIZE = 500;
-      for (let i = 0; i < docIds.length; i += BATCH_SIZE) {
+      for (let i = 0; i < docIds.length; i += 500) {
         await supabase.from('documents').update({
           processing_status: 'estrazione_in_corso',
           updated_at: new Date().toISOString(),
-        }).in('id', docIds.slice(i, i + BATCH_SIZE));
+        }).in('id', docIds.slice(i, i + 500));
       }
-      logger.info('pipeline', `Marked ${docIds.length} docs as estrazione_in_corso, ${allChunkJobs.length} total chunks`);
+      logger.info('pipeline', `Starting extraction: ${docIds.length} docs, ${allChunkJobs.length} chunks`);
     });
 
     const extractionBatches = chunkArray(allChunkJobs, EXTRACTION_BATCH_SIZE);
