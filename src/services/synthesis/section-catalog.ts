@@ -137,8 +137,8 @@ FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
 
 Regole:
 - Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
-- Diari clinici giornalieri: riportare solo i giorni con variazioni cliniche significative (interventi, complicanze, modifiche terapia). Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
-- Esami di laboratorio: riportare solo valori alterati e quelli rilevanti per il caso in tabella markdown. Aggiungere nota "restanti parametri nella norma" se applicabile
+- Diari clinici giornalieri: riportare TUTTI i giorni con variazioni cliniche (interventi, complicanze, modifiche terapia, parametri alterati, visite). NEL DUBBIO, INCLUDERE — il medico legale filtrerà. Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
+- Esami di laboratorio: riportare TUTTI i valori in tabella markdown. Valori alterati evidenziati in grassetto. Valori nella norma riportati con nota "(n.v.)" se lo spazio lo consente, altrimenti nota "restanti parametri nella norma"
 - Verbali operatori: riprodurre INTEGRALMENTE, sempre
 - Referti radiologici e strumentali: riprodurre INTEGRALMENTE
 - Lettere di dimissione: riprodurre INTEGRALMENTE diagnosi e terapia prescritta
@@ -398,7 +398,7 @@ FORMATO CITAZIONE per OGNI documento:
 Regole:
 - OGNI evento fornito DEVE comparire
 - Diari clinici: solo giorni con variazioni significative
-- Esami lab: solo valori alterati e rilevanti
+- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
 - Verbali operatori: riprodurre INTEGRALMENTE
 - Referti radiologici: riprodurre INTEGRALMENTE
 - Scrivi in PROSA DISCORSIVA
@@ -519,7 +519,7 @@ FORMATO CITAZIONE per OGNI documento:
 Regole:
 - OGNI evento fornito DEVE comparire
 - Diari clinici: solo giorni con variazioni significative
-- Esami lab: solo valori alterati e rilevanti
+- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
 - Verbali operatori: riprodurre INTEGRALMENTE
 - Referti radiologici: riprodurre INTEGRALMENTE
 - Scrivi in PROSA DISCORSIVA
@@ -616,7 +616,7 @@ FORMATO CITAZIONE per OGNI documento:
 Regole:
 - OGNI evento fornito DEVE comparire
 - Diari clinici: solo giorni con variazioni significative
-- Esami lab: solo valori alterati e rilevanti
+- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
 - Verbali operatori: riprodurre INTEGRALMENTE
 - Referti radiologici: riprodurre INTEGRALMENTE
 - Scrivi in PROSA DISCORSIVA
