@@ -12,6 +12,7 @@ import { DOCUMENT_TYPES } from '@/lib/constants';
 interface FileUploadProps {
   caseId: string;
   onUploadComplete?: () => void;
+  onUploadStart?: () => void;
 }
 
 interface UploadProgress {
@@ -20,7 +21,7 @@ interface UploadProgress {
   error?: string;
 }
 
-export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
+export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [fileTypes, setFileTypes] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
@@ -58,6 +59,7 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
   async function handleUpload() {
     if (files.length === 0) return;
     setIsUploading(true);
+    onUploadStart?.();
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -274,29 +276,62 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
 
       {/* Upload progress */}
       {progress.length > 0 && (
-        <div className="space-y-2" aria-live="polite">
-          <p className="text-sm font-medium">
-            {isUploading ? 'Caricamento in corso...' : `Completato: ${doneCount}/${progress.length}`}
-          </p>
-          {progress.map((p) => (
-            <div key={p.fileName} className="flex items-center justify-between rounded-md border px-3 py-2">
-              <span className="truncate text-sm">{p.fileName}</span>
-              <div className="shrink-0 ml-2">
-                {p.status === 'pending' && (
-                  <span className="text-xs text-muted-foreground">In attesa</span>
-                )}
-                {(p.status === 'uploading' || p.status === 'saving') && (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                )}
-                {p.status === 'done' && (
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                )}
-                {p.status === 'error' && (
-                  <span className="text-xs text-destructive">{p.error}</span>
-                )}
-              </div>
+        <div className="space-y-3" aria-live="polite">
+          {/* Global progress header + bar */}
+          <div className="space-y-2">
+            <p className="text-sm font-bold">
+              Caricamento: {doneCount + errorCount} di {progress.length} documenti
+            </p>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.round(((doneCount + errorCount) / progress.length) * 100)}%` }}
+              />
             </div>
-          ))}
+            {isUploading && (
+              <p className="text-xs text-muted-foreground">
+                Non chiudere questa pagina durante il caricamento
+              </p>
+            )}
+          </div>
+
+          {/* Compact scrollable file list */}
+          <div className="max-h-[300px] overflow-y-auto space-y-1">
+            {progress.map((p) => (
+              <div
+                key={p.fileName}
+                className={`flex items-center justify-between rounded-md px-3 py-1.5 border-l-4 ${
+                  p.status === 'uploading' || p.status === 'saving'
+                    ? 'border-l-primary bg-primary/5'
+                    : p.status === 'done'
+                      ? 'border-l-green-500 bg-green-50/50 dark:bg-green-950/10'
+                      : p.status === 'error'
+                        ? 'border-l-destructive bg-destructive/5'
+                        : 'border-l-muted-foreground/30'
+                }`}
+              >
+                <span className={`truncate text-sm ${
+                  p.status === 'pending' ? 'text-muted-foreground text-xs' : ''
+                }`}>
+                  {p.fileName}
+                </span>
+                <div className="shrink-0 ml-2">
+                  {p.status === 'pending' && (
+                    <span className="text-xs text-muted-foreground">In attesa</span>
+                  )}
+                  {(p.status === 'uploading' || p.status === 'saving') && (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  )}
+                  {p.status === 'done' && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                  {p.status === 'error' && (
+                    <span className="text-xs text-destructive">{p.error}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -305,8 +340,8 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
         <div
           className={`rounded-md p-3 text-sm ${
             errorCount === 0
-              ? 'bg-green-50 text-green-800'
-              : 'bg-yellow-50 text-yellow-800'
+              ? 'bg-green-50 text-green-800 dark:bg-green-950/20 dark:text-green-200'
+              : 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/20 dark:text-yellow-200'
           }`}
         >
           {errorCount === 0

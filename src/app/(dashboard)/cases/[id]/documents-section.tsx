@@ -53,6 +53,7 @@ export function DocumentsSection({
   onProceedToNext,
 }: DocumentsSectionProps) {
   const router = useRouter();
+  const [isUploading, setIsUploading] = useState(false);
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -93,7 +94,10 @@ export function DocumentsSection({
     }
   }, [deleteTarget, caseId, router]);
 
-  const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
+  const completedCount = documents.filter((d) => d.processing_status === 'completato').length;
+  const processingCount = documents.filter((d) => isDocProcessing(d.processing_status)).length;
+  const errorCount = documents.filter((d) => d.processing_status === 'errore').length;
+  const readyCount = documents.filter((d) => d.processing_status === 'caricato').length;
 
   return (
     <div className="space-y-4">
@@ -109,7 +113,7 @@ export function DocumentsSection({
             </p>
           </div>
 
-          <FileUpload caseId={caseId} onUploadComplete={() => router.refresh()} />
+          <FileUpload caseId={caseId} onUploadStart={() => setIsUploading(true)} onUploadComplete={() => { setIsUploading(false); router.refresh(); }} />
 
           {documents.length === 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -134,20 +138,36 @@ export function DocumentsSection({
         </CardContent>
       </Card>
 
-      {/* Upload status info — shown above the document list */}
-      {hasUploadedDocs && (
-        <p className="text-sm text-muted-foreground text-center">
-          {uploadedCount} {uploadedCount === 1 ? 'documento caricato' : 'documenti caricati'} — carica tutti i documenti prima di procedere.
-        </p>
-      )}
-
       {/* Documents list — same card style as classification review */}
       {documents.length > 0 && (
         <Card>
           <CardContent className="pt-6 space-y-4">
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium">Documenti caricati</p>
-              <p className="text-xs text-muted-foreground">{documents.length} {documents.length === 1 ? 'documento' : 'documenti'}</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-center">
+                {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {completedCount > 0 && (
+                  <Badge variant="success" className="text-xs">
+                    {completedCount} {completedCount === 1 ? 'completato' : 'completati'}
+                  </Badge>
+                )}
+                {processingCount > 0 && (
+                  <Badge variant="warning" className="text-xs">
+                    {processingCount} in elaborazione
+                  </Badge>
+                )}
+                {readyCount > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {readyCount} {readyCount === 1 ? 'pronto' : 'pronti'}
+                  </Badge>
+                )}
+                {errorCount > 0 && (
+                  <Badge variant="destructive" className="text-xs">
+                    {errorCount} con {errorCount === 1 ? 'errore' : 'errori'}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -232,7 +252,7 @@ export function DocumentsSection({
       )}
 
       {/* Proceed button — sticky footer, always visible when docs uploaded */}
-      {hasUploadedDocs && (
+      {hasUploadedDocs && !isUploading && (
         <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
           <Button
             size="lg"
