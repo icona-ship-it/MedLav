@@ -107,7 +107,7 @@ function CategoryPicker({ category, modules }: { category: ModuleCategory; modul
   const CategoryIcon = CATEGORY_ICONS[category.id as ModuleCategoryId] ?? Scale;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 py-4">
+    <div className="space-y-8">
       {/* Back */}
       <Link
         href="/"
@@ -117,39 +117,46 @@ function CategoryPicker({ category, modules }: { category: ModuleCategory; modul
         Torna indietro
       </Link>
 
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-          <CategoryIcon className="h-7 w-7 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{category.label}</h1>
-          <p className="mt-0.5 text-muted-foreground">{category.description}</p>
+      {/* Header — same style as dashboard */}
+      <div>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <CategoryIcon className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{category.label}</h1>
+            <p className="mt-1 text-muted-foreground">{category.description}</p>
+          </div>
         </div>
       </div>
 
       {/* Sub-type prompt */}
-      <p className="text-sm text-muted-foreground">
-        Che tipo di {category.label.toLowerCase()} devi fare?
+      <p className="text-muted-foreground">
+        Scegli il tipo di elaborato che vuoi creare.
       </p>
 
-      {/* Sub-type cards */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Sub-type cards — same card style as dashboard priority cards */}
+      <div className="grid gap-4 sm:grid-cols-2">
         {modules.map((mod) => (
           <Link
             key={mod.id}
             href={`/cases/new?module=${mod.id}`}
             className="group block"
           >
-            <Card className="h-full rounded-xl transition-all hover:shadow-md hover:border-primary/30">
-              <CardContent className="flex items-center gap-4 p-5">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{mod.label}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground leading-snug">
+            <Card className="h-full rounded-2xl border-primary/20 bg-primary/[0.03] transition-all hover:border-primary/40 hover:shadow-lg">
+              <CardContent className="flex flex-col gap-3 p-6">
+                <div>
+                  <h3 className="text-lg font-bold">{mod.label}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
                     {mod.description}
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
+                <div className="mt-auto flex items-center justify-end pt-2">
+                  <span className="flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
+                    Inizia
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </Link>
