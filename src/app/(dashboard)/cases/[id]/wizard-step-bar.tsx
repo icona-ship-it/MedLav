@@ -67,7 +67,7 @@ export function WizardStepBar({
               aria-label={`Vai a ${step.label}`}
             />
           ))}
-          <span className="ml-1 text-xs text-muted-foreground">{activeStep}/5</span>
+          <span className="ml-1 text-xs text-muted-foreground">{activeStep}/{steps.length}</span>
         </div>
       </div>
 
