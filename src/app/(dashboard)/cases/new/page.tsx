@@ -199,7 +199,7 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-8 py-4">
+    <div className="space-y-8">
       {/* Back link */}
       <Link
         href={backHref}
@@ -209,19 +209,22 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
         Torna indietro
       </Link>
 
-      {/* Hero */}
-      <div className="flex flex-col items-center text-center space-y-3">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-          <CategoryIcon className="h-7 w-7 text-primary" />
+      {/* Header — same style as dashboard and category picker */}
+      <div>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <CategoryIcon className="h-6 w-6" />
+          </div>
+          <div>
+            <Badge variant="secondary" className="text-xs font-normal mb-1">
+              {category.label}
+            </Badge>
+            <h1 className="text-3xl font-bold tracking-tight">{moduleDef.label}</h1>
+            <p className="mt-1 text-muted-foreground">{moduleDef.description}</p>
+          </div>
         </div>
-        <Badge variant="secondary" className="text-xs font-normal">
-          {category.label}
-        </Badge>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {moduleDef.label}
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-md">
-          {moduleDef.description}
+        <p className="mt-4 text-sm text-muted-foreground">
+          Dopo la creazione potrai caricare i documenti e avviare l&apos;elaborazione.
         </p>
       </div>
 
@@ -233,7 +236,7 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
           </div>
         )}
 
-        <Card className="rounded-xl">
+        <Card className="rounded-2xl">
           <CardContent className="p-6 sm:p-8 space-y-5">
             <div className="space-y-1">
               <h2 className="text-base font-semibold">Informazioni caso</h2>
@@ -242,24 +245,26 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="patientInitials">Iniziali paziente</Label>
-              <Input
-                id="patientInitials"
-                name="patientInitials"
-                placeholder="es. M.R."
-                maxLength={10}
-              />
-            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="patientInitials">Iniziali paziente</Label>
+                <Input
+                  id="patientInitials"
+                  name="patientInitials"
+                  placeholder="es. M.R."
+                  maxLength={10}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="practiceReference">Riferimento pratica</Label>
-              <Input
-                id="practiceReference"
-                name="practiceReference"
-                placeholder="es. RG 1234/2026"
-                maxLength={100}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="practiceReference">Riferimento pratica</Label>
+                <Input
+                  id="practiceReference"
+                  name="practiceReference"
+                  placeholder="es. RG 1234/2026"
+                  maxLength={100}
+                />
+              </div>
             </div>
 
             <input type="hidden" name="moduleId" value={moduleDef.id} />
@@ -270,7 +275,7 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
           type="submit"
           size="lg"
           disabled={isSubmitting}
-          className="w-full py-6 text-base"
+          className="w-full sm:w-auto px-12 py-6 text-base"
         >
           {isSubmitting ? (
             <>
@@ -284,9 +289,6 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
             </>
           )}
         </Button>
-        <p className="text-center text-xs text-muted-foreground">
-          Dopo la creazione potrai caricare i documenti
-        </p>
       </form>
     </div>
   );
