@@ -315,7 +315,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                 }`}>
                   {p.fileName}
                 </span>
-                <div className="shrink-0 ml-2">
+                <div className="flex items-center gap-1 shrink-0 ml-2">
                   {p.status === 'pending' && (
                     <span className="text-xs text-muted-foreground">In attesa</span>
                   )}
@@ -327,6 +327,16 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                   )}
                   {p.status === 'error' && (
                     <span className="text-xs text-destructive">{p.error}</span>
+                  )}
+                  {(p.status === 'done' || p.status === 'error') && (
+                    <button
+                      type="button"
+                      onClick={() => setProgress((prev) => prev.filter((item) => item.fileName !== p.fileName))}
+                      className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label={`Rimuovi ${p.fileName}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>

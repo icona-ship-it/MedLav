@@ -138,8 +138,8 @@ export function DocumentsSection({
         </CardContent>
       </Card>
 
-      {/* Documents list — same card style as classification review */}
-      {documents.length > 0 && (
+      {/* Documents list — hidden during upload to avoid visual repetition */}
+      {documents.length > 0 && !isUploading && (
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="space-y-2">
