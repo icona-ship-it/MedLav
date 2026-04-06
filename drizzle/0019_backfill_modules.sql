@@ -9,7 +9,7 @@ UPDATE cases SET module_id = 'perizia_ml_infortuni', module_category = 1, pipeli
 WHERE case_role = 'stragiudiziale' AND case_type = 'infortuni' AND module_id IS NULL;
 
 UPDATE cases SET module_id = 'perizia_ml_resp_prof', module_category = 1, pipeline_mode = 'full'
-WHERE case_role = 'stragiudiziale' AND case_type IN ('generica', 'responsabilita_medica') AND module_id IS NULL;
+WHERE case_role = 'stragiudiziale' AND case_type = 'generica' AND module_id IS NULL;
 
 UPDATE cases SET module_id = 'perizia_ml_malattia', module_category = 1, pipeline_mode = 'full'
 WHERE case_role = 'stragiudiziale' AND case_type = 'previdenziale' AND module_id IS NULL;
@@ -29,7 +29,7 @@ UPDATE cases SET module_id = 'ctu_civile_malattia', module_category = 2, pipelin
 WHERE case_role = 'ctu' AND case_type = 'previdenziale' AND module_id IS NULL;
 
 UPDATE cases SET module_id = 'ctu_civile_resp_prof', module_category = 2, pipeline_mode = 'full'
-WHERE case_role = 'ctu' AND case_type IN ('generica', 'responsabilita_medica') AND module_id IS NULL;
+WHERE case_role = 'ctu' AND case_type = 'generica' AND module_id IS NULL;
 
 -- Remaining CTU → ctu_civile_resp_prof
 UPDATE cases SET module_id = 'ctu_civile_resp_prof', module_category = 2, pipeline_mode = 'full'
