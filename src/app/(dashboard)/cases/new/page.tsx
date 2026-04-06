@@ -15,6 +15,8 @@ import {
   BookOpen,
   Calculator,
   EyeOff,
+  Briefcase,
+  Gavel,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
@@ -33,16 +35,16 @@ import type { ModuleDefinition, ModuleCategory, ModuleCategoryId } from '@/types
 // --- Category icon mapping ---
 
 const CATEGORY_ICONS: Record<ModuleCategoryId, LucideIcon> = {
-  1: Scale,        // Perizia ML
-  2: Scale,        // CTU civile
-  3: Shield,       // CTU previdenziale
-  4: HardHat,      // CTU INAIL
-  5: FileCheck,    // Parere pro veritate
-  6: FileSearch,   // Parere scopo riserva
-  7: Search,       // Analisi doc sanitari
-  8: BookOpen,     // Analisi doc giudiziari
-  9: Calculator,   // Analisi spese
-  10: EyeOff,      // Anonimizzatore
+  1: Scale,
+  2: Gavel,
+  3: Shield,
+  4: HardHat,
+  5: BookOpen,
+  6: FileSearch,
+  7: Search,
+  8: Briefcase,
+  9: Calculator,
+  10: EyeOff,
 };
 
 // --- Helpers ---
@@ -55,34 +57,110 @@ function findCategory(categoryId: number): ModuleCategory | undefined {
   return MODULE_CATEGORIES.find((c) => c.id === categoryId);
 }
 
+function getModulesForCategory(categoryId: number): ModuleDefinition[] {
+  return MODULE_CATALOG.filter((m) => m.categoryId === categoryId);
+}
+
 // --- Component ---
 
 export default function NewCasePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const moduleId = searchParams.get('module');
+  const categoryId = searchParams.get('category');
 
   const moduleDef = moduleId ? findModule(moduleId) : undefined;
-  const category = moduleDef ? findCategory(moduleDef.categoryId) : undefined;
+  const category = moduleDef
+    ? findCategory(moduleDef.categoryId)
+    : categoryId
+      ? findCategory(parseInt(categoryId, 10))
+      : undefined;
 
-  // No module param or invalid module → redirect to dashboard (module catalog)
-  useEffect(() => {
-    if (!moduleId || (moduleId && !moduleDef)) {
-      router.replace('/');
+  // Category picker: user clicked a multi-module category from dashboard
+  if (!moduleId && category) {
+    const modules = getModulesForCategory(category.id);
+    if (modules.length === 1) {
+      // Single module — go straight to creation form
+      return <ModuleNewCase moduleDef={modules[0]} category={category} />;
     }
-  }, [moduleId, moduleDef, router]);
+    return <CategoryPicker category={category} modules={modules} />;
+  }
 
-  // Module-based flow
+  // Module creation form
   if (moduleDef && category) {
     return <ModuleNewCase moduleDef={moduleDef} category={category} />;
   }
 
-  // Show nothing while redirecting
+  // No valid param → redirect to dashboard
+  useEffect(() => {
+    router.replace('/');
+  }, [router]);
+
   return null;
 }
 
 // ---------------------------------------------------------------------------
-// Module-based "New Case" form
+// Category picker — choose sub-type within a category
+// ---------------------------------------------------------------------------
+
+function CategoryPicker({ category, modules }: { category: ModuleCategory; modules: ModuleDefinition[] }) {
+  const CategoryIcon = CATEGORY_ICONS[category.id as ModuleCategoryId] ?? Scale;
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-8 py-4">
+      {/* Back */}
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Torna indietro
+      </Link>
+
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+          <CategoryIcon className="h-7 w-7 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{category.label}</h1>
+          <p className="mt-0.5 text-muted-foreground">{category.description}</p>
+        </div>
+      </div>
+
+      {/* Sub-type prompt */}
+      <p className="text-sm text-muted-foreground">
+        Che tipo di {category.label.toLowerCase()} devi fare?
+      </p>
+
+      {/* Sub-type cards */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {modules.map((mod) => (
+          <Link
+            key={mod.id}
+            href={`/cases/new?module=${mod.id}`}
+            className="group block"
+          >
+            <Card className="h-full rounded-xl transition-all hover:shadow-md hover:border-primary/30">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{mod.label}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground leading-snug">
+                    {mod.description}
+                  </p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Module creation form
 // ---------------------------------------------------------------------------
 
 function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; category: ModuleCategory }) {
@@ -90,6 +168,8 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
   const [error, setError] = useState<string | null>(null);
 
   const CategoryIcon = CATEGORY_ICONS[category.id as ModuleCategoryId] ?? Scale;
+  const modules = getModulesForCategory(category.id);
+  const backHref = modules.length > 1 ? `/cases/new?category=${category.id}` : '/';
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -115,17 +195,17 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
     <div className="mx-auto max-w-lg space-y-8 py-4">
       {/* Back link */}
       <Link
-        href="/"
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Torna al catalogo
+        Torna indietro
       </Link>
 
-      {/* Hero section */}
-      <div className="flex flex-col items-center text-center space-y-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-          <CategoryIcon className="h-8 w-8 text-primary" />
+      {/* Hero */}
+      <div className="flex flex-col items-center text-center space-y-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+          <CategoryIcon className="h-7 w-7 text-primary" />
         </div>
         <Badge variant="secondary" className="text-xs font-normal">
           {category.label}
@@ -133,7 +213,7 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
         <h1 className="text-2xl font-bold tracking-tight">
           {moduleDef.label}
         </h1>
-        <p className="text-muted-foreground text-sm leading-relaxed max-w-md">
+        <p className="text-sm text-muted-foreground max-w-md">
           {moduleDef.description}
         </p>
       </div>
@@ -147,16 +227,14 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
         )}
 
         <Card className="rounded-xl">
-          <CardContent className="p-8 space-y-6">
-            {/* Section header */}
+          <CardContent className="p-6 sm:p-8 space-y-5">
             <div className="space-y-1">
               <h2 className="text-base font-semibold">Informazioni caso</h2>
               <p className="text-xs text-muted-foreground">
-                Facoltative. Puoi sempre aggiungerle in seguito.
+                Facoltative — puoi sempre aggiungerle dopo.
               </p>
             </div>
 
-            {/* Patient initials */}
             <div className="space-y-2">
               <Label htmlFor="patientInitials">Iniziali paziente</Label>
               <Input
@@ -165,12 +243,8 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
                 placeholder="es. M.R."
                 maxLength={10}
               />
-              <p className="text-xs text-muted-foreground">
-                Per identificare il caso (es. M.R.)
-              </p>
             </div>
 
-            {/* Practice reference */}
             <div className="space-y-2">
               <Label htmlFor="practiceReference">Riferimento pratica</Label>
               <Input
@@ -179,43 +253,33 @@ function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; c
                 placeholder="es. RG 1234/2026"
                 maxLength={100}
               />
-              <p className="text-xs text-muted-foreground">
-                Numero RG, pratica assicurativa, ecc.
-              </p>
             </div>
 
-            {/* Hidden fields */}
             <input type="hidden" name="moduleId" value={moduleDef.id} />
           </CardContent>
         </Card>
 
-        {/* Divider */}
-        <div className="border-t border-border" />
-
-        {/* Submit area */}
-        <div className="space-y-3">
-          <Button
-            type="submit"
-            size="lg"
-            disabled={isSubmitting}
-            className="w-full py-6 text-base"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Creazione in corso...
-              </>
-            ) : (
-              <>
-                Crea elaborato
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </>
-            )}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Dopo la creazione potrai caricare i documenti
-          </p>
-        </div>
+        <Button
+          type="submit"
+          size="lg"
+          disabled={isSubmitting}
+          className="w-full py-6 text-base"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Creazione in corso...
+            </>
+          ) : (
+            <>
+              Crea elaborato
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </>
+          )}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          Dopo la creazione potrai caricare i documenti
+        </p>
       </form>
     </div>
   );
