@@ -188,9 +188,36 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
 
       {/* File list (before upload) */}
       {files.length > 0 && !isUploading && progress.length === 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">{files.length} file selezionati</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[500px] overflow-y-auto">
+        <div className="space-y-3">
+          {/* Header + warnings ON TOP */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{files.length} file selezionati</p>
+            <Button onClick={handleUpload} size="lg">
+              <Upload className="h-4 w-4" />
+              Carica {files.length} {files.length === 1 ? 'documento' : 'documenti'}
+            </Button>
+          </div>
+
+          {files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
+            <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/20 p-3 text-sm text-yellow-800 dark:text-yellow-200">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Consiglio: seleziona il tipo di documento per un&apos;analisi piu precisa.
+              </span>
+            </div>
+          )}
+
+          {files.some((f) => f.size > 10 * 1024 * 1024) && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Alcuni file sono molto grandi. Se un PDF contiene tipi diversi di documenti (es. cartelle cliniche + atti legali), seleziona &quot;Documento Misto&quot; come tipo oppure usa il servizio &quot;Organizza Documenti&quot; per separarli automaticamente.
+              </span>
+            </div>
+          )}
+
+          {/* Scrollable file list */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
           {files.map((file, index) => {
             const Icon = getFileIcon(file.type);
             const fileKey = `${file.name}-${file.size}`;
@@ -236,24 +263,8 @@ export function FileUpload({ caseId, onUploadComplete }: FileUploadProps) {
             );
           })}
           </div>
-          {files.length > 0 && files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
-            <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/20 p-3 text-sm text-yellow-800 dark:text-yellow-200">
-              <Info className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>
-                Consiglio: seleziona il tipo di documento per un&apos;analisi piu precisa.
-              </span>
-            </div>
-          )}
 
-          {files.some((f) => f.size > 10 * 1024 * 1024) && (
-            <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
-              <Info className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>
-                Alcuni file sono molto grandi. Se un PDF contiene tipi diversi di documenti (es. cartelle cliniche + atti legali), seleziona &quot;Documento Misto&quot; come tipo oppure usa il servizio &quot;Organizza Documenti&quot; per separarli automaticamente.
-              </span>
-            </div>
-          )}
-
+          {/* Bottom upload button (duplicated for convenience when scrolling) */}
           <Button onClick={handleUpload} className="w-full" size="lg">
             <Upload className="h-4 w-4" />
             Carica {files.length} {files.length === 1 ? 'documento' : 'documenti'}
