@@ -3,7 +3,7 @@
 import { useState, useCallback, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 
-const CONSENT_KEY = 'medlav-cookie-consent';
+const CONSENT_KEY = 'legmed-cookie-consent';
 
 function getConsentSnapshot(): string | null {
   if (typeof window === 'undefined') return 'unknown';

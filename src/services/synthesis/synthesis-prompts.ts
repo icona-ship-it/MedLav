@@ -201,7 +201,7 @@ Riporta i dati dell'esame obiettivo forniti. Le foto cliniche vanno inserite INL
 
 ` : ''}---
 
-*Le sezioni seguenti costituiscono l'analisi e la sintesi prodotta dal sistema MedLav sulla base della documentazione sopra riportata.*
+*Le sezioni seguenti costituiscono l'analisi e la sintesi prodotta dal sistema LegMed sulla base della documentazione sopra riportata.*
 
 ### RIASSUNTO DEL CASO
 Sintesi AMPIA e COMPLETA della vicenda clinica in 6-10 paragrafi. Questo è il quadro d'insieme che il medico legale legge per primo.

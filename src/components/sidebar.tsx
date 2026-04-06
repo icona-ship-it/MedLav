@@ -47,15 +47,15 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
         <Scale className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold">MedLav</span>
+        <span className="text-lg font-bold">LegMed</span>
       </div>
 
       {/* New Case Button */}
       <div className="px-3 pt-4 pb-2">
         <Button asChild className="w-full">
-          <Link href="/cases/new">
+          <Link href="/">
             <Plus className="mr-2 h-4 w-4" />
-            Nuovo Caso
+            Nuovo Elaborato
           </Link>
         </Button>
       </div>

@@ -2,7 +2,7 @@
 
 ## Supabase Point-in-Time Recovery (PITR)
 
-MedLav utilizza Supabase PostgreSQL (EU, Francoforte) con PITR abilitato.
+LegMed utilizza Supabase PostgreSQL (EU, Francoforte) con PITR abilitato.
 
 ### Configurazione
 
@@ -14,7 +14,7 @@ MedLav utilizza Supabase PostgreSQL (EU, Francoforte) con PITR abilitato.
 ### Come Ripristinare
 
 1. Accedere alla [Supabase Dashboard](https://supabase.com/dashboard)
-2. Selezionare il progetto MedLav
+2. Selezionare il progetto LegMed
 3. Navigare su **Settings > Database > Backups**
 4. Selezionare **Point in Time** e scegliere data/ora desiderata
 5. Confermare il ripristino — il database verra riportato allo stato selezionato

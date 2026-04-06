@@ -3,6 +3,25 @@
  * Single source of truth — import from here, never duplicate.
  */
 
+import { MODULE_CATALOG, MODULE_CATEGORIES } from '@/types/modules';
+import type { ModuleId } from '@/types/modules';
+
+// Re-export module system for convenience
+export { MODULE_CATALOG, MODULE_CATEGORIES };
+
+/** Label lookup for module IDs */
+export const moduleLabels: Record<string, string> = Object.fromEntries(
+  MODULE_CATALOG.map((m) => [m.id, m.label]),
+);
+
+/** Full label with category prefix */
+export function getModuleFullLabel(moduleId: ModuleId): string {
+  const mod = MODULE_CATALOG.find((m) => m.id === moduleId);
+  if (!mod) return moduleId;
+  const cat = MODULE_CATEGORIES.find((c) => c.id === mod.categoryId);
+  return cat ? `${cat.label} — ${mod.label}` : mod.label;
+}
+
 // --- Case Types ---
 
 export const CASE_TYPES = [

@@ -27,7 +27,7 @@ export default async function DashboardLayout({
             <MobileSidebar isAdmin={isAdmin} />
           </Suspense>
           <Scale className="h-5 w-5 text-primary" />
-          <span className="text-lg font-bold">MedLav</span>
+          <span className="text-lg font-bold">LegMed</span>
         </header>
         <main id="main-content" className="flex-1 overflow-auto">
           <div className="mx-auto max-w-7xl p-4 sm:p-6">

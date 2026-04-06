@@ -95,7 +95,7 @@ function getUpstashRatelimit(limit: number, windowMs: number): Ratelimit {
   const rl = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(limit, windowStr),
-    prefix: 'medlav:ratelimit',
+    prefix: 'legmed:ratelimit',
   });
 
   ratelimitCache.set(cacheKey, rl);

@@ -1,4 +1,4 @@
-# MedLav — Roadmap verso il prodotto #1
+# LegMed — Roadmap verso il prodotto #1
 
 ## Stato attuale: MVP++ (Marzo 2026)
 

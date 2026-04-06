@@ -11,5 +11,5 @@ export const { GET, POST, PUT } = serve({
     dataRetentionCleanup,
     organizeDocumentsJob,
   ],
-  serveHost: 'https://medlav.vercel.app',
+  serveHost: 'https://legmed.vercel.app',
 });

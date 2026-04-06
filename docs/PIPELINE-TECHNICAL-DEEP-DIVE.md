@@ -1,4 +1,4 @@
-# MedLav Pipeline — Technical Deep Dive
+# LegMed Pipeline — Technical Deep Dive
 
 ## Architecture Overview
 

@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id);
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://medlav.it';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

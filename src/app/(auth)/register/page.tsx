@@ -80,7 +80,7 @@ export default function RegisterPage() {
           </div>
           <CardTitle className="text-2xl">Registrazione</CardTitle>
           <CardDescription>
-            Crea il tuo account MedLav
+            Crea il tuo account LegMed
           </CardDescription>
         </CardHeader>
         <CardContent>

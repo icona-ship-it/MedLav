@@ -9,13 +9,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 
-const ONBOARDING_KEY = 'medlav-onboarding-completed';
+const ONBOARDING_KEY = 'legmed-onboarding-completed';
 
 const STEPS = [
   {
     icon: Scale,
-    title: 'Benvenuto in MedLav',
-    description: 'MedLav analizza la documentazione clinica e genera automaticamente report medico-legali strutturati per le tue perizie.',
+    title: 'Benvenuto in LegMed',
+    description: 'LegMed analizza la documentazione clinica e genera automaticamente report medico-legali strutturati per le tue perizie.',
     details: [
       'Supporta 10 tipologie di caso (ortopedica, oncologica, RC auto, ecc.)',
       'Report adattivo per ruolo: CTU, CTP o Stragiudiziale',

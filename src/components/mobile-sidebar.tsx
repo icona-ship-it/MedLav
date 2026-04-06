@@ -31,16 +31,16 @@ export function MobileSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle className="flex items-center gap-2">
             <Scale className="h-5 w-5 text-primary" />
-            MedLav
+            LegMed
           </SheetTitle>
         </SheetHeader>
 
         {/* New Case */}
         <div className="px-3 pt-4 pb-2">
           <Button asChild className="w-full" onClick={() => setOpen(false)}>
-            <Link href="/cases/new">
+            <Link href="/">
               <Plus className="mr-2 h-4 w-4" />
-              Nuovo Caso
+              Nuovo Elaborato
             </Link>
           </Button>
         </div>

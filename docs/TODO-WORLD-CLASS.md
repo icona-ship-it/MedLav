@@ -1,4 +1,4 @@
-# MedLav — TODO per Prodotto World-Class
+# LegMed — TODO per Prodotto World-Class
 
 Ultimo aggiornamento: 2026-03-13
 

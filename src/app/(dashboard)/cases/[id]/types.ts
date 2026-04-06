@@ -36,6 +36,9 @@ export interface CaseData {
   status: string;
   processing_stage: string;
   perizia_metadata?: PeriziaMetadataUI | null;
+  module_id?: string | null;
+  module_category?: number | null;
+  pipeline_mode?: string | null;
 }
 
 export interface Document {

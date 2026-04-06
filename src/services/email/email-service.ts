@@ -3,7 +3,7 @@ import { getResendClient } from '@/lib/email/client';
 import { buildReportReadyEmail } from '@/lib/email/templates';
 import { logger } from '@/lib/logger';
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'MedLav <noreply@medlav.it>';
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'LegMed <noreply@legmed.it>';
 
 /**
  * Send a "report ready" email notification to the user.

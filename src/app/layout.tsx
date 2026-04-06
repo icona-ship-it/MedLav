@@ -16,25 +16,25 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://medlav.it';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'MedLav - Cronistoria Medico-Legale',
-    template: '%s | MedLav',
+    default: 'LegMed - Cronistoria Medico-Legale',
+    template: '%s | LegMed',
   },
   description: 'Piattaforma per medici legali: caricamento documentazione clinica e generazione automatica di report medico-legali strutturati.',
   openGraph: {
     type: 'website',
     locale: 'it_IT',
-    siteName: 'MedLav',
-    title: 'MedLav - Cronistoria Medico-Legale',
+    siteName: 'LegMed',
+    title: 'LegMed - Cronistoria Medico-Legale',
     description: 'Trasforma la documentazione clinica in cronistorie strutturate per perizie medico-legali. Conforme GDPR Art. 9.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MedLav - Cronistoria Medico-Legale',
+    title: 'LegMed - Cronistoria Medico-Legale',
     description: 'Trasforma la documentazione clinica in cronistorie strutturate per perizie medico-legali.',
   },
   robots: {

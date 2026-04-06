@@ -75,7 +75,7 @@ export function ReportDialog({
   // Detect cross-tab edits via storage event
   useEffect(() => {
     if (!open) return;
-    const key = `medlav-draft-${caseId}`;
+    const key = `legmed-draft-${caseId}`;
     const handler = (e: StorageEvent) => {
       if (e.key === key && e.newValue && isDraftFromOtherTab(caseId)) {
         toast.warning('Un\'altra scheda sta modificando questo report. Salva per evitare conflitti.');

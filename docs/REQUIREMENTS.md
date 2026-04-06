@@ -1,4 +1,4 @@
-# REQUISITI FUNZIONALI - App Medicina Legale (MedLav)
+# REQUISITI FUNZIONALI - App Medicina Legale (LegMed)
 
 ## Documento di Specifica Funzionale
 

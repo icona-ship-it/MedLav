@@ -14,7 +14,7 @@ export default function TermsPage() {
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
           <Link href="/landing" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/landing">
@@ -33,9 +33,9 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold">1. Oggetto del Servizio</h2>
             <p>
-              MedLav (di seguito &quot;il Servizio&quot;) è una piattaforma SaaS che consente ai professionisti
+              LegMed (di seguito &quot;il Servizio&quot;) è una piattaforma SaaS che consente ai professionisti
               medico-legali di caricare documentazione clinica e ottenere report medico-legali strutturati
-              generati tramite intelligenza artificiale. Il Servizio è erogato da MedLav S.r.l. (di seguito
+              generati tramite intelligenza artificiale. Il Servizio è erogato da LegMed S.r.l. (di seguito
               &quot;il Fornitore&quot;), con sede legale in Italia.
             </p>
           </section>
@@ -143,7 +143,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold">11. Contatti</h2>
             <p>
-              Per domande sui presenti Termini: <strong>legal@medlav.it</strong>
+              Per domande sui presenti Termini: <strong>legal@legmed.it</strong>
             </p>
           </section>
         </div>

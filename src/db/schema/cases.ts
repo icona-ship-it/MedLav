@@ -1,6 +1,9 @@
 import { pgTable, uuid, text, timestamp, integer, pgEnum, jsonb } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
 import type { PeriziaMetadata } from '@/types';
+import type { ModuleId, PipelineMode } from '@/types/modules';
+
+// --- Legacy enums (kept for backward compatibility) ---
 
 export const caseTypeEnum = pgEnum('case_type', [
   'ortopedica',
@@ -31,15 +34,32 @@ export const caseStatusEnum = pgEnum('case_status', [
   'archiviato',
 ]);
 
+// --- New module enums ---
+
+export const pipelineModeEnum = pgEnum('pipeline_mode', [
+  'full',
+  'extraction_only',
+  'expenses_only',
+  'anonymize_only',
+]);
+
 export const cases = pgTable('cases', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => profiles.id, { onDelete: 'cascade' }).notNull(),
   code: text('code').notNull().unique(), // es. CASO-2026-001
   patientInitials: text('patient_initials'), // solo iniziali per GDPR
   practiceReference: text('practice_reference'), // riferimento pratica
+
+  // New module system
+  moduleId: text('module_id').$type<ModuleId>(),
+  moduleCategory: integer('module_category'),
+  pipelineMode: pipelineModeEnum('pipeline_mode').default('full'),
+
+  // Legacy fields (kept for backward compatibility, derived from moduleId for new cases)
   caseType: caseTypeEnum('case_type').notNull().default('generica'),
   caseTypes: jsonb('case_types').$type<string[]>(),
   caseRole: caseRoleEnum('case_role').notNull().default('ctu'),
+
   status: caseStatusEnum('status').notNull().default('bozza'),
   notes: text('notes'),
   periziaMetadata: jsonb('perizia_metadata').$type<PeriziaMetadata>(),

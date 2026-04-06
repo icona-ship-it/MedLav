@@ -28,6 +28,7 @@ import { MISTRAL_MODELS } from '@/lib/mistral/client';
 
 import type { OcrResult, ExtractionResult, CaseMetadata } from '../steps/types';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
+import type { PipelineMode } from '@/types/modules';
 
 // ─── onFailure handler ──────────────────────────────────────────────
 
@@ -183,18 +184,18 @@ export const processCase = inngest.createFunction(
     }
 
     // Refresh metadata with updated case info
-    const updatedMetadata: CaseMetadata = await step.run('refresh-case-metadata', async () => {
+    const { metadata: updatedMetadata, pipelineMode } = await step.run('refresh-case-metadata', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const { data: caseRow } = await supabase
         .from('cases')
-        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata')
+        .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata, pipeline_mode')
         .eq('id', caseId)
         .single();
       if (!caseRow) throw new Error(`Case not found: ${caseId}`);
 
       const rawCaseTypes = caseRow.case_types as string[] | null;
-      return {
+      const metadata: CaseMetadata = {
         caseId: caseRow.id as string,
         caseType: caseRow.case_type as CaseType,
         caseTypes: rawCaseTypes && rawCaseTypes.length > 0
@@ -204,6 +205,10 @@ export const processCase = inngest.createFunction(
         patientInitials: caseRow.patient_initials as string | null,
         userId: caseRow.user_id as string,
         periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+      };
+      return {
+        metadata,
+        pipelineMode: ((caseRow as Record<string, unknown>).pipeline_mode ?? 'full') as PipelineMode,
       };
     });
 
@@ -294,6 +299,37 @@ export const processCase = inngest.createFunction(
 
     // ── Step 4.5: Link images to events ──────────────────────────
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
+
+    // ── Pipeline branching by module type ───────────────────────
+    // extraction_only: stop here, finalize with just the timeline
+    if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
+      await step.run('finalize', () => finalizeStep({
+        caseId,
+        userId,
+        extractionResults,
+        consolidationResult,
+        anomalies: [],
+        missingDocs: [],
+        synthesisResult: { reportVersion: 0, wordCount: 0 },
+        synthesisWordCount: 0,
+        pipelineCost: buildPipelineSummary([], ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0)),
+      }));
+
+      await step.run('send-notification', () => sendNotificationStep(caseId, userId));
+
+      return {
+        success: true,
+        caseId,
+        pipelineMode,
+        documentsProcessed: extractionResults.length,
+        newEventsInserted: consolidationResult.newEventsCount,
+        totalEvents: consolidationResult.allEvents.length,
+        anomaliesDetected: 0,
+        missingDocuments: 0,
+      };
+    }
+
+    // ── Full pipeline continues below ───────────────────────────
 
     // ── Steps 4.6 + 5 + 6 + 7a: Parallel analysis (fault-tolerant) ──
     const [imageSettled, anomalySettled, missingSettled, calcSettled] = await Promise.allSettled([

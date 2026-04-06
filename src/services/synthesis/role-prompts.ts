@@ -62,22 +62,13 @@ Per ogni quesito, elenca i FATTI DOCUMENTALI pertinenti [documento, data] — il
   ctp: {
     role: 'ctp',
     toneDirective: `${OBJECTIVE_TONE}
-Il report è destinato al CTP. Presenta TUTTI i fatti documentati in modo completo e oggettivo.`,
+Il report è destinato al CTP. Presenta TUTTI i fatti documentati in modo completo e oggettivo, senza selezionare a favore o contro.`,
     emphasisDirective: `${OBJECTIVE_EMPHASIS}
-Analizza con particolare attenzione (riportando oggettivamente dalla documentazione):
-1. Ritardi diagnostici e terapeutici DOCUMENTATI (quantifica in giorni con date precise [documento, data])
-2. Deviazioni da linee guida e protocolli (cita quali linee guida [Fonte, Anno])
-3. Omissioni documentali oggettivamente riscontrabili
-4. Complicanze documentate e loro gestione
-5. Difetti nel consenso informato se documentati`,
+Per ogni fatto rilevante, evidenzia sia gli elementi che supportano la pretesa sia quelli che la indeboliscono, SENZA favorire nessuna delle due posizioni.`,
     anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,
-    extraSections: `Aggiungi una sezione "PROFILI CRITICI DOCUMENTATI" dopo gli Elementi di Rilievo:
-elenca ogni specifico profilo di criticità DOCUMENTALMENTE RISCONTRATO,
-con riferimento alla condotta specifica documentata [documento, data] e alla linea guida/buona pratica applicabile [Fonte, Anno].
-Riportare SOLO fatti verificabili — il CTP formulerà le proprie valutazioni.`,
+    extraSections: '',
     conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
-Organizza gli elementi documentali evidenziando i profili critici con relativa evidenza.
-Il CTP formulerà autonomamente le proprie valutazioni professionali.`,
+Il CTP formulerà autonomamente le proprie valutazioni professionali sulla base degli elementi documentali presentati.`,
   },
 
   stragiudiziale: {

@@ -58,7 +58,7 @@ const stats = [
 
 const testimonials = [
   {
-    quote: 'MedLav ha trasformato il mio workflow. Report che richiedevano giorni ora sono pronti in ore.',
+    quote: 'LegMed ha trasformato il mio workflow. Report che richiedevano giorni ora sono pronti in ore.',
     attribution: 'Medico Legale, CTU Tribunale',
   },
   {
@@ -79,7 +79,7 @@ export default function LandingPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
@@ -116,7 +116,7 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-6 max-w-lg text-xl text-muted-foreground leading-relaxed">
-                Carica le cartelle cliniche del tuo caso. MedLav le analizza e genera
+                Carica le cartelle cliniche del tuo caso. LegMed le analizza e genera
                 una cronistoria strutturata per le tue relazioni peritali.
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
@@ -139,7 +139,7 @@ export default function LandingPage() {
                   <div className="h-3 w-3 rounded-full bg-red-400" />
                   <div className="h-3 w-3 rounded-full bg-yellow-400" />
                   <div className="h-3 w-3 rounded-full bg-green-400" />
-                  <span className="ml-2 text-xs text-muted-foreground">MedLav - Caso #2024-0042</span>
+                  <span className="ml-2 text-xs text-muted-foreground">LegMed - Caso #2024-0042</span>
                 </div>
                 {/* Mock document → cronistoria */}
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -325,7 +325,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-sm text-muted-foreground sm:flex-row">
           <div className="flex items-center gap-2">
             <Scale className="h-4 w-4" />
-            <span className="font-medium">MedLav</span>
+            <span className="font-medium">LegMed</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
             <Link href="/terms" className="hover:text-foreground transition-colors">Termini di Servizio</Link>

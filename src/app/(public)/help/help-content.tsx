@@ -6,16 +6,16 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 
 const FAQ_ITEMS = [
   {
-    question: 'Come funziona MedLav?',
+    question: 'Come funziona LegMed?',
     answer:
-      'MedLav semplifica il lavoro del medico legale in tre passaggi: carichi la documentazione clinica (referti, cartelle cliniche, esami), ' +
+      'LegMed semplifica il lavoro del medico legale in tre passaggi: carichi la documentazione clinica (referti, cartelle cliniche, esami), ' +
       'il nostro sistema AI analizza i documenti tramite OCR ed estrazione automatica degli eventi clinici, e infine viene generato un report ' +
       'medico-legale strutturato che puoi esportare e personalizzare.',
   },
   {
     question: 'Quali formati di documenti sono supportati?',
     answer:
-      'MedLav supporta i seguenti formati: PDF (anche scansionati), immagini (JPG, PNG, TIFF), e documenti DOCX. ' +
+      'LegMed supporta i seguenti formati: PDF (anche scansionati), immagini (JPG, PNG, TIFF), e documenti DOCX. ' +
       'Il sistema OCR riconosce automaticamente il testo anche da documenti scansionati o fotografati.',
   },
   {
@@ -42,7 +42,7 @@ const FAQ_ITEMS = [
   {
     question: 'Come contatto il supporto?',
     answer:
-      'Per qualsiasi domanda o problema, puoi contattarci all\'indirizzo email support@medlav.it. ' +
+      'Per qualsiasi domanda o problema, puoi contattarci all\'indirizzo email support@legmed.it. ' +
       'Rispondiamo generalmente entro 24 ore lavorative.',
   },
 ];
@@ -180,8 +180,8 @@ export function HelpContent() {
         <h2 className="mb-2 text-lg font-semibold">Hai ancora domande?</h2>
         <p className="text-sm text-muted-foreground">
           Contattaci a{' '}
-          <a href="mailto:support@medlav.it" className="text-primary underline">
-            support@medlav.it
+          <a href="mailto:support@legmed.it" className="text-primary underline">
+            support@legmed.it
           </a>
           {' '}e ti risponderemo al pi&ugrave; presto.
         </p>

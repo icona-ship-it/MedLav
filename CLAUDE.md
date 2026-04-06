@@ -1,4 +1,4 @@
-# MedLav
+# LegMed
 
 Web app per medici legali: upload documentazione clinica → report medico-legale strutturato automatico.
 
@@ -123,7 +123,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 - `docs/DPA-MISTRAL.md` — Data Processing Agreement Mistral
 - `docs/BACKUP-STRATEGY.md` — Backup e data retention policy
 - `docs/ROADMAP.md` — Roadmap e feature future
-- `docs/GUIDA-COMPLETA-FUNZIONALITA-MEDLAV.md` — Guida utente completa
+- `docs/GUIDA-COMPLETA-FUNZIONALITA-LEGMED.md` — Guida utente completa
 - `docs/PRESENTAZIONE.md` — Presentazione prodotto
 - `docs/TODO-WORLD-CLASS.md` — TODO prioritizzato per miglioramenti futuri
 - `.claude/rules/` — Regole codice, sicurezza, testing, git

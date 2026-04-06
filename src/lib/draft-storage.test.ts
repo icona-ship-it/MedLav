@@ -24,7 +24,7 @@ describe('draft-storage', () => {
     it('should save draft to localStorage', () => {
       saveDraft('case-123', 'Draft content');
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'medlav-draft-case-123',
+        'legmed-draft-case-123',
         expect.stringContaining('"content":"Draft content"'),
       );
     });
@@ -53,7 +53,7 @@ describe('draft-storage', () => {
     });
 
     it('should return null for invalid JSON', () => {
-      localStorageMock.setItem('medlav-draft-bad', 'not json');
+      localStorageMock.setItem('legmed-draft-bad', 'not json');
       localStorageMock.getItem.mockReturnValueOnce('not json');
       expect(getDraft('bad')).toBeNull();
     });
@@ -63,7 +63,7 @@ describe('draft-storage', () => {
     it('should remove draft from localStorage', () => {
       saveDraft('case-789', 'Content');
       clearDraft('case-789');
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('medlav-draft-case-789');
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('legmed-draft-case-789');
     });
   });
 
@@ -100,10 +100,10 @@ describe('draft-storage', () => {
         savedAt: new Date().toISOString(),
         tabId: 'other-tab-id',
       });
-      localStorageMock.setItem('medlav-draft-case-other', otherDraft);
+      localStorageMock.setItem('legmed-draft-case-other', otherDraft);
       // Reset mock so getDraft reads from store
       localStorageMock.getItem.mockImplementation((key: string) =>
-        key === 'medlav-draft-case-other' ? otherDraft : '',
+        key === 'legmed-draft-case-other' ? otherDraft : '',
       );
       expect(isDraftFromOtherTab('case-other')).toBe(true);
     });

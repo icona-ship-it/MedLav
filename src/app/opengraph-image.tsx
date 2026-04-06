@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
 
-export const alt = 'MedLav - Report medico-legali automatici';
+export const alt = 'LegMed - Report medico-legali automatici';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -58,7 +58,7 @@ export default function OpenGraphImage() {
             marginBottom: 16,
           }}
         >
-          MedLav
+          LegMed
         </div>
 
         {/* Tagline */}

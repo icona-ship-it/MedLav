@@ -1,4 +1,4 @@
-# Vision: MedLav
+# Vision: LegMed
 
 ## Problema
 
@@ -6,7 +6,7 @@ Il medico legale riceve centinaia di pagine di documentazione clinica (cartelle 
 
 ## Soluzione
 
-MedLav e una web app che automatizza la fase preparatoria della perizia medico-legale. Il perito carica la documentazione clinica, il sistema la elabora (OCR + AI) e produce un report strutturato con: sintesi medico-legale, cronologia eventi clinici, anomalie rilevate e documentazione mancante. Il report e modificabile ed esportabile, pronto per essere integrato nella relazione peritale.
+LegMed e una web app che automatizza la fase preparatoria della perizia medico-legale. Il perito carica la documentazione clinica, il sistema la elabora (OCR + AI) e produce un report strutturato con: sintesi medico-legale, cronologia eventi clinici, anomalie rilevate e documentazione mancante. Il report e modificabile ed esportabile, pronto per essere integrato nella relazione peritale.
 
 ## Utente Target
 
@@ -23,7 +23,7 @@ MedLav e una web app che automatizza la fase preparatoria della perizia medico-l
 
 ## Differenziazione
 
-Nessun tool esistente combina OCR (incluso testo manoscritto), estrazione strutturata AI, e analisi medico-legale specializzata (anomalie, documentazione mancante, confronto linee guida) in un unico flusso integrato. MedLav e costruito DA medici legali PER medici legali.
+Nessun tool esistente combina OCR (incluso testo manoscritto), estrazione strutturata AI, e analisi medico-legale specializzata (anomalie, documentazione mancante, confronto linee guida) in un unico flusso integrato. LegMed e costruito DA medici legali PER medici legali.
 
 ## Vincoli di Business
 

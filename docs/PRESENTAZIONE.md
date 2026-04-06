@@ -1,16 +1,16 @@
-# MedLav
+# LegMed
 
 **La documentazione clinica diventa una cronistoria strutturata in pochi minuti.**
 
 ---
 
-## Cos'e MedLav?
+## Cos'e LegMed?
 
-MedLav e un'applicazione web pensata per i **medici legali** (CTU, CTP, consulenti stragiudiziali).
+LegMed e un'applicazione web pensata per i **medici legali** (CTU, CTP, consulenti stragiudiziali).
 
 Quando un medico legale riceve un incarico, deve leggere decine o centinaia di pagine di documentazione clinica (cartelle cliniche, referti, esami del sangue, radiografie) e ricostruire a mano la **cronistoria** del paziente: cosa e successo, quando, chi l'ha fatto, in quale struttura.
 
-Questo lavoro richiede ore. MedLav lo fa in **pochi minuti**.
+Questo lavoro richiede ore. LegMed lo fa in **pochi minuti**.
 
 ---
 
@@ -59,7 +59,7 @@ Il medico legale riceve:
 
 ## Sicurezza e privacy
 
-MedLav tratta **dati sanitari sensibili** (protetti dal GDPR, Articolo 9). La sicurezza non e un optional, e il fondamento:
+LegMed tratta **dati sanitari sensibili** (protetti dal GDPR, Articolo 9). La sicurezza non e un optional, e il fondamento:
 
 - **Tutti i dati restano in Europa** (server a Francoforte, Germania)
 - **L'intelligenza artificiale e europea** (Mistral AI, azienda francese — i dati non escono mai dall'UE)
@@ -157,4 +157,4 @@ Ogni passaggio e **indipendente e riprovabile**: se uno fallisce, viene ritentat
 
 ---
 
-*MedLav — Trasforma la documentazione clinica in conoscenza strutturata.*
+*LegMed — Trasforma la documentazione clinica in conoscenza strutturata.*

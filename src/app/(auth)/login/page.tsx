@@ -34,7 +34,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
             <Scale className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">MedLav</CardTitle>
+          <CardTitle className="text-2xl">LegMed</CardTitle>
           <CardDescription>
             Accedi alla piattaforma di cronistoria medico-legale
           </CardDescription>

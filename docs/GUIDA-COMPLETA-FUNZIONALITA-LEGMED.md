@@ -1,8 +1,8 @@
-# Guida Completa Funzionalità MedLav
+# Guida Completa Funzionalità LegMed
 
-## Cos'è MedLav
+## Cos'è LegMed
 
-MedLav è una web application per **medici legali** (CTU, CTP, stragiudiziale) che automatizza la creazione di relazioni peritali. Il medico carica la documentazione clinica di un caso e l'app genera automaticamente:
+LegMed è una web application per **medici legali** (CTU, CTP, stragiudiziale) che automatizza la creazione di relazioni peritali. Il medico carica la documentazione clinica di un caso e l'app genera automaticamente:
 
 - **Cronologia medico-legale** strutturata con tutti i fatti clinici
 - **Report completo** con riassunto del caso e analisi

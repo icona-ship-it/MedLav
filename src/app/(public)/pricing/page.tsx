@@ -15,7 +15,7 @@ export default function PricingPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/landing" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/landing">

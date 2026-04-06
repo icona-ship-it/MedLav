@@ -2,8 +2,8 @@
 
 ## ai sensi dell'Art. 35 del Regolamento (UE) 2016/679 (GDPR)
 
-**Titolare del Trattamento:** MedLav S.r.l.
-**Responsabile della Protezione dei Dati (DPO):** privacy@medlav.it
+**Titolare del Trattamento:** LegMed S.r.l.
+**Responsabile della Protezione dei Dati (DPO):** privacy@legmed.it
 **Data prima redazione:** 11 marzo 2026
 **Versione:** 1.0
 **Stato:** Approvata
@@ -29,7 +29,7 @@
 
 ### 1.1 Obbligo di effettuare la DPIA
 
-La presente Valutazione d'Impatto sulla Protezione dei Dati (DPIA) e redatta ai sensi dell'Art. 35 del Regolamento (UE) 2016/679 (di seguito "GDPR" o "Regolamento") ed e **obbligatoria** in quanto il trattamento effettuato dalla piattaforma MedLav rientra in almeno tre delle condizioni previste dalle Linee guida del Gruppo di lavoro Art. 29 (WP 248 rev.01) e dall'elenco pubblicato dal Garante per la protezione dei dati personali italiano:
+La presente Valutazione d'Impatto sulla Protezione dei Dati (DPIA) e redatta ai sensi dell'Art. 35 del Regolamento (UE) 2016/679 (di seguito "GDPR" o "Regolamento") ed e **obbligatoria** in quanto il trattamento effettuato dalla piattaforma LegMed rientra in almeno tre delle condizioni previste dalle Linee guida del Gruppo di lavoro Art. 29 (WP 248 rev.01) e dall'elenco pubblicato dal Garante per la protezione dei dati personali italiano:
 
 - **Trattamento su larga scala di categorie particolari di dati** (Art. 9 GDPR): dati relativi alla salute contenuti in documentazione clinica (cartelle cliniche, referti, diagnosi, esami, terapie);
 - **Utilizzo di nuove tecnologie**: impiego di intelligenza artificiale (modelli linguistici di grandi dimensioni, OCR con modelli vision) per l'analisi automatizzata di documentazione sanitaria;
@@ -38,7 +38,7 @@ La presente Valutazione d'Impatto sulla Protezione dei Dati (DPIA) e redatta ai 
 
 ### 1.2 Ambito
 
-La presente DPIA copre l'intero ciclo di vita del trattamento dei dati sanitari all'interno della piattaforma MedLav, dall'upload della documentazione clinica fino alla cancellazione dei dati. Il perimetro include:
+La presente DPIA copre l'intero ciclo di vita del trattamento dei dati sanitari all'interno della piattaforma LegMed, dall'upload della documentazione clinica fino alla cancellazione dei dati. Il perimetro include:
 
 - Raccolta e conservazione di documentazione clinica digitalizzata;
 - Elaborazione OCR (Optical Character Recognition) e HTR (Handwritten Text Recognition);
@@ -54,7 +54,7 @@ La presente DPIA copre l'intero ciclo di vita del trattamento dei dati sanitari 
 
 ### 2.1 Natura del trattamento
 
-MedLav e una piattaforma SaaS (Software as a Service) web-based che consente ai medici legali di caricare documentazione clinica dei pazienti e ottenere, tramite elaborazione automatizzata con intelligenza artificiale, un report medico-legale strutturato composto da:
+LegMed e una piattaforma SaaS (Software as a Service) web-based che consente ai medici legali di caricare documentazione clinica dei pazienti e ottenere, tramite elaborazione automatizzata con intelligenza artificiale, un report medico-legale strutturato composto da:
 
 - **Sintesi medico-legale**: relazione strutturata del caso clinico (inquadramento, decorso, stato attuale, elementi di rilievo medico-legale);
 - **Cronologia eventi clinici**: timeline unificata e ordinata di tutti gli eventi medici estratti dalla documentazione;
@@ -116,7 +116,7 @@ Il trattamento avviene nel contesto della medicina legale italiana, dove il medi
 - **CTP (Consulente Tecnico di Parte)**: incaricato dall'avvocato di una delle parti in un contenzioso;
 - **Perito stragiudiziale**: incaricato direttamente dal paziente o dall'assicurazione per valutazioni extragiudiziali.
 
-Il medico legale e il **titolare autonomo** del trattamento dei dati dei propri pazienti nell'ambito del mandato professionale ricevuto. MedLav agisce come **responsabile del trattamento** (Art. 28 GDPR) fornendo lo strumento tecnologico.
+Il medico legale e il **titolare autonomo** del trattamento dei dati dei propri pazienti nell'ambito del mandato professionale ricevuto. LegMed agisce come **responsabile del trattamento** (Art. 28 GDPR) fornendo lo strumento tecnologico.
 
 I dati sanitari trattati sono per loro natura estremamente sensibili e il report generato puo avere impatto diretto su:
 - Procedimenti giudiziari (risarcimento danni, responsabilita medica);
@@ -156,7 +156,7 @@ I dati sanitari trattati sono per loro natura estremamente sensibili e il report
 
 #### Garanzie per trasferimenti extra-UE
 
-Tutti i fornitori con sede legale extra-UE utilizzano **data center situati nell'Unione Europea** per il trattamento e la conservazione dei dati di MedLav. In aggiunta:
+Tutti i fornitori con sede legale extra-UE utilizzano **data center situati nell'Unione Europea** per il trattamento e la conservazione dei dati di LegMed. In aggiunta:
 
 - I DPA (Data Processing Agreement) stipulati con ciascun sub-responsabile includono le **Clausole Contrattuali Standard (SCC)** approvate dalla Commissione Europea (Decisione di esecuzione 2021/914);
 - Sono state condotte **Transfer Impact Assessment (TIA)** per valutare il rischio residuo;
@@ -220,7 +220,7 @@ L'applicazione implementa funzionalita specifiche per garantire l'esercizio dei 
 | Cancellazione | Art. 17 | Funzione `deleteMyAccount()`: elimina in cascata tutti i dati dell'utente (profilo, casi, documenti, pagine, eventi, immagini eventi, anomalie, documenti mancanti, report, audit log) e l'account di autenticazione |
 | Rettifica | Art. 16 | L'utente puo modificare eventi estratti, annotare, correggere e rigenerare il report |
 | Limitazione | Art. 18 | Possibilita di archiviare casi senza ulteriore elaborazione |
-| Opposizione | Art. 21 | Contatto DPO (privacy@medlav.it) per richieste di opposizione |
+| Opposizione | Art. 21 | Contatto DPO (privacy@legmed.it) per richieste di opposizione |
 
 **Per quanto riguarda i pazienti** (interessati indiretti): i pazienti possono esercitare i propri diritti rivolgendosi al medico legale titolare del trattamento. Il medico legale puo a sua volta cancellare i dati del caso dalla piattaforma.
 

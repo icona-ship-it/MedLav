@@ -9,6 +9,14 @@ import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
 import { z } from 'zod';
+import {
+  ALL_MODULE_IDS,
+  moduleToRole,
+  moduleToCaseTypes,
+  moduleToPipelineMode,
+  moduleToCategory,
+} from '@/types/modules';
+import type { ModuleId } from '@/types/modules';
 
 // --- Zod Schemas ---
 
@@ -17,6 +25,7 @@ const validCaseTypes = CASE_TYPES.map((t) => t.value);
 const caseTypeSchema = z.enum(validCaseTypes as [string, ...string[]]);
 const caseRoleSchema = z.enum(['ctu', 'ctp', 'stragiudiziale']);
 const caseStatusSchema = z.enum(['bozza', 'in_revisione', 'definitivo', 'archiviato']);
+const moduleIdSchema = z.enum(ALL_MODULE_IDS as unknown as [string, ...string[]]);
 
 const periziaMetadataSchema = z.object({
   tribunale: z.string().max(200).optional(),
@@ -41,9 +50,10 @@ const periziaMetadataSchema = z.object({
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({
-  caseType: caseTypeSchema,
-  caseRole: caseRoleSchema,
+  caseType: caseTypeSchema.optional(),
+  caseRole: caseRoleSchema.optional(),
   caseTypes: z.array(caseTypeSchema).min(1).max(7).optional(),
+  moduleId: moduleIdSchema.optional(),
   patientInitials: z.string().max(10).optional(),
   practiceReference: z.string().max(100).optional(),
   notes: z.string().max(5000).optional(),
@@ -99,9 +109,10 @@ export async function createCase(formData: FormData) {
   }
 
   const validated = createCaseSchema.safeParse({
-    caseType: formData.get('caseType'),
-    caseRole: formData.get('caseRole'),
+    caseType: formData.get('caseType') || undefined,
+    caseRole: formData.get('caseRole') || undefined,
     caseTypes: parsedCaseTypes,
+    moduleId: formData.get('moduleId') || undefined,
     patientInitials: formData.get('patientInitials') || undefined,
     practiceReference: formData.get('practiceReference') || undefined,
     notes: formData.get('notes') || undefined,
@@ -112,8 +123,34 @@ export async function createCase(formData: FormData) {
     return { error: 'Dati non validi. Verifica tipo caso e tipo incarico.' };
   }
 
-  const { caseType, caseRole, patientInitials, practiceReference, notes, periziaMetadata } = validated.data;
-  const caseTypes: string[] = validated.data.caseTypes ?? [caseType];
+  const { patientInitials, practiceReference, notes, periziaMetadata } = validated.data;
+
+  // Derive role, type(s), and pipeline mode from module or legacy fields
+  let caseRole: string;
+  let caseType: string;
+  let caseTypes: string[];
+  let moduleIdValue: ModuleId | undefined;
+  let moduleCategoryValue: number | undefined;
+  let pipelineModeValue: string = 'full';
+
+  if (validated.data.moduleId) {
+    const mid = validated.data.moduleId as ModuleId;
+    moduleIdValue = mid;
+    caseRole = moduleToRole(mid) ?? 'ctu';
+    const legacyTypes = moduleToCaseTypes(mid);
+    caseType = legacyTypes[0] ?? 'generica';
+    caseTypes = legacyTypes.length > 0 ? legacyTypes : ['generica'];
+    pipelineModeValue = moduleToPipelineMode(mid);
+    moduleCategoryValue = moduleToCategory(mid).id;
+  } else {
+    // Legacy flow — require caseType and caseRole
+    if (!validated.data.caseType || !validated.data.caseRole) {
+      return { error: 'Dati non validi. Verifica tipo caso e tipo incarico.' };
+    }
+    caseRole = validated.data.caseRole;
+    caseType = validated.data.caseType;
+    caseTypes = validated.data.caseTypes ?? [caseType];
+  }
 
   // Generate unique case code with retry on collision
   const year = new Date().getFullYear();
@@ -155,6 +192,11 @@ export async function createCase(formData: FormData) {
         perizia_metadata: periziaMetadata,
         status: 'bozza',
         document_count: 0,
+        ...(moduleIdValue ? {
+          module_id: moduleIdValue,
+          module_category: moduleCategoryValue,
+          pipeline_mode: pipelineModeValue,
+        } : {}),
       })
       .select('id')
       .single();

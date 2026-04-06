@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
           <Link href="/landing" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/landing">
@@ -33,8 +33,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold">1. Titolare del Trattamento</h2>
             <p>
-              Titolare del trattamento: MedLav S.r.l., con sede legale in Italia.
-              Contatto DPO: <strong>privacy@medlav.it</strong>
+              Titolare del trattamento: LegMed S.r.l., con sede legale in Italia.
+              Contatto DPO: <strong>privacy@legmed.it</strong>
             </p>
           </section>
 
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
               <li><strong>Limitazione:</strong> limitare il trattamento in determinate circostanze</li>
             </ul>
             <p className="mt-4">
-              Per esercitare questi diritti: <strong>privacy@medlav.it</strong> oppure dalla sezione
+              Per esercitare questi diritti: <strong>privacy@legmed.it</strong> oppure dalla sezione
               Impostazioni dell&apos;account. Risponderemo entro 30 giorni.
             </p>
           </section>

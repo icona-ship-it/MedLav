@@ -4,7 +4,7 @@
  * Includes tab-awareness to detect cross-tab editing conflicts.
  */
 
-const DRAFT_PREFIX = 'medlav-draft-';
+const DRAFT_PREFIX = 'legmed-draft-';
 
 /** Unique ID for this browser tab, survives re-renders but not page reload. */
 const TAB_ID = typeof crypto !== 'undefined'

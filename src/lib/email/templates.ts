@@ -1,4 +1,4 @@
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://medlav.it';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
 
 interface ReportReadyEmailParams {
   caseCode: string;
@@ -31,7 +31,7 @@ export function buildReportReadyEmail(params: ReportReadyEmailParams): EmailCont
           <!-- Header -->
           <tr>
             <td style="padding: 32px 32px 0; text-align: center;">
-              <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #18181b;">MedLav</h1>
+              <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #18181b;">LegMed</h1>
             </td>
           </tr>
           <!-- Body -->
@@ -58,7 +58,7 @@ export function buildReportReadyEmail(params: ReportReadyEmailParams): EmailCont
           <tr>
             <td style="padding: 16px 32px; border-top: 1px solid #e4e4e7; text-align: center;">
               <p style="margin: 0; font-size: 12px; color: #71717a; line-height: 1.5;">
-                Questa email è stata inviata automaticamente da MedLav.<br>
+                Questa email è stata inviata automaticamente da LegMed.<br>
                 Se non desideri ricevere queste notifiche, puoi disattivarle nelle impostazioni del tuo profilo.
               </p>
             </td>

@@ -187,7 +187,7 @@ export function SharedCaseView({ caseData, events, anomalies, missingDocs, repor
 
         {/* Footer */}
         <div className="text-center text-xs text-muted-foreground border-t pt-4">
-          Generato con MedLav &mdash; Caso condiviso in sola lettura
+          Generato con LegMed &mdash; Caso condiviso in sola lettura
         </div>
       </div>
     </div>

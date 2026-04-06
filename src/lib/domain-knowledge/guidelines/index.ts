@@ -16,7 +16,7 @@ import { SNLG_INFEZIONI } from './snlg-infezioni';
 import { ERRORE_DIAGNOSTICO_GUIDELINES } from './errore-diagnostico';
 
 /**
- * All clinical guidelines for the MedLav RAG system.
+ * All clinical guidelines for the LegMed RAG system.
  * These will be ingested via the API once pgvector is enabled on Supabase.
  */
 export const CLINICAL_GUIDELINES: readonly GuidelineContent[] = [

@@ -9,7 +9,7 @@ export const DEMO_CASE = {
   caseRole: 'ctu' as const,
   patientInitials: 'M.R.',
   practiceReference: 'RG 12345/2025 - Tribunale di Milano',
-  notes: 'Caso dimostrativo per esplorare le funzionalità di MedLav.',
+  notes: 'Caso dimostrativo per esplorare le funzionalità di LegMed.',
   periziaMetadata: {
     tribunale: 'Tribunale Ordinario di Milano',
     sezione: 'Sezione III Civile',

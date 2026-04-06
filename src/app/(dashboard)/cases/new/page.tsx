@@ -1,14 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, Scale, UserCheck, FileSearch, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { ArrowLeft, Loader2, Scale, UserCheck, FileSearch } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { createCase } from '../../actions';
-import { CASE_TYPES as caseTypes } from '@/lib/constants';
+import {
+  MODULE_CATALOG,
+  MODULE_CATEGORIES,
+  CASE_TYPES as caseTypes,
+} from '@/lib/constants';
+import type { ModuleDefinition, ModuleCategory } from '@/types/modules';
 
-// --- Role definitions ---
+// --- Role definitions (kept for legacy fallback) ---
 
 const ROLE_OPTIONS = [
   {
@@ -34,9 +42,181 @@ const ROLE_OPTIONS = [
   },
 ] as const;
 
+// --- Helpers ---
+
+function findModule(moduleId: string): ModuleDefinition | undefined {
+  return MODULE_CATALOG.find((m) => m.id === moduleId);
+}
+
+function findCategory(categoryId: number): ModuleCategory | undefined {
+  return MODULE_CATEGORIES.find((c) => c.id === categoryId);
+}
+
 // --- Component ---
 
 export default function NewCasePage() {
+  const searchParams = useSearchParams();
+  const moduleId = searchParams.get('module');
+
+  const moduleDef = moduleId ? findModule(moduleId) : undefined;
+  const category = moduleDef ? findCategory(moduleDef.categoryId) : undefined;
+
+  // If module param is provided but invalid, redirect to dashboard
+  if (moduleId && !moduleDef) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild aria-label="Torna alla dashboard">
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Modulo non trovato</h1>
+            <p className="text-muted-foreground">
+              Il modulo richiesto non esiste. <Link href="/" className="underline text-primary">Torna alla dashboard</Link>.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Module-based flow
+  if (moduleDef && category) {
+    return <ModuleNewCase moduleDef={moduleDef} category={category} />;
+  }
+
+  // Legacy flow (no module param)
+  return <LegacyNewCase />;
+}
+
+// ---------------------------------------------------------------------------
+// Module-based "New Case" form
+// ---------------------------------------------------------------------------
+
+function ModuleNewCase({ moduleDef, category }: { moduleDef: ModuleDefinition; category: ModuleCategory }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result = await createCase(formData);
+
+      if (result?.error) {
+        setError(result.error);
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      if (err instanceof Error && 'digest' in err) throw err;
+      setError('Errore di rete. Verifica la connessione e riprova.');
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild aria-label="Torna alla dashboard">
+          <Link href="/">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Nuovo Elaborato</h1>
+          <p className="text-muted-foreground">
+            {category.label}
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {error && (
+          <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        <Card>
+          <CardContent className="pt-6 space-y-6">
+            {/* Module info */}
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold">{moduleDef.label}</h2>
+              <p className="text-sm text-muted-foreground">{moduleDef.description}</p>
+            </div>
+
+            {/* Patient initials */}
+            <div className="space-y-2">
+              <Label htmlFor="patientInitials">Iniziali paziente</Label>
+              <Input
+                id="patientInitials"
+                name="patientInitials"
+                placeholder="es. M.R."
+                maxLength={10}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Opzionale. Utilizzate per identificare il caso nella dashboard.
+              </p>
+            </div>
+
+            {/* Practice reference */}
+            <div className="space-y-2">
+              <Label htmlFor="practiceReference">Riferimento pratica</Label>
+              <Input
+                id="practiceReference"
+                name="practiceReference"
+                placeholder="es. RG 1234/2026"
+                maxLength={100}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Opzionale. Numero di pratica o riferimento interno.
+              </p>
+            </div>
+
+            {/* Hidden fields */}
+            <input type="hidden" name="moduleId" value={moduleDef.id} />
+          </CardContent>
+        </Card>
+
+        {/* Submit */}
+        <div className="flex items-center gap-4">
+          <Button variant="outline" asChild>
+            <Link href="/">Annulla</Link>
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={isSubmitting}
+            className="flex-1 py-6 text-base bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Creazione in corso...
+              </>
+            ) : (
+              'Crea Elaborato'
+            )}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Legacy "New Case" form (no module param — backward compat)
+// ---------------------------------------------------------------------------
+
+function LegacyNewCase() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('ctu');

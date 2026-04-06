@@ -15,7 +15,7 @@ export default function HelpPage() {
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
           <Link href="/landing" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/landing">
@@ -29,7 +29,7 @@ export default function HelpPage() {
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="mb-2 text-3xl font-bold">Aiuto</h1>
         <p className="mb-10 text-muted-foreground">
-          Trova risposte alle domande frequenti, scopri come utilizzare MedLav e consulta il glossario dei termini.
+          Trova risposte alle domande frequenti, scopri come utilizzare LegMed e consulta il glossario dei termini.
         </p>
 
         <HelpContent />

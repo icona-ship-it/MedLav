@@ -47,7 +47,7 @@ export default function SecurityPage() {
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
           <Link href="/landing" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">MedLav</span>
+            <span className="text-lg font-bold">LegMed</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/landing">
@@ -61,7 +61,7 @@ export default function SecurityPage() {
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="mb-4 text-3xl font-bold">Sicurezza e Compliance</h1>
         <p className="mb-12 text-lg text-muted-foreground">
-          MedLav tratta dati sanitari sensibili. La sicurezza non è una feature, è il fondamento.
+          LegMed tratta dati sanitari sensibili. La sicurezza non è una feature, è il fondamento.
         </p>
 
         <div className="grid gap-6 sm:grid-cols-2">
@@ -146,7 +146,7 @@ export default function SecurityPage() {
 
         <div className="mt-12 rounded-xl border bg-muted/30 p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            Domande sulla sicurezza? Contattaci: <strong>security@medlav.it</strong>
+            Domande sulla sicurezza? Contattaci: <strong>security@legmed.it</strong>
           </p>
         </div>
       </main>

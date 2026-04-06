@@ -337,7 +337,7 @@ ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' 
 </div>`).join('\n')}
 
 <footer style="margin-top:40px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#94a3b8;text-align:center">
-  Report generato da MedLav il ${now}
+  Report generato da LegMed il ${now}
 </footer>
 </div>
 </body>
@@ -1122,7 +1122,7 @@ ${signatureImageBase64 ? `
 
 <!-- ═══ Screen footer ═══ -->
 <footer class="screen-footer">
-  Report generato da MedLav il ${now}
+  Report generato da LegMed il ${now}
 </footer>
 
 <!-- ═══ Running footer (screen) ═══ -->

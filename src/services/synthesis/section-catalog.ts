@@ -310,20 +310,9 @@ ${NO_EVN_RULE}`,
 // ── CTP sections (derived from CTU, without osservazioni_bozza) ─────
 
 function buildCTPSections(): SectionSpec[] {
-  return CTU_SECTIONS
-    .filter((s) => s.id !== 'osservazioni_bozza')
-    .map((s) => {
-      if (s.id === 'epicrisi') {
-        return {
-          ...s,
-          promptDirective: s.promptDirective.replace(
-            'NON esprimere giudizi sul nesso causale',
-            'Evidenzia con particolare attenzione i profili critici documentati nella condotta sanitaria. NON esprimere giudizi sul nesso causale',
-          ),
-        };
-      }
-      return s;
-    });
+  // CTP uses same objective sections as CTU, minus osservazioni_bozza.
+  // No bias toward critical profiles — 100% objective like CTU.
+  return CTU_SECTIONS.filter((s) => s.id !== 'osservazioni_bozza');
 }
 
 const CTP_SECTIONS: SectionSpec[] = buildCTPSections();

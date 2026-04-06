@@ -488,7 +488,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   children.push(
     new Paragraph({ text: '' }),
     new Paragraph({
-      children: [new TextRun({ text: `Report generato da MedLav il ${now}`, color: '94A3B8', size: 18 })],
+      children: [new TextRun({ text: `Report generato da LegMed il ${now}`, color: '94A3B8', size: 18 })],
       alignment: AlignmentType.CENTER,
     }),
   );
@@ -947,7 +947,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   // Footer timestamp
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
   children.push(new Paragraph({
-    children: [new TextRun({ text: `Report generato da MedLav il ${now}`, color: '94A3B8', size: 18 })],
+    children: [new TextRun({ text: `Report generato da LegMed il ${now}`, color: '94A3B8', size: 18 })],
     alignment: AlignmentType.CENTER,
     spacing: { before: 400 },
   }));

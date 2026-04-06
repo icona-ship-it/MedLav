@@ -84,7 +84,7 @@ describe('draft-storage — adversarial', () => {
   });
 
   it('should handle tampered localStorage data (missing fields)', () => {
-    localStorageMock.setItem('medlav-draft-tampered', JSON.stringify({ content: 'ok' }));
+    localStorageMock.setItem('legmed-draft-tampered', JSON.stringify({ content: 'ok' }));
     localStorageMock.getItem.mockReturnValueOnce(JSON.stringify({ content: 'ok' }));
     // Missing savedAt — should return null
     const draft = getDraft('tampered');
@@ -93,7 +93,7 @@ describe('draft-storage — adversarial', () => {
 
   it('should handle tampered localStorage data (wrong types)', () => {
     const tampered = JSON.stringify({ content: 12345, savedAt: true, tabId: null });
-    localStorageMock.setItem('medlav-draft-types', tampered);
+    localStorageMock.setItem('legmed-draft-types', tampered);
     localStorageMock.getItem.mockReturnValueOnce(tampered);
     // content is truthy (number 12345), savedAt is truthy (true)
     // getDraft uses if (!draft.content || !draft.savedAt) which treats these as valid
@@ -113,7 +113,7 @@ describe('draft-storage — adversarial', () => {
 
   it('should handle isDraftFromOtherTab when draft has no tabId (legacy format)', () => {
     const legacyDraft = JSON.stringify({ content: 'old', savedAt: '2025-01-01T00:00:00Z' });
-    localStorageMock.setItem('medlav-draft-legacy', legacyDraft);
+    localStorageMock.setItem('legmed-draft-legacy', legacyDraft);
     localStorageMock.getItem.mockReturnValueOnce(legacyDraft);
     // No tabId → should not be treated as "other tab"
     const result = isDraftFromOtherTab('legacy');

@@ -33,7 +33,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
       name: 'Trial',
       price: 'Gratis',
       period: '',
-      description: 'Prova MedLav senza impegno',
+      description: 'Prova LegMed senza impegno',
       features: [
         '5 casi inclusi',
         'Pipeline OCR completa',
@@ -81,7 +81,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
         'DPA personalizzato',
       ],
       cta: 'Contattaci',
-      ctaHref: 'mailto:sales@medlav.it',
+      ctaHref: 'mailto:sales@legmed.it',
       highlighted: false,
     },
   ];
@@ -89,7 +89,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
 
 const faqItems: Array<{ question: string; answer: string }> = [
   {
-    question: 'Posso provare MedLav prima di pagare?',
+    question: 'Posso provare LegMed prima di pagare?',
     answer: 'Sì, il piano Trial è completamente gratuito e include 5 casi. Non serve carta di credito per iniziare.',
   },
   {
@@ -102,7 +102,7 @@ const faqItems: Array<{ question: string; answer: string }> = [
   },
   {
     question: 'Cosa succede se cancello l\'abbonamento?',
-    answer: 'Puoi continuare ad usare MedLav fino alla fine del periodo già pagato. I tuoi dati rimangono accessibili, ma non potrai creare nuovi casi oltre il limite del piano Trial.',
+    answer: 'Puoi continuare ad usare LegMed fino alla fine del periodo già pagato. I tuoi dati rimangono accessibili, ma non potrai creare nuovi casi oltre il limite del piano Trial.',
   },
   {
     question: 'I prezzi includono l\'IVA?',
@@ -114,7 +114,7 @@ const faqItems: Array<{ question: string; answer: string }> = [
   },
   {
     question: 'Come posso ottenere un piano Enterprise?',
-    answer: 'Contattaci all\'indirizzo sales@medlav.it per discutere le tue esigenze. Offriamo piani personalizzati con SLA, onboarding dedicato e funzionalità avanzate.',
+    answer: 'Contattaci all\'indirizzo sales@legmed.it per discutere le tue esigenze. Offriamo piani personalizzati con SLA, onboarding dedicato e funzionalità avanzate.',
   },
 ];
 
@@ -235,7 +235,7 @@ export function PricingContent() {
           Tutti i piani includono: dati protetti in EU, GDPR Art. 9, crittografia, audit trail.
           <br />
           Hai domande?{' '}
-          <a href="mailto:info@medlav.it" className="text-primary underline">
+          <a href="mailto:info@legmed.it" className="text-primary underline">
             Scrivici
           </a>
         </p>

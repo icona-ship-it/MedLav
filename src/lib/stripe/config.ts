@@ -2,7 +2,7 @@ export const PLANS = {
   trial: {
     name: 'Trial',
     casesLimit: 5,
-    description: '5 casi gratuiti per provare MedLav',
+    description: '5 casi gratuiti per provare LegMed',
   },
   pro: {
     name: 'Pro',

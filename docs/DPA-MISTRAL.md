@@ -14,7 +14,7 @@ ai sensi dell'Art. 28 del Regolamento (UE) 2016/679 (GDPR)
 
 **Tra:**
 
-- **Titolare del trattamento** ("Titolare"): [Ragione sociale], con sede legale in [indirizzo], P.IVA [numero], nella persona del legale rappresentante pro tempore — di seguito "MedLav"
+- **Titolare del trattamento** ("Titolare"): [Ragione sociale], con sede legale in [indirizzo], P.IVA [numero], nella persona del legale rappresentante pro tempore — di seguito "LegMed"
 
 - **Responsabile del trattamento** ("Responsabile"): Mistral AI, SAS con sede legale a Parigi, Francia — di seguito "Mistral AI"
 
@@ -24,11 +24,11 @@ Congiuntamente denominate le "Parti".
 
 ## 1. Oggetto e durata del trattamento
 
-1.1. Il presente Accordo disciplina il trattamento di dati personali che Mistral AI effettua per conto di MedLav nell'ambito della fornitura dei servizi API di intelligenza artificiale.
+1.1. Il presente Accordo disciplina il trattamento di dati personali che Mistral AI effettua per conto di LegMed nell'ambito della fornitura dei servizi API di intelligenza artificiale.
 
 1.2. L'Accordo ha efficacia dalla data di sottoscrizione e rimane in vigore per l'intera durata del contratto di servizio tra le Parti. Al termine del contratto, si applicano le disposizioni di cui all'Art. 8 del presente Accordo.
 
-1.3. Il trattamento ha carattere continuativo e si attiva ogni volta che la piattaforma MedLav effettua chiamate API verso i servizi Mistral.
+1.3. Il trattamento ha carattere continuativo e si attiva ogni volta che la piattaforma LegMed effettua chiamate API verso i servizi Mistral.
 
 ---
 
@@ -43,7 +43,7 @@ Congiuntamente denominate le "Parti".
 | **Generazione sintesi medico-legale** | Produzione del report medico-legale strutturato con analisi, valutazioni e conclusioni | `mistral-large-latest` |
 | **Embedding semantici** | Generazione di vettori per il sistema RAG (retrieval di linee guida cliniche) | `mistral-embed` |
 
-2.2. Il trattamento consiste nella trasmissione temporanea dei dati ai server Mistral AI, nella loro elaborazione algoritmica, e nella restituzione dei risultati a MedLav. Mistral AI non conserva i dati dopo il completamento della singola richiesta API (zero data retention policy).
+2.2. Il trattamento consiste nella trasmissione temporanea dei dati ai server Mistral AI, nella loro elaborazione algoritmica, e nella restituzione dei risultati a LegMed. Mistral AI non conserva i dati dopo il completamento della singola richiesta API (zero data retention policy).
 
 2.3. Non e previsto alcun processo decisionale automatizzato ai sensi dell'Art. 22 GDPR. I report generati sono strumenti di supporto al perito medico-legale che mantiene piena autonomia decisionale.
 
@@ -59,7 +59,7 @@ Congiuntamente denominate le "Parti".
 - **Dati di imaging**: referti radiologici, descrizioni di immagini diagnostiche (TAC, RMN, RX, ecografie)
 - **Dati identificativi indiretti**: date, riferimenti temporali, codici nosologici che, combinati, potrebbero consentire l'identificazione dell'interessato
 
-3.2. MedLav si impegna, ove tecnicamente possibile, ad anonimizzare o pseudonimizzare i dati prima della trasmissione a Mistral AI, rimuovendo nomi, codici fiscali e altri identificatori diretti.
+3.2. LegMed si impegna, ove tecnicamente possibile, ad anonimizzare o pseudonimizzare i dati prima della trasmissione a Mistral AI, rimuovendo nomi, codici fiscali e altri identificatori diretti.
 
 ---
 
@@ -122,7 +122,7 @@ Mettere a disposizione del Titolare tutte le informazioni necessarie per dimostr
 
 6.2. Mistral AI conferma che l'infrastruttura utilizzata per l'erogazione dei servizi API e localizzata nell'UE (data center in area Frankfurt/EU).
 
-6.3. MedLav configura la propria piattaforma per instradare tutte le chiamate API esclusivamente verso gli endpoint EU di Mistral AI.
+6.3. LegMed configura la propria piattaforma per instradare tutte le chiamate API esclusivamente verso gli endpoint EU di Mistral AI.
 
 6.4. Il Titolare e l'intero stack applicativo (Vercel fra1, Supabase EU Frankfurt) sono configurati per il trattamento EU-only.
 
@@ -158,7 +158,7 @@ Mettere a disposizione del Titolare tutte le informazioni necessarie per dimostr
 
 ### Crittografia
 
-- **In transito**: TLS 1.3 (minimo) per tutte le comunicazioni tra MedLav e le API Mistral
+- **In transito**: TLS 1.3 (minimo) per tutte le comunicazioni tra LegMed e le API Mistral
 - **A riposo**: crittografia AES-256 (o equivalente) per qualsiasi dato eventualmente conservato temporaneamente durante l'elaborazione
 
 ### Infrastruttura EU-only
@@ -242,7 +242,7 @@ Mettere a disposizione del Titolare tutte le informazioni necessarie per dimostr
 
 11.4. Le comunicazioni relative al presente Accordo devono essere inviate a:
 
-**Titolare (MedLav):**
+**Titolare (LegMed):**
 - Referente privacy: [nome]
 - Email: [email]
 - PEC: [pec]
@@ -255,7 +255,7 @@ Mettere a disposizione del Titolare tutte le informazioni necessarie per dimostr
 
 **Data**: ___________________
 
-**Per il Titolare (MedLav)**
+**Per il Titolare (LegMed)**
 
 Nome: ___________________
 Ruolo: ___________________
@@ -278,9 +278,9 @@ Firma: ___________________
 | Sintesi report | Testo eventi estratti + contesto caso per generazione report | EU API `mistral-large-latest` | Zero (elaborazione in-memory) |
 | Embedding linee guida | Testo di linee guida cliniche (non contiene dati personali) | EU API `mistral-embed` | Zero (elaborazione in-memory) |
 
-## Allegato B — Misure di pseudonimizzazione implementate da MedLav
+## Allegato B — Misure di pseudonimizzazione implementate da LegMed
 
-MedLav implementa le seguenti misure prima della trasmissione dei dati a Mistral AI:
+LegMed implementa le seguenti misure prima della trasmissione dei dati a Mistral AI:
 
 1. I documenti clinici vengono identificati tramite UUID interno, senza associazione diretta con dati anagrafici nel payload API
 2. Il caso medico-legale e identificato da un codice interno (ID caso), non dal nome del paziente

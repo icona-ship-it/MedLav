@@ -16,7 +16,8 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { deleteCase, updateCaseStatus } from '../../actions';
-import { caseTypeLabels } from '@/lib/constants';
+import { caseTypeLabels, moduleLabels, getModuleFullLabel } from '@/lib/constants';
+import type { ModuleId } from '@/types/modules';
 import { formatDate } from '@/lib/format';
 import { EditCaseDialog } from './edit-case-dialog';
 import { ShareCaseDialog } from '@/components/share-case-dialog';
@@ -144,7 +145,9 @@ export function CaseHeader({
             </div>
             <p className="text-muted-foreground">
               {caseData.patient_initials || 'N/D'} &mdash;{' '}
-              {caseTypeLabels[caseData.case_type] ?? caseData.case_type}
+              {caseData.module_id
+                ? getModuleFullLabel(caseData.module_id as ModuleId)
+                : caseTypeLabels[caseData.case_type] ?? caseData.case_type}
               {caseData.practice_reference && ` \u2014 ${caseData.practice_reference}`}
             </p>
           </div>

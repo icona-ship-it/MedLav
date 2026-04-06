@@ -34,7 +34,7 @@ interface CaseDetailClientProps {
 
 const POLL_INTERVAL_MS = 10000;
 
-const WIZARD_STEPS = [
+const FULL_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },
   { number: 2, label: 'Info Perizia', hint: 'Compila i dati della perizia (facoltativo)' },
   { number: 3, label: 'Elaborazione', hint: 'Avvia l\'analisi AI dei documenti' },
@@ -42,10 +42,33 @@ const WIZARD_STEPS = [
   { number: 5, label: 'Report', hint: 'Il tuo report è pronto' },
 ] as const;
 
+const EXTRACTION_WIZARD_STEPS = [
+  { number: 1, label: 'Documenti', hint: 'Carica i documenti da analizzare' },
+  { number: 2, label: 'Elaborazione', hint: 'Avvia l\'estrazione eventi' },
+  { number: 3, label: 'Cronistoria', hint: 'La cronistoria estratta è pronta' },
+] as const;
+
 // --- Helpers ---
 
 function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
+}
+
+function computeExtractionAutoStep(
+  processingStage: string,
+  hasProcessingDocs: boolean,
+  hasEvents: boolean,
+): number {
+  // 3-step wizard: 1=Documenti, 2=Elaborazione, 3=Cronistoria
+  if (processingStage === 'completato') return 3;
+  if (processingStage === 'elaborazione') return 2;
+  if (processingStage === 'errore') {
+    if (hasEvents) return 3;
+    return 2;
+  }
+  if (hasEvents) return 3;
+  if (hasProcessingDocs) return 2;
+  return 1;
 }
 
 function computeAutoStep(
@@ -91,6 +114,11 @@ export function CaseDetailClient({
   const [localAnomalies, setLocalAnomalies] = useState(anomalies);
   const [localDocuments, setLocalDocuments] = useState(initialDocuments);
 
+  // Determine pipeline mode for UI adaptation
+  const pipelineMode = caseData.pipeline_mode ?? 'full';
+  const isExtractionOnly = pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only';
+  const WIZARD_STEPS = isExtractionOnly ? EXTRACTION_WIZARD_STEPS : FULL_WIZARD_STEPS;
+
   // Sync with server data on refresh
   useEffect(() => {
     setLocalAnomalies(anomalies);
@@ -109,7 +137,9 @@ export function CaseDetailClient({
   const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
   const processingStage = caseData.processing_stage ?? 'idle';
 
-  const autoStep = computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
+  const autoStep = isExtractionOnly
+    ? computeExtractionAutoStep(processingStage, hasProcessingDocs, hasEvents)
+    : computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
@@ -161,8 +191,15 @@ export function CaseDetailClient({
       <WizardStepBar
         steps={WIZARD_STEPS.map((step) => ({
           ...step,
-          subtitle:
-            step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
+          subtitle: isExtractionOnly
+            ? (step.number === 1
+                ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
+                : step.number === 2
+                ? (hasProcessingDocs || processingStage === 'elaborazione'
+                    ? 'In elaborazione...'
+                    : processingStage === 'errore' ? 'Errore' : 'Pronto')
+                : hasEvents ? `${events.length} eventi estratti` : 'In attesa')
+            : (step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
@@ -176,7 +213,7 @@ export function CaseDetailClient({
                 : 'Nessuna anomalia')
             : processingStage === 'generazione_report'
                 ? 'Generazione in corso...'
-                : hasReport ? 'Report pronto' : 'In attesa',
+                : hasReport ? 'Report pronto' : 'In attesa'),
           hint: activeStep === step.number ? step.hint : undefined,
         }))}
         activeStep={activeStep}
@@ -186,91 +223,146 @@ export function CaseDetailClient({
 
       {/* Step content - aria-live for screen readers */}
       <div aria-live="polite">
-      {/* === STEP 1: Documenti === */}
-      {activeStep === 1 && (
-        <div key="step-1" className="animate-step-in">
-        <DocumentsSection
-          caseId={caseId}
-          documents={localDocuments}
-          processingLabels={processingLabels}
-          hasUploadedDocs={hasUploadedDocs}
-          onProceedToNext={() => handleSetStep(2)}
-        />
-        </div>
-      )}
+      {isExtractionOnly ? (
+        <>
+          {/* === Extraction-only: 3-step wizard === */}
 
-      {/* === STEP 2: Info Perizia === */}
-      {activeStep === 2 && (
-        <div key="step-2" className="animate-step-in">
-        <PeriziaMetadataForm
-          caseId={caseId}
-          caseData={caseData}
-          onSaved={() => router.refresh()}
-          onProceedToNext={() => handleSetStep(3)}
-        />
-        </div>
-      )}
-
-      {/* === STEP 3: Elaborazione === */}
-      {activeStep === 3 && (
-        <div key="step-3" className="animate-step-in">
-        <ProcessingSection
-          caseId={caseId}
-          documents={localDocuments}
-          hasProcessingDocs={hasProcessingDocs}
-          hasUploadedDocs={hasUploadedDocs}
-          processingStage={processingStage}
-          lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
-        />
-        </div>
-      )}
-
-      {/* === STEP 4: Revisione Anomalie === */}
-      {activeStep === 4 && (
-        <div key="step-4" className="animate-step-in">
-          {processingStage === 'revisione_anomalie' || hasEvents || localAnomalies.length > 0 ? (
-            <AnomalyReviewStep
-              caseId={caseId}
-              anomalies={localAnomalies}
-              missingDocs={missingDocs}
-              events={events}
-              documents={localDocuments}
-              documentPages={documentPages}
-              processingStage={processingStage}
-              onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
-              onGenerateStarted={() => {
-                userNavigatedRef.current = false;
-                setActiveStep(5);
-              }}
-            />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  In attesa dell&apos;elaborazione. Carica i documenti e avvia l&apos;elaborazione.
-                </p>
-              </CardContent>
-            </Card>
+          {/* STEP 1: Documenti */}
+          {activeStep === 1 && (
+            <div key="step-1" className="animate-step-in">
+              <DocumentsSection
+                caseId={caseId}
+                documents={localDocuments}
+                processingLabels={processingLabels}
+                hasUploadedDocs={hasUploadedDocs}
+                onProceedToNext={() => handleSetStep(2)}
+              />
+            </div>
           )}
-        </div>
-      )}
 
-      {/* === STEP 5: Report === */}
-      {activeStep === 5 && (
-        <div key="step-5" className="animate-step-in">
-          <ReportStep
-            caseId={caseId}
-            report={report}
-            events={events}
-            anomalies={localAnomalies}
-            missingDocs={missingDocs}
-            documents={localDocuments}
-            documentPages={documentPages}
-            eventImages={eventImages}
-            processingStage={processingStage}
-            onNavigateToStep={handleSetStep}
-          />
-        </div>
+          {/* STEP 2: Elaborazione */}
+          {activeStep === 2 && (
+            <div key="step-2" className="animate-step-in">
+              <ProcessingSection
+                caseId={caseId}
+                documents={localDocuments}
+                hasProcessingDocs={hasProcessingDocs}
+                hasUploadedDocs={hasUploadedDocs}
+                processingStage={processingStage}
+                lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+              />
+            </div>
+          )}
+
+          {/* STEP 3: Cronistoria (eventi) */}
+          {activeStep === 3 && (
+            <div key="step-3" className="animate-step-in">
+              <ReportStep
+                caseId={caseId}
+                report={null}
+                events={events}
+                anomalies={[]}
+                missingDocs={[]}
+                documents={localDocuments}
+                documentPages={documentPages}
+                eventImages={eventImages}
+                processingStage={processingStage}
+                onNavigateToStep={handleSetStep}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* === Full pipeline: 5-step wizard === */}
+
+          {/* STEP 1: Documenti */}
+          {activeStep === 1 && (
+            <div key="step-1" className="animate-step-in">
+              <DocumentsSection
+                caseId={caseId}
+                documents={localDocuments}
+                processingLabels={processingLabels}
+                hasUploadedDocs={hasUploadedDocs}
+                onProceedToNext={() => handleSetStep(2)}
+              />
+            </div>
+          )}
+
+          {/* STEP 2: Info Perizia */}
+          {activeStep === 2 && (
+            <div key="step-2" className="animate-step-in">
+              <PeriziaMetadataForm
+                caseId={caseId}
+                caseData={caseData}
+                onSaved={() => router.refresh()}
+                onProceedToNext={() => handleSetStep(3)}
+              />
+            </div>
+          )}
+
+          {/* STEP 3: Elaborazione */}
+          {activeStep === 3 && (
+            <div key="step-3" className="animate-step-in">
+              <ProcessingSection
+                caseId={caseId}
+                documents={localDocuments}
+                hasProcessingDocs={hasProcessingDocs}
+                hasUploadedDocs={hasUploadedDocs}
+                processingStage={processingStage}
+                lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+              />
+            </div>
+          )}
+
+          {/* STEP 4: Revisione Anomalie */}
+          {activeStep === 4 && (
+            <div key="step-4" className="animate-step-in">
+              {processingStage === 'revisione_anomalie' || hasEvents || localAnomalies.length > 0 ? (
+                <AnomalyReviewStep
+                  caseId={caseId}
+                  anomalies={localAnomalies}
+                  missingDocs={missingDocs}
+                  events={events}
+                  documents={localDocuments}
+                  documentPages={documentPages}
+                  processingStage={processingStage}
+                  onAnomaliesChanged={(updated) => setLocalAnomalies(updated)}
+                  onGenerateStarted={() => {
+                    userNavigatedRef.current = false;
+                    setActiveStep(5);
+                  }}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      In attesa dell&apos;elaborazione. Carica i documenti e avvia l&apos;elaborazione.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* STEP 5: Report */}
+          {activeStep === 5 && (
+            <div key="step-5" className="animate-step-in">
+              <ReportStep
+                caseId={caseId}
+                report={report}
+                events={events}
+                anomalies={localAnomalies}
+                missingDocs={missingDocs}
+                documents={localDocuments}
+                documentPages={documentPages}
+                eventImages={eventImages}
+                processingStage={processingStage}
+                onNavigateToStep={handleSetStep}
+              />
+            </div>
+          )}
+        </>
       )}
       </div>
     </div>
