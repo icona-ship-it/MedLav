@@ -93,6 +93,27 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 - Impatto delle patologie sulla vita quotidiana e sull'autonomia
 - Riferimenti alle tabelle INPS/INAIL per le percentuali di invalidita`,
 
+  previdenziale_dlgs62: `FOCUS D.LGS. 62/2024 — CONDIZIONE DI DISABILITA: Presta particolare attenzione a:
+- Valutazione multidimensionale secondo il modello ICF
+- Funzioni corporee, strutture corporee, attivita e partecipazione, fattori ambientali
+- Verbale della commissione multidisciplinare e relativi accertamenti
+- Progetto di vita individuale e misure di sostegno
+- Limitazioni dell'attivita e restrizioni alla partecipazione
+- Barriere ambientali e fattori contestuali
+- Ausili, protesi, accomodamenti ragionevoli in uso o necessari
+- Documentazione specialistica a supporto della condizione di disabilita`,
+
+  previdenziale_inv_civile: `FOCUS INVALIDITA CIVILE — L. 118/1971, L. 18/1980, L. 104/1992, L. 222/1984: Presta particolare attenzione a:
+- Percentuali di invalidita e riferimenti alle tabelle D.M. 05/02/1992
+- Patologie croniche con relativi riscontri diagnostici strumentali
+- Autonomia negli atti della vita quotidiana (alimentazione, igiene, vestizione, deambulazione)
+- Capacita di deambulazione e necessita di accompagnatore
+- Capacita lavorativa generica e specifica residua
+- Terapie farmacologiche in corso e risposta terapeutica
+- Ausili, protesi e presidi utilizzati
+- Verbale della commissione medica ASL/INPS e relativi accertamenti
+- Prognosi e possibilita di miglioramento o aggravamento`,
+
   infortuni: `FOCUS INFORTUNI SUL LAVORO / MALATTIA PROFESSIONALE: Presta particolare attenzione a:
 - Dinamica dell'infortunio o caratteristiche dell'esposizione professionale
 - Nesso causale tra l'attivita lavorativa e le lesioni/patologie
@@ -102,6 +123,31 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
 - Postumi permanenti e loro quantificazione
 - Capacita lavorativa specifica e generica residua
 - Riferimenti alle tabelle INAIL per l'indennizzo del danno biologico`,
+
+  inail_malattia_prof: `FOCUS MALATTIA PROFESSIONALE INAIL: Presta particolare attenzione a:
+- Mansione lavorativa svolta e rischio professionale specifico
+- Agente patogeno o fattore di rischio e durata/intensita dell'esposizione
+- Insorgenza dei sintomi e diagnosi della malattia
+- Denuncia di malattia professionale e certificato medico
+- Documentazione della sorveglianza sanitaria (visite periodiche, cartella sanitaria)
+- Documento di Valutazione dei Rischi (DVR) e misure di prevenzione
+- Accertamenti INAIL e valutazione del danno biologico
+- Nesso causale tra esposizione lavorativa e patologia
+- Concause extraprofessionali e patologie preesistenti
+- Tabelle delle malattie professionali (tabellate vs non tabellate)`,
+
+  inail_infortunio: `FOCUS INFORTUNIO SUL LAVORO INAIL: Presta particolare attenzione a:
+- Dinamica dell'infortunio: data, ora, luogo, circostanze, mansione svolta
+- Causa violenta e occasione di lavoro
+- Per infortunio in itinere: percorso, mezzo di trasporto, circostanze
+- Certificato medico iniziale INAIL e certificati di continuazione
+- Denuncia di infortunio del datore di lavoro
+- Primo soccorso e iter diagnostico-terapeutico
+- DPI in uso al momento dell'infortunio
+- Formazione del lavoratore in materia di sicurezza
+- Periodi di inabilita temporanea assoluta (ITA)
+- Postumi permanenti e percentuale danno biologico INAIL
+- Valutazione INAIL e relativi accertamenti`,
 
   perizia_assicurativa: `FOCUS PERIZIA ASSICURATIVA — VALUTAZIONE PER COMPAGNIA: Presta particolare attenzione a:
 - Dinamica del sinistro e compatibilita biomeccanica con le lesioni

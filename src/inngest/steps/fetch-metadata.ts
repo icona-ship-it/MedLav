@@ -22,7 +22,7 @@ export async function fetchCaseMetadata(
 
   const { data: caseRow, error: caseError } = await supabase
     .from('cases')
-    .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata')
+    .select('id, case_type, case_types, case_role, patient_initials, user_id, perizia_metadata, module_id')
     .eq('id', caseId)
     .single();
 
@@ -75,6 +75,7 @@ export async function fetchCaseMetadata(
       patientInitials: caseRow.patient_initials as string | null,
       userId: caseRow.user_id as string,
       periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
+      moduleId: (caseRow.module_id ?? undefined) as string | undefined,
     } satisfies CaseMetadata,
     documents: (docs ?? []).map((d) => ({
       id: d.id as string,

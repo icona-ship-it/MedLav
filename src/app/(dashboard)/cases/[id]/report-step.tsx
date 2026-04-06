@@ -177,6 +177,12 @@ export function ReportStep({
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
+                    <a href={`/api/cases/${caseId}/export/html`} download>
+                      <Download className="mr-2 h-3.5 w-3.5" />
+                      Esporta HTML
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <a href={`/api/cases/${caseId}/export/csv`} download>
                       <Download className="mr-2 h-3.5 w-3.5" />
                       Esporta CSV

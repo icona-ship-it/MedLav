@@ -43,11 +43,35 @@ export const QUESITI_TEMPLATES: Record<CaseType, readonly string[]> = {
     'Dica il CTU se le infermità riscontrate comportino una riduzione permanente della capacità lavorativa, quantificandola in misura percentuale secondo le tabelle di cui al D.M. 05/02/1992.',
     'Dica il CTU se il periziando sia da considerarsi invalido civile ai sensi della L. 118/1971 e successive modificazioni, indicando la percentuale di invalidità.',
   ],
+  previdenziale_dlgs62: [
+    'Accerti il CTU se il periziando sia affetto da condizione di disabilità ai sensi del D.Lgs. 62/2024 e, in caso affermativo, ne descriva l\'entità secondo il modello ICF.',
+    'Valuti il CTU se la valutazione multidimensionale effettuata dalla commissione sia conforme ai criteri previsti dal D.Lgs. 62/2024 e dalla classificazione ICF.',
+    'Accerti il CTU se il progetto di vita individuale elaborato dalla commissione sia adeguato alle esigenze di sostegno del periziando.',
+    'Valuti il CTU le limitazioni dell\'attività e le restrizioni alla partecipazione del periziando, specificando i fattori ambientali facilitanti e le barriere esistenti.',
+  ],
+  previdenziale_inv_civile: [
+    'Quantifichi il CTU la percentuale di invalidità civile del periziando, con riferimento alle tabelle del D.M. 05/02/1992, specificando le singole menomazioni e la percentuale complessiva.',
+    'Accerti il CTU se il periziando sia persona non in grado di deambulare senza l\'aiuto permanente di un accompagnatore, ovvero non in grado di compiere gli atti quotidiani della vita senza assistenza continua (L. 18/1980).',
+    'Valuti il CTU la sussistenza dei requisiti sanitari per il riconoscimento dell\'handicap grave ai sensi dell\'art. 3 comma 3 della L. 104/1992.',
+    'Indichi il CTU la data di insorgenza dell\'invalidità e se le infermità riscontrate siano suscettibili di miglioramento.',
+  ],
   infortuni: [
     'Dica il CTU se l\'evento lesivo sia avvenuto in occasione di lavoro e se sussista nesso causale con l\'attività lavorativa svolta.',
     'Dica il CTU se siano state rispettate le norme di sicurezza di cui al D.Lgs. 81/2008 e se le misure di prevenzione adottate dal datore di lavoro fossero adeguate.',
     'Quantifichi il CTU il danno biologico permanente e temporaneo, con riferimento alle tabelle INAIL, indicando il grado di menomazione dell\'integrità psicofisica.',
     'Dica il CTU se residui una riduzione permanente della capacità lavorativa specifica.',
+  ],
+  inail_malattia_prof: [
+    'Accerti il CTU se la patologia riscontrata nel periziando sia riconducibile con ragionevole probabilità all\'esposizione lavorativa, specificando l\'agente patogeno, la durata e l\'intensità dell\'esposizione.',
+    'Indichi il CTU se la malattia sia tabellata o non tabellata ai sensi delle vigenti tabelle INAIL.',
+    'Quantifichi il CTU il danno biologico permanente secondo le tabelle allegate al D.Lgs. 38/2000, specificando i periodi di inabilità temporanea.',
+    'Valuti il CTU l\'eventuale danno differenziale tra la menomazione complessiva e l\'indennizzo INAIL.',
+  ],
+  inail_infortunio: [
+    'Accerti il CTU la dinamica dell\'infortunio e la sussistenza del nesso causale tra l\'evento traumatico e le lesioni documentate.',
+    'Quantifichi il CTU il danno biologico permanente secondo le tabelle allegate al D.Lgs. 38/2000.',
+    'Valuti il CTU se la percentuale di danno biologico attribuita dall\'INAIL sia congrua rispetto ai postumi accertati.',
+    'Accerti il CTU se il datore di lavoro abbia adempiuto agli obblighi di sicurezza previsti dal D.Lgs. 81/2008.',
   ],
   perizia_assicurativa: [
     'Descriva il perito le lesioni riportate dal danneggiato a seguito del sinistro in oggetto, verificando la compatibilità con la dinamica dichiarata.',

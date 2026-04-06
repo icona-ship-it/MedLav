@@ -143,7 +143,7 @@ function CategoryPicker({ category, modules }: { category: ModuleCategory; modul
             href={`/cases/new?module=${mod.id}`}
             className="group block"
           >
-            <Card className="h-full rounded-2xl border-primary/20 bg-primary/[0.03] transition-all hover:border-primary/40 hover:shadow-lg">
+            <Card className="h-full rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
               <CardContent className="flex flex-col gap-3 p-6">
                 <div>
                   <h3 className="text-lg font-bold">{mod.label}</h3>

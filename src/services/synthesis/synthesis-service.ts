@@ -29,6 +29,7 @@ import { validateReport } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 import { computePromptVersion } from './prompt-version';
 import type { DocumentSummary } from './document-summarizer';
+import type { PubMedSearchResult } from '../pubmed/evidence-enricher';
 import { logger } from '@/lib/logger';
 
 export interface SynthesisResult {
@@ -55,6 +56,8 @@ export interface SynthesisParams {
   documentsOcrText?: DocumentOcrContext[];
   /** Per-document AI summaries for large cases (map-reduce mode) */
   documentSummaries?: DocumentSummary[];
+  /** PubMed scientific references for bibliography section */
+  pubmedReferences?: PubMedSearchResult[];
 }
 
 const SYNTHESIS_SPLIT_THRESHOLD_CHARS = 40_000;

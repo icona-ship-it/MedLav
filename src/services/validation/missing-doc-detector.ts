@@ -77,11 +77,34 @@ const EXPECTED_DOCS_BY_CASE_TYPE: Record<CaseType, Array<{
     { name: 'Esami strumentali e diagnostici', check: 'hasEsamiPreOp', reason: 'Necessari per oggettivare le limitazioni funzionali e supportare la valutazione percentuale di invalidita' },
     { name: 'Documentazione delle terapie in corso', check: 'hasDiarioClinico', reason: 'Fondamentale per dimostrare la cronicita delle patologie e l\'adeguatezza del trattamento in atto' },
   ],
+  previdenziale_dlgs62: [
+    { name: 'Verbale della commissione multidisciplinare', check: 'hasDiarioClinico', reason: 'Documento centrale del ricorso: contiene la valutazione impugnata della condizione di disabilita ai sensi del D.Lgs. 62/2024' },
+    { name: 'Documentazione specialistica delle patologie', check: 'hasFollowUpPostOp', reason: 'Essenziale per documentare le menomazioni e le limitazioni funzionali secondo il modello ICF' },
+    { name: 'Esami strumentali e diagnostici', check: 'hasEsamiPreOp', reason: 'Necessari per oggettivare le menomazioni delle funzioni e strutture corporee' },
+  ],
+  previdenziale_inv_civile: [
+    { name: 'Verbale della commissione medica ASL/INPS', check: 'hasDiarioClinico', reason: 'Documento centrale del ricorso: contiene la valutazione percentuale di invalidita impugnata' },
+    { name: 'Documentazione specialistica delle patologie dichiarate', check: 'hasFollowUpPostOp', reason: 'Essenziale per documentare le patologie alla base della richiesta di invalidita con referti specialistici recenti' },
+    { name: 'Esami strumentali e diagnostici', check: 'hasEsamiPreOp', reason: 'Necessari per oggettivare le limitazioni funzionali e supportare la valutazione percentuale di invalidita' },
+    { name: 'Documentazione delle terapie in corso', check: 'hasLetteraDimissione', reason: 'Fondamentale per dimostrare la cronicita delle patologie e l\'adeguatezza del trattamento in atto' },
+  ],
   infortuni: [
     { name: 'Certificato medico iniziale INAIL', check: 'hasEsamiPreOp', reason: 'Documento obbligatorio per l\'apertura della pratica INAIL con diagnosi iniziale e prognosi' },
     { name: 'Denuncia di infortunio o malattia professionale', check: 'hasDiarioClinico', reason: 'Documento obbligatorio che attesta la dinamica dell\'evento e le circostanze lavorative' },
     { name: 'Referti dei controlli e certificati di continuazione', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare il decorso clinico e determinare la durata dell\'inabilita temporanea' },
     { name: 'Lettera di dimissione (se ricovero)', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per la diagnosi finale e le indicazioni terapeutiche alla dimissione post-infortunio' },
+  ],
+  inail_malattia_prof: [
+    { name: 'Denuncia di malattia professionale', check: 'hasDiarioClinico', reason: 'Documento obbligatorio che attesta la patologia denunciata e le circostanze dell\'esposizione lavorativa' },
+    { name: 'Certificato medico malattia professionale', check: 'hasEsamiPreOp', reason: 'Documento obbligatorio per l\'apertura della pratica INAIL con diagnosi e nesso causale' },
+    { name: 'Documentazione esposizione lavorativa (DVR, mansionario)', check: 'hasConsenso', reason: 'Essenziale per documentare il rischio professionale specifico e la durata dell\'esposizione' },
+    { name: 'Referti dei controlli e accertamenti INAIL', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare il decorso clinico e la valutazione del danno biologico INAIL' },
+  ],
+  inail_infortunio: [
+    { name: 'Certificato medico iniziale INAIL', check: 'hasEsamiPreOp', reason: 'Documento obbligatorio per l\'apertura della pratica INAIL con diagnosi iniziale e prognosi' },
+    { name: 'Denuncia di infortunio del datore di lavoro', check: 'hasDiarioClinico', reason: 'Documento obbligatorio che attesta la dinamica dell\'infortunio e le circostanze lavorative' },
+    { name: 'Certificati di continuazione INAIL', check: 'hasFollowUpPostOp', reason: 'Necessari per documentare il decorso clinico e i periodi di inabilita temporanea assoluta' },
+    { name: 'Lettera di dimissione (se ricovero)', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per la diagnosi finale e le indicazioni terapeutiche post-infortunio' },
   ],
   perizia_assicurativa: [
     { name: 'Verbale di pronto soccorso', check: 'hasLetteraDimissione', reason: 'Documento fondamentale per attestare le lesioni riportate e la tempestivita del primo accesso sanitario post-sinistro' },

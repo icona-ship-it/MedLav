@@ -14,7 +14,11 @@ import { INFEZIONE_NOSOCOMIALE_KNOWLEDGE } from './case-type/infezione-nosocomia
 import { ERRORE_DIAGNOSTICO_KNOWLEDGE } from './case-type/errore-diagnostico';
 import { RC_AUTO_KNOWLEDGE } from './case-type/rc-auto';
 import { PREVIDENZIALE_KNOWLEDGE } from './case-type/previdenziale';
+import { PREVIDENZIALE_DLGS62_KNOWLEDGE } from './case-type/previdenziale-dlgs-62-2024';
+import { PREVIDENZIALE_INV_CIVILE_KNOWLEDGE } from './case-type/previdenziale-inv-civile';
 import { INFORTUNI_KNOWLEDGE } from './case-type/infortuni';
+import { INAIL_MALATTIA_PROF_KNOWLEDGE } from './case-type/inail-malattia-professionale';
+import { INAIL_INFORTUNIO_KNOWLEDGE } from './case-type/inail-infortunio-lavoro';
 import { PERIZIA_ASSICURATIVA_KNOWLEDGE } from './case-type/perizia-assicurativa';
 import { ANALISI_SPESE_MEDICHE_KNOWLEDGE } from './case-type/analisi-spese-mediche';
 import { OPINIONE_PROGNOSTICA_KNOWLEDGE } from './case-type/opinione-prognostica';
@@ -29,7 +33,11 @@ const CASE_TYPE_KNOWLEDGE: Record<CaseType, CaseTypeKnowledge> = {
   errore_diagnostico: ERRORE_DIAGNOSTICO_KNOWLEDGE,
   rc_auto: RC_AUTO_KNOWLEDGE,
   previdenziale: PREVIDENZIALE_KNOWLEDGE,
+  previdenziale_dlgs62: PREVIDENZIALE_DLGS62_KNOWLEDGE,
+  previdenziale_inv_civile: PREVIDENZIALE_INV_CIVILE_KNOWLEDGE,
   infortuni: INFORTUNI_KNOWLEDGE,
+  inail_malattia_prof: INAIL_MALATTIA_PROF_KNOWLEDGE,
+  inail_infortunio: INAIL_INFORTUNIO_KNOWLEDGE,
   perizia_assicurativa: PERIZIA_ASSICURATIVA_KNOWLEDGE,
   analisi_spese_mediche: ANALISI_SPESE_MEDICHE_KNOWLEDGE,
   opinione_prognostica: OPINIONE_PROGNOSTICA_KNOWLEDGE,

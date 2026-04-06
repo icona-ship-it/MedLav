@@ -183,12 +183,20 @@ describe('section-catalog', () => {
 
     it('should have placeholder sections with isPlaceholder=true and maxTokens=0', () => {
       const placeholders = CTU_SECTIONS.filter((s) => s.isPlaceholder);
-      expect(placeholders.length).toBeGreaterThanOrEqual(5);
+      expect(placeholders.length).toBeGreaterThanOrEqual(4);
       for (const p of placeholders) {
         expect(p.maxTokens).toBe(0);
         expect(p.placeholderText).toBeTruthy();
         expect(p.dataSources).toEqual([]);
       }
+    });
+
+    it('should have bibliografia section with pubmed-references data source and fallback placeholder text', () => {
+      const biblio = CTU_SECTIONS.find((s) => s.id === 'bibliografia');
+      expect(biblio).toBeDefined();
+      expect(biblio!.dataSources).toContain('pubmed-references');
+      expect(biblio!.placeholderText).toBeTruthy();
+      expect(biblio!.promptDirective).toBeTruthy();
     });
 
     it('should not contain specialty sections (analisi_intervento, complicanze, etc.)', () => {
@@ -377,11 +385,17 @@ describe('section-catalog', () => {
     it('should include placeholder sections in CTU plan', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const placeholders = plan.filter((s) => s.isPlaceholder);
-      expect(placeholders.length).toBeGreaterThanOrEqual(4);
+      expect(placeholders.length).toBeGreaterThanOrEqual(3);
       expect(placeholders.map((s) => s.id)).toContain('verbale_operazioni_peritali');
       expect(placeholders.map((s) => s.id)).toContain('visita_periziando');
       expect(placeholders.map((s) => s.id)).toContain('considerazioni_ml');
-      expect(placeholders.map((s) => s.id)).toContain('bibliografia');
+    });
+
+    it('should include bibliografia section in CTU plan', () => {
+      const plan = resolveSectionPlan(CTU_PARAMS);
+      const biblio = plan.find((s) => s.id === 'bibliografia');
+      expect(biblio).toBeDefined();
+      expect(biblio!.dataSources).toContain('pubmed-references');
     });
 
     it('should include visita_clinica placeholder in stragiudiziale plan', () => {

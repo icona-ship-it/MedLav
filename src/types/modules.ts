@@ -192,7 +192,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_dlgs62'],
     priority: false,
   },
   {
@@ -202,7 +202,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_dlgs62'],
     priority: false,
   },
   {
@@ -212,7 +212,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_inv_civile'],
     priority: false,
   },
   {
@@ -222,7 +222,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_inv_civile'],
     priority: false,
   },
   {
@@ -232,7 +232,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_inv_civile'],
     priority: false,
   },
   {
@@ -242,7 +242,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_inv_civile'],
     priority: false,
   },
   {
@@ -252,7 +252,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 3,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
+    legacyCaseTypes: ['previdenziale_inv_civile'],
     priority: false,
   },
 
@@ -264,7 +264,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 4,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['infortuni'],
+    legacyCaseTypes: ['inail_malattia_prof'],
     priority: false,
   },
   {
@@ -274,7 +274,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     categoryId: 4,
     impliedRole: 'ctu',
     pipelineMode: 'full',
-    legacyCaseTypes: ['infortuni'],
+    legacyCaseTypes: ['inail_infortunio'],
     priority: false,
   },
 
@@ -348,7 +348,6 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     pipelineMode: 'anonymize_only',
     legacyCaseTypes: [],
     priority: false,
-    hidden: true,
   },
 ] as const;
 

@@ -110,7 +110,7 @@ export default async function DashboardPage() {
 
             return (
               <Link key={cat.id} href={href} className="group block">
-                <Card className="h-full rounded-2xl border-primary/20 bg-primary/[0.03] transition-all hover:border-primary/40 hover:shadow-lg">
+                <Card className="h-full rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
                   <CardContent className="flex flex-col gap-4 p-6">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
                       <Icon className="h-6 w-6" />

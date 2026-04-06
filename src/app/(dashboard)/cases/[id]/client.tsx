@@ -7,6 +7,7 @@ import { DocumentsSection } from './documents-section';
 import { ProcessingSection } from './processing-section';
 import { PeriziaMetadataForm } from './perizia-form';
 import { ReportStep } from './report-step';
+import { AnonymizeStep } from './anonymize-step';
 import { WizardStepBar } from './wizard-step-bar';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
@@ -45,6 +46,11 @@ const EXTRACTION_WIZARD_STEPS = [
   { number: 3, label: 'Cronistoria', hint: 'La cronistoria estratta è pronta' },
 ] as const;
 
+const ANONYMIZE_WIZARD_STEPS = [
+  { number: 1, label: 'Documenti', hint: 'Carica i documenti da anonimizzare' },
+  { number: 2, label: 'Anonimizza', hint: 'Visualizza e scarica il testo anonimizzato' },
+] as const;
+
 // --- Helpers ---
 
 function isDocProcessing(status: string): boolean {
@@ -66,6 +72,14 @@ function computeExtractionAutoStep(
   if (hasEvents) return 3;
   if (hasProcessingDocs) return 2;
   return 1;
+}
+
+function computeAnonymizeAutoStep(
+  documents: Document[],
+): number {
+  // 2-step wizard: 1=Documenti, 2=Anonimizza
+  if (documents.length === 0) return 1;
+  return 2;
 }
 
 function computeAutoStep(
@@ -114,7 +128,12 @@ export function CaseDetailClient({
   // Determine pipeline mode for UI adaptation
   const pipelineMode = caseData.pipeline_mode ?? 'full';
   const isExtractionOnly = pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only';
-  const WIZARD_STEPS = isExtractionOnly ? EXTRACTION_WIZARD_STEPS : FULL_WIZARD_STEPS;
+  const isAnonymizeOnly = pipelineMode === 'anonymize_only';
+  const WIZARD_STEPS = isAnonymizeOnly
+    ? ANONYMIZE_WIZARD_STEPS
+    : isExtractionOnly
+      ? EXTRACTION_WIZARD_STEPS
+      : FULL_WIZARD_STEPS;
 
   // Sync with server data on refresh
   useEffect(() => {
@@ -134,9 +153,11 @@ export function CaseDetailClient({
   const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
   const processingStage = caseData.processing_stage ?? 'idle';
 
-  const autoStep = isExtractionOnly
-    ? computeExtractionAutoStep(processingStage, hasProcessingDocs, hasEvents)
-    : computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
+  const autoStep = isAnonymizeOnly
+    ? computeAnonymizeAutoStep(localDocuments)
+    : isExtractionOnly
+      ? computeExtractionAutoStep(processingStage, hasProcessingDocs, hasEvents)
+      : computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
@@ -188,7 +209,11 @@ export function CaseDetailClient({
       <WizardStepBar
         steps={WIZARD_STEPS.map((step) => ({
           ...step,
-          subtitle: isExtractionOnly
+          subtitle: isAnonymizeOnly
+            ? (step.number === 1
+                ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
+                : 'Pronto')
+            : isExtractionOnly
             ? (step.number === 1
                 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
                 : step.number === 2
@@ -215,7 +240,35 @@ export function CaseDetailClient({
 
       {/* Step content - aria-live for screen readers */}
       <div aria-live="polite">
-      {isExtractionOnly ? (
+      {isAnonymizeOnly ? (
+        <>
+          {/* === Anonymize-only: 2-step wizard === */}
+
+          {/* STEP 1: Documenti */}
+          {activeStep === 1 && (
+            <div key="step-1" className="animate-step-in">
+              <DocumentsSection
+                caseId={caseId}
+                documents={localDocuments}
+                processingLabels={processingLabels}
+                hasUploadedDocs={hasUploadedDocs}
+                onProceedToNext={() => handleSetStep(2)}
+              />
+            </div>
+          )}
+
+          {/* STEP 2: Anonimizza */}
+          {activeStep === 2 && (
+            <div key="step-2" className="animate-step-in">
+              <AnonymizeStep
+                caseId={caseId}
+                documents={localDocuments}
+                processingStage={processingStage}
+              />
+            </div>
+          )}
+        </>
+      ) : isExtractionOnly ? (
         <>
           {/* === Extraction-only: 3-step wizard === */}
 

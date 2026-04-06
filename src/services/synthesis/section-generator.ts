@@ -23,6 +23,7 @@ import { buildGuidelineContext } from '../rag/retrieval-service';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import type { PubMedSearchResult } from '../pubmed/evidence-enricher';
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -162,6 +163,12 @@ export function buildSectionUserPrompt(params: {
     }
   }
 
+  // Add PubMed references
+  if (spec.dataSources.includes('pubmed-references') && synthesisParams.pubmedReferences) {
+    const pubmedText = formatPubMedReferencesForPrompt(synthesisParams.pubmedReferences);
+    if (pubmedText) parts.push(pubmedText);
+  }
+
   // Add guidelines
   if (spec.dataSources.includes('guidelines') && guidelineContext) {
     parts.push(`\n${guidelineContext}\n`);
@@ -185,6 +192,18 @@ export async function generateSingleSection(params: {
 }): Promise<GeneratedSection> {
   const { spec, synthesisParams, previousContext, documentsOcrText } = params;
   const startMs = Date.now();
+
+  // Bibliography: fall back to placeholder when no PubMed references available
+  if (spec.dataSources.includes('pubmed-references') &&
+      (!synthesisParams.pubmedReferences || synthesisParams.pubmedReferences.length === 0)) {
+    return {
+      id: spec.id,
+      title: spec.title,
+      content: spec.placeholderText ?? '',
+      contextSummary: '',
+      wordCount: 0,
+    };
+  }
 
   const hasOcrText = !!(documentsOcrText && documentsOcrText.length > 0);
 
@@ -350,4 +369,21 @@ function filterOcrForSection(
   }
   // Default: return all
   return docs;
+}
+
+// ── PubMed formatting ─────────────────────────────────────────────
+
+function formatPubMedReferencesForPrompt(results: PubMedSearchResult[]): string {
+  if (results.length === 0) return '';
+
+  const parts: string[] = ['## RIFERIMENTI SCIENTIFICI PUBMED\n'];
+  for (const result of results) {
+    parts.push(`### Diagnosi: ${result.query}\n`);
+    for (const article of result.articles) {
+      const doi = article.doi ? ` DOI: ${article.doi}.` : '';
+      parts.push(`- ${article.authors}. ${article.title}. ${article.journal}. ${article.year}.${doi} PMID: ${article.pmid}`);
+    }
+    parts.push('');
+  }
+  return parts.join('\n');
 }

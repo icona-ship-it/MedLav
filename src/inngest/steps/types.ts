@@ -9,6 +9,7 @@ export interface CaseMetadata {
   patientInitials: string | null;
   userId: string;
   periziaMetadata?: PeriziaMetadata;
+  moduleId?: string;
 }
 
 export interface DocumentInfo {

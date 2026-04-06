@@ -277,17 +277,32 @@ ${NO_EVN_RULE}`,
   {
     id: 'bibliografia',
     title: 'Bibliografia',
-    maxTokens: TOKENS_NONE,
-    dataSources: [],
+    maxTokens: TOKENS_MAX,
+    dataSources: ['pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
-    isPlaceholder: true,
     placeholderText: `*[Inserire bibliografia pertinente. Fonti tipiche:*
 *- Linee guida delle societa scientifiche di riferimento per la patologia in esame*
 *- Tabelle SIMLA per la valutazione del danno biologico*
 *- Letteratura medico-legale e giuridica rilevante*
 *- Protocolli e standard di buona pratica clinica applicabili al caso]*`,
-    promptDirective: '',
+    promptDirective: `Genera la sezione Bibliografia del report medico-legale.
+
+Ti vengono forniti riferimenti scientifici PubMed pertinenti alle diagnosi del caso.
+Per CIASCUN articolo, formatta come citazione bibliografica in stile Vancouver:
+
+Autori. Titolo. Rivista. Anno;DOI (se disponibile). PMID: numero.
+
+Organizza le citazioni per argomento/diagnosi, con un breve sottotitolo per ciascun gruppo.
+
+Dopo le citazioni PubMed, aggiungi la nota:
+
+*[Il perito potra integrare questa sezione con ulteriori fonti:*
+*- Linee guida delle societa scientifiche di riferimento*
+*- Tabelle SIMLA per la valutazione del danno biologico*
+*- Letteratura medico-legale e giuridica aggiuntiva]*
+
+${NO_EVN_RULE}`,
   },
   {
     id: 'osservazioni_bozza',
@@ -451,6 +466,231 @@ ${NO_EVN_RULE}`,
   },
 ];
 
+// ── Parere Pro Veritate sections (6) ───────────────────────────────
+
+const PARERE_PRO_VERITATE_SECTIONS: SectionSpec[] = [
+  {
+    id: 'intestazione_parere',
+    title: 'Intestazione',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 200,
+    needsOcr: false,
+    promptDirective: `Genera l'intestazione formale del parere pro veritate.
+Includi:
+- Nome, qualifica e specializzazione del professionista incaricato
+- Data del parere
+- Dicitura "Parere pro veritate"
+- Dati identificativi del paziente (iniziali, data di nascita se disponibile)
+- Soggetto richiedente (studio legale, paziente, etc.)
+Stile formale.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'oggetto_parere',
+    title: 'Oggetto del Parere',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['perizia-metadata', 'events-medical'],
+    contextMaxChars: 300,
+    needsOcr: false,
+    promptDirective: `Descrivi l'oggetto del parere: cosa e stato richiesto al professionista.
+Includi:
+- Quesito o richiesta formulata dal committente
+- Ambito della valutazione (responsabilita professionale medica)
+- Breve inquadramento della vicenda clinica oggetto di analisi
+Stile conciso e formale (1-2 paragrafi).
+${NO_EVN_RULE}`,
+  },
+  // Reuse stragiudiziale documentazione_sanitaria spec
+  {
+    id: 'documentazione_sanitaria',
+    title: 'La Documentazione Medica Prodotta',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1000,
+    needsOcr: true,
+    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+FORMATO CITAZIONE per OGNI documento:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+
+Regole:
+- OGNI evento fornito DEVE comparire
+- Diari clinici: solo giorni con variazioni significative
+- Esami lab: solo valori alterati e rilevanti
+- Verbali operatori: riprodurre INTEGRALMENTE
+- Referti radiologici: riprodurre INTEGRALMENTE
+- Scrivi in PROSA DISCORSIVA
+- Se disponibili immagini diagnostiche, inserirle INLINE
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'analisi_condotta',
+    title: 'Analisi della Condotta Sanitaria',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'context-summaries', 'guidelines'],
+    contextMaxChars: 800,
+    needsOcr: true,
+    promptDirective: `Analizza la condotta sanitaria alla luce degli standard di cura applicabili.
+Includi:
+- Ricostruzione cronologica delle scelte diagnostico-terapeutiche adottate
+- Confronto con le linee guida e buone pratiche cliniche vigenti al momento dei fatti
+- Identificazione di eventuali scostamenti dagli standard di cura
+- Valutazione dell'iter diagnostico: tempestivita, appropriatezza degli accertamenti
+- Valutazione dell'iter terapeutico: adeguatezza delle scelte, tempistica degli interventi
+- Analisi del consenso informato se documentato
+NON esprimere giudizi definitivi sulla responsabilita — il perito li formulera nella sezione successiva.
+Scrivi in prosa discorsiva formale, con citazioni puntuali alla documentazione.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'valutazione_responsabilita',
+    title: 'Valutazione dei Profili di Responsabilità',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui la valutazione dei profili di responsabilita professionale:*
+
+*- Sussistenza o insussistenza di condotte censurabili sotto il profilo medico-legale*
+*- Nesso di causalita materiale tra condotta e danno (criterio controfattuale)*
+*- Nesso di causalita giuridica (criterio del "piu probabile che non")*
+*- Quantificazione del danno biologico permanente e temporaneo*
+*- Eventuale concorso di cause (preesistenze, concause)*
+*- Perdita di chance se applicabile]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'conclusioni_parere',
+    title: 'Conclusioni',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['context-summaries', 'calculations'],
+    contextMaxChars: 0,
+    needsOcr: false,
+    promptDirective: `Genera una breve sintesi conclusiva (1-2 paragrafi).
+Riepiloga i fatti principali emersi dall'analisi della documentazione e della condotta sanitaria.
+Riporta i dati quantitativi emersi (periodi ITT/ITP, esiti documentati) se disponibili.
+NON esprimere giudizi definitivi sulla responsabilita — il perito li formulera autonomamente.
+Stile fattuale e conciso.
+${NO_EVN_RULE}
+
+*[Il perito completera questa sezione con il proprio parere motivato sulla sussistenza di profili di responsabilita professionale]*`,
+  },
+];
+
+// ── Parere Scopo Riserva sections (6) ──────────────────────────────
+
+const PARERE_SCOPO_RISERVA_SECTIONS: SectionSpec[] = [
+  {
+    id: 'intestazione_parere',
+    title: 'Intestazione',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['perizia-metadata'],
+    contextMaxChars: 200,
+    needsOcr: false,
+    promptDirective: `Genera l'intestazione formale del parere scopo riserva.
+Includi:
+- Nome, qualifica e specializzazione del professionista incaricato
+- Data del parere
+- Dicitura "Parere a scopo riserva"
+- Dati identificativi del periziando (iniziali, data di nascita se disponibile)
+- Soggetto richiedente (compagnia assicurativa, studio legale, etc.)
+Stile formale.
+${NO_EVN_RULE}`,
+  },
+  // Reuse stragiudiziale documentazione_sanitaria spec
+  {
+    id: 'documentazione_sanitaria',
+    title: 'La Documentazione Medica Prodotta',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1000,
+    needsOcr: true,
+    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+FORMATO CITAZIONE per OGNI documento:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+
+Regole:
+- OGNI evento fornito DEVE comparire
+- Diari clinici: solo giorni con variazioni significative
+- Esami lab: solo valori alterati e rilevanti
+- Verbali operatori: riprodurre INTEGRALMENTE
+- Referti radiologici: riprodurre INTEGRALMENTE
+- Scrivi in PROSA DISCORSIVA
+- Se disponibili immagini diagnostiche, inserirle INLINE
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'quadro_clinico',
+    title: 'Quadro Clinico Attuale',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'context-summaries'],
+    contextMaxChars: 600,
+    needsOcr: true,
+    promptDirective: `Descrivi il quadro clinico attuale del periziando basandoti sulla documentazione piu recente.
+Includi:
+- Diagnosi attuali documentate
+- Esiti degli ultimi accertamenti diagnostici e strumentali
+- Terapie in corso
+- Limitazioni funzionali documentate
+- Stato clinico complessivo al momento dell'ultima documentazione disponibile
+Stile descrittivo e fattuale. Riporta SOLO dati documentati.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'prognosi',
+    title: 'Valutazione Prognostica',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'context-summaries', 'calculations', 'guidelines'],
+    contextMaxChars: 600,
+    needsOcr: false,
+    promptDirective: `Genera una valutazione prognostica basata sulla documentazione clinica disponibile.
+Includi:
+- Decorso clinico atteso sulla base della patologia documentata e della letteratura
+- Tempistiche prevedibili di guarigione o stabilizzazione
+- Eventuali necessita terapeutiche future prevedibili (interventi, riabilitazione, terapie)
+- Periodi di invalidita temporanea residua stimabili (ITT/ITP) se i calcoli sono disponibili
+- Esiti permanenti prevedibili sulla base del quadro attuale
+NON quantificare percentuali di invalidita permanente — il perito le determinera.
+Stile prudente e basato su evidenze documentali.
+${NO_EVN_RULE}`,
+  },
+  {
+    id: 'stima_riserva',
+    title: 'Stima della Riserva',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui la stima della riserva tecnica, includendo:*
+
+*- Danno biologico permanente stimato (range percentuale)*
+*- Danno biologico temporaneo: periodi ITT e ITP con relative percentuali*
+*- Spese mediche future prevedibili*
+*- Eventuali costi per assistenza o protesi*
+*- Riserva complessiva consigliata (range min-max)*
+*- Note e avvertenze sulla stima]*`,
+    promptDirective: '',
+  },
+  {
+    id: 'conclusioni_parere',
+    title: 'Conclusioni',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['context-summaries', 'calculations'],
+    contextMaxChars: 0,
+    needsOcr: false,
+    promptDirective: `Genera una breve sintesi conclusiva del parere scopo riserva (1-2 paragrafi).
+Riepiloga:
+- Il quadro clinico attuale in sintesi
+- La prognosi attesa
+- I dati quantitativi disponibili (periodi ITT/ITP, esiti documentati)
+NON indicare importi o percentuali di invalidita — il perito li determinera.
+Stile sintetico e formale.
+${NO_EVN_RULE}`,
+  },
+];
+
 // ── Condition evaluation ────────────────────────────────────────────
 
 interface ConditionContext {
@@ -508,8 +748,9 @@ export function resolveSectionPlan(params: {
   periziaMetadata?: PeriziaMetadata;
   events: ConsolidatedEvent[];
   documentTypes: string[];
+  moduleId?: string;
 }): SectionSpec[] {
-  const { caseRole, periziaMetadata, events, documentTypes } = params;
+  const { caseRole, periziaMetadata, events, documentTypes, moduleId } = params;
 
   const conditionCtx: ConditionContext = {
     events,
@@ -517,20 +758,27 @@ export function resolveSectionPlan(params: {
     periziaMetadata,
   };
 
-  // Select role-specific section template
+  // Module-specific section templates take priority over role-based ones
   let baseSections: SectionSpec[];
-  switch (caseRole) {
-    case 'ctu':
-      baseSections = CTU_SECTIONS;
-      break;
-    case 'ctp':
-      baseSections = CTP_SECTIONS;
-      break;
-    case 'stragiudiziale':
-      baseSections = STRAGIUDIZIALE_SECTIONS;
-      break;
-    default:
-      baseSections = CTU_SECTIONS;
+  if (moduleId === 'parere_pro_veritate') {
+    baseSections = PARERE_PRO_VERITATE_SECTIONS;
+  } else if (moduleId === 'parere_scopo_riserva') {
+    baseSections = PARERE_SCOPO_RISERVA_SECTIONS;
+  } else {
+    // Select role-specific section template
+    switch (caseRole) {
+      case 'ctu':
+        baseSections = CTU_SECTIONS;
+        break;
+      case 'ctp':
+        baseSections = CTP_SECTIONS;
+        break;
+      case 'stragiudiziale':
+        baseSections = STRAGIUDIZIALE_SECTIONS;
+        break;
+      default:
+        baseSections = CTU_SECTIONS;
+    }
   }
 
   // Filter by conditions
@@ -541,9 +789,17 @@ export function resolveSectionPlan(params: {
 }
 
 /**
- * Get all possible section IDs for a given role (for validation/parsing).
+ * Get all possible section IDs for a given role/module (for validation/parsing).
  */
-export function getAllSectionIds(caseRole: CaseRole): string[] {
+export function getAllSectionIds(caseRole: CaseRole, moduleId?: string): string[] {
+  // Module-specific sections take priority
+  if (moduleId === 'parere_pro_veritate') {
+    return PARERE_PRO_VERITATE_SECTIONS.map((s) => s.id);
+  }
+  if (moduleId === 'parere_scopo_riserva') {
+    return PARERE_SCOPO_RISERVA_SECTIONS.map((s) => s.id);
+  }
+
   switch (caseRole) {
     case 'ctu':
       return CTU_SECTIONS.map((s) => s.id);
@@ -558,4 +814,10 @@ export function getAllSectionIds(caseRole: CaseRole): string[] {
 
 // ── Exports for testing ─────────────────────────────────────────────
 
-export { CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS };
+export {
+  CTU_SECTIONS,
+  CTP_SECTIONS,
+  STRAGIUDIZIALE_SECTIONS,
+  PARERE_PRO_VERITATE_SECTIONS,
+  PARERE_SCOPO_RISERVA_SECTIONS,
+};

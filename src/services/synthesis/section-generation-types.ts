@@ -16,7 +16,8 @@ export type SectionDataSource =
   | 'image-analysis'      // diagnostic image analysis results
   | 'perizia-metadata'    // perizia form data (tribunal, quesiti, etc.)
   | 'context-summaries'   // context summaries from previous sections
-  | 'guidelines';         // RAG guidelines
+  | 'guidelines'          // RAG guidelines
+  | 'pubmed-references';  // PubMed scientific references
 
 /**
  * Specification for a single report section.
@@ -54,7 +55,8 @@ export type SectionCondition =
   | 'has-legal-docs'
   | 'has-expense-events'
   | 'has-perizie-docs'
-  | 'has-quesiti';
+  | 'has-quesiti'
+  | 'has-pubmed-references';
 
 /**
  * Output of generating a single section.

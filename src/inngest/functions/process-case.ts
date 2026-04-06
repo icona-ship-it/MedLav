@@ -20,6 +20,8 @@ import {
 } from '../steps/generate-report';
 import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
+import { enrichWithPubMedEvidence } from '@/services/pubmed/evidence-enricher';
+import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
 import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
@@ -212,6 +214,42 @@ export const processCase = inngest.createFunction(
       };
     });
 
+    // ── Pipeline branching: anonymize_only stops after OCR ───────
+    if (pipelineMode === 'anonymize_only') {
+      await step.run('finalize-anonymize', async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+
+        // Mark all documents as completed
+        const docIds = ocrResults.map((r) => r.documentId);
+        for (let i = 0; i < docIds.length; i += 500) {
+          await supabase.from('documents').update({
+            processing_status: 'completato',
+            updated_at: new Date().toISOString(),
+          }).in('id', docIds.slice(i, i + 500));
+        }
+
+        // Mark case as completed
+        await supabase
+          .from('cases')
+          .update({ processing_stage: 'completato', updated_at: new Date().toISOString() })
+          .eq('id', caseId);
+
+        logger.info('pipeline', `Anonymize-only pipeline complete for case ${caseId}, ${docIds.length} docs OCR'd`);
+      });
+
+      return {
+        success: true,
+        caseId,
+        pipelineMode,
+        documentsProcessed: ocrResults.length,
+        newEventsInserted: 0,
+        totalEvents: 0,
+        anomaliesDetected: 0,
+        missingDocuments: 0,
+      };
+    }
+
     // ── Step 3: Extract events (batched chunks, parallel) ────────
     const allChunkJobs: ChunkJob[] = [];
     for (const ocrResult of ocrResults) {
@@ -365,6 +403,16 @@ export const processCase = inngest.createFunction(
       () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
     );
 
+    // ── PubMed evidence search (optional, non-blocking) ────────────
+    let pubmedResults: PubMedSearchResult[] = [];
+    try {
+      pubmedResults = await step.run('search-pubmed', () =>
+        enrichWithPubMedEvidence(consolidationResult.allEvents, updatedMetadata.caseType),
+      );
+    } catch {
+      logger.warn('pipeline', `PubMed search failed (non-blocking) for case ${caseId}`);
+    }
+
     // ── Mark generating report ───────────────────────────────────
     await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
@@ -413,6 +461,7 @@ export const processCase = inngest.createFunction(
       calculations,
       imageAnalysisResults,
       documentSummaries,
+      pubmedResults,
     );
 
     // ── Sectional report generation ───────────────────────────────

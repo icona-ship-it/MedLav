@@ -97,6 +97,7 @@ export function buildSynthesisParams(
   calculations: MedicoLegalCalculation[],
   imageAnalysisResults: ImageAnalysisResult[],
   documentSummaries?: import('@/services/synthesis/document-summarizer').DocumentSummary[],
+  pubmedReferences?: import('@/services/pubmed/evidence-enricher').PubMedSearchResult[],
 ): SynthesisParams {
   return {
     caseType: metadata.caseType,
@@ -110,6 +111,7 @@ export function buildSynthesisParams(
     periziaMetadata: metadata.periziaMetadata,
     imageAnalysis: imageAnalysisResults.length > 0 ? imageAnalysisResults : undefined,
     documentSummaries,
+    pubmedReferences: pubmedReferences && pubmedReferences.length > 0 ? pubmedReferences : undefined,
   };
 }
 
@@ -332,6 +334,7 @@ export function planReportSections(
     periziaMetadata: metadata.periziaMetadata,
     events: allEvents,
     documentTypes,
+    moduleId: metadata.moduleId,
   });
 
   logger.info('pipeline', `Section plan: ${plan.length} sections [${plan.map((s) => s.id).join(', ')}]`);
