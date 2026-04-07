@@ -6,7 +6,7 @@ import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 // ── Timeout per tipo di operazione ──
 // Vercel Pro maxDuration must be set to 800s in project settings (Settings → Functions).
 // Default 300s is NOT enough for LLM synthesis on large cases.
-export const TIMEOUT_EXTRACTION = 240_000;  // 4 minuti
+export const TIMEOUT_EXTRACTION = 150_000;  // 2.5 minuti — 2 chunk × 2.5min = 5min max per batch, under Inngest limit
 export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti (casi grandi richiedono tempo per generare report completi)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (OCR e altro)
 

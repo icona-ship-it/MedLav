@@ -8,9 +8,9 @@ export const PAGES_PER_CHUNK = 15;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
  * Each job calls Mistral LLM (30s-2min) sequentially within a batch.
- * Balance: 3 chunks × 2min worst case = 6min, safely under Vercel 800s.
- * With Inngest Hobby (5 concurrent steps), 54 chunks → 18 batches. */
-export const EXTRACTION_BATCH_SIZE = 3;
+ * 2 chunks × 2.5min = 5min max, under Inngest's ~5min step response limit.
+ * With Inngest Hobby (5 concurrent steps), 54 chunks → 27 batches. */
+export const EXTRACTION_BATCH_SIZE = 2;
 
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
