@@ -282,7 +282,7 @@ export function ReportStep({
         <TabsList className="mb-4">
           <TabsTrigger value="report">Report</TabsTrigger>
           <TabsTrigger value="timeline">Cronistoria ({events.length} eventi)</TabsTrigger>
-          {pubmedReferences.length > 0 && (
+          {pubmedReferences.length > 0 && pubmedReferences.some(r => r.articles.length > 0) && (
             <TabsTrigger value="pubmed">
               Evidenze PubMed ({pubmedReferences.reduce((s, r) => s + r.articles.length, 0)})
             </TabsTrigger>
@@ -340,9 +340,9 @@ export function ReportStep({
           />
         </TabsContent>
 
-        {pubmedReferences.length > 0 && (
+        {pubmedReferences.length > 0 && pubmedReferences.some(r => r.articles.length > 0) && (
           <TabsContent value="pubmed">
-            <PubMedTab references={pubmedReferences} />
+            <PubMedTab references={pubmedReferences.filter(r => r.articles.length > 0)} />
           </TabsContent>
         )}
       </Tabs>
