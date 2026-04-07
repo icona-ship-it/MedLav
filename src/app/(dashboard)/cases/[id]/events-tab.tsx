@@ -328,13 +328,18 @@ export function EventsTab({
 
           {/* Verification events separator */}
           {displayVerification.length > 0 && displayNormal.length > 0 && visibleCount >= displayNormal.length && (
-            <div className="flex items-center gap-2 py-3 mt-2">
-              <div className="h-px flex-1 bg-yellow-300" />
-              <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Eventi da verificare ({displayVerification.length})
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-2 py-3">
+                <div className="h-px flex-1 bg-yellow-300" />
+                <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Eventi da verificare ({displayVerification.length})
+                </div>
+                <div className="h-px flex-1 bg-yellow-300" />
               </div>
-              <div className="h-px flex-1 bg-yellow-300" />
+              <p className="text-xs text-muted-foreground px-1">
+                Questi eventi sono stati estratti automaticamente e potrebbero richiedere una tua verifica.
+              </p>
             </div>
           )}
 

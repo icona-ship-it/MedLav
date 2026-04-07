@@ -32,7 +32,9 @@ export function QualityGateDialog({
     reportRead: false,
   });
 
-  const allChecked = checks.anomaliesReviewed && checks.missingDocsNoted && checks.reportRead;
+  const allChecked = checks.reportRead
+    && (anomalyCount === 0 || checks.anomaliesReviewed)
+    && (missingDocsCount === 0 || checks.missingDocsNoted);
 
   const handleToggle = (key: keyof typeof checks) => {
     setChecks((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -67,38 +69,36 @@ export function QualityGateDialog({
               onChange={() => handleToggle('reportRead')}
               className="mt-0.5 h-4 w-4 rounded border-gray-300"
             />
-            <span className="text-sm">Ho letto il report completo</span>
+            <span className="text-sm">Ho letto e revisionato il report</span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={checks.anomaliesReviewed}
-              onChange={() => handleToggle('anomaliesReviewed')}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
-            />
-            <span className="text-sm">
-              Ho verificato le anomalie segnalate
-              {anomalyCount > 0 && (
-                <span className="text-muted-foreground"> ({anomalyCount} trovate)</span>
-              )}
-            </span>
-          </label>
+          {anomalyCount > 0 && (
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={checks.anomaliesReviewed}
+                onChange={() => handleToggle('anomaliesReviewed')}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm">
+                Ho verificato gli avvisi segnalati ({anomalyCount})
+              </span>
+            </label>
+          )}
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={checks.missingDocsNoted}
-              onChange={() => handleToggle('missingDocsNoted')}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
-            />
-            <span className="text-sm">
-              Ho preso nota della documentazione mancante
-              {missingDocsCount > 0 && (
-                <span className="text-muted-foreground"> ({missingDocsCount} segnalati)</span>
-              )}
-            </span>
-          </label>
+          {missingDocsCount > 0 && (
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={checks.missingDocsNoted}
+                onChange={() => handleToggle('missingDocsNoted')}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm">
+                Ho verificato la documentazione mancante ({missingDocsCount})
+              </span>
+            </label>
+          )}
         </div>
 
         <DialogFooter>

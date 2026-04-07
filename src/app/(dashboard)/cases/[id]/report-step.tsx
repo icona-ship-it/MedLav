@@ -152,7 +152,7 @@ export function ReportStep({
                 {generationProgress ? (
                   <>
                     <p className="text-base font-semibold">
-                      Generazione report: sezione {generationProgress.currentSection} di {generationProgress.totalSections}
+                      Preparazione report: sezione {generationProgress.currentSection} di {generationProgress.totalSections}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {generationProgress.currentSectionTitle}
@@ -168,10 +168,10 @@ export function ReportStep({
                     </div>
                   </>
                 ) : (
-                  <p className="text-base font-semibold">Generazione report in corso...</p>
+                  <p className="text-base font-semibold">Preparazione report in corso...</p>
                 )}
                 <p className="mt-1 text-sm text-muted-foreground">
-                  L&apos;AI sta analizzando {events.length} eventi e generando il report medico-legale.
+                  Analisi in corso — stiamo preparando il tuo report.
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground italic">
                   La pagina si aggiorna automaticamente al completamento.
@@ -191,7 +191,7 @@ export function ReportStep({
           <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3 mb-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
-                Cronistoria con {events.length} eventi estratti
+                Analisi completata — {events.length} eventi trovati
               </p>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -278,7 +278,7 @@ export function ReportStep({
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="report">Report</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline ({events.length})</TabsTrigger>
+          <TabsTrigger value="timeline">Cronistoria ({events.length} eventi)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="report">

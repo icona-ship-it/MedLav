@@ -43,6 +43,13 @@ function confidenceColor(confidence: number): string {
   return 'text-red-600 dark:text-red-400';
 }
 
+function confidenceLabel(confidence: number): string {
+  if (confidence >= 90) return 'Ottima';
+  if (confidence >= 80) return 'Buona';
+  if (confidence >= 60) return 'Discreta — verifica le parti meno leggibili';
+  return 'Bassa — alcune parti potrebbero richiedere verifica manuale';
+}
+
 interface DocCoverage {
   doc: Document;
   eventCount: number;
@@ -131,7 +138,7 @@ export function QualitySidebar({
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors">
           <span className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-orange-500" />
-            Segnalazioni
+            Verifiche consigliate
           </span>
           {alertCount > 0 ? (
             <Badge variant="destructive" className="text-xs">
@@ -154,7 +161,7 @@ export function QualitySidebar({
           {isSynthesisTruncated && (
             <div className="flex items-start gap-2 text-xs text-yellow-700 dark:text-yellow-400">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>Report potenzialmente troncato. Prova a rigenerarlo.</span>
+              <span>Report potrebbe essere incompleto — prova a rigenerare.</span>
             </div>
           )}
 
@@ -165,6 +172,9 @@ export function QualitySidebar({
                 <span className="font-medium">
                   {highSeverity.length} {highSeverity.length === 1 ? 'anomalia' : 'anomalie'} da verificare
                 </span>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  Incongruenze rilevate nei dati clinici che richiedono attenzione.
+                </p>
                 {onSwitchToAnomalies && (
                   <Button
                     variant="link"
@@ -182,18 +192,28 @@ export function QualitySidebar({
           {missingDocs.length > 0 && (
             <div className="flex items-start gap-2 text-xs text-yellow-700 dark:text-yellow-400">
               <FileQuestion className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                {missingDocs.length} doc. {missingDocs.length === 1 ? 'mancante' : 'mancanti'}
-              </span>
+              <div>
+                <span>
+                  {missingDocs.length} doc. {missingDocs.length === 1 ? 'mancante' : 'mancanti'}
+                </span>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  Documenti attesi per questo tipo di caso ma non ancora caricati.
+                </p>
+              </div>
             </div>
           )}
 
           {incompleteDataDocs.length > 0 && (
             <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                {incompleteDataDocs.length} {incompleteDataDocs.length === 1 ? 'documento senza' : 'documenti senza'} eventi estratti
-              </span>
+              <div>
+                <span>
+                  {incompleteDataDocs.length} {incompleteDataDocs.length === 1 ? 'documento senza' : 'documenti senza'} eventi estratti
+                </span>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  Documenti elaborati ma senza eventi rilevati. Verifica che il contenuto sia leggibile.
+                </p>
+              </div>
             </div>
           )}
         </CollapsibleContent>
@@ -255,13 +275,15 @@ export function QualitySidebar({
           </div>
 
           {ocrConfidence !== null && (
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-1.5">
-                <Eye className="h-3.5 w-3.5" /> Qualità OCR
-              </span>
-              <span className={`font-medium ${confidenceColor(ocrConfidence)}`}>
-                {ocrConfidence}%
-              </span>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" /> Qualità OCR
+                </span>
+                <span className={`font-medium ${confidenceColor(ocrConfidence)}`}>
+                  {ocrConfidence}% — {confidenceLabel(ocrConfidence)}
+                </span>
+              </div>
             </div>
           )}
 

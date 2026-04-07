@@ -10,6 +10,11 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -161,8 +166,8 @@ export function ReportActionBar({
                 >
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   <div>
-                    <div>Anteprima Report</div>
-                    <p className="text-xs text-muted-foreground font-normal">Anteprima nel browser</p>
+                    <div>Visualizza nel browser</div>
+                    <p className="text-xs text-muted-foreground font-normal">Apre anteprima in una nuova scheda</p>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -191,6 +196,16 @@ export function ReportActionBar({
                     <p className="text-xs text-muted-foreground font-normal">Apre finestra di stampa del browser</p>
                   </div>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download>
+                    <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Esporta senza dati personali</div>
+                      <p className="text-xs text-muted-foreground font-normal">Versione anonimizzata per condivisione</p>
+                    </div>
+                  </a>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -202,18 +217,36 @@ export function ReportActionBar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {/* Regenerate */}
-                <DropdownMenuItem
-                  onClick={onRegenerate}
-                  disabled={isRegenerating}
-                >
-                  {isRegenerating ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  )}
-                  {isRegenerating ? 'Rigenerazione...' : 'Rigenera Report'}
-                </DropdownMenuItem>
+                {/* Regenerate — with confirmation dialog */}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem
+                      disabled={isRegenerating}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {isRegenerating ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      {isRegenerating ? 'Rigenerazione...' : 'Rigenera report completo'}
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Rigenera report completo</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Sei sicuro? Il report verr&agrave; rigenerato da capo. Le modifiche manuali andranno perse.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annulla</AlertDialogCancel>
+                      <AlertDialogAction onClick={onRegenerate}>
+                        Rigenera
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Versions */}
                 {report.version > 1 && (
@@ -223,7 +256,7 @@ export function ReportActionBar({
                     ) : (
                       <GitCompare className="mr-2 h-3.5 w-3.5" />
                     )}
-                    Confronta versioni
+                    Confronta con versione precedente
                   </DropdownMenuItem>
                 )}
 
@@ -242,17 +275,10 @@ export function ReportActionBar({
                 <DropdownMenuItem asChild>
                   <a href={`/api/cases/${caseId}/export/pct`} download>
                     <FileCode className="mr-2 h-3.5 w-3.5" />
-                    Esporta PCT
-                  </a>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator />
-
-                {/* Anonymize */}
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download>
-                    <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                    Esporta HTML anonimizzato
+                    <div>
+                      <div>Esporta PCT</div>
+                      <p className="text-xs text-muted-foreground font-normal">Formato tribunale</p>
+                    </div>
                   </a>
                 </DropdownMenuItem>
 
@@ -262,13 +288,13 @@ export function ReportActionBar({
                 {effectiveStatus === 'bozza' && (
                   <DropdownMenuItem onClick={() => setQualityGateOpen(true)} disabled={isPending}>
                     {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                    Approva come Definitivo
+                    Approva e finalizza
                   </DropdownMenuItem>
                 )}
                 {effectiveStatus === 'definitivo' && (
                   <DropdownMenuItem onClick={() => handleStatusChange('bozza')} disabled={isPending}>
                     {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                    Riporta a Bozza
+                    Torna a modifica
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
