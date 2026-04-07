@@ -7,10 +7,11 @@ import { logger } from '@/lib/logger';
 export const PAGES_PER_CHUNK = 15;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
- * Each job calls Mistral LLM (30s-2min). Set to 1 so each step does a single
- * LLM call — all steps run in parallel via Promise.allSettled, maximizing
- * throughput while staying safely under Vercel 300s timeout. */
-export const EXTRACTION_BATCH_SIZE = 1;
+ * Each job calls Mistral LLM (30s-2min) sequentially within a batch.
+ * Inngest free plan limits parallel steps (~5-10), so fewer bigger batches
+ * is faster than many tiny ones. 3 chunks × 2min = 6min max per step,
+ * well under Vercel Pro 300s timeout. */
+export const EXTRACTION_BATCH_SIZE = 3;
 
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
