@@ -94,7 +94,7 @@ export const processCase = inngest.createFunction(
     id: 'process-case',
     retries: 3,
     concurrency: [
-      { limit: 10, key: 'event.data.userId' },
+      { limit: 5, key: 'event.data.userId' },
     ],
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
