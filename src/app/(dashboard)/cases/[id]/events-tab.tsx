@@ -16,7 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { addManualEvent, reorderEvent } from '../../actions';
+import { addManualEvent } from '../../actions';
 import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
 import { EventCard } from './event-card';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
@@ -163,14 +163,13 @@ function isVerificationEvent(e: EventRow): boolean {
 
 export function EventsTab({
   caseId, events, eventImages, onImageClick,
-  highlightedEventOrderNumber, onViewInReport,
+  highlightedEventOrderNumber,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
   highlightedEventOrderNumber?: number | null;
-  onViewInReport?: (orderNumber: number) => void;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
@@ -179,7 +178,7 @@ export function EventsTab({
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
   const [visibleCount, setVisibleCount] = useState(20);
-  const [, startReorder] = useTransition();
+
 
   const toggleEvent = useCallback((eventId: string) => {
     setExpandedEvents((prev) => {
@@ -189,17 +188,6 @@ export function EventsTab({
       return next;
     });
   }, []);
-
-  const handleMoveEvent = useCallback((eventId: string, direction: 'up' | 'down') => {
-    startReorder(async () => {
-      const result = await reorderEvent({ caseId, eventId, direction });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
-      }
-      router.refresh();
-    });
-  }, [caseId, router]);
 
   const altroEvents = events.filter((e) => e.event_type === 'altro');
 
@@ -220,7 +208,7 @@ export function EventsTab({
     ? filteredEvents
     : filteredEvents.filter((e) => isVerificationEvent(e));
 
-  const renderEventCard = (event: EventRow, index: number, list: EventRow[]) => (
+  const renderEventCard = (event: EventRow) => (
     <EventCard
       key={event.id}
       event={event}
@@ -234,12 +222,7 @@ export function EventsTab({
       onDeleted={() => router.refresh()}
       eventImages={eventImages}
       onImageClick={onImageClick}
-      onMoveUp={() => handleMoveEvent(event.id, 'up')}
-      onMoveDown={() => handleMoveEvent(event.id, 'down')}
-      isFirst={index === 0}
-      isLast={index === list.length - 1}
       isHighlighted={highlightedEventOrderNumber === event.order_number}
-      onViewInReport={onViewInReport ? () => onViewInReport(event.order_number) : undefined}
     />
   );
 
@@ -324,7 +307,7 @@ export function EventsTab({
         )}
         <div className="space-y-2">
           {/* Normal events (lazy-loaded) */}
-          {displayNormal.slice(0, visibleCount).map((event, index) => renderEventCard(event, index, displayNormal))}
+          {displayNormal.slice(0, visibleCount).map((event) => renderEventCard(event))}
 
           {/* Verification events separator */}
           {displayVerification.length > 0 && displayNormal.length > 0 && visibleCount >= displayNormal.length && (
@@ -346,7 +329,7 @@ export function EventsTab({
           {/* Verification events (shown after all normal are visible) */}
           {visibleCount >= displayNormal.length && (
             displayVerification.slice(0, Math.max(0, visibleCount - displayNormal.length)).map((event, index) =>
-              renderEventCard(event, index, displayVerification)
+              renderEventCard(event)
             )
           )}
 

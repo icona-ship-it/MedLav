@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
-  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2, FileSearch,
+  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -59,8 +59,8 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
 
 export function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  eventImages, onImageClick, onMoveUp, onMoveDown, isFirst, isLast,
-  isHighlighted, onViewInReport,
+  eventImages, onImageClick,
+  isHighlighted,
 }: {
   event: EventRow;
   caseId: string;
@@ -73,12 +73,7 @@ export function EventCard({
   onDeleted: () => void;
   eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  isFirst?: boolean;
-  isLast?: boolean;
   isHighlighted?: boolean;
-  onViewInReport?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [editForm, setEditForm] = useState({
@@ -160,24 +155,9 @@ export function EventCard({
           </div>
         </button>
         <div className="flex items-center gap-1 ml-2">
-          {onMoveUp && !isFirst && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveUp} title="Sposta su" aria-label="Sposta evento su">
-              <ChevronUp className="h-3 w-3" />
-            </Button>
-          )}
-          {onMoveDown && !isLast && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveDown} title="Sposta giù" aria-label="Sposta evento giù">
-              <ChevronDown className="h-3 w-3" />
-            </Button>
-          )}
-          {onViewInReport && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onViewInReport} title="Vedi nel report" aria-label="Vedi nel report">
-              <FileSearch className="h-3 w-3" />
-            </Button>
-          )}
           {!isEditing && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica" aria-label="Modifica evento">
-              <Pencil className="h-3 w-3" />
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica evento" aria-label="Modifica evento">
+              <Pencil className="h-3.5 w-3.5" />
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'} aria-expanded={isExpanded}>

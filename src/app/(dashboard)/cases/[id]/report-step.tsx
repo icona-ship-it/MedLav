@@ -240,7 +240,6 @@ export function ReportStep({
             eventImages={eventImages}
             onImageClick={() => {}}
             highlightedEventOrderNumber={highlightedEventId}
-            onViewInReport={() => {}}
           />
         </div>
       );
@@ -329,10 +328,6 @@ export function ReportStep({
             eventImages={eventImages}
             onImageClick={() => {}}
             highlightedEventOrderNumber={highlightedEventId}
-            onViewInReport={(orderNumber) => {
-              setHighlightedEventId(orderNumber);
-              setActiveTab('report');
-            }}
           />
         </TabsContent>
       </Tabs>
