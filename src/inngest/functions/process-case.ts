@@ -444,13 +444,29 @@ export const processCase = inngest.createFunction(
       logger.warn('pipeline', `PubMed search failed (non-blocking) for case ${caseId}`);
     }
 
-    // ── Mark generating report ───────────────────────────────────
+    // ── Mark generating report + save PubMed results ──────────────
     await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
+
+      // Save PubMed results to perizia_metadata for UI display
+      const { data: caseRow } = await supabase
+        .from('cases')
+        .select('perizia_metadata')
+        .eq('id', caseId)
+        .single();
+      const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+
       await supabase
         .from('cases')
-        .update({ processing_stage: 'generazione_report', updated_at: new Date().toISOString() })
+        .update({
+          processing_stage: 'generazione_report',
+          perizia_metadata: {
+            ...existingMeta,
+            ...(pubmedResults.length > 0 ? { pubmedReferences: pubmedResults } : {}),
+          },
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', caseId);
       logger.info('pipeline', `Case ${caseId} marked as generazione_report`);
     });

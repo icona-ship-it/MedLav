@@ -159,6 +159,11 @@ export function CaseDetailClient({
     (caseData.perizia_metadata as Record<string, unknown> | null)?.generationProgress as GenerationProgress | undefined
   ) ?? null;
 
+  // Extract PubMed references from perizia_metadata (saved after PubMed search step)
+  const pubmedReferences = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.pubmedReferences as Array<{ query: string; category: 'diagnosis' | 'treatment' | 'causal_nexus'; articles: Array<{ pmid: string; title: string; authors: string; journal: string; year: string; doi?: string }> }> | undefined
+  ) ?? [];
+
   const autoStep = isAnonymizeOnly
     ? computeAnonymizeAutoStep(localDocuments)
     : isExtractionOnly
@@ -322,6 +327,7 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
+                pubmedReferences={[]}
               />
             </div>
           )}
@@ -385,6 +391,7 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
+                pubmedReferences={pubmedReferences}
               />
             </div>
           )}

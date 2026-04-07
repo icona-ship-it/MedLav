@@ -18,6 +18,8 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
+import { PubMedTab } from './pubmed-tab';
+import type { PubMedReference } from './pubmed-tab';
 import { csrfHeaders } from '@/lib/csrf-client';
 import { parseSections } from '@/lib/section-parser-client';
 import { EventsTab } from './events-tab';
@@ -59,6 +61,7 @@ interface ReportStepProps {
   processingStage: string;
   onNavigateToStep: (step: number) => void;
   generationProgress?: GenerationProgress | null;
+  pubmedReferences?: PubMedReference[];
 }
 
 // --- Component ---
@@ -75,6 +78,7 @@ export function ReportStep({
   processingStage,
   onNavigateToStep,
   generationProgress,
+  pubmedReferences = [],
 }: ReportStepProps) {
   const router = useRouter();
 
@@ -278,6 +282,11 @@ export function ReportStep({
         <TabsList className="mb-4">
           <TabsTrigger value="report">Report</TabsTrigger>
           <TabsTrigger value="timeline">Cronistoria ({events.length} eventi)</TabsTrigger>
+          {pubmedReferences.length > 0 && (
+            <TabsTrigger value="pubmed">
+              Evidenze PubMed ({pubmedReferences.reduce((s, r) => s + r.articles.length, 0)})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="report">
@@ -330,6 +339,12 @@ export function ReportStep({
             highlightedEventOrderNumber={highlightedEventId}
           />
         </TabsContent>
+
+        {pubmedReferences.length > 0 && (
+          <TabsContent value="pubmed">
+            <PubMedTab references={pubmedReferences} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Mobile: Quality sidebar as Sheet */}
