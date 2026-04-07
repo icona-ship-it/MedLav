@@ -23,6 +23,7 @@ export type PipelineMode =
 export type ModuleId =
   // Cat 1: Perizia medico legale (privato/studio legale/assicurazione/ag. infortunistiche)
   | 'perizia_ml_rc_civile'
+  | 'perizia_ml_stradale'
   | 'perizia_ml_infortuni'
   | 'perizia_ml_malattia'
   | 'perizia_ml_resp_prof'
@@ -104,7 +105,17 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
   {
     id: 'perizia_ml_rc_civile',
     label: 'Responsabilità civile',
-    description: 'Perizia medico-legale per responsabilità civile',
+    description: 'Perizia medico-legale per responsabilità civile generale',
+    categoryId: 1,
+    impliedRole: 'stragiudiziale',
+    pipelineMode: 'full',
+    legacyCaseTypes: ['rc_auto'],
+    priority: true,
+  },
+  {
+    id: 'perizia_ml_stradale',
+    label: 'Sinistro stradale',
+    description: 'Perizia medico-legale per sinistro stradale e RC auto',
     categoryId: 1,
     impliedRole: 'stragiudiziale',
     pipelineMode: 'full',
