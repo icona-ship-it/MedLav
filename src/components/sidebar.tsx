@@ -55,7 +55,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <Button asChild className="w-full">
           <Link href="/">
             <Plus className="mr-2 h-4 w-4" />
-            Nuovo Elaborato
+            Nuovo Caso
           </Link>
         </Button>
       </div>

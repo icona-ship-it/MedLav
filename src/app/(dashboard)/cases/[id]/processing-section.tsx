@@ -56,7 +56,6 @@ export function ProcessingSection({
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [showReassurance, setShowReassurance] = useState(false);
   const processingStartRef = useRef<number | null>(null);
 
   // Count failed documents (excluding warning-only)
@@ -68,17 +67,14 @@ export function ProcessingSection({
 
   const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
 
-  // Reassurance timer — show message after 30s of processing
+  // Track processing start time
   useEffect(() => {
     if (hasProcessingDocs) {
       if (!processingStartRef.current) {
         processingStartRef.current = Date.now();
       }
-      const timer = setTimeout(() => setShowReassurance(true), 30000);
-      return () => clearTimeout(timer);
     } else {
       processingStartRef.current = null;
-      setShowReassurance(false);
     }
   }, [hasProcessingDocs]);
 
@@ -188,15 +184,13 @@ export function ProcessingSection({
                 L&apos;elaborazione continua in background. La pagina si aggiorna automaticamente.
               </p>
 
-              {/* Reassurance message after 30s */}
-              {showReassurance && (
-                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30 p-3">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                  <p className="text-sm text-green-700 dark:text-green-400">
-                    L&apos;analisi sta procedendo regolarmente. Non chiudere la pagina.
-                  </p>
-                </div>
-              )}
+              {/* Reassurance message — always visible during processing */}
+              <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30 p-3">
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  L&apos;analisi continua anche se chiudi questa pagina. Riceverai una notifica quando sarà pronta.
+                </p>
+              </div>
 
               {/* Cancel link — at bottom, text-only, requires confirmation */}
               <div className="pt-2 border-t text-center">
@@ -263,7 +257,7 @@ export function ProcessingSection({
                       </Badge>
                       <Badge variant="outline" className="text-sm px-3 py-1">
                         <Clock className="mr-1.5 h-3.5 w-3.5" />
-                        Tempo stimato: {Math.max(2, uploadedCount * 2)}-{Math.max(5, uploadedCount * 5)} min
+                        Di solito pochi minuti. Per documenti molto grandi può richiedere più tempo.
                       </Badge>
                     </div>
                   </div>

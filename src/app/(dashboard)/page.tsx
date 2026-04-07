@@ -89,7 +89,7 @@ export default async function DashboardPage() {
           Cosa vuoi fare?
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Scegli il tipo di elaborato. Ti guideremo passo passo.
+          Scegli un modulo, carica i documenti e otterrai il risultato in pochi minuti.
         </p>
       </div>
 

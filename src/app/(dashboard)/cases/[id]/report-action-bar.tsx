@@ -160,24 +160,36 @@ export function ReportActionBar({
                   onClick={() => window.open(`/api/cases/${caseId}/export/html?inline=true`, '_blank')}
                 >
                   <Eye className="mr-2 h-3.5 w-3.5" />
-                  Anteprima Report
+                  <div>
+                    <div>Anteprima Report</div>
+                    <p className="text-xs text-muted-foreground font-normal">Anteprima nel browser</p>
+                  </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/html`} download>
+                  <a href={`/api/cases/${caseId}/export/docx`} download>
                     <Download className="mr-2 h-3.5 w-3.5" />
-                    Esporta HTML
+                    <div>
+                      <div>Esporta DOCX</div>
+                      <p className="text-xs text-muted-foreground font-normal">Documento Word — per stampare o inviare</p>
+                    </div>
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/docx`} download>
+                  <a href={`/api/cases/${caseId}/export/html`} download>
                     <Download className="mr-2 h-3.5 w-3.5" />
-                    Esporta DOCX
+                    <div>
+                      <div>Esporta HTML</div>
+                      <p className="text-xs text-muted-foreground font-normal">Pagina web — per archiviare o condividere</p>
+                    </div>
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handlePdfExport}>
                   <Printer className="mr-2 h-3.5 w-3.5" />
-                  Stampa PDF
+                  <div>
+                    <div>Stampa PDF</div>
+                    <p className="text-xs text-muted-foreground font-normal">Apre finestra di stampa del browser</p>
+                  </div>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -221,7 +233,10 @@ export function ReportActionBar({
                 <DropdownMenuItem asChild>
                   <a href={`/api/cases/${caseId}/export/csv`} download>
                     <Download className="mr-2 h-3.5 w-3.5" />
-                    Esporta CSV
+                    <div>
+                      <div>Esporta CSV</div>
+                      <p className="text-xs text-muted-foreground font-normal">Tabella dati — per Excel</p>
+                    </div>
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>

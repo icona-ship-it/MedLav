@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
 import { statusConfig, caseTypeLabels, processingStageConfig, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
+import { CaseSearch } from './case-search';
+import type { CaseSearchItem } from './case-search';
 
 const STAGE_ICONS = {
   spinner: Loader2,
@@ -105,55 +107,26 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {cases.map((caseItem) => {
-                const status = statusConfig[caseItem.status] ?? statusConfig.bozza;
-                const moduleId = (caseItem as Record<string, unknown>).module_id as string | null;
-                const label = moduleId ? moduleLabels[moduleId] : caseTypeLabels[caseItem.case_type as string];
-                return (
-                  <Link
-                    key={caseItem.id}
-                    href={`/cases/${caseItem.id}`}
-                    className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold">
-                          {caseItem.code}
-                        </span>
-                        <Badge variant={status.variant}>
-                          {status.label}
-                        </Badge>
-                        {(() => {
-                          const stage = processingStageConfig[caseItem.processing_stage as string];
-                          if (!stage?.show) return null;
-                          const Icon = stage.icon ? STAGE_ICONS[stage.icon] : null;
-                          return (
-                            <Badge variant={stage.variant}>
-                              {Icon && <Icon className={`mr-1 h-3 w-3${stage.icon === 'spinner' ? ' animate-spin' : ''}`} />}
-                              {stage.label}
-                            </Badge>
-                          );
-                        })()}
-                        {!moduleId && (
-                          <Badge variant="outline">
-                            {(caseItem.case_role as string).toUpperCase()}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {caseItem.patient_initials || 'N/D'} &mdash;{' '}
-                        {label ?? caseItem.case_type}
-                      </p>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <div>{caseItem.document_count} documenti</div>
-                      <div>{formatRelativeDate(caseItem.created_at)}</div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            <CaseSearch cases={cases.map((caseItem) => {
+              const status = statusConfig[caseItem.status] ?? statusConfig.bozza;
+              const moduleId = (caseItem as Record<string, unknown>).module_id as string | null;
+              const label = moduleId ? moduleLabels[moduleId] : caseTypeLabels[caseItem.case_type as string];
+              return {
+                id: caseItem.id,
+                code: caseItem.code,
+                patient_initials: caseItem.patient_initials,
+                status: caseItem.status,
+                case_type: caseItem.case_type as string,
+                case_role: caseItem.case_role as string,
+                module_id: moduleId,
+                processing_stage: caseItem.processing_stage as string,
+                document_count: caseItem.document_count,
+                created_at: caseItem.created_at,
+                label: label ?? (caseItem.case_type as string),
+                statusLabel: status.label,
+                statusVariant: status.variant,
+              } satisfies CaseSearchItem;
+            })} />
           )}
         </CardContent>
       </Card>
