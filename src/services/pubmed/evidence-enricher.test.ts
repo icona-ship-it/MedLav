@@ -186,7 +186,7 @@ describe('enrichWithFullEvidence', () => {
 
     const nexusResults = result.filter((r) => r.category === 'causal_nexus');
     expect(nexusResults).toHaveLength(1);
-    expect(nexusResults[0].query).toContain('frattura femore');
+    expect(nexusResults[0].query).toContain('fracture femore');
     expect(nexusResults[0].query).toContain('Ritardo diagnostico di 3 mesi');
   });
 

@@ -28,6 +28,79 @@ const MAX_TREATMENT_SEARCHES = 2;
 const MAX_TOTAL_SEARCHES = 5;
 
 /**
+ * Common Italian→English medical term translations for PubMed search.
+ * PubMed indexes articles in English — Italian terms won't match.
+ */
+const MEDICAL_TERM_TRANSLATIONS: Record<string, string> = {
+  'frattura': 'fracture',
+  'frattura periprotesica': 'periprosthetic fracture',
+  'protesi ginocchio': 'knee prosthesis',
+  'protesi anca': 'hip prosthesis',
+  'artroprotesi': 'arthroplasty',
+  'osteosintesi': 'osteosynthesis',
+  'intervento chirurgico': 'surgery',
+  'ricovero': 'hospitalization',
+  'ritardo diagnostico': 'delayed diagnosis',
+  'errore diagnostico': 'diagnostic error',
+  'responsabilità professionale': 'medical malpractice',
+  'danno biologico': 'biological damage',
+  'nesso causale': 'causal relationship',
+  'infezione nosocomiale': 'nosocomial infection',
+  'complicanza': 'complication',
+  'complicanza post-operatoria': 'postoperative complication',
+  'lesione': 'injury',
+  'trauma': 'trauma',
+  'sinistro stradale': 'road accident',
+  'incidente stradale': 'traffic accident',
+  'colpo di frusta': 'whiplash',
+  'ernia': 'hernia',
+  'ernia del disco': 'disc herniation',
+  'lombosciatalgia': 'lumbosciatalgia',
+  'cervicalgia': 'cervicalgia',
+  'contusione': 'contusion',
+  'distorsione': 'sprain',
+  'lussazione': 'dislocation',
+  'neoplasia': 'neoplasm',
+  'tumore': 'tumor',
+  'chemioterapia': 'chemotherapy',
+  'radioterapia': 'radiotherapy',
+  'fisioterapia': 'physiotherapy',
+  'riabilitazione': 'rehabilitation',
+  'invalidità': 'disability',
+  'inabilità temporanea': 'temporary disability',
+  'malattia professionale': 'occupational disease',
+  'infortunio sul lavoro': 'work injury',
+  'parto': 'delivery',
+  'taglio cesareo': 'cesarean section',
+  'asfissia neonatale': 'neonatal asphyxia',
+  'paralisi cerebrale': 'cerebral palsy',
+  'consenso informato': 'informed consent',
+};
+
+/**
+ * Translate Italian medical terms to English for PubMed search.
+ * Tries exact match first, then individual word translations.
+ */
+function translateForPubMed(italianTerm: string): string {
+  const lower = italianTerm.toLowerCase().trim();
+
+  // Try exact match
+  if (MEDICAL_TERM_TRANSLATIONS[lower]) {
+    return MEDICAL_TERM_TRANSLATIONS[lower];
+  }
+
+  // Try longest substring match
+  for (const [it, en] of Object.entries(MEDICAL_TERM_TRANSLATIONS).sort((a, b) => b[0].length - a[0].length)) {
+    if (lower.includes(it)) {
+      return lower.replace(it, en);
+    }
+  }
+
+  // Return original (some Italian medical terms like "frattura" are close to English)
+  return italianTerm;
+}
+
+/**
  * Enrich a case with full PubMed evidence across 3 categories.
  *
  * 1. Diagnosis (max 2): top diagnoses by frequency
@@ -62,7 +135,8 @@ export async function enrichWithFullEvidence(
 
   for (const diagnosis of topDiagnoses) {
     if (searchCount >= MAX_TOTAL_SEARCHES) break;
-    const query = buildSearchQuery(diagnosis, caseType);
+    const translatedDiagnosis = translateForPubMed(diagnosis);
+    const query = buildSearchQuery(translatedDiagnosis, caseType);
     try {
       const articles = await searchPubMed(query, 5);
       searchCount++;
@@ -91,7 +165,8 @@ export async function enrichWithFullEvidence(
 
   for (const procedure of topProcedures) {
     if (searchCount >= MAX_TOTAL_SEARCHES) break;
-    const query = `"${procedure}" AND (outcomes OR complications OR "evidence based")`;
+    const translatedProcedure = translateForPubMed(procedure);
+    const query = `"${translatedProcedure}" AND (outcomes OR complications OR "evidence based")`;
     try {
       const articles = await searchPubMed(query, 5);
       searchCount++;
@@ -106,7 +181,7 @@ export async function enrichWithFullEvidence(
 
   // --- 3. Causal nexus search (max 1, only if anomalies exist) ---
   if (anomalies.length > 0 && topDiagnoses.length > 0 && searchCount < MAX_TOTAL_SEARCHES) {
-    const primaryDiagnosis = topDiagnoses[0];
+    const primaryDiagnosis = translateForPubMed(topDiagnoses[0]);
     const anomalyDescription = anomalies[0].description;
     const query = `"${primaryDiagnosis}" AND ("delayed diagnosis" OR "medical malpractice" OR "causal relationship" OR prognosis)`;
     try {
