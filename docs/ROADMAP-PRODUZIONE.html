@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Roadmap Produzione</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 48px; }
+  .header h1 { font-size: 36px; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
+  .header .subtitle { font-size: 18px; color: #64748b; }
+  .header .date { font-size: 14px; color: #94a3b8; margin-top: 8px; }
+  .logo { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .logo-icon { width: 40px; height: 40px; background: #2563eb; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 18px; }
+
+  /* Sections */
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .section-subtitle { font-size: 14px; color: #64748b; margin-bottom: 20px; }
+  .section-number { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #2563eb; color: white; border-radius: 8px; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+
+  /* Cards */
+  .card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 16px; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .card-title { font-size: 16px; font-weight: 600; color: #0f172a; }
+  .card-body { font-size: 14px; color: #475569; }
+  .card-body ul { margin-left: 20px; margin-top: 8px; }
+  .card-body li { margin-bottom: 6px; }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-done { background: #dcfce7; color: #166534; }
+  .badge-issue { background: #fef2f2; color: #991b1b; }
+  .badge-todo { background: #fff7ed; color: #9a3412; }
+  .badge-info { background: #eff6ff; color: #1e40af; }
+  .badge-critical { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+  /* Priority */
+  .priority { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .priority-high { color: #dc2626; }
+  .priority-medium { color: #d97706; }
+  .priority-low { color: #2563eb; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: #f1f5f9; padding: 10px 16px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; }
+  tr:hover { background: #f8fafc; }
+
+  /* Summary box */
+  .summary-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .summary-item { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; text-align: center; }
+  .summary-number { font-size: 32px; font-weight: 800; color: #2563eb; }
+  .summary-label { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  /* Checklist */
+  .checklist { list-style: none; margin: 0; padding: 0; }
+  .checklist li { padding: 8px 0; display: flex; align-items: flex-start; gap: 8px; font-size: 14px; }
+  .check { flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .check-done { background: #dcfce7; color: #166534; }
+  .check-todo { background: #fff7ed; color: #9a3412; }
+  .check-issue { background: #fef2f2; color: #991b1b; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 32px; }
+  .timeline::before { content: ''; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; }
+  .timeline-item { position: relative; margin-bottom: 24px; }
+  .timeline-dot { position: absolute; left: -32px; top: 4px; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; }
+  .dot-done { background: #22c55e; }
+  .dot-current { background: #2563eb; }
+  .dot-todo { background: #e2e8f0; }
+  .timeline-content { background: white; border-radius: 10px; border: 1px solid #e2e8f0; padding: 16px 20px; }
+  .timeline-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .timeline-desc { font-size: 13px; color: #64748b; }
+
+  /* Cost table */
+  .cost-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+  .cost-label { font-size: 14px; color: #475569; }
+  .cost-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .cost-total { font-size: 18px; font-weight: 700; color: #2563eb; border-top: 2px solid #2563eb; padding-top: 12px; margin-top: 8px; }
+
+  /* Print */
+  @media print {
+    body { background: white; }
+    .card { break-inside: avoid; border: 1px solid #ddd; }
+    .section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">L</div>
+    <span style="font-size: 24px; font-weight: 700;">LegMed</span>
+  </div>
+  <h1>Roadmap Produzione</h1>
+  <div class="subtitle">Piano completo per portare LegMed in produzione</div>
+  <div class="date">Aggiornato: 7 Aprile 2026</div>
+</div>
+
+<!-- Summary -->
+<div class="summary-box">
+  <div class="summary-item">
+    <div class="summary-number">26</div>
+    <div class="summary-label">Moduli implementati</div>
+  </div>
+  <div class="summary-item">
+    <div class="summary-number">664</div>
+    <div class="summary-label">Test automatici</div>
+  </div>
+  <div class="summary-item">
+    <div class="summary-number">3</div>
+    <div class="summary-label">Problemi critici</div>
+  </div>
+  <div class="summary-item">
+    <div class="summary-number">~350&euro;</div>
+    <div class="summary-label">Costo mensile prod.</div>
+  </div>
+</div>
+
+<!-- SEZIONE 1: Problemi attuali -->
+<div class="section">
+  <div class="section-title"><span class="section-number">1</span> Problemi attuali</div>
+  <div class="section-subtitle">Problemi da risolvere prima di andare in produzione</div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Inngest piano Hobby — limite 5 step concorrenti</div>
+      <span class="badge badge-critical">CRITICO</span>
+    </div>
+    <div class="card-body">
+      Con 5 step concorrenti, i casi con molti documenti (20+) impiegano 15-30 minuti e possono avere errori di timeout. I competitor come Docsy completano in 3 minuti.
+      <ul>
+        <li><strong>Soluzione:</strong> Upgrade a Inngest Pro ($75/mese) &rarr; 100 step concorrenti</li>
+        <li><strong>Modifica codice:</strong> Batch size da 3 a 1, concurrency da 5 a 100</li>
+        <li><strong>Risultato atteso:</strong> Elaborazione in 3-5 minuti per qualsiasi caso</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">PubMed — traduzione termini limitata</div>
+      <span class="badge badge-issue">MEDIO</span>
+    </div>
+    <div class="card-body">
+      La tabella di traduzione IT&rarr;EN ha 45 termini medici. Per diagnosi specifiche italiane, PubMed potrebbe non trovare risultati. Il tab "Evidenze PubMed" appare vuoto.
+      <ul>
+        <li><strong>Soluzione:</strong> Integrare un servizio di traduzione medica (es. DeepL Medical o glossario UMLS)</li>
+        <li><strong>Mitigazione attuale:</strong> Il tab PubMed viene nascosto se non ci sono risultati</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Mistral API — risposte vuote occasionali</div>
+      <span class="badge badge-issue">MEDIO</span>
+    </div>
+    <div class="card-body">
+      L'API Mistral occasionalmente restituisce contenuto vuoto per chunk di testo grandi o documenti scannerizzati male. L'estrazione salta il chunk ma perde gli eventi di quelle pagine.
+      <ul>
+        <li><strong>Mitigazione attuale:</strong> Retry automatico (3 tentativi), batch continua con i chunk riusciti</li>
+        <li><strong>Soluzione futura:</strong> Fallback a un modello secondario, split dei chunk troppo grandi</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Test end-to-end non automatizzati</div>
+      <span class="badge badge-todo">DA FARE</span>
+    </div>
+    <div class="card-body">
+      I 664 test sono tutti unitari. Non ci sono test di integrazione che testano il flusso completo Supabase &rarr; Inngest &rarr; Mistral &rarr; DB &rarr; UI.
+      <ul>
+        <li><strong>Soluzione:</strong> Aggiungere test Playwright per i flussi critici</li>
+        <li><strong>Priorita:</strong> Alta per la produzione, non bloccante per la demo</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- SEZIONE 2: Roadmap produzione -->
+<div class="section">
+  <div class="section-title"><span class="section-number">2</span> Roadmap Produzione</div>
+  <div class="section-subtitle">Step-by-step per il go-live</div>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="timeline-dot dot-current"></div>
+      <div class="timeline-content">
+        <div class="timeline-title">Fase 1 — Infrastruttura (1-2 giorni)</div>
+        <div class="timeline-desc">
+          <ul class="checklist">
+            <li><span class="check check-todo">&#9744;</span> Upgrade Inngest a Pro ($75/mese)</li>
+            <li><span class="check check-todo">&#9744;</span> Modificare codice: batch size 1, concurrency 100</li>
+            <li><span class="check check-todo">&#9744;</span> Acquistare dominio legmed.it (o .eu)</li>
+            <li><span class="check check-todo">&#9744;</span> Configurare dominio su Vercel + SSL</li>
+            <li><span class="check check-todo">&#9744;</span> Aggiornare URL in Inngest, email, export</li>
+            <li><span class="check check-done">&#10003;</span> Vercel Pro attivo</li>
+            <li><span class="check check-done">&#10003;</span> Supabase EU (Frankfurt) attivo</li>
+            <li><span class="check check-done">&#10003;</span> Sentry monitoring attivo</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-todo"></div>
+      <div class="timeline-content">
+        <div class="timeline-title">Fase 2 — Legale e GDPR (3-5 giorni)</div>
+        <div class="timeline-desc">
+          <ul class="checklist">
+            <li><span class="check check-todo">&#9744;</span> Privacy Policy aggiornata per LegMed</li>
+            <li><span class="check check-todo">&#9744;</span> Terms of Service definitivi</li>
+            <li><span class="check check-todo">&#9744;</span> DPIA (Data Protection Impact Assessment) rivista</li>
+            <li><span class="check check-todo">&#9744;</span> DPA con Mistral AI verificato</li>
+            <li><span class="check check-todo">&#9744;</span> Cookie Policy conforme</li>
+            <li><span class="check check-todo">&#9744;</span> Informativa Art. 9 GDPR (dati sanitari)</li>
+            <li><span class="check check-todo">&#9744;</span> Verifica se necessaria registrazione dispositivo medico</li>
+            <li><span class="check check-done">&#10003;</span> Dati su server EU (Frankfurt)</li>
+            <li><span class="check check-done">&#10003;</span> Anonimizzatore integrato</li>
+            <li><span class="check check-done">&#10003;</span> Nessun dato paziente nei log</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-todo"></div>
+      <div class="timeline-content">
+        <div class="timeline-title">Fase 3 — Test pesanti (3-5 giorni)</div>
+        <div class="timeline-desc">
+          <ul class="checklist">
+            <li><span class="check check-todo">&#9744;</span> Test con 50+ documenti per caso</li>
+            <li><span class="check check-todo">&#9744;</span> Test con 10 utenti simultanei</li>
+            <li><span class="check check-todo">&#9744;</span> Test con documenti scannerizzati male (OCR basso)</li>
+            <li><span class="check check-todo">&#9744;</span> Test con documenti in formati diversi (PDF, DOCX, JPG, TIFF)</li>
+            <li><span class="check check-todo">&#9744;</span> Test di tutti i 10 moduli (ogni tipo di elaborato)</li>
+            <li><span class="check check-todo">&#9744;</span> Test export DOCX/HTML/CSV per ogni tipo</li>
+            <li><span class="check check-todo">&#9744;</span> Test anonimizzatore con dati reali</li>
+            <li><span class="check check-todo">&#9744;</span> Test PubMed con diagnosi reali italiane</li>
+            <li><span class="check check-todo">&#9744;</span> Test Playwright E2E automatizzati</li>
+            <li><span class="check check-todo">&#9744;</span> Validazione report con periti reali (benchmark)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-todo"></div>
+      <div class="timeline-content">
+        <div class="timeline-title">Fase 4 — Pagamenti e Onboarding (2-3 giorni)</div>
+        <div class="timeline-desc">
+          <ul class="checklist">
+            <li><span class="check check-todo">&#9744;</span> Stripe live mode (non test)</li>
+            <li><span class="check check-todo">&#9744;</span> Piani pricing definitivi (Trial/Pro/Enterprise)</li>
+            <li><span class="check check-todo">&#9744;</span> Email transazionali da dominio verificato (Resend)</li>
+            <li><span class="check check-todo">&#9744;</span> Onboarding guidato per nuovi utenti</li>
+            <li><span class="check check-todo">&#9744;</span> Pagina Help/FAQ completa</li>
+            <li><span class="check check-done">&#10003;</span> Stripe integrato (test mode)</li>
+            <li><span class="check check-done">&#10003;</span> Email notifiche completamento</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-todo"></div>
+      <div class="timeline-content">
+        <div class="timeline-title">Fase 5 — Go Live</div>
+        <div class="timeline-desc">
+          <ul class="checklist">
+            <li><span class="check check-todo">&#9744;</span> Deploy finale su dominio produzione</li>
+            <li><span class="check check-todo">&#9744;</span> Monitoring attivo (Sentry + Inngest + Vercel)</li>
+            <li><span class="check check-todo">&#9744;</span> Backup automatici DB configurati</li>
+            <li><span class="check check-todo">&#9744;</span> Piano di disaster recovery</li>
+            <li><span class="check check-todo">&#9744;</span> Primi utenti beta (5-10 periti)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEZIONE 3: Piano test per sezione -->
+<div class="section">
+  <div class="section-title"><span class="section-number">3</span> Piano Test per Sezione</div>
+  <div class="section-subtitle">Test pesanti per ogni area dell'applicazione</div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">A. Dashboard e Catalogo Moduli</div>
+      <span class="priority priority-medium">MEDIA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Caricamento dashboard</td><td>50+ casi esistenti</td><td>Carica in &lt;2s, moduli visibili</td></tr>
+        <tr><td>Creazione caso per ogni modulo</td><td>Tutti i 26 moduli</td><td>Caso creato, redirect al caso</td></tr>
+        <tr><td>Casi vecchi (pre-moduli)</td><td>Aprire caso senza module_id</td><td>Funziona con fallback a case_type</td></tr>
+        <tr><td>Ricerca casi</td><td>Cercare per codice e paziente</td><td>Filtro funzionante, risultati corretti</td></tr>
+        <tr><td>Mobile responsive</td><td>Dashboard su iPhone/iPad</td><td>Layout corretto, moduli cliccabili</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">B. Upload Documenti</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Upload massivo</td><td>30 PDF da 10MB ciascuno</td><td>Progress bar, tutti caricati</td></tr>
+        <tr><td>Formati diversi</td><td>PDF + JPG + DOCX + TIFF</td><td>Tutti accettati e processati</td></tr>
+        <tr><td>File corrotto</td><td>PDF danneggiato</td><td>Errore chiaro, altri file non impattati</td></tr>
+        <tr><td>File molto grande</td><td>PDF da 100MB</td><td>Upload con progress o errore chiaro</td></tr>
+        <tr><td>Upload simultaneo</td><td>2 utenti caricano contemporaneamente</td><td>Nessuna interferenza</td></tr>
+        <tr><td>Tipo documento</td><td>Cambiare tipo prima dell'upload</td><td>Tipo salvato correttamente</td></tr>
+        <tr><td>Cancellazione</td><td>Eliminare documento durante upload</td><td>File rimosso, nessun errore</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">C. Pipeline OCR + Estrazione</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>OCR PDF digitale</td><td>PDF con testo selezionabile</td><td>Confidence &gt;90%, testo completo</td></tr>
+        <tr><td>OCR scansione</td><td>PDF scannerizzato 300dpi</td><td>Confidence 70-90%, testo leggibile</td></tr>
+        <tr><td>OCR manoscritto</td><td>Documento scritto a mano</td><td>Confidence &lt;50%, eventi marcati "da verificare"</td></tr>
+        <tr><td>OCR immagine</td><td>Foto JPG di referto</td><td>Testo estratto con confidence variabile</td></tr>
+        <tr><td>Estrazione eventi</td><td>Cartella clinica 50 pagine</td><td>50+ eventi estratti con date e diagnosi</td></tr>
+        <tr><td>Estrazione parallela</td><td>28 documenti simultanei</td><td>Tutti processati, nessun timeout (con Inngest Pro)</td></tr>
+        <tr><td>Chunk grandi</td><td>Documento da 200 pagine</td><td>Suddiviso in chunk, tutti estratti</td></tr>
+        <tr><td>Documento vuoto</td><td>PDF senza testo</td><td>Errore chiaro "nessun testo rilevato"</td></tr>
+        <tr><td>Resilienza Mistral</td><td>Simulare Mistral down</td><td>Retry automatico, errore dopo 3 tentativi</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">D. Generazione Report (Full Pipeline)</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Report CTU completo</td><td>15 sezioni, 28 documenti</td><td>Report strutturato con tutte le sezioni</td></tr>
+        <tr><td>Report Stragiudiziale</td><td>8 sezioni, 10 documenti</td><td>Report con epicrisi e conclusioni</td></tr>
+        <tr><td>Report Parere pro veritate</td><td>6 sezioni dedicate</td><td>Sezioni specifiche per responsabilita</td></tr>
+        <tr><td>Report con PubMed</td><td>Caso con diagnosi note</td><td>Bibliografia con citazioni reali</td></tr>
+        <tr><td>Report con anomalie</td><td>Caso con ritardi diagnostici</td><td>Anomalie riportate oggettivamente</td></tr>
+        <tr><td>Report con calcoli</td><td>Caso con periodi ITT/ITP</td><td>Calcoli corretti nell'epicrisi</td></tr>
+        <tr><td>Progress sezioni</td><td>Osservare durante generazione</td><td>"Sezione X di Y" aggiornato ogni 5s</td></tr>
+        <tr><td>Oggettivita</td><td>Verificare tono del report</td><td>Nessun giudizio, solo fatti documentati</td></tr>
+        <tr><td>Confronto benchmark</td><td>Stesso caso dei benchmark reali</td><td>Struttura e contenuto comparabile</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">E. Analisi Documentale (Extraction Only)</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Cronistoria completa</td><td>20 documenti sanitari</td><td>Timeline cronologica di tutti gli eventi</td></tr>
+        <tr><td>Wizard 3 step</td><td>Documenti &rarr; Elaborazione &rarr; Cronistoria</td><td>Nessuno step extra (no Info Perizia, no Report)</td></tr>
+        <tr><td>Export DOCX cronistoria</td><td>Scaricare DOCX</td><td>Tabella professionale con date DD.MM.YYYY</td></tr>
+        <tr><td>Export HTML cronistoria</td><td>Visualizzare nel browser</td><td>Pagina stampabile con tabella eventi</td></tr>
+        <tr><td>Export CSV</td><td>Scaricare CSV</td><td>Apribile in Excel, dati corretti</td></tr>
+        <tr><td>Velocita</td><td>5 documenti</td><td>Completato in &lt;3 minuti</td></tr>
+        <tr><td>Categorizzazione</td><td>Verificare tipi evento</td><td>Pochi eventi "altro", categorizzazione corretta</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">F. Analisi Spese Mediche</div>
+      <span class="priority priority-medium">MEDIA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Estrazione importi</td><td>Fatture con importi in euro</td><td>Importi estratti correttamente (1.500,00 &euro;)</td></tr>
+        <tr><td>Categorizzazione spese</td><td>Fatture miste</td><td>8 categorie (farmaci, visite, esami, etc.)</td></tr>
+        <tr><td>Export DOCX spese</td><td>Scaricare report spese</td><td>Tabella riepilogo + dettaglio per categoria</td></tr>
+        <tr><td>Totali corretti</td><td>Verificare somme</td><td>Totali per categoria e totale generale corretti</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">G. Anonimizzatore</div>
+      <span class="priority priority-medium">MEDIA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Anonimizzazione nomi</td><td>Documento con nomi pazienti</td><td>Nomi sostituiti con [PAZIENTE], [MEDICO]</td></tr>
+        <tr><td>Codice fiscale</td><td>Documento con CF</td><td>CF sostituito con [CF]</td></tr>
+        <tr><td>Date</td><td>Date nel testo</td><td>Date sostituite con [DATA]</td></tr>
+        <tr><td>Copia testo</td><td>Click "Copia"</td><td>Testo anonimizzato negli appunti</td></tr>
+        <tr><td>Download TXT</td><td>Click "Scarica"</td><td>File .txt scaricato</td></tr>
+        <tr><td>Documenti multipli</td><td>5 documenti</td><td>Tutti anonimizzati in un unico output</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">H. Export e Formattazione</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>DOCX report completo</td><td>CTU con 15 sezioni</td><td>Documento Word formattato, stampabile</td></tr>
+        <tr><td>DOCX anonimizzato</td><td>Export senza dati personali</td><td>Nomi/date/CF sostituiti</td></tr>
+        <tr><td>HTML report</td><td>Visualizzare nel browser</td><td>Pagina professionale, stampabile</td></tr>
+        <tr><td>CSV eventi</td><td>Export tabellare</td><td>Apribile in Excel, colonne corrette</td></tr>
+        <tr><td>Date formato italiano</td><td>Verificare date nei DOCX</td><td>DD.MM.YYYY ovunque</td></tr>
+        <tr><td>Tabelle nel report</td><td>Report con esami lab</td><td>Tabelle markdown renderizzate in DOCX/HTML</td></tr>
+        <tr><td>Immagini nel report</td><td>Report con immagini OCR</td><td>Immagini embedded nel DOCX/HTML</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">I. PubMed Integration</div>
+      <span class="priority priority-medium">MEDIA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Ricerca per diagnosi</td><td>Caso con "frattura periprotesica"</td><td>Articoli trovati (traduzione IT&rarr;EN)</td></tr>
+        <tr><td>Ricerca trattamento</td><td>Caso con intervento chirurgico</td><td>Articoli su outcomes</td></tr>
+        <tr><td>Ricerca nesso causale</td><td>Caso con anomalie</td><td>Articoli su malpractice/prognosi</td></tr>
+        <tr><td>Tab PubMed visibile</td><td>Report con risultati</td><td>Tab con link a PubMed e DOI</td></tr>
+        <tr><td>Tab PubMed nascosto</td><td>Report senza risultati</td><td>Tab non visibile (nessun tab vuoto)</td></tr>
+        <tr><td>Citazioni nel report</td><td>Epicrisi e conclusioni</td><td>Riferimenti scientifici citati</td></tr>
+        <tr><td>PubMed down</td><td>API non disponibile</td><td>Report generato comunque (non bloccante)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">J. Sicurezza e GDPR</div>
+      <span class="priority priority-high">ALTA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Autenticazione</td><td>Accesso senza login</td><td>Redirect a login</td></tr>
+        <tr><td>RLS Supabase</td><td>Utente A accede a caso di Utente B</td><td>Errore 403, accesso negato</td></tr>
+        <tr><td>Rate limiting</td><td>100 richieste in 1 minuto</td><td>Blocco dopo 60 richieste</td></tr>
+        <tr><td>Log sanitizzati</td><td>Verificare log Vercel/Sentry</td><td>Nessun nome paziente nei log, solo ID</td></tr>
+        <tr><td>Cookie consent</td><td>Primo accesso</td><td>Banner GDPR visibile</td></tr>
+        <tr><td>Esporta dati</td><td>Settings &rarr; Esporta</td><td>Download completo dati utente</td></tr>
+        <tr><td>Cancella account</td><td>Settings &rarr; Cancella</td><td>Tutti i dati eliminati</td></tr>
+        <tr><td>XSS/Injection</td><td>Input con script malevoli</td><td>Input sanitizzato, nessuna esecuzione</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">K. Admin Panel</div>
+      <span class="priority priority-low">BASSA</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tr><th>Test</th><th>Scenario</th><th>Risultato atteso</th></tr>
+        <tr><td>Monitor Pipeline</td><td>Casi in elaborazione</td><td>Lista aggiornata ogni 5s</td></tr>
+        <tr><td>Force Reset</td><td>Caso bloccato</td><td>Reset a idle, rilancio possibile</td></tr>
+        <tr><td>Reset All</td><td>Piu casi bloccati</td><td>Tutti resettati in un click</td></tr>
+        <tr><td>Accesso non-admin</td><td>Utente normale accede a /admin</td><td>Accesso negato</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SEZIONE 4: Costi -->
+<div class="section">
+  <div class="section-title"><span class="section-number">4</span> Costi Produzione Mensili</div>
+  <div class="section-subtitle">Stima costi per operativita con 50-100 utenti</div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="cost-row"><span class="cost-label">Vercel Pro</span><span class="cost-value">$20/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Inngest Pro</span><span class="cost-value">$75/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Supabase Pro</span><span class="cost-value">$25/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Mistral API (stima 500 casi/mese)</span><span class="cost-value">~$150/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Upstash Redis</span><span class="cost-value">$10/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Resend (email)</span><span class="cost-value">$20/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Sentry (monitoring)</span><span class="cost-value">$26/mese</span></div>
+      <div class="cost-row"><span class="cost-label">Dominio legmed.it</span><span class="cost-value">~$15/anno</span></div>
+      <div class="cost-row cost-total"><span class="cost-label">Totale stimato</span><span class="cost-value">~$340/mese</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- SEZIONE 5: Stato feature -->
+<div class="section">
+  <div class="section-title"><span class="section-number">5</span> Stato Feature</div>
+  <div class="section-subtitle">Tutte le funzionalita implementate</div>
+
+  <div class="card">
+    <div class="card-body">
+      <table>
+        <tr><th>Feature</th><th>Stato</th><th>Note</th></tr>
+        <tr><td>Catalogo 26 moduli (10 categorie)</td><td><span class="badge badge-done">FATTO</span></td><td>Allineato spec periti</td></tr>
+        <tr><td>Pipeline 4 modalita (full, extraction, expenses, anonymize)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>OCR parallelo (Mistral OCR)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Estrazione eventi con anti-hallucination</td><td><span class="badge badge-done">FATTO</span></td><td>extraction_reasoning obbligatorio</td></tr>
+        <tr><td>Consolidamento e deduplicazione</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Anomaly detection (7 tipi)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Calcoli medico-legali (ITT/ITP)</td><td><span class="badge badge-done">FATTO</span></td><td>Tabelle Milano, Balthazard, Gabrielli</td></tr>
+        <tr><td>Generazione report sezionale</td><td><span class="badge badge-done">FATTO</span></td><td>Context rolling tra sezioni</td></tr>
+        <tr><td>Report 100% oggettivo</td><td><span class="badge badge-done">FATTO</span></td><td>Audit prompt verificato</td></tr>
+        <tr><td>Template CTU (15 sez), CTP (14), Stragiudiziale (8)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Template Parere pro veritate (6 sez)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Template Parere scopo riserva (6 sez)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Domain knowledge specializzato (17 tipi)</td><td><span class="badge badge-done">FATTO</span></td><td>Incl. previdenziale e INAIL</td></tr>
+        <tr><td>PubMed (3 categorie + nesso causale)</td><td><span class="badge badge-done">FATTO</span></td><td>Traduzione IT&rarr;EN 45 termini</td></tr>
+        <tr><td>Tab Evidenze PubMed nella UI</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Export DOCX/HTML/CSV report</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Export DOCX/HTML cronistoria</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Export DOCX spese mediche</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Anonimizzatore standalone</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Analisi spese mediche (8 categorie)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Analisi immagini diagnostiche (Pixtral)</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>RAG linee guida cliniche</td><td><span class="badge badge-done">FATTO</span></td><td>pgvector + embedding Mistral</td></tr>
+        <tr><td>Auth completa + GDPR</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Stripe payments</td><td><span class="badge badge-done">FATTO</span></td><td>Test mode</td></tr>
+        <tr><td>Admin panel + force reset</td><td><span class="badge badge-done">FATTO</span></td><td></td></tr>
+        <tr><td>Progress report real-time</td><td><span class="badge badge-done">FATTO</span></td><td>Sezione X di Y</td></tr>
+        <tr><td>664 test automatici</td><td><span class="badge badge-done">FATTO</span></td><td>Unit test, no E2E</td></tr>
+        <tr><td>Test E2E Playwright</td><td><span class="badge badge-todo">DA FARE</span></td><td>Priorita alta per produzione</td></tr>
+        <tr><td>Traduzione multilingua</td><td><span class="badge badge-todo">DA FARE</span></td><td>Per espansione internazionale</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div style="text-align: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 13px;">
+  LegMed &mdash; Documento riservato &mdash; Aprile 2026
+</div>
+
+</div>
+</body>
+</html>
