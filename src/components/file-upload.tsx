@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
 import { getFileIcon, formatFileSize } from '@/lib/format';
 import { DOCUMENT_TYPES } from '@/lib/constants';
+import { toUserMessage } from '@/lib/user-error-messages';
 
 interface FileUploadProps {
   caseId: string;
@@ -96,7 +97,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         });
 
       if (uploadError) {
-        newProgress[i] = { ...newProgress[i], status: 'error', error: uploadError.message };
+        newProgress[i] = { ...newProgress[i], status: 'error', error: toUserMessage(uploadError.message) };
         setProgress([...newProgress]);
         continue;
       }

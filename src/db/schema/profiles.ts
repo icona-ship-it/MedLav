@@ -5,6 +5,10 @@ export const profiles = pgTable('profiles', {
   email: text('email').notNull(),
   fullName: text('full_name'),
   studio: text('studio'), // nome studio medico-legale
+  studioAddress: text('studio_address'), // indirizzo studio
+  studioPhone: text('studio_phone'), // telefono studio
+  studioPec: text('studio_pec'), // PEC studio
+  studioTitle: text('studio_title'), // qualifica/specializzazione
   // Stripe subscription fields
   stripeCustomerId: text('stripe_customer_id'),
   subscriptionStatus: text('subscription_status').default('trial'),

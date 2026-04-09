@@ -423,6 +423,17 @@ export async function assembleSectionsAndSaveReport(
     if (warnings.length > 0) {
       logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
     }
+
+    // Block saving for critical validation errors (empty report, too short, missing required sections)
+    const criticalErrors = errors.filter((e) =>
+      e.type === 'empty_report' || e.type === 'too_short' || e.type === 'missing_section',
+    );
+    if (criticalErrors.length > 0) {
+      throw new Error(
+        `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +
+        `Inngest riprovera la generazione.`,
+      );
+    }
   }
 
   // Merge all token usage

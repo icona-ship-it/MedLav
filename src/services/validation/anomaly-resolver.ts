@@ -27,8 +27,9 @@ export interface ResolvedAnomaly extends DetectedAnomaly {
   resolution: AnomalyResolution | null;
 }
 
-/** Max anomalies to resolve per run (skip low-severity if exceeded). */
-const MAX_ANOMALIES_PER_RUN = 10;
+/** Max anomalies to resolve per run (skip low-severity if exceeded).
+ * Capped at 5 to stay within Vercel 800s budget (5 × ~120s = ~600s worst case). */
+const MAX_ANOMALIES_PER_RUN = 5;
 /** Max OCR chars per anomaly to send to LLM. */
 const MAX_OCR_CHARS = 5000;
 

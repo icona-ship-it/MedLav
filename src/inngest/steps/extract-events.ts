@@ -5,12 +5,13 @@ import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
 export const PAGES_PER_CHUNK = 15;
+/** Overlap pages between consecutive chunks to prevent mid-document splits. */
+const OVERLAP_PAGES = 2;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
  * Each job calls Mistral LLM (30s-2min) sequentially within a batch.
- * 2 chunks × 2.5min = 5min max, under Inngest's ~5min step response limit.
- * With Inngest Hobby (5 concurrent steps), 54 chunks → 27 batches. */
-export const EXTRACTION_BATCH_SIZE = 2;
+ * With Inngest Pro (100 concurrent steps), 1 chunk per step maximizes parallelism. */
+export const EXTRACTION_BATCH_SIZE = 1;
 
 // Enum validation — LLM can produce values outside the enum
 const VALID_EVENT_TYPES = new Set([
@@ -114,8 +115,10 @@ export function planChunksSync(
   pageCount: number,
 ): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
-  for (let i = 1; i <= pageCount; i += PAGES_PER_CHUNK) {
+  const step = PAGES_PER_CHUNK - OVERLAP_PAGES; // stride with overlap
+  for (let i = 1; i <= pageCount; i += step) {
     ranges.push({ start: i, end: Math.min(i + PAGES_PER_CHUNK - 1, pageCount) });
+    if (i + PAGES_PER_CHUNK - 1 >= pageCount) break; // last chunk reached
   }
   return ranges;
 }

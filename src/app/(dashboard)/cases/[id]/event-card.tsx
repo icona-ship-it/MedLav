@@ -76,6 +76,25 @@ export function EventCard({
   isHighlighted?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const handleQuickVerify = () => {
+    setIsVerifying(true);
+    startTransition(async () => {
+      const result = await updateEvent({
+        eventId: event.id,
+        caseId,
+        requiresVerification: false,
+      });
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success('Evento segnato come verificato');
+      }
+      setIsVerifying(false);
+    });
+  };
+
   const [editForm, setEditForm] = useState({
     title: event.title,
     description: event.description,
@@ -149,7 +168,19 @@ export function EventCard({
                 {formatDate(event.event_date)}
               </span>
               <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
-              {event.requires_verification && <Badge variant="warning" className="text-xs">Da verificare</Badge>}
+              {event.requires_verification ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleQuickVerify(); }}
+                  className="inline-flex items-center"
+                  title="Clicca per segnare come verificato"
+                >
+                  <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors">
+                    {isVerifying ? '...' : 'Da verificare ✓'}
+                  </Badge>
+                </button>
+              ) : event.requires_verification === false && (
+                <Badge variant="success" className="text-xs">Verificato</Badge>
+              )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
           </div>

@@ -27,7 +27,8 @@ export const organizeDocumentsJob = inngest.createFunction(
     id: 'organize-documents',
     retries: 2,
     concurrency: [
-      { limit: 3, key: 'event.data.userId' },
+      { limit: 20 },                              // global cap
+      { limit: 5, key: 'event.data.userId' },      // per-user fairness
     ],
   },
   { event: 'case/documents.organize' },

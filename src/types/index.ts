@@ -78,6 +78,13 @@ export type ProcessingStatus =
 
 // Perizia metadata (formal court expert report data)
 export interface PeriziaMetadata {
+  // Patient data (optional — for formal perizia header. GDPR: never log these fields)
+  patientFullName?: string;    // "Massarenti Daniela"
+  patientDateOfBirth?: string; // "1945-02-02"
+  patientAddress?: string;     // "Via Todeschini 37, 37126 Verona"
+  patientFiscalCode?: string;  // "MSSDNL45B42A944J"
+  patientPhone?: string;       // telefono paziente
+  // Court/proceeding data
   tribunale?: string;          // "Tribunale Ordinario di Brescia"
   sezione?: string;            // "Sezione Centrale Civile"
   rgNumber?: string;           // "10965/2025"

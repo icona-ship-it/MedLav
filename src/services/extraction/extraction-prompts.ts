@@ -10,7 +10,7 @@ Estrarre e riportare:
 - A.3 Anamnesi e Terapie: anamnesi patologica, tutte le terapie farmacologiche (farmaco, dosaggio, via, frequenza), modifiche terapeutiche, trasfusioni
 - A.4 Descrizione Operatoria: testo INTEGRALE della descrizione chirurgica, tipo intervento, operatori, tecnica, tempi operatori (durata, orario), reperti, complicanze, tipo anestesia
 - A.5 Cartella Anestesiologica: valutazione preop (ASA score), tipo anestesia, farmaci, parametri vitali intraop, complicanze
-- A.6 Diario Medico/Infermieristico: SOLO eventi avversi, complicanze, peggioramenti improvvisi, interventi urgenza, allarmi (NON routine quotidiana)
+- A.6 Diario Medico/Infermieristico: eventi avversi, complicanze, peggioramenti, interventi urgenza, allarmi, variazioni parametri vitali, modifiche terapeutiche, annotazioni cliniche significative. Includere anche andamento parametri vitali se documentato (utile per ricostruire la catena probatoria). Escludere solo annotazioni puramente logistiche (pasti, igiene personale, posizionamento)
 - A.7 Lettera di Dimissione: diagnosi dimissione completa, condizioni alla dimissione, terapia domiciliare, follow-up, prognosi
 
 ### FONTE B - REFERTI CONTROLLI MEDICI
@@ -373,7 +373,7 @@ CAMPI CRITICI DA ESTRARRE:
 - Esami: TUTTI i valori con unità di misura e range di riferimento
 - Dimissione: diagnosi dimissione completa, terapia domiciliare (farmaco, dose, via, frequenza), follow-up, prognosi
 ERRORI COMUNI: Saltare valori di laboratorio in tabelle, ignorare annotazioni manoscritte a margine, perdere la cartella anestesiologica.
-COSA NON ESTRARRE: Routine quotidiana del diario infermieristico (pasti, igiene, posizionamento), firme senza contenuto clinico.`,
+COSA NON ESTRARRE: Annotazioni puramente logistiche del diario (pasti, igiene personale, posizionamento letto), firme senza contenuto clinico.`,
 
   referto_specialistico: `ISTRUZIONI SPECIFICHE PER REFERTO SPECIALISTICO:
 STRUTTURA ATTESA: Intestazione (specialista, data, struttura) → Motivo della visita → Anamnesi → Esame obiettivo → Esami richiesti/visionati → Diagnosi/Conclusioni → Terapia/Follow-up.

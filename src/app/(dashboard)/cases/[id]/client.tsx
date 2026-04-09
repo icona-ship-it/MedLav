@@ -9,6 +9,7 @@ import { PeriziaMetadataForm } from './perizia-form';
 import { ReportStep } from './report-step';
 import type { GenerationProgress } from './report-step';
 import { AnonymizeStep } from './anonymize-step';
+import { ExpenseTable } from './expense-table';
 import { WizardStepBar } from './wizard-step-bar';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
@@ -45,6 +46,12 @@ const EXTRACTION_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti da analizzare' },
   { number: 2, label: 'Elaborazione', hint: 'Avvia l\'estrazione eventi' },
   { number: 3, label: 'Cronistoria', hint: 'La cronistoria estratta è pronta' },
+] as const;
+
+const EXPENSES_WIZARD_STEPS = [
+  { number: 1, label: 'Documenti', hint: 'Carica scontrini, fatture, ricevute' },
+  { number: 2, label: 'Elaborazione', hint: 'Avvia l\'analisi delle spese' },
+  { number: 3, label: 'Spese', hint: 'La tabella spese è pronta' },
 ] as const;
 
 const ANONYMIZE_WIZARD_STEPS = [
@@ -128,13 +135,16 @@ export function CaseDetailClient({
 
   // Determine pipeline mode for UI adaptation
   const pipelineMode = caseData.pipeline_mode ?? 'full';
-  const isExtractionOnly = pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only';
+  const isExtractionOnly = pipelineMode === 'extraction_only';
+  const isExpensesOnly = pipelineMode === 'expenses_only';
   const isAnonymizeOnly = pipelineMode === 'anonymize_only';
   const WIZARD_STEPS = isAnonymizeOnly
     ? ANONYMIZE_WIZARD_STEPS
-    : isExtractionOnly
-      ? EXTRACTION_WIZARD_STEPS
-      : FULL_WIZARD_STEPS;
+    : isExpensesOnly
+      ? EXPENSES_WIZARD_STEPS
+      : isExtractionOnly
+        ? EXTRACTION_WIZARD_STEPS
+        : FULL_WIZARD_STEPS;
 
   // Sync with server data on refresh
   useEffect(() => {
@@ -166,7 +176,7 @@ export function CaseDetailClient({
 
   const autoStep = isAnonymizeOnly
     ? computeAnonymizeAutoStep(localDocuments)
-    : isExtractionOnly
+    : (isExtractionOnly || isExpensesOnly)
       ? computeExtractionAutoStep(processingStage, hasProcessingDocs, hasEvents)
       : computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
   const [activeStep, setActiveStep] = useState(autoStep);
@@ -224,7 +234,7 @@ export function CaseDetailClient({
             ? (step.number === 1
                 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
                 : 'Pronto')
-            : isExtractionOnly
+            : (isExtractionOnly || isExpensesOnly)
             ? (step.number === 1
                 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
                 : step.number === 2
@@ -277,6 +287,73 @@ export function CaseDetailClient({
                 caseId={caseId}
                 documents={localDocuments}
                 processingStage={processingStage}
+              />
+            </div>
+          )}
+        </>
+      ) : isExpensesOnly ? (
+        <>
+          {/* === Expenses-only: 3-step wizard === */}
+
+          {/* STEP 1: Documenti */}
+          {activeStep === 1 && (
+            <div key="step-1" className="animate-step-in">
+              <DocumentsSection
+                caseId={caseId}
+                documents={localDocuments}
+                processingLabels={processingLabels}
+                hasUploadedDocs={hasUploadedDocs}
+                onProceedToNext={() => handleSetStep(2)}
+              />
+            </div>
+          )}
+
+          {/* STEP 2: Elaborazione */}
+          {activeStep === 2 && (
+            <div key="step-2" className="animate-step-in">
+              <ProcessingSection
+                caseId={caseId}
+                documents={localDocuments}
+                hasProcessingDocs={hasProcessingDocs}
+                hasUploadedDocs={hasUploadedDocs}
+                processingStage={processingStage}
+                lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+              />
+            </div>
+          )}
+
+          {/* STEP 3: Spese + Cronistoria */}
+          {activeStep === 3 && (
+            <div key="step-3" className="animate-step-in space-y-6">
+              {/* Expense table from LLM extraction */}
+              {(() => {
+                const expenseExtraction = (caseData.perizia_metadata as Record<string, unknown> | null)?.expenseExtraction as { items: Array<Record<string, unknown>>; totalAmount: number | null } | undefined;
+                if (expenseExtraction?.items && expenseExtraction.items.length > 0) {
+                  return (
+                    <ExpenseTable
+                      items={expenseExtraction.items as unknown as import('@/services/expenses/expense-extractor').ExtractedExpenseItem[]}
+                      totalAmount={expenseExtraction.totalAmount}
+                      caseId={caseId}
+                    />
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Events timeline below */}
+              <ReportStep
+                caseId={caseId}
+                report={null}
+                events={events}
+                anomalies={[]}
+                missingDocs={[]}
+                documents={localDocuments}
+                documentPages={documentPages}
+                eventImages={eventImages}
+                processingStage={processingStage}
+                onNavigateToStep={handleSetStep}
+                generationProgress={generationProgress}
+                pubmedReferences={[]}
               />
             </div>
           )}

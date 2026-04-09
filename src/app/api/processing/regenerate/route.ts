@@ -17,7 +17,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
 
-export const maxDuration = 300; // synthesis can take several minutes
+export const maxDuration = 800; // synthesis can take several minutes (TIMEOUT_SYNTHESIS=600s)
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),

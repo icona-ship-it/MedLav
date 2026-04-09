@@ -138,8 +138,8 @@ export function DocumentsSection({
         </CardContent>
       </Card>
 
-      {/* Documents list — hidden during upload to avoid visual repetition */}
-      {documents.length > 0 && !isUploading && (
+      {/* Documents list — always visible, even during upload */}
+      {documents.length > 0 && (
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="space-y-2">
@@ -171,7 +171,7 @@ export function DocumentsSection({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {documents.slice(0, 30).map((doc) => {
+              {documents.map((doc) => {
                 const Icon = getFileIcon(doc.file_type);
                 const canDelete = !isDocProcessing(doc.processing_status);
                 const isUploaded = doc.processing_status === 'caricato';
@@ -241,11 +241,7 @@ export function DocumentsSection({
                   </div>
                 );
               })}
-              {documents.length > 30 && (
-                <p className="text-xs text-muted-foreground text-center py-1 col-span-2">
-                  ...e altri {documents.length - 30} documenti
-                </p>
-              )}
+              {/* All documents shown — no pagination limit */}
             </div>
           </CardContent>
         </Card>

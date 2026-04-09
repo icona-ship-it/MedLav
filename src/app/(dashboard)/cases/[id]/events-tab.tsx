@@ -177,6 +177,9 @@ export function EventsTab({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [searchText, setSearchText] = useState('');
   const [visibleCount, setVisibleCount] = useState(20);
 
 
@@ -195,8 +198,15 @@ export function EventsTab({
   const verificationEvents = events.filter((e) => isVerificationEvent(e));
 
   const filteredEvents = events.filter((event) => {
-    if (showOnlyVerification) return isVerificationEvent(event);
-    if (eventTypeFilter) return event.event_type === eventTypeFilter;
+    if (showOnlyVerification && !isVerificationEvent(event)) return false;
+    if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
+    if (dateFrom && event.event_date < dateFrom) return false;
+    if (dateTo && event.event_date > dateTo) return false;
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      const haystack = `${event.title} ${event.description} ${event.doctor ?? ''} ${event.facility ?? ''} ${event.diagnosis ?? ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
   });
 
@@ -300,6 +310,33 @@ export function EventsTab({
                   }`}
                 >
                   Da verificare ({verificationEvents.length})
+                </button>
+              )}
+            </div>
+            {/* Date range + text search filters */}
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">Da:</label>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-7 rounded border px-2 text-xs bg-background" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">A:</label>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-7 rounded border px-2 text-xs bg-background" />
+              </div>
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Cerca medico, struttura, diagnosi..."
+                className="h-7 rounded border px-2 text-xs bg-background flex-1 min-w-[180px]"
+              />
+              {(dateFrom || dateTo || searchText) && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); setSearchText(''); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Azzera filtri
                 </button>
               )}
             </div>

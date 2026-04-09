@@ -15,7 +15,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
 
-export const maxDuration = 300; // section regeneration can take several minutes
+export const maxDuration = 800; // section regeneration needs margin for LLM timeout + retries
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),

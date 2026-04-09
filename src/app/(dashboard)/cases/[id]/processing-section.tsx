@@ -188,7 +188,7 @@ export function ProcessingSection({
               <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30 p-3">
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
                 <p className="text-sm text-green-700 dark:text-green-400">
-                  L&apos;analisi continua anche se chiudi questa pagina. Riceverai una notifica quando sarà pronta.
+                  L&apos;analisi continua anche se chiudi questa pagina. Riceverai un&apos;email al completamento.
                 </p>
               </div>
 
@@ -257,7 +257,7 @@ export function ProcessingSection({
                       </Badge>
                       <Badge variant="outline" className="text-sm px-3 py-1">
                         <Clock className="mr-1.5 h-3.5 w-3.5" />
-                        Di solito pochi minuti. Per documenti molto grandi può richiedere più tempo.
+                        Tempo stimato: ~{Math.max(2, documents.length * 2)} minuti per {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
                       </Badge>
                     </div>
                   </div>

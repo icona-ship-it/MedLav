@@ -1,4 +1,9 @@
 export interface PeriziaMetadataUI {
+  patientFullName?: string;
+  patientDateOfBirth?: string;
+  patientAddress?: string;
+  patientFiscalCode?: string;
+  patientPhone?: string;
   tribunale?: string;
   sezione?: string;
   rgNumber?: string;

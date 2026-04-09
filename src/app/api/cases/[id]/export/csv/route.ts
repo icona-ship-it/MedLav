@@ -43,6 +43,7 @@ export async function GET(
     }
 
     const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
+    const exportType = request.nextUrl.searchParams.get('type') ?? 'events';
 
     logAccess({
       userId: user.id,
@@ -51,13 +52,30 @@ export async function GET(
       entityId: caseId,
       metadata: {
         format: 'csv',
+        exportType,
         anonymized: shouldAnonymize,
         reportVersion: data.report?.version ?? null,
         reportStatus: data.report?.report_status ?? null,
       },
     });
 
-    let csv = generateCsvExport(data.events);
+    let csv: string;
+    let filenamePrefix: string;
+
+    if (exportType === 'expenses') {
+      // Export expense extraction data as CSV
+      const expenseExtraction = (data.periziaMetadata as Record<string, unknown> | null)?.expenseExtraction as {
+        items?: Array<Record<string, unknown>>;
+        totalAmount?: number | null;
+      } | undefined;
+
+      csv = generateExpenseCsv(expenseExtraction?.items ?? []);
+      filenamePrefix = 'spese';
+    } else {
+      csv = generateCsvExport(data.events);
+      filenamePrefix = 'eventi';
+    }
+
     if (shouldAnonymize) {
       const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
       const result = anonymizeText({ text: csv, periziaMetadata });
@@ -68,7 +86,7 @@ export async function GET(
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="eventi-${data.caseData.code}${suffix}.csv"`,
+        'Content-Disposition': `attachment; filename="${filenamePrefix}-${data.caseData.code}${suffix}.csv"`,
       },
     });
   } catch (error) {
@@ -81,4 +99,100 @@ export async function GET(
       { status: 500 },
     );
   }
+}
+
+// ── Expense CSV generator ──────────────────────────────────────────────
+
+const EXPENSE_CSV_HEADERS = [
+  'N.',
+  'Data',
+  'Descrizione',
+  'Importo (€)',
+  'N. Ricevuta/Fattura',
+  'Tipo Farmaco',
+  'Categoria',
+  'Struttura',
+  'Diagnosi Correlata',
+  'Note',
+];
+
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  farmaci: 'Farmaci',
+  visite_specialistiche: 'Visite specialistiche',
+  esami_diagnostici: 'Esami diagnostici',
+  interventi: 'Interventi chirurgici',
+  riabilitazione: 'Riabilitazione',
+  ausili_protesi: 'Ausili e protesi',
+  trasporti: 'Trasporti sanitari',
+  altro: 'Altro',
+};
+
+function escapeCsvField(value: string): string {
+  if (value.includes(';') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function formatDateIT(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
+
+/**
+ * Generate CSV for expense items.
+ * Uses semicolon separator and UTF-8 BOM for Excel IT compatibility.
+ */
+function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
+  const BOM = '\uFEFF'; // UTF-8 BOM for Excel
+  const SEP = ';';
+
+  const headerLine = EXPENSE_CSV_HEADERS.join(SEP);
+  const rows: string[] = [headerLine];
+
+  let totalAmount = 0;
+  let hasAnyAmount = false;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const amount = typeof item.amount === 'number' ? item.amount : null;
+
+    if (amount !== null) {
+      totalAmount += amount;
+      hasAnyAmount = true;
+    }
+
+    const row = [
+      String(i + 1),
+      formatDateIT(String(item.date ?? '')),
+      escapeCsvField(String(item.description ?? '')),
+      amount !== null ? amount.toFixed(2).replace('.', ',') : '',
+      escapeCsvField(String(item.receiptNumber ?? '')),
+      escapeCsvField(String(item.drugType ?? '')),
+      EXPENSE_CATEGORY_LABELS[String(item.category ?? 'altro')] ?? String(item.category ?? ''),
+      escapeCsvField(String(item.facility ?? '')),
+      escapeCsvField(String(item.linkedDiagnosis ?? '')),
+      escapeCsvField(String(item.notes ?? '')),
+    ];
+    rows.push(row.join(SEP));
+  }
+
+  // Add total row
+  if (hasAnyAmount) {
+    rows.push('');
+    const totalRow = [
+      '',
+      '',
+      'TOTALE',
+      totalAmount.toFixed(2).replace('.', ','),
+      '', '', '', '', '', '',
+    ];
+    rows.push(totalRow.join(SEP));
+  }
+
+  return BOM + rows.join('\n');
 }

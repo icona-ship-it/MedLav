@@ -6,13 +6,15 @@ import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 // ── Timeout per tipo di operazione ──
 // Vercel Pro maxDuration must be set to 800s in project settings (Settings → Functions).
 // Default 300s is NOT enough for LLM synthesis on large cases.
-export const TIMEOUT_EXTRACTION = 150_000;  // 2.5 minuti — 2 chunk × 2.5min = 5min max per batch, under Inngest limit
+export const TIMEOUT_EXTRACTION = 180_000;  // 3 minuti — 1 chunk per step con Inngest Pro
 export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti (casi grandi richiedono tempo per generare report completi)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (OCR e altro)
 
 // ── Retry ──
-const MAX_RETRIES = 5;
-const RETRY_BASE_DELAY_MS = 2000;
+// With Vercel maxDuration=800s, worst case must stay under budget:
+// 4 attempts × 180s extraction timeout + delays ≈ 720s + ~60s delays = ~780s (safe)
+const MAX_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 1500;
 const MAX_RETRY_DELAY_MS = 30_000;
 
 // ── Deterministic seed for reproducible outputs ──
@@ -154,7 +156,10 @@ class Semaphore {
   }
 }
 
-const mistralSemaphore = new Semaphore(5);
+// Note: in serverless (Vercel/Inngest), each invocation has its own semaphore.
+// This only limits concurrency within a single process (e.g. Promise.all in dev mode).
+// Cross-process rate limiting is handled by Mistral's 429 + our retry logic above.
+const mistralSemaphore = new Semaphore(10);
 
 // ── Transient error detection ──
 function isTransientError(err: unknown): boolean {
@@ -196,6 +201,9 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
         throw error;
       }
 
+      // Detect rate limit specifically for better logging
+      const isRateLimit = message.includes('429') || message.includes('rate') || message.includes('Too Many');
+
       // Retry-After header (rate limit 429)
       let delayMs: number;
       const errObj = error as Record<string, unknown>;
@@ -204,12 +212,19 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
         (errObj?.headers as Record<string, string> | undefined)?.['retry-after'];
 
       if (retryAfter) {
-        delayMs = (parseInt(String(retryAfter), 10) || 5) * 1000;
-        logger.info('mistral-retry', `[retry:${label}] Using Retry-After header: ${retryAfter}s`);
+        // Respect server's Retry-After, capped to avoid sleeping forever
+        const retryAfterMs = Math.min((parseInt(String(retryAfter), 10) || 5) * 1000, MAX_RETRY_DELAY_MS);
+        const jitter = Math.round(Math.random() * 2000);
+        delayMs = retryAfterMs + jitter;
+        logger.warn('mistral-retry', `[retry:${label}] Rate limited — Retry-After: ${retryAfter}s, capped delay: ${delayMs}ms`);
+      } else if (isRateLimit) {
+        // 429 without Retry-After: use longer backoff, capped
+        const baseDelay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt + 1), MAX_RETRY_DELAY_MS);
+        delayMs = Math.min(Math.round(baseDelay * (0.5 + Math.random())), MAX_RETRY_DELAY_MS);
+        logger.warn('mistral-retry', `[retry:${label}] Rate limited (no Retry-After), backing off ${delayMs}ms`);
       } else {
         const baseDelay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
-        const jitter = baseDelay * (0.7 + Math.random() * 0.6);
-        delayMs = Math.round(jitter);
+        delayMs = Math.min(Math.round(baseDelay * (0.7 + Math.random() * 0.6)), MAX_RETRY_DELAY_MS);
       }
 
       logger.info('mistral-retry',
@@ -343,9 +358,9 @@ async function _streamMistralChatInternal(params: {
           totalTokens: data.usage.totalTokens ?? 0,
         };
       }
-      if (Date.now() - lastTokenAt > STALL_TIMEOUT_MS && content.length === 0) {
+      if (Date.now() - lastTokenAt > STALL_TIMEOUT_MS) {
         throw new Error(
-          `[mistral:${label}] Stream stalled: no tokens received for ${STALL_TIMEOUT_MS / 1000}s`,
+          `[mistral:${label}] Stream stalled: no tokens received for ${STALL_TIMEOUT_MS / 1000}s (${content.length} chars so far)`,
         );
       }
       if (content.length - lastLogAt >= 2000) {
@@ -387,49 +402,49 @@ async function _completeMistralChatFallback(params: {
   const { model, messages, temperature, maxTokens, responseFormat, randomSeed, label } = params;
   const timeoutMs = params.timeoutMs ?? TIMEOUT_DEFAULT;
 
-  return withMistralRetry(async () => {
-    const client = getMistralClient();
-    const startMs = Date.now();
+  // No withMistralRetry here — the stream path already exhausted its retry budget.
+  // This is a single-shot fallback attempt.
+  const client = getMistralClient();
+  const startMs = Date.now();
 
-    logger.info('mistral', `[mistral:${label}] Using chat.complete() fallback (timeout: ${timeoutMs}ms)`);
+  logger.info('mistral', `[mistral:${label}] Using chat.complete() fallback (timeout: ${timeoutMs}ms)`);
 
-    const response = await client.chat.complete(
-      {
-        model,
-        messages: messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-        temperature,
-        maxTokens,
-        ...(responseFormat && { responseFormat }),
-        ...(randomSeed != null && { randomSeed }),
-      },
-      { timeoutMs },
-    );
+  const response = await client.chat.complete(
+    {
+      model,
+      messages: messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+      temperature,
+      maxTokens,
+      ...(responseFormat && { responseFormat }),
+      ...(randomSeed != null && { randomSeed }),
+    },
+    { timeoutMs },
+  );
 
-    const content = response?.choices?.[0]?.message?.content;
-    const finishReason = (response?.choices?.[0]?.finishReason ?? null) as MistralChatResult['finishReason'];
+  const content = response?.choices?.[0]?.message?.content;
+  const finishReason = (response?.choices?.[0]?.finishReason ?? null) as MistralChatResult['finishReason'];
 
-    if (typeof content !== 'string' || content.length === 0) {
-      throw new Error(`[mistral:${label}] chat.complete() returned empty content`);
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new Error(`[mistral:${label}] chat.complete() fallback returned empty content`);
+  }
+
+  const usage: TokenUsage = response?.usage
+    ? {
+      promptTokens: response.usage.promptTokens ?? 0,
+      completionTokens: response.usage.completionTokens ?? 0,
+      totalTokens: response.usage.totalTokens ?? 0,
     }
+    : createEmptyUsage();
 
-    const usage: TokenUsage = response?.usage
-      ? {
-        promptTokens: response.usage.promptTokens ?? 0,
-        completionTokens: response.usage.completionTokens ?? 0,
-        totalTokens: response.usage.totalTokens ?? 0,
-      }
-      : createEmptyUsage();
-
-    if (finishReason === 'length') {
-      logger.error('mistral',
-        `[mistral:${label}] Response TRUNCATED: finishReason=length, ${content.length} chars. ` +
-        `Output hit maxTokens limit — report may be incomplete.`,
-      );
-    }
-
-    logger.info('mistral',
-      `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms (finishReason: ${finishReason ?? 'unknown'})`,
+  if (finishReason === 'length') {
+    logger.error('mistral',
+      `[mistral:${label}] Response TRUNCATED: finishReason=length, ${content.length} chars. ` +
+      `Output hit maxTokens limit — report may be incomplete.`,
     );
-    return { content, usage, finishReason };
-  }, label);
+  }
+
+  logger.info('mistral',
+    `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms (finishReason: ${finishReason ?? 'unknown'})`,
+  );
+  return { content, usage, finishReason };
 }

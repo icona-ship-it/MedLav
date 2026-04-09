@@ -24,6 +24,8 @@ import { enrichWithFullEvidence } from '@/services/pubmed/evidence-enricher';
 import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
+import { extractExpensesFromOcr } from '@/services/expenses/expense-extractor';
+import type { ExpenseExtractionResult } from '@/services/expenses/expense-extractor';
 import { MAP_REDUCE_THRESHOLD_DOCS, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
@@ -94,7 +96,8 @@ export const processCase = inngest.createFunction(
     id: 'process-case',
     retries: 3,
     concurrency: [
-      { limit: 5, key: 'event.data.userId' },
+      { limit: 50 },                              // global cap — protect Mistral rate limits
+      { limit: 10, key: 'event.data.userId' },     // per-user fairness
     ],
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
@@ -332,9 +335,40 @@ export const processCase = inngest.createFunction(
     // extraction_only: stop here, finalize with just the timeline
     // expenses_only: run expense analysis, save to metadata, then finalize
     if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
-      // For expenses_only, run dedicated expense analysis
+      // For expenses_only, run LLM expense extraction + algorithmic analysis
       let expenseResult: ExpenseAnalysisResult | undefined;
+      let llmExpenseResult: ExpenseExtractionResult | undefined;
       if (pipelineMode === 'expenses_only') {
+        // Step A: LLM extraction from OCR text of expense documents
+        llmExpenseResult = await step.run('extract-expenses-llm', async () => {
+          const { createAdminClient } = await import('@/lib/supabase/admin');
+          const supabase = createAdminClient();
+
+          // Fetch OCR text from all documents (expenses may be mixed with medical docs)
+          const docIds = ocrResults.map((r) => r.documentId);
+          const { data: pages } = await supabase
+            .from('pages')
+            .select('document_id, page_number, ocr_text')
+            .in('document_id', docIds)
+            .order('page_number', { ascending: true });
+
+          if (!pages || pages.length === 0) {
+            logger.warn('pipeline', 'No OCR pages found for expense extraction');
+            return { items: [], totalAmount: null, currency: 'EUR' } as ExpenseExtractionResult;
+          }
+
+          const ocrText = pages.map((p) => (p.ocr_text as string) ?? '').join('\n\n---\n\n');
+
+          // Try to find a diagnosis from extracted events for context
+          const diagnosisEvents = consolidationResult.allEvents
+            .filter((e) => e.eventType === 'diagnosi' && e.title)
+            .map((e) => e.title);
+          const finalDiagnosis = diagnosisEvents.length > 0 ? diagnosisEvents.join('; ') : undefined;
+
+          return extractExpensesFromOcr(ocrText, finalDiagnosis);
+        });
+
+        // Step B: Algorithmic analysis on extracted events (backward compat)
         expenseResult = await step.run('analyze-expenses', () => {
           const eventsForAnalysis = consolidationResult.allEvents.map((e) => ({
             event_type: e.eventType,
@@ -347,7 +381,7 @@ export const processCase = inngest.createFunction(
           return analyzeExpenses(eventsForAnalysis);
         });
 
-        // Save expense analysis to perizia_metadata
+        // Save both results to perizia_metadata
         await step.run('save-expense-analysis', async () => {
           const { createAdminClient } = await import('@/lib/supabase/admin');
           const supabase = createAdminClient();
@@ -362,12 +396,18 @@ export const processCase = inngest.createFunction(
           await supabase
             .from('cases')
             .update({
-              perizia_metadata: { ...existingMeta, expenseAnalysis: expenseResult },
+              perizia_metadata: {
+                ...existingMeta,
+                expenseAnalysis: expenseResult,
+                expenseExtraction: llmExpenseResult,
+              },
               updated_at: new Date().toISOString(),
             })
             .eq('id', caseId);
 
-          logger.info('pipeline', `Expense analysis saved for case ${caseId}: ${expenseResult?.totalItems ?? 0} items, total ${expenseResult?.totalAmount ?? 'N/A'}`);
+          const llmCount = llmExpenseResult?.items?.length ?? 0;
+          const llmTotal = llmExpenseResult?.totalAmount;
+          logger.info('pipeline', `Expense analysis saved for case ${caseId}: LLM extracted ${llmCount} items (€${llmTotal ?? 'N/A'}), algorithmic ${expenseResult?.totalItems ?? 0} items`);
         });
       }
 
@@ -527,6 +567,7 @@ export const processCase = inngest.createFunction(
     }
 
     const accumulatedSections: GeneratedSection[] = [];
+    let sectionGenerationFailed = false;
     for (let i = 0; i < sectionPlan.length; i++) {
       const spec = sectionPlan[i];
       const previousContext = accumulatedSections.map((s) => ({
@@ -534,36 +575,54 @@ export const processCase = inngest.createFunction(
         title: s.title,
         contextSummary: s.contextSummary,
       }));
-      const section = await step.run(`gen-section-${spec.id}`, async () => {
-        // Update generation progress in DB so the UI can show section-by-section status
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-        const { data: caseRow } = await supabase
-          .from('cases')
-          .select('perizia_metadata')
-          .eq('id', caseId)
-          .single();
-        const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-        await supabase.from('cases').update({
-          perizia_metadata: {
-            ...existingMeta,
-            generationProgress: {
-              currentSection: i + 1,
-              totalSections: sectionPlan.length,
-              currentSectionTitle: spec.title,
+      try {
+        const section = await step.run(`gen-section-${spec.id}`, async () => {
+          // Update generation progress in DB so the UI can show section-by-section status
+          const { createAdminClient } = await import('@/lib/supabase/admin');
+          const supabase = createAdminClient();
+          const { data: caseRow } = await supabase
+            .from('cases')
+            .select('perizia_metadata')
+            .eq('id', caseId)
+            .single();
+          const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+          await supabase.from('cases').update({
+            perizia_metadata: {
+              ...existingMeta,
+              generationProgress: {
+                currentSection: i + 1,
+                totalSections: sectionPlan.length,
+                currentSectionTitle: spec.title,
+              },
             },
-          },
-          updated_at: new Date().toISOString(),
-        }).eq('id', caseId);
+            updated_at: new Date().toISOString(),
+          }).eq('id', caseId);
 
-        return generateSectionStep(caseId, spec, synthesisParams, previousContext);
-      });
-      accumulatedSections.push(section);
+          return generateSectionStep(caseId, spec, synthesisParams, previousContext);
+        });
+        accumulatedSections.push(section);
+      } catch (sectionError) {
+        // Save partial report with what we have so far, then re-throw
+        logger.error('pipeline', `Section "${spec.id}" failed after retries, saving partial report (${accumulatedSections.length}/${sectionPlan.length} sections)`, {
+          error: sectionError instanceof Error ? sectionError.message : 'unknown',
+        });
+        sectionGenerationFailed = true;
+        break;
+      }
     }
 
+    // Save report (partial or complete)
     const synthesisResult = await step.run('assemble-and-save-report', () =>
       assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams),
     );
+
+    // If a section failed, throw AFTER saving partial report so user has something
+    if (sectionGenerationFailed) {
+      throw new Error(
+        `Report parziale salvato (${accumulatedSections.length}/${sectionPlan.length} sezioni). ` +
+        `Una sezione ha fallito dopo i retry. Il report è disponibile ma incompleto.`
+      );
+    }
 
     const synthesisWordCount = synthesisResult.wordCount;
 

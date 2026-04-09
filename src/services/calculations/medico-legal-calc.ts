@@ -43,11 +43,8 @@ export function calculateMedicoLegalPeriods(
   // 4. Diagnosis → Treatment time
   calculations.push(...calculateDiagnosisToTreatment(events));
 
-  // 5. ITT estimate
-  calculations.push(calculateITT(events));
-
-  // 6. ITP estimate
-  calculations.push(calculateITP(events));
+  // 5. ITT/ITP graduated estimate (75%, 50%, 25%)
+  calculations.push(...calculateGraduatedITTITP(events));
 
   // 7. Biological damage estimate with table reference
   if (caseType) {
@@ -206,67 +203,174 @@ function calculateDiagnosisToTreatment(events: CalcEvent[]): MedicoLegalCalculat
   return results;
 }
 
-function calculateITT(events: CalcEvent[]): MedicoLegalCalculation {
-  // ITT = hospital days + immobilization periods
+/**
+ * Calculate graduated ITT/ITP periods following Italian medico-legal convention:
+ * - ITT (100%): hospitalization + immobilization periods
+ * - ITP 75%: from end of immobilization to start of rehabilitation
+ * - ITP 50%: rehabilitation period
+ * - ITP 25%: from end of rehabilitation to clinical stabilization
+ *
+ * These are proposals — the expert determines final percentages.
+ */
+function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[] {
+  const results: MedicoLegalCalculation[] = [];
+
+  // Find key milestones
   const admissions = events.filter((e) => e.event_type === 'ricovero');
-  let totalDays = 0;
-  let startDate: string | null = null;
-  let endDate: string | null = null;
+  const discharges = events.filter((e) =>
+    e.description.toLowerCase().includes('dimission') || e.title.toLowerCase().includes('dimission'),
+  );
+  const rehabEvents = events.filter((e) => {
+    const text = `${e.title} ${e.description}`.toLowerCase();
+    return text.includes('riabilitaz') || text.includes('fisioterapi') || text.includes('fkt') ||
+      text.includes('fisiokinesiterapi') || text.includes('rieducazione');
+  });
+  const lastFollowUp = [...events]
+    .reverse()
+    .find((e) => e.event_type === 'follow-up' || e.event_type === 'visita');
+  const immobilizationEvents = events.filter((e) => {
+    const text = `${e.title} ${e.description}`.toLowerCase();
+    return text.includes('tutore') || text.includes('gesso') || text.includes('immobilizzaz') ||
+      text.includes('doccia gessata') || text.includes('stecca') || text.includes('palmarino');
+  });
 
+  // ITT (100%) — hospitalization + immobilization
+  let ittDays = 0;
+  let ittStart: string | null = null;
+  let ittEnd: string | null = null;
+
+  // Hospital days
   for (const admission of admissions) {
-    const discharge = events.find(
-      (e) => e.event_date > admission.event_date &&
-        (e.description.toLowerCase().includes('dimission') || e.title.toLowerCase().includes('dimission')),
-    );
-
+    const discharge = discharges.find((d) => d.event_date > admission.event_date);
     if (discharge) {
-      const days = daysDiff(admission.event_date, discharge.event_date);
-      totalDays += days;
-      if (!startDate) startDate = admission.event_date;
-      endDate = discharge.event_date;
+      ittDays += daysDiff(admission.event_date, discharge.event_date);
+      if (!ittStart) ittStart = admission.event_date;
+      ittEnd = discharge.event_date;
     }
   }
 
-  return {
-    label: 'Invalidità Temporanea Totale (ITT) stimata',
-    value: totalDays > 0 ? `${totalDays} giorni` : 'Non calcolabile',
-    days: totalDays || null,
-    startDate,
-    endDate,
-    notes: 'Stima basata sui periodi di ricovero. Il perito deve verificare e integrare con periodi di immobilizzazione.',
-  };
-}
-
-function calculateITP(events: CalcEvent[]): MedicoLegalCalculation {
-  // ITP = from end of ITT to last follow-up with improvement
-  const lastDischarge = [...events]
-    .reverse()
-    .find((e) => e.description.toLowerCase().includes('dimission') || e.title.toLowerCase().includes('dimission'));
-
-  const lastFollowUp = [...events]
-    .reverse()
-    .find((e) => e.event_type === 'follow-up' || (e.event_type === 'visita' && e.event_date > (lastDischarge?.event_date ?? '')));
-
-  if (lastDischarge && lastFollowUp && lastFollowUp.event_date > lastDischarge.event_date) {
-    const days = daysDiff(lastDischarge.event_date, lastFollowUp.event_date);
-    return {
-      label: 'Invalidità Temporanea Parziale (ITP) stimata',
-      value: `${days} giorni`,
-      days,
-      startDate: lastDischarge.event_date,
-      endDate: lastFollowUp.event_date,
-      notes: 'Stima dal termine del ricovero all\'ultimo follow-up. Il perito deve definire il grado di ITP.',
-    };
+  // Add immobilization period if after hospital
+  if (immobilizationEvents.length > 0) {
+    const immobStart = ittEnd ?? immobilizationEvents[0].event_date;
+    const immobEnd = immobilizationEvents[immobilizationEvents.length - 1].event_date;
+    if (immobEnd > immobStart) {
+      const immobDays = daysDiff(immobStart, immobEnd);
+      ittDays += immobDays;
+      if (!ittStart) ittStart = immobStart;
+      ittEnd = immobEnd;
+    }
   }
 
-  return {
-    label: 'Invalidità Temporanea Parziale (ITP) stimata',
-    value: 'Non calcolabile',
-    days: null,
-    startDate: null,
-    endDate: null,
-    notes: 'Dati insufficienti per stimare l\'ITP. Il perito deve definire il periodo manualmente.',
-  };
+  // If no hospital/immobilization, use first event as trauma date
+  if (!ittStart && events.length > 0) {
+    ittStart = events[0].event_date;
+  }
+
+  results.push({
+    label: 'Invalidità Temporanea Totale (ITT) al 100%',
+    value: ittDays > 0 ? `${ittDays} giorni` : 'Non calcolabile',
+    days: ittDays || null,
+    startDate: ittStart,
+    endDate: ittEnd,
+    notes: 'Stima basata su ricovero + immobilizzazione documentata. Il perito verifica e corregge.',
+  });
+
+  // ITP graduated periods
+  const ittEndDate = ittEnd ?? ittStart;
+  if (!ittEndDate || !lastFollowUp) {
+    results.push({
+      label: 'Invalidità Temporanea Parziale (ITP) graduata',
+      value: 'Non calcolabile',
+      days: null,
+      startDate: null,
+      endDate: null,
+      notes: 'Dati insufficienti per stimare i periodi ITP. Il perito definisce manualmente.',
+    });
+    return results;
+  }
+
+  const totalRecoveryDays = daysDiff(ittEndDate, lastFollowUp.event_date);
+  if (totalRecoveryDays <= 0) return results;
+
+  // Detect rehabilitation start/end to split the recovery period
+  const rehabStart = rehabEvents.length > 0 ? rehabEvents[0].event_date : null;
+  const rehabEnd = rehabEvents.length > 0 ? rehabEvents[rehabEvents.length - 1].event_date : null;
+
+  if (rehabStart && rehabEnd && rehabStart > ittEndDate) {
+    // We have clear phases: post-immob → rehab → stabilization
+    const itp75Days = daysDiff(ittEndDate, rehabStart);
+    const itp50Days = daysDiff(rehabStart, rehabEnd);
+    const itp25Days = daysDiff(rehabEnd, lastFollowUp.event_date);
+
+    if (itp75Days > 0) {
+      results.push({
+        label: 'ITP al 75%',
+        value: `${itp75Days} giorni`,
+        days: itp75Days,
+        startDate: ittEndDate,
+        endDate: rehabStart,
+        notes: 'Dalla fine immobilizzazione all\'inizio riabilitazione.',
+      });
+    }
+    if (itp50Days > 0) {
+      results.push({
+        label: 'ITP al 50%',
+        value: `${itp50Days} giorni`,
+        days: itp50Days,
+        startDate: rehabStart,
+        endDate: rehabEnd,
+        notes: 'Periodo riabilitativo.',
+      });
+    }
+    if (itp25Days > 0) {
+      results.push({
+        label: 'ITP al 25%',
+        value: `${itp25Days} giorni`,
+        days: itp25Days,
+        startDate: rehabEnd,
+        endDate: lastFollowUp.event_date,
+        notes: 'Dalla fine riabilitazione alla stabilizzazione clinica.',
+      });
+    }
+  } else {
+    // No clear rehab phase — divide recovery into thirds as estimate
+    const third = Math.round(totalRecoveryDays / 3);
+    const addDays = (base: string, n: number): string => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const phase1End = addDays(ittEndDate, third);
+    const phase2End = addDays(ittEndDate, third * 2);
+
+    results.push({
+      label: 'ITP al 75%',
+      value: `${third} giorni (stima)`,
+      days: third,
+      startDate: ittEndDate,
+      endDate: phase1End,
+      notes: 'Stima: primo terzo del periodo di recupero. Il perito deve verificare.',
+    });
+    results.push({
+      label: 'ITP al 50%',
+      value: `${third} giorni (stima)`,
+      days: third,
+      startDate: phase1End,
+      endDate: phase2End,
+      notes: 'Stima: secondo terzo del periodo di recupero. Il perito deve verificare.',
+    });
+    results.push({
+      label: 'ITP al 25%',
+      value: `${totalRecoveryDays - third * 2} giorni (stima)`,
+      days: totalRecoveryDays - third * 2,
+      startDate: phase2End,
+      endDate: lastFollowUp.event_date,
+      notes: 'Stima: ultimo terzo del periodo di recupero. Il perito deve verificare.',
+    });
+  }
+
+  return results;
 }
 
 /**

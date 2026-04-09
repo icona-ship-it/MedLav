@@ -29,6 +29,7 @@ interface SectionDef {
 }
 
 const SECTIONS: SectionDef[] = [
+  { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
   { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'judgeName', 'fondoSpese'] },
   { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
   { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
@@ -49,6 +50,11 @@ export function PeriziaMetadataForm({
   const [isPending, startTransition] = useTransition();
   const existing = caseData.perizia_metadata ?? {};
   const [form, setForm] = useState({
+    patientFullName: existing.patientFullName ?? '',
+    patientDateOfBirth: existing.patientDateOfBirth ?? '',
+    patientAddress: existing.patientAddress ?? '',
+    patientFiscalCode: existing.patientFiscalCode ?? '',
+    patientPhone: existing.patientPhone ?? '',
     tribunale: existing.tribunale ?? '',
     sezione: existing.sezione ?? '',
     rgNumber: existing.rgNumber ?? '',
@@ -203,6 +209,35 @@ export function PeriziaMetadataForm({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="px-4 py-4 border border-t-0 rounded-b-lg -mt-px">
+                {section.id === 'paziente' && (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Nome e Cognome</Label>
+                        <Input value={form.patientFullName} onChange={(e) => setForm({ ...form, patientFullName: e.target.value })} placeholder="es. Massarenti Daniela" />
+                        <p className="text-xs text-muted-foreground mt-1">Apparirà nell&apos;intestazione della perizia</p>
+                      </div>
+                      <div>
+                        <Label>Data di nascita</Label>
+                        <Input type="date" value={form.patientDateOfBirth} onChange={(e) => setForm({ ...form, patientDateOfBirth: e.target.value })} />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Indirizzo di residenza</Label>
+                      <Input value={form.patientAddress} onChange={(e) => setForm({ ...form, patientAddress: e.target.value })} placeholder="es. Via Todeschini 37, 37126 Verona" />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Codice Fiscale</Label>
+                        <Input value={form.patientFiscalCode} onChange={(e) => setForm({ ...form, patientFiscalCode: e.target.value.toUpperCase() })} placeholder="es. MSSDNL45B42A944J" maxLength={16} />
+                      </div>
+                      <div>
+                        <Label>Telefono</Label>
+                        <Input value={form.patientPhone} onChange={(e) => setForm({ ...form, patientPhone: e.target.value })} placeholder="es. 333 816 5222" />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {section.id === 'intestazione' && (
                   <div className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-3">

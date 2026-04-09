@@ -159,22 +159,38 @@ export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
     b.title.toLowerCase(),
   );
 
-  if (titleSimilarity > 0.6) return true;
+  // High title similarity: likely same event (used for discrepancy detection and dedup)
+  if (titleSimilarity > 0.7) return true;
 
-  // Check if descriptions share significant keywords
-  const aKeywords = extractMedicalKeywords(a.description);
-  const bKeywords = extractMedicalKeywords(b.description);
-  const overlap = aKeywords.filter((k) => bKeywords.includes(k));
+  // For moderate similarity (0.5-0.7), require description keyword overlap
+  // to avoid merging genuinely different same-day events (two ECGs, two blood draws)
+  if (titleSimilarity > 0.5) {
+    const aKeywords = extractMedicalKeywords(a.description);
+    const bKeywords = extractMedicalKeywords(b.description);
+    const overlap = aKeywords.filter((k) => bKeywords.includes(k));
+    const overlapRatio = Math.min(aKeywords.length, bKeywords.length) > 0
+      ? overlap.length / Math.min(aKeywords.length, bKeywords.length)
+      : 0;
+    return overlapRatio > 0.4;
+  }
 
-  return overlap.length >= 3;
+  return false;
 }
 
 /**
  * Simple Jaccard similarity on word sets.
  */
+// Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars
+const MEDICAL_ABBREVIATIONS = new Set([
+  'ecg', 'tac', 'rmn', 'pcr', 'inr', 'ptt', 'tsh', 'ft3', 'ft4', 'pet', 'eeg', 'emg',
+  'moc', 'hba', 'ves', 'hcv', 'hiv', 'hbv', 'ldl', 'hdl', 'bnp', 'cpk', 'got', 'gpt',
+  'alt', 'ast', 'gfr', 'psa', 'cea', 'afp', 'ldh', 'crp', 'wbc', 'rbc', 'plt', 'hgb',
+  'mcv', 'mch', 'rdw', 'mpv', 'fev', 'fvc', 'dlco', 'asa', 'bmi', 'nyha',
+]);
+
 function calculateSimilarity(a: string, b: string): number {
-  const wordsA = new Set(a.split(/\s+/).filter((w) => w.length > 3));
-  const wordsB = new Set(b.split(/\s+/).filter((w) => w.length > 3));
+  const wordsA = new Set(a.split(/\s+/).filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)));
+  const wordsB = new Set(b.split(/\s+/).filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)));
 
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
@@ -205,8 +221,8 @@ function extractMedicalKeywords(text: string): string[] {
   return text
     .toLowerCase()
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !stopWords.has(w))
-    .slice(0, 30); // Cap at 30 keywords
+    .filter((w) => (w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)) && !stopWords.has(w))
+    .slice(0, 50); // Cap at 50 keywords (increased to avoid losing tail of lab panels)
 }
 
 /**

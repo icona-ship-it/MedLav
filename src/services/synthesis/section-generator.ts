@@ -329,18 +329,23 @@ function filterNonMedicalEvents(events: ConsolidatedEvent[]): ConsolidatedEvent[
 
 // ── OCR filtering by section type ───────────────────────────────────
 
+// Documents that are explicitly NOT medical documentation.
+// Everything else is included in documentazione_sanitaria — this ensures
+// no medical document (PS, referti, cartelle, etc.) is ever accidentally excluded.
+const EXCLUDED_FROM_MEDICAL = new Set([
+  'memoria_difensiva',
+  'documento_amministrativo',
+  'certificato',
+  'perizia_precedente',
+  'perizia_ctp',
+  'perizia_ctu',
+  'spese_mediche',
+]);
+
 const NON_MEDICAL_DOC_TYPES = new Set([
   'memoria_difensiva',
   'documento_amministrativo',
   'certificato',
-]);
-
-const MEDICAL_DOC_TYPES = new Set([
-  'cartella_clinica',
-  'referto_specialistico',
-  'esame_strumentale',
-  'esame_laboratorio',
-  'lettera_dimissione',
 ]);
 
 const PERIZIA_DOC_TYPES = new Set([
@@ -357,7 +362,9 @@ function filterOcrForSection(
   const isUniversal = (d: DocumentOcrContext) => d.documentType === 'altro' || d.documentType === 'misto';
 
   if (spec.dataSources.includes('events-medical') || spec.id === 'documentazione_sanitaria') {
-    return docs.filter((d) => MEDICAL_DOC_TYPES.has(d.documentType) || isUniversal(d));
+    // Inclusive approach: include ALL documents EXCEPT known non-medical types.
+    // This ensures pronto_soccorso, any new document type, or misclassified docs are never lost.
+    return docs.filter((d) => !EXCLUDED_FROM_MEDICAL.has(d.documentType) || isUniversal(d));
   }
   if (spec.dataSources.includes('events-non-medical') || spec.id === 'documentazione_atti' || spec.id === 'premesse') {
     return docs.filter((d) => NON_MEDICAL_DOC_TYPES.has(d.documentType) || isUniversal(d));
@@ -371,6 +378,10 @@ function filterOcrForSection(
   // Default: return all
   return docs;
 }
+
+// Exported for testing only
+export { filterOcrForSection as _filterOcrForSection_test };
+export { EXCLUDED_FROM_MEDICAL as _EXCLUDED_FROM_MEDICAL_test };
 
 // ── PubMed formatting ─────────────────────────────────────────────
 

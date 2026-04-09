@@ -347,9 +347,10 @@ const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
     promptDirective: `Genera l'intestazione della valutazione stragiudiziale.
 Includi:
 - Dati del professionista incaricato (nome, qualifica, specializzazione)
-- Dati del paziente/periziando (iniziali, data di nascita se disponibile)
+- Dati del paziente/periziando: nome completo, data di nascita, luogo di nascita, residenza, codice fiscale, telefono (se disponibili nei metadati perizia)
 - Data della visita medico-legale (se disponibile)
-- Oggetto dell'incarico
+- Oggetto dell'incarico (in relazione alle lesioni, tipo di danno)
+Se i dati completi del paziente non sono disponibili, usa le iniziali.
 Stile formale e conciso.
 ${NO_EVN_RULE}`,
   },
@@ -370,18 +371,34 @@ Stile sintetico (1-3 paragrafi). Riporta SOLO fatti documentati.
 ${NO_EVN_RULE}`,
   },
   {
+    id: 'il_fatto',
+    title: 'Il Fatto',
+    maxTokens: TOKENS_MAX,
+    dataSources: ['events-medical', 'perizia-metadata'],
+    contextMaxChars: 400,
+    needsOcr: false,
+    promptDirective: `Genera la narrazione dell'evento indice (sinistro, trauma, intervento, evento avverso).
+Riporta:
+- La data e le circostanze dell'evento (luogo, dinamica, modalita)
+- Le prime cure prestate (pronto soccorso, primo accesso medico)
+- La diagnosi iniziale
+Stile narrativo in terza persona, ricostruzione fedele basata sulla documentazione.
+NON includere la storia clinica successiva (sara nella sezione documentazione medica).
+${NO_EVN_RULE}`,
+  },
+  {
     id: 'fatto_storia_clinica',
-    title: 'Il Fatto e la Storia Clinica',
+    title: 'Iter Diagnostico-Terapeutico',
     maxTokens: TOKENS_MAX,
     dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 600,
-    needsOcr: true,
-    promptDirective: `Genera la narrazione del fatto e della storia clinica in ordine cronologico.
-Riporta:
-- L'evento indice (sinistro, intervento, evento avverso) con data e circostanze
-- L'iter diagnostico-terapeutico successivo
-- Gli esiti documentati e la situazione clinica attuale
-Stile narrativo discorsivo. Piu sintetico rispetto a una CTU, ma fedele ai fatti documentati.
+    needsOcr: false,
+    promptDirective: `Genera una sintesi dell'iter diagnostico-terapeutico successivo all'evento.
+Riporta in ordine cronologico:
+- Le visite e controlli successivi
+- Gli interventi e terapie effettuati
+- L'evoluzione clinica fino alla stabilizzazione
+Stile sintetico e oggettivo. I dettagli completi sono nella sezione Documentazione Medica.
 ${NO_EVN_RULE}`,
   },
   {

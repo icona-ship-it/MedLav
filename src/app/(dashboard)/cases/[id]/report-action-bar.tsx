@@ -4,7 +4,7 @@ import { useCallback, useTransition, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Download, Pencil, Printer, GitCompare, ShieldCheck,
-  FileCode, Eye, MoreHorizontal, RefreshCw, ShieldAlert,
+  FileCode, Eye, MoreHorizontal, RefreshCw, ShieldAlert, CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -151,6 +151,20 @@ export function ReportActionBar({
               <Pencil className="mr-1 h-3.5 w-3.5" />
               <span className="hidden sm:inline">Modifica</span>
             </Button>
+
+            {/* Approve button — visible for drafts */}
+            {effectiveStatus === 'bozza' && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setQualityGateOpen(true)}
+                disabled={isPending}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">Approva</span>
+              </Button>
+            )}
 
             {/* Export dropdown */}
             <DropdownMenu>

@@ -177,8 +177,9 @@ describe('section-catalog', () => {
       expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('osservazioni_bozza');
     });
 
-    it('should have 8 stragiudiziale sections', () => {
-      expect(STRAGIUDIZIALE_SECTIONS).toHaveLength(8);
+    it('should have 9 stragiudiziale sections (incl. Il Fatto separato)', () => {
+      expect(STRAGIUDIZIALE_SECTIONS).toHaveLength(9);
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('il_fatto');
     });
 
     it('should have placeholder sections with isPlaceholder=true and maxTokens=0', () => {

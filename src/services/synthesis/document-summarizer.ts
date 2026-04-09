@@ -16,11 +16,11 @@ import { logger } from '@/lib/logger';
  * enough to complete within Vercel's 300s function timeout. */
 export const MAP_REDUCE_THRESHOLD_DOCS = 10;
 
-/** Max chars of OCR text sent per-document summary call */
-export const OCR_PER_DOC_SUMMARY_LIMIT = 30_000;
+/** Max chars of OCR text sent per-document summary call (increased to include last pages: discharge, therapy) */
+export const OCR_PER_DOC_SUMMARY_LIMIT = 45_000;
 
-/** Max summary output chars per document */
-export const DOC_SUMMARY_MAX_CHARS = 2000;
+/** Max summary output chars per document (increased to preserve clinical details in large cases) */
+export const DOC_SUMMARY_MAX_CHARS = 4000;
 
 export interface DocumentSummary {
   documentId: string;

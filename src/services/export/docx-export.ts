@@ -494,6 +494,14 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   );
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Times New Roman', size: 24 }, // 12pt (half-points)
+          paragraph: { spacing: { line: 360 } }, // 1.5 line spacing (240 = single)
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
@@ -953,6 +961,14 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   }));
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Times New Roman', size: 24 }, // 12pt — requisito tribunali italiani
+          paragraph: { spacing: { line: 360 } }, // Interlinea 1.5 — requisito tribunali
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
