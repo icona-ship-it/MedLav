@@ -125,23 +125,17 @@ export const processCase = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // ── Step 2: OCR documents in batches (Mistral rate limits: ~2 req/sec on Production tier) ──
-    // Each step.run is a separate serverless invocation — no cross-process rate limiting possible.
-    // Configurable via env: OCR_PARALLEL_BATCH_SIZE (default 3). Check your tier at admin.mistral.ai/plateforme/limits
-    const OCR_BATCH_SIZE = parseInt(process.env.OCR_PARALLEL_BATCH_SIZE ?? '3', 10);
-    const ocrBatches = chunkArray(documents, OCR_BATCH_SIZE);
-    const ocrSettled: PromiseSettledResult<OcrResult | null>[] = [];
-    for (const batch of ocrBatches) {
-      const batchResults = await Promise.allSettled(
-        batch.map((doc) =>
-          step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
-        ),
-      );
-      for (const r of batchResults) {
-        ocrSettled.push(r);
-        if (r.status === 'rejected') {
-          logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
-        }
+    // ── Step 2: OCR all documents (parallel, fault-tolerant) ──
+    // Mistral allows 24 req/sec — full parallelism is safe.
+    // Each step.run is a separate Inngest step (serverless invocation).
+    const ocrSettled = await Promise.allSettled(
+      documents.map((doc) =>
+        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
+      ),
+    );
+    for (const r of ocrSettled) {
+      if (r.status === 'rejected') {
+        logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
       }
     }
     const ocrResults: OcrResult[] = ocrSettled

@@ -1,4 +1,4 @@
-import { getMistralClient, MISTRAL_MODELS, withMistralRetry } from '@/lib/mistral/client';
+import { getMistralClient, MISTRAL_MODELS, withMistralRetry, TIMEOUT_OCR } from '@/lib/mistral/client';
 import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-types';
 import { logger } from '@/lib/logger';
 
@@ -225,7 +225,7 @@ async function ocrPdf(params: {
   signedUrl: string;
 }): Promise<OcrDocumentResult> {
   const { documentId, fileName, signedUrl } = params;
-  const client = getMistralClient();
+  const client = getMistralClient(TIMEOUT_OCR);
 
   const response = await withMistralRetry(
     () => client.ocr.process({
@@ -258,7 +258,7 @@ async function ocrImage(params: {
   signedUrl: string;
 }): Promise<OcrDocumentResult> {
   const { documentId, fileName, signedUrl } = params;
-  const client = getMistralClient();
+  const client = getMistralClient(TIMEOUT_OCR);
 
   const response = await withMistralRetry(
     () => client.ocr.process({
@@ -289,7 +289,7 @@ async function ocrDocx(params: {
   signedUrl: string;
 }): Promise<OcrDocumentResult> {
   const { documentId, fileName, signedUrl } = params;
-  const client = getMistralClient();
+  const client = getMistralClient(TIMEOUT_OCR);
 
   const response = await withMistralRetry(
     () => client.ocr.process({

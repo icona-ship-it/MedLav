@@ -8,7 +8,8 @@ import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 // Default 300s is NOT enough for LLM synthesis on large cases.
 export const TIMEOUT_EXTRACTION = 180_000;  // 3 minuti — 1 chunk per step con Inngest Pro
 export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti (casi grandi richiedono tempo per generare report completi)
-export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (OCR e altro)
+export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (classificazione, embedding, altro)
+export const TIMEOUT_OCR        = 300_000;  // 5 minuti (documenti grandi possono richiedere tempo)
 
 // ── Retry ──
 // With Vercel maxDuration=800s, worst case must stay under budget:
@@ -71,14 +72,14 @@ async function fetchWithContentLength(
   return fetch(input, init);
 }
 
-export function getMistralClient(): Mistral {
+export function getMistralClient(timeoutMs?: number): Mistral {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) {
     throw new Error('MISTRAL_API_KEY environment variable is not set');
   }
   return new Mistral({
     apiKey,
-    timeoutMs: TIMEOUT_DEFAULT,
+    timeoutMs: timeoutMs ?? TIMEOUT_DEFAULT,
     httpClient: new HTTPClient({ fetcher: fetchWithContentLength }),
   });
 }
