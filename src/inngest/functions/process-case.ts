@@ -125,8 +125,10 @@ export const processCase = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // ── Step 2: OCR documents in batches of 5 (avoids Mistral rate limits) ──
-    const OCR_BATCH_SIZE = 5;
+    // ── Step 2: OCR documents in batches (Mistral rate limits: ~2 req/sec on Production tier) ──
+    // Each step.run is a separate serverless invocation — no cross-process rate limiting possible.
+    // Configurable via env: OCR_PARALLEL_BATCH_SIZE (default 3). Check your tier at admin.mistral.ai/plateforme/limits
+    const OCR_BATCH_SIZE = parseInt(process.env.OCR_PARALLEL_BATCH_SIZE ?? '3', 10);
     const ocrBatches = chunkArray(documents, OCR_BATCH_SIZE);
     const ocrSettled: PromiseSettledResult<OcrResult | null>[] = [];
     for (const batch of ocrBatches) {
