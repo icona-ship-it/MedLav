@@ -125,15 +125,21 @@ export const processCase = inngest.createFunction(
       throw new Error('No documents to process');
     }
 
-    // ── Step 2: OCR all documents (parallel, fault-tolerant) ─────
-    const ocrSettled = await Promise.allSettled(
-      documents.map((doc) =>
-        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
-      ),
-    );
-    for (const r of ocrSettled) {
-      if (r.status === 'rejected') {
-        logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+    // ── Step 2: OCR documents in batches of 5 (avoids Mistral rate limits) ──
+    const OCR_BATCH_SIZE = 5;
+    const ocrBatches = chunkArray(documents, OCR_BATCH_SIZE);
+    const ocrSettled: PromiseSettledResult<OcrResult | null>[] = [];
+    for (const batch of ocrBatches) {
+      const batchResults = await Promise.allSettled(
+        batch.map((doc) =>
+          step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
+        ),
+      );
+      for (const r of batchResults) {
+        ocrSettled.push(r);
+        if (r.status === 'rejected') {
+          logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+        }
       }
     }
     const ocrResults: OcrResult[] = ocrSettled
