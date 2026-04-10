@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validateCsrfToken } from '@/lib/csrf';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { isAdminUser } from '@/lib/admin';
 import { logger } from '@/lib/logger';
 
@@ -20,6 +21,11 @@ export async function POST(request: NextRequest) {
 
     if (!user || !isAdminUser(user.email)) {
       return NextResponse.json({ success: false, error: 'Non autorizzato' }, { status: 403 });
+    }
+
+    const rateCheck = await checkRateLimit({ key: `admin-reset:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra qualche minuto.' }, { status: 429 });
     }
 
     const admin = createAdminClient();

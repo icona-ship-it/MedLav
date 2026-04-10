@@ -46,7 +46,6 @@ export async function saveDocumentMetadata(params: {
     'image/jpeg', 'image/png', 'image/tiff', 'image/webp',
     'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/octet-stream', // fallback for unknown types
   ]);
 
   if (params.fileSize > MAX_FILE_SIZE) {

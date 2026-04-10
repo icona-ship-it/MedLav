@@ -57,7 +57,9 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
     .eq('id', caseId)
     .single();
   const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-  const { generationProgress: _, ...cleanedMeta } = existingMeta;
+  const cleanedMeta = Object.fromEntries(
+    Object.entries(existingMeta).filter(([key]) => key !== 'generationProgress'),
+  );
   await supabase
     .from('cases')
     .update({

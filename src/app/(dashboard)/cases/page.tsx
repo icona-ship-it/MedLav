@@ -1,22 +1,13 @@
 export const revalidate = 30;
 
 import Link from 'next/link';
-import { Archive, FileText, FolderPlus, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { Archive, FileText, FolderPlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { getCases } from '../actions';
-import { statusConfig, caseTypeLabels, processingStageConfig, moduleLabels } from '@/lib/constants';
-import { formatRelativeDate } from '@/lib/format-date';
+import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { CaseSearch } from './case-search';
 import type { CaseSearchItem } from './case-search';
-
-const STAGE_ICONS = {
-  spinner: Loader2,
-  check: CheckCircle2,
-  alert: AlertTriangle,
-  error: XCircle,
-} as const;
 
 const VALID_STATUSES = ['bozza', 'in_revisione', 'definitivo', 'archiviato'];
 

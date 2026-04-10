@@ -3,7 +3,6 @@ import {
   analyzeExpenses,
   extractAmount,
   inferCategory,
-  type ExpenseAnalysisResult,
 } from './expense-analyzer';
 
 // ---------------------------------------------------------------------------

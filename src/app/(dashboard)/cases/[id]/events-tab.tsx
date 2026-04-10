@@ -365,7 +365,7 @@ export function EventsTab({
 
           {/* Verification events (shown after all normal are visible) */}
           {visibleCount >= displayNormal.length && (
-            displayVerification.slice(0, Math.max(0, visibleCount - displayNormal.length)).map((event, index) =>
+            displayVerification.slice(0, Math.max(0, visibleCount - displayNormal.length)).map((event) =>
               renderEventCard(event)
             )
           )}
