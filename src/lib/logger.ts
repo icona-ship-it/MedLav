@@ -46,6 +46,29 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
+// ── GDPR Art. 9 log sanitization ─────────────────────────────────────
+
+const SANITIZE_PATTERNS: Array<{ regex: RegExp; replacement: string }> = [
+  // Italian fiscal code (Codice Fiscale): RSSMRA85M01H501Z
+  { regex: /\b[A-Z]{6}\d{2}[A-EHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b/gi, replacement: '[CF_REDACTED]' },
+  // Email addresses
+  { regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: '[EMAIL_REDACTED]' },
+  // Italian phone numbers (+39, 0x, 3x)
+  { regex: /(?:\+39\s?)?(?:0\d{1,4}[\s.-]?\d{4,8}|3\d{2}[\s.-]?\d{3}[\s.-]?\d{4})\b/g, replacement: '[PHONE_REDACTED]' },
+];
+
+/**
+ * Sanitize a log message by redacting PII patterns (CF, email, phone).
+ * Exported for reuse in Sentry beforeSend hooks.
+ */
+export function sanitizeLogMessage(message: string): string {
+  let result = message;
+  for (const { regex, replacement } of SANITIZE_PATTERNS) {
+    result = result.replace(regex, replacement);
+  }
+  return result;
+}
+
 function formatDevMessage(tag: string, message: string, metadata?: Record<string, unknown>): string {
   const base = `[${tag}] ${message}`;
   if (metadata && Object.keys(metadata).length > 0) {
@@ -88,11 +111,12 @@ function createLogger(requestId?: string): Logger {
   ): void {
     if (!shouldLog(level)) return;
 
+    const sanitized = sanitizeLogMessage(message);
     const method = CONSOLE_METHOD[level];
     if (isProduction()) {
-      console[method](formatJsonEntry(level, tag, message, requestId, metadata));
+      console[method](formatJsonEntry(level, tag, sanitized, requestId, metadata));
     } else {
-      console[method](formatDevMessage(tag, message, metadata));
+      console[method](formatDevMessage(tag, sanitized, metadata));
     }
   }
 

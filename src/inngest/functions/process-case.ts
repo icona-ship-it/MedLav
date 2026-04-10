@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
 
@@ -88,6 +89,38 @@ async function handlePipelineFailure(event: { data: unknown }) {
       .in('processing_status', ['ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso', 'in_coda']);
 
     logger.error('pipeline', `Pipeline failed permanently for case ${caseId}: ${errorMessage}`);
+
+    // Report to Sentry with safe context (no patient data)
+    Sentry.captureException(
+      errorObj instanceof Error ? errorObj : new Error(errorMessage),
+      {
+        tags: { component: 'pipeline', stage: stage || 'unknown' },
+        extra: { caseId },
+      },
+    );
+    await Sentry.flush(2000);
+
+    // Send failure email notification to the user
+    try {
+      const { data: caseForNotif } = await supabase
+        .from('cases')
+        .select('code, user_id')
+        .eq('id', caseId)
+        .single();
+      if (caseForNotif) {
+        const { sendPipelineFailureEmail } = await import('@/services/email/email-service');
+        await sendPipelineFailureEmail(
+          caseForNotif.user_id as string,
+          (caseForNotif.code as string) ?? caseId,
+          caseId,
+          stage,
+        );
+      }
+    } catch (notifErr) {
+      logger.warn('pipeline', 'Failed to send failure email notification', {
+        error: notifErr instanceof Error ? notifErr.message : 'unknown',
+      });
+    }
   } catch (err) {
     logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {
       error: err instanceof Error ? err.message : 'unknown',

@@ -142,10 +142,10 @@ export async function enrichWithFullEvidence(
       searchCount++;
       if (articles.length > 0) {
         results.push({ query: diagnosis, category: 'diagnosis', articles });
-        logger.info('pubmed', `Found ${articles.length} articles for diagnosis "${diagnosis}"`);
+        logger.info('pubmed', `Found ${articles.length} articles for diagnosis query`, { resultCount: articles.length });
       }
     } catch (error) {
-      logger.warn('pubmed', `Search failed for diagnosis "${diagnosis}": ${error instanceof Error ? error.message : 'unknown'}`);
+      logger.warn('pubmed', 'Search failed for diagnosis query', { error: error instanceof Error ? error.message : 'unknown' });
     }
   }
 
@@ -172,10 +172,10 @@ export async function enrichWithFullEvidence(
       searchCount++;
       if (articles.length > 0) {
         results.push({ query: procedure, category: 'treatment', articles });
-        logger.info('pubmed', `Found ${articles.length} articles for treatment "${procedure}"`);
+        logger.info('pubmed', `Found ${articles.length} articles for treatment query`, { resultCount: articles.length });
       }
     } catch (error) {
-      logger.warn('pubmed', `Search failed for treatment "${procedure}": ${error instanceof Error ? error.message : 'unknown'}`);
+      logger.warn('pubmed', 'Search failed for treatment query', { error: error instanceof Error ? error.message : 'unknown' });
     }
   }
 
