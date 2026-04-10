@@ -39,6 +39,26 @@ export async function saveDocumentMetadata(params: {
     return { error: 'Non autenticato' };
   }
 
+  // Server-side file validation (client-side checks are not trusted)
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+  const ALLOWED_MIME_TYPES = new Set([
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/tiff', 'image/webp',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream', // fallback for unknown types
+  ]);
+
+  if (params.fileSize > MAX_FILE_SIZE) {
+    return { error: 'File troppo grande. Il limite è 100 MB per documento.' };
+  }
+  if (params.fileSize <= 0) {
+    return { error: 'File vuoto o non valido.' };
+  }
+  if (!ALLOWED_MIME_TYPES.has(params.fileType)) {
+    return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel.' };
+  }
+
   // Verify case ownership
   const { data: caseData } = await supabase
     .from('cases')

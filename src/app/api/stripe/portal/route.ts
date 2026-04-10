@@ -1,9 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStripeClient } from '@/lib/stripe/client';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { validateCsrfToken } from '@/lib/csrf';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const csrfError = await validateCsrfToken(request);
+  if (csrfError) return csrfError;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

@@ -3,6 +3,12 @@
   "functions": {
     "app/api/inngest/route.ts": {
       "maxDuration": 800
+    },
+    "app/api/processing/regenerate/route.ts": {
+      "maxDuration": 800
+    },
+    "app/api/processing/regenerate-section/route.ts": {
+      "maxDuration": 800
     }
   }
 }
