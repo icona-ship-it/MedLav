@@ -155,29 +155,43 @@ async function insertReportWithMetadata(
 ): Promise<SynthesisStepResult> {
   const supabase = createAdminClient();
 
-  const { data: latestReport } = await supabase
-    .from('reports')
-    .select('version')
-    .eq('case_id', caseId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Retry version insertion to handle concurrent race conditions
+  let report: { id: string } | null = null;
+  for (let versionAttempt = 0; versionAttempt < 3; versionAttempt++) {
+    const { data: latestReport } = await supabase
+      .from('reports')
+      .select('version')
+      .eq('case_id', caseId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  const newVersion = ((latestReport?.version as number | null) ?? 0) + 1;
+    const newVersion = ((latestReport?.version as number | null) ?? 0) + 1 + versionAttempt;
 
-  const { data: report, error } = await supabase
-    .from('reports')
-    .insert({
-      case_id: caseId,
-      version: newVersion,
-      report_status: 'bozza',
-      synthesis: synthesisText,
-      ...(generationMetadata ? { generation_metadata: generationMetadata } : {}),
-    })
-    .select('id')
-    .single();
+    const { data: inserted, error } = await supabase
+      .from('reports')
+      .insert({
+        case_id: caseId,
+        version: newVersion,
+        report_status: 'bozza',
+        synthesis: synthesisText,
+        ...(generationMetadata ? { generation_metadata: generationMetadata } : {}),
+      })
+      .select('id')
+      .single();
 
-  if (error || !report) {
+    if (!error && inserted) {
+      report = inserted;
+      logger.info('pipeline', `Report saved: case=${caseId} version=${newVersion} words=${wordCount} id=${inserted.id}`);
+      break;
+    }
+
+    // If unique constraint violation (23505), retry with higher version
+    if (error?.code === '23505') {
+      logger.warn('pipeline', `Report version ${newVersion} conflict for case ${caseId}, retrying...`);
+      continue;
+    }
+
     logger.error('pipeline', `Failed to insert report for case ${caseId}`, {
       error: error?.message ?? 'No data returned',
       code: error?.code,
@@ -186,9 +200,11 @@ async function insertReportWithMetadata(
     throw new Error(`Report insert failed: ${error?.message ?? 'no data returned'}`);
   }
 
-  logger.info('pipeline', `Report saved: case=${caseId} version=${newVersion} words=${wordCount} id=${report.id}`);
+  if (!report) {
+    throw new Error(`Report insert failed after 3 version attempts for case ${caseId}`);
+  }
 
-  return { reportId: report.id, reportVersion: newVersion, wordCount };
+  return { reportId: report.id, reportVersion: 0, wordCount };
 }
 
 /**

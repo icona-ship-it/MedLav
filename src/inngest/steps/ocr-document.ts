@@ -120,7 +120,8 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
         handwriting_confidence: p.handwritingConfidence,
       }));
 
-      await supabase.from('pages').insert(pageRows);
+      // Upsert to handle Inngest step retries — avoids duplicate pages
+      await supabase.from('pages').upsert(pageRows, { onConflict: 'document_id,page_number' });
 
       // Upload extracted images to Supabase Storage and update pages.image_path
       if (result.images.length > 0) {

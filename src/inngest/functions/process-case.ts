@@ -79,6 +79,14 @@ async function handlePipelineFailure(event: { data: unknown }) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', caseId);
+
+    // Reset stuck documents to 'errore' so they don't stay in intermediate states
+    await supabase
+      .from('documents')
+      .update({ processing_status: 'errore', processing_error: 'Pipeline fallita', updated_at: new Date().toISOString() })
+      .eq('case_id', caseId)
+      .in('processing_status', ['ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso', 'in_coda']);
+
     logger.error('pipeline', `Pipeline failed permanently for case ${caseId}: ${errorMessage}`);
   } catch (err) {
     logger.error('pipeline', 'Failed to mark case as errore in onFailure handler', {

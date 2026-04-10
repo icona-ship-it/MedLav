@@ -9,7 +9,7 @@ import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 export const TIMEOUT_EXTRACTION = 180_000;  // 3 minuti — 1 chunk per step con Inngest Pro
 export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti (casi grandi richiedono tempo per generare report completi)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (classificazione, embedding, altro)
-export const TIMEOUT_OCR        = 300_000;  // 5 minuti (documenti grandi possono richiedere tempo)
+export const TIMEOUT_OCR        = 180_000;  // 3 minuti — 4 retry × 180s ≈ 720s + delays, sotto Vercel 800s
 
 // ── Retry ──
 // With Vercel maxDuration=800s, worst case must stay under budget:

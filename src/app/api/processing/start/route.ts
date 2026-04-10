@@ -133,7 +133,9 @@ export async function POST(request: NextRequest) {
     // This runs AFTER validation so user doesn't lose data on rejected requests
     const isReprocessing = caseData.processing_stage !== 'idle';
     if (isReprocessing) {
-      logger.info('processing/start', `Re-processing case ${caseId}: cleaning all data for fresh analysis`);
+      logger.info('processing/start', `Re-processing case ${caseId}: cancelling previous pipeline + cleaning all data`);
+      // Cancel any running pipeline first to prevent race conditions
+      await inngest.send({ name: 'case/pipeline.cancelled', data: { caseId } });
       await Promise.all([
         supabase.from('events').delete().eq('case_id', caseId),
         supabase.from('anomalies').delete().eq('case_id', caseId),
