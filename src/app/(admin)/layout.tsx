@@ -7,6 +7,7 @@ import {
   Users,
   ArrowLeft,
   ShieldCheck,
+  BarChart3,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { isAdminUser } from '@/lib/admin';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils';
 const adminNavigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Pipeline', href: '/admin/processing', icon: Activity },
+  { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   { name: 'Utenti', href: '/admin/users', icon: Users },
   { name: 'Audit Log', href: '/admin/audit', icon: ScrollText },
 ];

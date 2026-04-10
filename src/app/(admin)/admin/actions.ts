@@ -218,6 +218,13 @@ export async function forceResetCase(caseId: string, targetStage: 'idle' | 'erro
     return { success: false, error: 'Errore durante il reset' };
   }
 
+  // Also reset any stuck documents for this case
+  await admin
+    .from('documents')
+    .update({ processing_status: 'errore', processing_error: 'Reset manuale admin', updated_at: new Date().toISOString() })
+    .eq('case_id', caseId)
+    .in('processing_status', ['ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso', 'in_coda']);
+
   logger.info('admin', `Case ${caseRow.code} force-reset from ${caseRow.processing_stage} to ${targetStage} by admin ${user.id}`);
   return { success: true };
 }
@@ -467,4 +474,62 @@ export async function toggleUserActive(userId: string): Promise<{ success: boole
   });
 
   return { success: true, isActive: newIsActive };
+}
+
+/**
+ * Get recent cases overview (last 20) with status, user, document count.
+ */
+export async function getRecentCases() {
+  await verifyAdmin();
+  const admin = createAdminClient();
+  const now = new Date();
+
+  const { data: cases } = await admin
+    .from('cases')
+    .select('id, code, processing_stage, case_type, patient_initials, user_id, updated_at, created_at, perizia_metadata, module_id')
+    .order('updated_at', { ascending: false })
+    .limit(20);
+
+  if (!cases || cases.length === 0) return [];
+
+  // Fetch user emails
+  const userIds = [...new Set(cases.map((c) => c.user_id))];
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, email, full_name')
+    .in('id', userIds);
+  const userMap = new Map(profiles?.map((p) => [p.id, { email: p.email, name: p.full_name }]) ?? []);
+
+  // Count documents per case
+  const caseIds = cases.map((c) => c.id as string);
+  const { data: docCounts } = await admin
+    .from('documents')
+    .select('case_id')
+    .in('case_id', caseIds);
+
+  const docCountMap = new Map<string, number>();
+  for (const d of docCounts ?? []) {
+    const cid = d.case_id as string;
+    docCountMap.set(cid, (docCountMap.get(cid) ?? 0) + 1);
+  }
+
+  return cases.map((c) => {
+    const meta = c.perizia_metadata as Record<string, unknown> | null;
+    const lastError = (meta?.lastError as string) ?? null;
+    const user = userMap.get(c.user_id as string);
+    return {
+      id: c.id as string,
+      code: c.code as string,
+      processingStage: c.processing_stage as string,
+      caseType: c.case_type as string,
+      moduleId: (c.module_id as string) ?? null,
+      patientInitials: (c.patient_initials as string) ?? null,
+      userEmail: user?.email ?? 'N/A',
+      userName: (user?.name as string) ?? null,
+      documentCount: docCountMap.get(c.id as string) ?? 0,
+      lastError,
+      updatedAgo: timeAgo(c.updated_at as string, now),
+      createdAt: c.created_at as string,
+    };
+  });
 }
