@@ -6,6 +6,15 @@ import type { MissingDocument } from '@/services/validation/missing-doc-detector
 import type { PipelineCostSummary } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
+export interface PipelineWarning {
+  step: string;
+  severity: 'warning' | 'critical';
+  message: string;
+  failedCount?: number;
+  totalCount?: number;
+  failedItems?: string[];
+}
+
 interface FinalizeParams {
   caseId: string;
   userId: string;
@@ -16,6 +25,7 @@ interface FinalizeParams {
   synthesisResult: SynthesisStepResult;
   synthesisWordCount: number;
   pipelineCost?: PipelineCostSummary;
+  pipelineWarnings?: PipelineWarning[];
 }
 
 /**
@@ -32,6 +42,7 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
     synthesisResult,
     synthesisWordCount,
     pipelineCost,
+    pipelineWarnings = [],
   } = params;
   const supabase = createAdminClient();
 
@@ -50,7 +61,7 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
       .in('id', docIds.slice(i, i + BATCH_SIZE));
   }
 
-  // Update case status and processing stage, clear generation progress
+  // Update case status and processing stage, clear generation progress, save pipeline warnings
   const { data: caseRow } = await supabase
     .from('cases')
     .select('perizia_metadata')
@@ -58,16 +69,26 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
     .single();
   const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
   const cleanedMeta = Object.fromEntries(
-    Object.entries(existingMeta).filter(([key]) => key !== 'generationProgress'),
+    Object.entries(existingMeta).filter(([key]) => key !== 'generationProgress' && key !== 'processingProgress'),
   );
-  await supabase
+  const { error: caseUpdateError } = await supabase
     .from('cases')
     .update({
       processing_stage: 'completato',
-      perizia_metadata: cleanedMeta,
+      perizia_metadata: {
+        ...cleanedMeta,
+        ...(pipelineWarnings.length > 0 ? { pipelineWarnings } : {}),
+      },
       updated_at: new Date().toISOString(),
     })
     .eq('id', caseId);
+  if (caseUpdateError) {
+    throw new Error(`Failed to mark case ${caseId} as completato: ${caseUpdateError.message}`);
+  }
+
+  if (pipelineWarnings.length > 0) {
+    logger.warn('pipeline', `Case ${caseId} completed with ${pipelineWarnings.length} warning(s): ${pipelineWarnings.map((w) => w.message).join('; ')}`);
+  }
 
   // Audit log (no sensitive data)
   await supabase.from('audit_log').insert({

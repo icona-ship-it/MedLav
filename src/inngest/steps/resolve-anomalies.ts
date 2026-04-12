@@ -69,7 +69,7 @@ export async function resolveAnomaliesStep(
       ? `Risolta automaticamente (confidenza: ${Math.round(r.resolution.confidence * 100)}%). Evidenza: ${r.resolution.evidence}`
       : `Confermata dopo verifica OCR (confidenza: ${Math.round(r.resolution.confidence * 100)}%). ${r.resolution.reasoning}`;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('anomalies')
       .update({
         status,
@@ -77,6 +77,9 @@ export async function resolveAnomaliesStep(
         resolved_at: r.resolution.resolved ? new Date().toISOString() : null,
       })
       .eq('id', anomalyRow.id);
+    if (updateError) {
+      logger.warn('pipeline', `Failed to update anomaly resolution for ${anomalyRow.id}: ${updateError.message}`);
+    }
   }
 
   const unresolvedAnomalies = filterUnresolvedAnomalies(resolved);

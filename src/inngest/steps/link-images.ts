@@ -82,8 +82,13 @@ export async function linkImagesToEventsStep(caseId: string): Promise<void> {
       page_number: l.pageNumber,
     }));
 
-    await supabase.from('event_images').insert(rows);
-    logger.info('pipeline', ` Step 4.5: Linked ${links.length} images to events`);
+    const { error: insertError } = await supabase.from('event_images').insert(rows);
+    if (insertError) {
+      logger.error('pipeline', `Failed to insert ${rows.length} event_images: ${insertError.message}`);
+      // Non-blocking: images are supplementary, pipeline continues
+    } else {
+      logger.info('pipeline', ` Step 4.5: Linked ${links.length} images to events`);
+    }
   }
 }
 

@@ -41,7 +41,11 @@ export async function detectAnomaliesStep(
       suggestion: a.suggestion,
     }));
 
-    await supabase.from('anomalies').insert(anomalyRows);
+    const { error: insertError } = await supabase.from('anomalies').insert(anomalyRows);
+    if (insertError) {
+      logger.error('pipeline', `Failed to insert ${anomalyRows.length} anomalies for case ${caseId}: ${insertError.message}`);
+      throw new Error(`Anomaly insert failed: ${insertError.message}`);
+    }
   }
 
   return detected;
@@ -94,7 +98,11 @@ export async function detectMissingDocumentsStep(
       related_event: m.relatedEvent,
     }));
 
-    await supabase.from('missing_documents').insert(missingRows);
+    const { error: insertError } = await supabase.from('missing_documents').insert(missingRows);
+    if (insertError) {
+      logger.error('pipeline', `Failed to insert ${missingRows.length} missing documents for case ${caseId}: ${insertError.message}`);
+      throw new Error(`Missing documents insert failed: ${insertError.message}`);
+    }
   }
 
   return missing;
