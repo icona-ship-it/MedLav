@@ -119,14 +119,18 @@ export async function GET(
   const docIds = Array.from(docMap.keys());
 
   if (docIds.length > 0) {
-    const { data: matchingPages } = await supabase
-      .from('pages')
-      .select('id, ocr_text, page_number, document_id')
-      .in('document_id', docIds)
-      .ilike('ocr_text', `%${query}%`)
-      .limit(50);
+    const matchingPages: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < docIds.length && matchingPages.length < 50; i += 200) {
+      const { data } = await supabase
+        .from('pages')
+        .select('id, ocr_text, page_number, document_id')
+        .in('document_id', docIds.slice(i, i + 200))
+        .ilike('ocr_text', `%${query}%`)
+        .limit(50 - matchingPages.length);
+      if (data) matchingPages.push(...data);
+    }
 
-    for (const page of matchingPages ?? []) {
+    for (const page of matchingPages) {
       const text = (page.ocr_text ?? '') as string;
       const excerpt = extractExcerpt(text, lowerQuery);
       const docName = docMap.get(page.document_id as string) ?? 'Documento';

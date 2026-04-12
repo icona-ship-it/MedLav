@@ -113,12 +113,17 @@ export async function anonymizeCaseDocuments(caseId: string): Promise<AnonymizeC
 
   const docIds = docs.map((d) => d.id);
 
-  // Fetch all pages with OCR text
-  const { data: pages } = await supabase
-    .from('pages')
-    .select('document_id, page_number, ocr_text')
-    .in('document_id', docIds)
-    .order('page_number', { ascending: true });
+  // Fetch all pages with OCR text (batched for PostgREST URL limit)
+  const pages: Array<Record<string, unknown>> = [];
+  const PG_BATCH = 200;
+  for (let i = 0; i < docIds.length; i += PG_BATCH) {
+    const { data } = await supabase
+      .from('pages')
+      .select('document_id, page_number, ocr_text')
+      .in('document_id', docIds.slice(i, i + PG_BATCH))
+      .order('page_number', { ascending: true });
+    if (data) pages.push(...data);
+  }
 
   if (!pages || pages.length === 0) {
     return { success: false, error: 'Nessun testo OCR disponibile. I documenti devono prima essere elaborati (OCR).' };
@@ -132,7 +137,7 @@ export async function anonymizeCaseDocuments(caseId: string): Promise<AnonymizeC
   for (const doc of docs) {
     const docPages = pages
       .filter((p) => p.document_id === doc.id && p.ocr_text)
-      .sort((a, b) => a.page_number - b.page_number);
+      .sort((a, b) => (a.page_number as number) - (b.page_number as number));
 
     if (docPages.length > 0) {
       const docName = docNameMap.get(doc.id) ?? 'Documento';

@@ -369,13 +369,17 @@ export async function getCaseEventImages(caseId: string): Promise<Record<string,
   if (eventsWithoutImages.length > 0) {
     const docIds = [...new Set(eventsWithoutImages.map((e) => e.document_id as string))];
 
-    const { data: pages } = await supabase
-      .from('pages')
-      .select('document_id, image_path')
-      .in('document_id', docIds)
-      .not('image_path', 'is', null);
+    const pages: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < docIds.length; i += 200) {
+      const { data } = await supabase
+        .from('pages')
+        .select('document_id, image_path')
+        .in('document_id', docIds.slice(i, i + 200))
+        .not('image_path', 'is', null);
+      if (data) pages.push(...data);
+    }
 
-    if (pages && pages.length > 0) {
+    if (pages.length > 0) {
       // Build docId -> paths map
       const docImageMap: Record<string, string[]> = {};
       for (const page of pages) {

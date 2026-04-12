@@ -478,8 +478,9 @@ export const processCase = inngest.createFunction(
     );
 
     // Re-read all events from DB for downstream steps.
-    // consolidationResult no longer includes allEvents to stay under Inngest's 4MB step output limit.
-    const allEvents = await step.run('fetch-all-events', () => fetchAllEventsForCase(caseId));
+    // NOT inside step.run — avoids serializing full array through Inngest step output (4MB limit).
+    // Non-step code re-executes on each Inngest re-invocation; it's just a DB read — cheap and safe.
+    const allEvents = await fetchAllEventsForCase(caseId);
 
     // ── Step 4.5: Link images to events ──────────────────────────
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
@@ -497,15 +498,19 @@ export const processCase = inngest.createFunction(
           const { createAdminClient } = await import('@/lib/supabase/admin');
           const supabase = createAdminClient();
 
-          // Fetch OCR text from all documents (expenses may be mixed with medical docs)
+          // Fetch OCR text from all documents (batched for PostgREST URL limit)
           const docIds = ocrResults.map((r) => r.documentId);
-          const { data: pages } = await supabase
-            .from('pages')
-            .select('document_id, page_number, ocr_text')
-            .in('document_id', docIds)
-            .order('page_number', { ascending: true });
+          const pages: Array<Record<string, unknown>> = [];
+          for (let bi = 0; bi < docIds.length; bi += 200) {
+            const { data } = await supabase
+              .from('pages')
+              .select('document_id, page_number, ocr_text')
+              .in('document_id', docIds.slice(bi, bi + 200))
+              .order('page_number', { ascending: true });
+            if (data) pages.push(...data);
+          }
 
-          if (!pages || pages.length === 0) {
+          if (pages.length === 0) {
             logger.warn('pipeline', 'No OCR pages found for expense extraction');
             return { items: [], totalAmount: null, currency: 'EUR' } as ExpenseExtractionResult;
           }

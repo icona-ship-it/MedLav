@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     const retryIds = retryableDocs.map((d) => d.id);
 
     // Reset to 'caricato'
-    await supabase
+    const { error: docError } = await supabase
       .from('documents')
       .update({
         processing_status: 'caricato',
@@ -109,13 +109,19 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .in('id', retryIds);
+    if (docError) {
+      return NextResponse.json({ success: false, error: 'Errore durante il reset dei documenti. Riprova.' }, { status: 500 });
+    }
 
     // Reset processing stage so UI reflects retry in progress
-    await supabase
+    const { error: stageError } = await supabase
       .from('cases')
       .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
       .eq('id', caseId)
       .eq('user_id', user.id);
+    if (stageError) {
+      return NextResponse.json({ success: false, error: 'Errore durante il retry. Riprova.' }, { status: 500 });
+    }
 
     // Trigger Inngest
     await inngest.send({

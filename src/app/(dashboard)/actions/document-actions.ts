@@ -232,14 +232,18 @@ export async function getCasePageImages(caseId: string): Promise<Record<string, 
 
   const docIds = docs.map((d) => d.id);
 
-  // Get pages with images
-  const { data: pages } = await supabase
-    .from('pages')
-    .select('document_id, image_path')
-    .in('document_id', docIds)
-    .not('image_path', 'is', null);
+  // Get pages with images (batched for PostgREST URL limit)
+  const pages: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < docIds.length; i += 200) {
+    const { data } = await supabase
+      .from('pages')
+      .select('document_id, image_path')
+      .in('document_id', docIds.slice(i, i + 200))
+      .not('image_path', 'is', null);
+    if (data) pages.push(...data);
+  }
 
-  if (!pages || pages.length === 0) return {};
+  if (pages.length === 0) return {};
 
   const result: Record<string, string[]> = {};
   for (const page of pages) {
@@ -382,11 +386,15 @@ export async function getCaseDocumentPages(caseId: string): Promise<DocumentPage
 
   const docIds = docs.map((d) => d.id);
 
-  const { data: pages } = await supabase
-    .from('pages')
-    .select('id, document_id, page_number, ocr_text, ocr_confidence, has_handwriting')
-    .in('document_id', docIds)
-    .order('page_number', { ascending: true });
+  const allPages: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < docIds.length; i += 200) {
+    const { data } = await supabase
+      .from('pages')
+      .select('id, document_id, page_number, ocr_text, ocr_confidence, has_handwriting')
+      .in('document_id', docIds.slice(i, i + 200))
+      .order('page_number', { ascending: true });
+    if (data) allPages.push(...data);
+  }
 
-  return (pages ?? []) as DocumentPage[];
+  return allPages as unknown as DocumentPage[];
 }

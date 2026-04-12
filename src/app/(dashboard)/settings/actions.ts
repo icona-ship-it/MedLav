@@ -234,40 +234,45 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
 
   const caseIds = (cases ?? []).map((c) => c.id as string);
 
-  const [profileRes, eventsRes, reportsRes, auditRes, documentsRes, anomaliesRes, missingDocsRes, caseSharesRes] = await Promise.all([
+  // Batched fetch helper to stay under PostgREST URL limit
+  const EX_BATCH = 200;
+  async function batchedFetch(table: string, columns: string): Promise<unknown[]> {
+    const results: unknown[] = [];
+    for (let i = 0; i < caseIds.length; i += EX_BATCH) {
+      const { data } = await admin.from(table).select(columns).in('case_id', caseIds.slice(i, i + EX_BATCH));
+      if (data) results.push(...data);
+    }
+    return results;
+  }
+
+  const [profileRes, auditRes] = await Promise.all([
     admin.from('profiles').select('*').eq('id', user.id).single(),
-    caseIds.length > 0
-      ? admin.from('events').select('id, case_id, event_date, event_type, title, description, source_type, confidence, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
-    caseIds.length > 0
-      ? admin.from('reports').select('id, case_id, version, report_status, synthesis, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
     admin.from('audit_log').select('action, entity_type, entity_id, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500),
-    caseIds.length > 0
-      ? admin.from('documents').select('id, case_id, file_name, file_type, file_size, document_type, processing_status, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
-    caseIds.length > 0
-      ? admin.from('anomalies').select('id, case_id, anomaly_type, severity, description, suggestion, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
-    caseIds.length > 0
-      ? admin.from('missing_documents').select('id, case_id, document_name, reason, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
-    caseIds.length > 0
-      ? admin.from('case_shares').select('id, case_id, label, expires_at, view_count, created_at').in('case_id', caseIds)
-      : Promise.resolve({ data: [] }),
   ]);
+
+  // Fetch all case-related data (batched to avoid URL limit for users with many cases)
+  const [eventsData, reportsData, documentsData, anomaliesData, missingDocsData, caseSharesData] = caseIds.length > 0
+    ? await Promise.all([
+      batchedFetch('events', 'id, case_id, event_date, event_type, title, description, source_type, confidence, created_at'),
+      batchedFetch('reports', 'id, case_id, version, report_status, synthesis, created_at'),
+      batchedFetch('documents', 'id, case_id, file_name, file_type, file_size, document_type, processing_status, created_at'),
+      batchedFetch('anomalies', 'id, case_id, anomaly_type, severity, description, suggestion, created_at'),
+      batchedFetch('missing_documents', 'id, case_id, document_name, reason, created_at'),
+      batchedFetch('case_shares', 'id, case_id, label, expires_at, view_count, created_at'),
+    ])
+    : [[], [], [], [], [], []];
 
   const exportData = {
     exportDate: new Date().toISOString(),
     gdprArticle: 'Art. 15/20 GDPR — Diritto di accesso e portabilità',
     profile: profileRes.data,
     cases: cases ?? [],
-    documents: documentsRes.data ?? [],
-    events: eventsRes.data ?? [],
-    anomalies: anomaliesRes.data ?? [],
-    missingDocuments: missingDocsRes.data ?? [],
-    reports: reportsRes.data ?? [],
-    caseShares: caseSharesRes.data ?? [],
+    documents: documentsData,
+    events: eventsData,
+    anomalies: anomaliesData,
+    missingDocuments: missingDocsData,
+    reports: reportsData,
+    caseShares: caseSharesData,
     auditLog: auditRes.data ?? [],
   };
 

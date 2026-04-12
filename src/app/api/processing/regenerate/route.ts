@@ -112,13 +112,15 @@ export async function POST(request: NextRequest) {
     }));
 
     // Delete old anomalies and missing docs
-    await admin.from('anomalies').delete().eq('case_id', caseId);
-    await admin.from('missing_documents').delete().eq('case_id', caseId);
+    const { error: delAnom } = await admin.from('anomalies').delete().eq('case_id', caseId);
+    if (delAnom) logger.warn('regenerate', `Failed to delete old anomalies: ${delAnom.message}`);
+    const { error: delMissing } = await admin.from('missing_documents').delete().eq('case_id', caseId);
+    if (delMissing) logger.warn('regenerate', `Failed to delete old missing docs: ${delMissing.message}`);
 
     // Re-detect anomalies
     const rawAnomalies = detectAnomalies(events);
     if (rawAnomalies.length > 0) {
-      await admin.from('anomalies').insert(
+      const { error: insertAnom } = await admin.from('anomalies').insert(
         rawAnomalies.map((a) => ({
           case_id: caseId,
           anomaly_type: a.anomalyType,
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
           suggestion: a.suggestion,
         })),
       );
+      if (insertAnom) logger.error('regenerate', `Failed to insert anomalies: ${insertAnom.message}`);
     }
 
     // Resolve anomalies via LLM (check source OCR pages)
@@ -188,7 +191,7 @@ export async function POST(request: NextRequest) {
       caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
     });
     if (missingDocs.length > 0) {
-      await admin.from('missing_documents').insert(
+      const { error: insertMissing } = await admin.from('missing_documents').insert(
         missingDocs.map((m) => ({
           case_id: caseId,
           document_name: m.documentName,
@@ -196,6 +199,7 @@ export async function POST(request: NextRequest) {
           related_event: m.relatedEvent,
         })),
       );
+      if (insertMissing) logger.error('regenerate', `Failed to insert missing docs: ${insertMissing.message}`);
     }
 
     // Calculate medico-legal periods for report integration

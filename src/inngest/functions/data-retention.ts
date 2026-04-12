@@ -128,7 +128,10 @@ async function deleteCaseAndRelatedData(
 
   if (docRows && docRows.length > 0) {
     const docIds = docRows.map((d) => d.id as string);
-    await supabase.from('pages').delete().in('document_id', docIds);
+    for (let i = 0; i < docIds.length; i += 200) {
+      const { error: delErr } = await supabase.from('pages').delete().in('document_id', docIds.slice(i, i + 200));
+      if (delErr) logger.warn('data-retention', `Failed to delete pages batch: ${delErr.message}`);
+    }
 
     // Remove document files from Supabase Storage
     const storagePaths = docRows

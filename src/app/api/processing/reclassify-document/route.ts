@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       reasoning: result.reasoning,
     };
 
-    await admin
+    const { error: updateError } = await admin
       .from('documents')
       .update({
         classification_metadata: classificationMetadata,
@@ -141,6 +141,9 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', documentId);
+    if (updateError) {
+      return NextResponse.json({ success: false, error: 'Errore nel salvataggio della classificazione.' }, { status: 500 });
+    }
 
     logger.info('reclassify', `Document ${documentId} reclassified as ${result.documentType} (${result.confidence}%)`);
 

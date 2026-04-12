@@ -267,16 +267,15 @@ export async function resetAllData() {
 
   logger.info('admin', ` Reset all data requested by user ${user.id}`);
 
-  // Delete in correct order (foreign key dependencies)
-  await admin.from('event_images').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('anomalies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('missing_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('reports').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('events').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('pages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('cases').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await admin.from('audit_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  // Delete in correct order (foreign key dependencies) — check each for errors
+  const tables = ['event_images', 'anomalies', 'missing_documents', 'reports', 'events', 'pages', 'documents', 'cases', 'audit_log'] as const;
+  for (const table of tables) {
+    const { error } = await admin.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) {
+      logger.error('admin', `Reset failed on table ${table}: ${error.message}`);
+      throw new Error(`Reset fallito sulla tabella ${table}: ${error.message}`);
+    }
+  }
 
   // Clear storage bucket
   try {

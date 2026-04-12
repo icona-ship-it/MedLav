@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     // Update document types in DB
     const now = new Date().toISOString();
     for (const dt of documentTypes) {
-      await supabase
+      const { error: updateError } = await supabase
         .from('documents')
         .update({
           document_type: dt.documentType,
@@ -117,6 +117,9 @@ export async function POST(request: NextRequest) {
           updated_at: now,
         })
         .eq('id', dt.documentId);
+      if (updateError) {
+        return NextResponse.json({ success: false, error: 'Errore nell\'aggiornamento dei documenti. Riprova.' }, { status: 500 });
+      }
     }
 
     // Send Inngest event to resume pipeline

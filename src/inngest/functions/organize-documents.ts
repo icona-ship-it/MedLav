@@ -110,11 +110,15 @@ export const organizeDocumentsJob = inngest.createFunction(
       for (const doc of organizeResult.documents) {
         if (doc.wasSplit && doc.splitBuffer && doc.originalDocumentId) {
           const storagePath = `cases/${caseId}/${doc.fileName}`;
-          await supabase.storage.from('documents').upload(storagePath, doc.splitBuffer, {
+          const { error: uploadErr } = await supabase.storage.from('documents').upload(storagePath, doc.splitBuffer, {
             contentType: 'application/pdf',
             upsert: true,
           });
-          await supabase.from('documents').insert({
+          if (uploadErr) {
+            logger.error('organize', `Failed to upload split PDF ${doc.fileName}: ${uploadErr.message}`);
+            continue; // Skip this split, don't create orphan DB row
+          }
+          const { error: insertErr } = await supabase.from('documents').insert({
             case_id: caseId,
             user_id: userId,
             file_name: doc.fileName,
@@ -130,8 +134,11 @@ export const organizeDocumentsJob = inngest.createFunction(
               organizedBy: 'document_organizer',
             },
           });
+          if (insertErr) {
+            logger.error('organize', `Failed to insert split document ${doc.fileName}: ${insertErr.message}`);
+          }
         } else if (doc.originalDocumentId) {
-          await supabase.from('documents').update({
+          const { error: updateErr } = await supabase.from('documents').update({
             document_type: doc.documentType,
             classification_metadata: {
               aiSuggestedType: doc.documentType,
@@ -141,6 +148,9 @@ export const organizeDocumentsJob = inngest.createFunction(
             },
             updated_at: new Date().toISOString(),
           }).eq('id', doc.originalDocumentId);
+          if (updateErr) {
+            logger.error('organize', `Failed to update document ${doc.originalDocumentId}: ${updateErr.message}`);
+          }
         }
       }
 

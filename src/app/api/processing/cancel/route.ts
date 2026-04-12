@@ -83,11 +83,14 @@ export async function POST(request: NextRequest) {
       .in('processing_status', processingStatuses);
 
     // Reset processing stage to idle
-    await supabase
+    const { error: stageError } = await supabase
       .from('cases')
       .update({ processing_stage: 'idle', updated_at: new Date().toISOString() })
       .eq('id', caseId)
       .eq('user_id', user.id);
+    if (stageError) {
+      return NextResponse.json({ success: false, error: 'Errore durante l\'annullamento. Riprova.' }, { status: 500 });
+    }
 
     // Send Inngest cancel event
     await inngest.send({

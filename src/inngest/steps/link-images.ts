@@ -38,11 +38,15 @@ export async function linkImagesToEventsStep(caseId: string): Promise<void> {
 
   const docIds = docsRaw.map((d) => d.id);
 
-  const { data: pagesRaw } = await supabase
-    .from('pages')
-    .select('id, document_id, page_number, image_path')
-    .in('document_id', docIds)
-    .not('image_path', 'is', null);
+  const pagesRaw: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < docIds.length; i += 200) {
+    const { data } = await supabase
+      .from('pages')
+      .select('id, document_id, page_number, image_path')
+      .in('document_id', (docIds as string[]).slice(i, i + 200))
+      .not('image_path', 'is', null);
+    if (data) pagesRaw.push(...data);
+  }
 
   if (!pagesRaw || pagesRaw.length === 0) {
     logger.info('pipeline', ' Step 4.5: No pages with images, skipping');
@@ -112,20 +116,28 @@ export async function analyzeDiagnosticImagesStep(
 
   const docIds = docsForImages.map((d) => d.id);
 
-  // Count total pages with images before limiting
-  const { count: totalImagesCount } = await supabase
-    .from('pages')
-    .select('id', { count: 'exact', head: true })
-    .in('document_id', docIds)
-    .not('image_path', 'is', null);
+  // Count total pages with images before limiting (batched for URL limit)
+  let totalImagesCount = 0;
+  for (let i = 0; i < docIds.length; i += 200) {
+    const { count } = await supabase
+      .from('pages')
+      .select('id', { count: 'exact', head: true })
+      .in('document_id', (docIds as string[]).slice(i, i + 200))
+      .not('image_path', 'is', null);
+    totalImagesCount += count ?? 0;
+  }
 
   const MAX_DIAGNOSTIC_IMAGES = 3;
-  const { data: pagesWithImages } = await supabase
-    .from('pages')
-    .select('page_number, image_path, document_id')
-    .in('document_id', docIds)
-    .not('image_path', 'is', null)
-    .limit(MAX_DIAGNOSTIC_IMAGES);
+  const pagesWithImages: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < docIds.length && pagesWithImages.length < MAX_DIAGNOSTIC_IMAGES; i += 200) {
+    const { data } = await supabase
+      .from('pages')
+      .select('page_number, image_path, document_id')
+      .in('document_id', (docIds as string[]).slice(i, i + 200))
+      .not('image_path', 'is', null)
+      .limit(MAX_DIAGNOSTIC_IMAGES - pagesWithImages.length);
+    if (data) pagesWithImages.push(...data);
+  }
 
   if (!pagesWithImages || pagesWithImages.length === 0) {
     logger.info('pipeline', ' Step 4.6: No images to analyze');

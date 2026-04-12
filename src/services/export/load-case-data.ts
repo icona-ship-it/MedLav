@@ -67,13 +67,17 @@ export async function loadCaseDataForExport(caseId: string) {
 
   // Fetch pages for all documents (requires doc IDs from previous query)
   const docIds = (documentsRes.data ?? []).map((d) => d.id as string);
-  const pagesRes = docIds.length > 0
-    ? await supabase
+  const allPages: Array<Record<string, unknown>> = [];
+  const PG_BATCH = 200;
+  for (let i = 0; i < docIds.length; i += PG_BATCH) {
+    const { data } = await supabase
       .from('pages')
       .select('document_id, page_number, ocr_text')
-      .in('document_id', docIds)
-      .order('page_number', { ascending: true })
-    : { data: [] };
+      .in('document_id', docIds.slice(i, i + PG_BATCH))
+      .order('page_number', { ascending: true });
+    if (data) allPages.push(...data);
+  }
+  const pagesRes = { data: allPages };
 
   // Group pages by document
   const pagesByDoc = new Map<string, DocumentPage[]>();
