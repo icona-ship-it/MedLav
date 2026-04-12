@@ -403,3 +403,97 @@ export async function getCaseEventImages(caseId: string): Promise<Record<string,
 
   return result;
 }
+
+/**
+ * Bulk verify all events that require verification in a case.
+ */
+export async function bulkVerifyEvents(caseId: string): Promise<{ error?: string; count?: number }> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data: toVerify } = await supabase
+    .from('events')
+    .select('id')
+    .eq('case_id', caseId)
+    .eq('is_deleted', false)
+    .eq('requires_verification', true);
+
+  if (!toVerify || toVerify.length === 0) return { count: 0 };
+
+  const ids = toVerify.map((e) => e.id as string);
+  const BATCH = 200;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const { error } = await supabase
+      .from('events')
+      .update({ requires_verification: false, updated_at: new Date().toISOString() })
+      .in('id', ids.slice(i, i + BATCH));
+    if (error) return { error: 'Errore verifica eventi' };
+  }
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'events.bulk_verified',
+    entity_type: 'case',
+    entity_id: caseId,
+    metadata: { count: ids.length },
+  });
+
+  return { count: ids.length };
+}
+
+/**
+ * Bulk soft-delete all events that require verification in a case.
+ */
+export async function bulkDeleteVerificationEvents(caseId: string): Promise<{ error?: string; count?: number }> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data: toDelete } = await supabase
+    .from('events')
+    .select('id')
+    .eq('case_id', caseId)
+    .eq('is_deleted', false)
+    .eq('requires_verification', true);
+
+  if (!toDelete || toDelete.length === 0) return { count: 0 };
+
+  const ids = toDelete.map((e) => e.id as string);
+  const BATCH = 200;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const { error } = await supabase
+      .from('events')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .in('id', ids.slice(i, i + BATCH));
+    if (error) return { error: 'Errore eliminazione eventi' };
+  }
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'events.bulk_deleted',
+    entity_type: 'case',
+    entity_id: caseId,
+    metadata: { count: ids.length },
+  });
+
+  return { count: ids.length };
+}

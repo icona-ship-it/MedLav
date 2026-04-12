@@ -195,11 +195,16 @@ export function EventCard({
             <p className="mt-1 text-sm font-medium">{event.title}</p>
           </div>
         </button>
-        <div className="flex items-center gap-1 ml-2">
+        <div className="flex items-center gap-0.5 ml-2">
           {!isEditing && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica evento" aria-label="Modifica evento">
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
+            <>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica evento" aria-label="Modifica evento">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(); }} title="Elimina evento" aria-label="Elimina evento">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'} aria-expanded={isExpanded}>
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

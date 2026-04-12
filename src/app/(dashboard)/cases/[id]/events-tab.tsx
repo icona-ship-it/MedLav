@@ -16,8 +16,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { addManualEvent } from '../../actions';
+import { addManualEvent, bulkVerifyEvents, bulkDeleteVerificationEvents } from '../../actions';
 import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
+import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
@@ -357,9 +358,59 @@ export function EventsTab({
                 </div>
                 <div className="h-px flex-1 bg-yellow-300" />
               </div>
-              <p className="text-xs text-muted-foreground px-1">
-                Questi eventi sono stati estratti automaticamente e potrebbero richiedere una tua verifica.
-              </p>
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-muted-foreground">
+                  Questi eventi potrebbero richiedere una tua verifica.
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      toast('Verificare tutti gli eventi?', {
+                        description: `${verificationEvents.length} eventi saranno segnati come verificati.`,
+                        action: {
+                          label: 'Verifica tutti',
+                          onClick: async () => {
+                            const result = await bulkVerifyEvents(caseId);
+                            if (result.error) { toast.error(result.error); return; }
+                            toast.success(`${result.count} eventi verificati`);
+                            router.refresh();
+                          },
+                        },
+                        cancel: { label: 'Annulla', onClick: () => {} },
+                      });
+                    }}
+                  >
+                    <CheckCheck className="mr-1 h-3 w-3" />
+                    Verifica tutti
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs text-destructive hover:text-destructive"
+                    onClick={() => {
+                      toast('Eliminare tutti gli eventi da verificare?', {
+                        description: `${verificationEvents.length} eventi saranno rimossi dalla cronistoria.`,
+                        action: {
+                          label: 'Elimina tutti',
+                          onClick: async () => {
+                            const result = await bulkDeleteVerificationEvents(caseId);
+                            if (result.error) { toast.error(result.error); return; }
+                            toast.success(`${result.count} eventi eliminati`);
+                            router.refresh();
+                          },
+                        },
+                        cancel: { label: 'Annulla', onClick: () => {} },
+                      });
+                    }}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    Elimina tutti
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
