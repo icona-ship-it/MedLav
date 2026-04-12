@@ -174,9 +174,19 @@ export function EventCard({
                   className="inline-flex items-center"
                   title="Clicca per segnare come verificato"
                 >
-                  <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors">
-                    {isVerifying ? '...' : 'Da verificare ✓'}
-                  </Badge>
+                  {(!event.event_date || event.event_date === '' || event.date_precision === 'sconosciuta') ? (
+                    <Badge variant="outline" className="text-xs cursor-pointer border-yellow-400 text-yellow-700 dark:text-yellow-400 hover:bg-green-100 hover:text-green-800 transition-colors">
+                      {isVerifying ? '...' : 'Data incerta ✓'}
+                    </Badge>
+                  ) : (event.confidence as number) < 50 || ((event.reliability_notes ?? '') as string).toLowerCase().includes('ocr') ? (
+                    <Badge variant="outline" className="text-xs cursor-pointer border-orange-400 text-orange-700 dark:text-orange-400 hover:bg-green-100 hover:text-green-800 transition-colors">
+                      {isVerifying ? '...' : 'Dati incerti ✓'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors">
+                      {isVerifying ? '...' : 'Da verificare ✓'}
+                    </Badge>
+                  )}
                 </button>
               ) : event.requires_verification === false && (
                 <Badge variant="success" className="text-xs">Verificato</Badge>

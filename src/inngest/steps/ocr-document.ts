@@ -17,8 +17,18 @@ async function saveOcrImagesToStorage(
   documentId: string,
   images: OcrImageResult[],
 ): Promise<void> {
-  // Limit images to avoid timeout (large docs can have 50+ images)
-  const imagesToSave = images.slice(0, MAX_OCR_IMAGES_TO_SAVE);
+  // Filter out non-diagnostic images (logos, signatures, stamps are typically < 15KB base64)
+  const MIN_IMAGE_BASE64_LENGTH = 15_000; // ~11KB real file — diagnostic images are much larger
+  const diagnosticImages = images.filter((img) => {
+    if (img.imageBase64.length < MIN_IMAGE_BASE64_LENGTH) {
+      logger.info('pipeline', ` Skipping small image p${img.pageNumber}-f${img.figureIndex} (${Math.round(img.imageBase64.length / 1000)}KB base64) — likely logo/signature`);
+      return false;
+    }
+    return true;
+  });
+
+  // Limit remaining images to avoid timeout (large docs can have 50+ images)
+  const imagesToSave = diagnosticImages.slice(0, MAX_OCR_IMAGES_TO_SAVE);
 
   // Upload ALL images in parallel
   const uploadResults = await Promise.allSettled(

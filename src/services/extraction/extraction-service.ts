@@ -178,7 +178,8 @@ export async function extractEventsFromChunk(params: {
   const result = parseExtractionResponse(content, chunkLabel);
   const validatedEvents = validateExtractedNamesAgainstOcr(result.events, chunkText);
   const inferredEvents = inferMissingDates(validatedEvents);
-  return { ...result, events: inferredEvents, usage };
+  const filteredEvents = flagLegislativeReferences(inferredEvents);
+  return { ...result, events: filteredEvents, usage };
 }
 
 /**
@@ -395,6 +396,61 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
 
   if (inferredCount > 0) {
     logger.info('extraction', `Date inference: ${inferredCount} events inherited dates from nearby events`);
+  }
+
+  return result;
+}
+
+// ── Legislative reference filter ──
+
+const LEGISLATIVE_PATTERNS = [
+  /\bLegge\s+\d+\/\d{4}\b/i,
+  /\bL\.\s*\d+\/\d{4}\b/i,
+  /\bD\.?\s*L\.?\s*gs\.?\s*\d+\/\d{4}\b/i,
+  /\bD\.?\s*P\.?\s*R\.?\s*\d+\/\d{4}\b/i,
+  /\bD\.?\s*M\.?\s*\d+\/\d{4}\b/i,
+  /\bArt\.?\s*\d+\s+c\.?\s*[cp]\b/i, // Art. 2043 c.c.
+  /\bCass\.?\s*(Civ|Pen|Sez)/i, // Cassazione
+  /\bSent(?:enza)?\s+n\.\s*\d+/i, // Sentenza n.
+];
+
+const PATIENT_KEYWORDS = [
+  'paziente', 'periziando', 'ricorrente', 'resistente', 'sig.', 'signor',
+  'danneggiato', 'vittima', 'lavoratore', 'assicurato', 'infortunato',
+];
+
+/**
+ * Flag legislative references that are NOT about the patient.
+ * Does NOT delete them — marks with very low confidence so they sort to bottom.
+ */
+export function flagLegislativeReferences(events: ExtractedEvent[]): ExtractedEvent[] {
+  let flaggedCount = 0;
+
+  const result = events.map((event) => {
+    // Only check documento_amministrativo and altro types
+    if (event.eventType !== 'documento_amministrativo' && event.eventType !== 'altro') return event;
+
+    const text = `${event.title} ${event.description}`.toLowerCase();
+
+    // Does it match a legislative pattern?
+    const isLegislative = LEGISLATIVE_PATTERNS.some((p) => p.test(event.title) || p.test(event.description));
+    if (!isLegislative) return event;
+
+    // Does it reference the patient specifically?
+    const mentionsPatient = PATIENT_KEYWORDS.some((kw) => text.includes(kw));
+    if (mentionsPatient) return event; // Keep — it's about the patient
+
+    flaggedCount++;
+    return {
+      ...event,
+      confidence: Math.min(event.confidence, 10),
+      requiresVerification: true,
+      reliabilityNotes: `[AUTO] Riferimento normativo generico — potrebbe non essere pertinente alla vicenda clinica del paziente. ${event.reliabilityNotes ?? ''}`.trim(),
+    };
+  });
+
+  if (flaggedCount > 0) {
+    logger.info('extraction', `Legislative filter: ${flaggedCount} normative references flagged with low confidence`);
   }
 
   return result;

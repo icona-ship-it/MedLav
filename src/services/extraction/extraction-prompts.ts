@@ -196,7 +196,12 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
 
 ## REGOLE FONDAMENTALI
 
-1. **ZERO DISCARD — MASSIMA PRIORITÀ**: Non scartare MAI nessun dato. Tutto ciò che è documentato DEVE essere estratto come evento separato. OGNI esame, OGNI visita, OGNI valore di laboratorio, OGNI prescrizione = un evento. Anche i fatti clinici citati all'interno di documenti legali (memorie, conclusioni, contestazioni) sono eventi da estrarre. Se hai dubbi se estrarre o meno un dato, ESTRAILO. È fondamentale per la completezza della perizia medico-legale.
+1. **ZERO DISCARD — MASSIMA PRIORITÀ**: Non scartare MAI nessun dato RELATIVO AL PAZIENTE. OGNI esame, OGNI visita, OGNI valore di laboratorio, OGNI prescrizione = un evento. Anche i fatti clinici citati all'interno di documenti legali (memorie, conclusioni, contestazioni) sono eventi da estrarre. Se hai dubbi se estrarre o meno un dato, ESTRAILO. È fondamentale per la completezza della perizia medico-legale.
+   **ECCEZIONE — NON estrarre come eventi separati:**
+   - Riferimenti legislativi puri (es. "Legge 833/1978", "D.Lgs. 81/2008", "Art. 2043 c.c.", "D.P.R. 1124/1965") che non descrivono un fatto specifico del paziente
+   - Citazioni di giurisprudenza generica (sentenze di Cassazione, precedenti giurisprudenziali)
+   - Articoli di codice civile/penale citati come base giuridica
+   Questi vanno estratti SOLO se collegati a un fatto concreto del paziente (es. "in applicazione della L. 104/92, al paziente veniva riconosciuta invalidità al 75%").
 2. **COPIA FEDELE E DETTAGLIATA**: La descrizione deve essere LUNGA e COMPLETA — riporta FEDELMENTE tutto il contenuto clinico rilevante dal testo originale. Includi tutti i valori numerici, dosaggi, parametri. NON sintetizzare, NON abbreviare. Questa descrizione verrà usata direttamente nella relazione peritale.
 3. **DATE**: Usa formato YYYY-MM-DD. NON inventare date — ma una data approssimata è MOLTO meglio di NULL.
    - Data imprecisa → primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01", datePrecision="mese")
