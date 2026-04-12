@@ -130,13 +130,29 @@ async function deleteCaseAndRelatedData(
     const docIds = docRows.map((d) => d.id as string);
     await supabase.from('pages').delete().in('document_id', docIds);
 
-    // Remove files from Supabase Storage
+    // Remove document files from Supabase Storage
     const storagePaths = docRows
       .map((d) => d.storage_path as string)
       .filter(Boolean);
 
     if (storagePaths.length > 0) {
       await supabase.storage.from('documents').remove(storagePaths);
+    }
+
+    // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
+    const ocrImagePaths: string[] = [];
+    for (const docId of docIds) {
+      const { data: listed } = await supabase.storage
+        .from('documents')
+        .list(`ocr-images/${docId}`);
+      if (listed && listed.length > 0) {
+        ocrImagePaths.push(...listed.map((f) => `ocr-images/${docId}/${f.name}`));
+      }
+    }
+    if (ocrImagePaths.length > 0) {
+      for (let i = 0; i < ocrImagePaths.length; i += 1000) {
+        await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
+      }
     }
   }
 

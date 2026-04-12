@@ -234,7 +234,7 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
 
   const caseIds = (cases ?? []).map((c) => c.id as string);
 
-  const [profileRes, eventsRes, reportsRes, auditRes] = await Promise.all([
+  const [profileRes, eventsRes, reportsRes, auditRes, documentsRes, anomaliesRes, missingDocsRes, caseSharesRes] = await Promise.all([
     admin.from('profiles').select('*').eq('id', user.id).single(),
     caseIds.length > 0
       ? admin.from('events').select('id, case_id, event_date, event_type, title, description, source_type, confidence, created_at').in('case_id', caseIds)
@@ -243,6 +243,18 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
       ? admin.from('reports').select('id, case_id, version, report_status, synthesis, created_at').in('case_id', caseIds)
       : Promise.resolve({ data: [] }),
     admin.from('audit_log').select('action, entity_type, entity_id, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500),
+    caseIds.length > 0
+      ? admin.from('documents').select('id, case_id, file_name, file_type, file_size, document_type, processing_status, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
+    caseIds.length > 0
+      ? admin.from('anomalies').select('id, case_id, anomaly_type, severity, description, suggestion, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
+    caseIds.length > 0
+      ? admin.from('missing_documents').select('id, case_id, document_name, reason, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
+    caseIds.length > 0
+      ? admin.from('case_shares').select('id, case_id, label, expires_at, view_count, created_at').in('case_id', caseIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const exportData = {
@@ -250,8 +262,12 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
     gdprArticle: 'Art. 15/20 GDPR — Diritto di accesso e portabilità',
     profile: profileRes.data,
     cases: cases ?? [],
+    documents: documentsRes.data ?? [],
     events: eventsRes.data ?? [],
+    anomalies: anomaliesRes.data ?? [],
+    missingDocuments: missingDocsRes.data ?? [],
     reports: reportsRes.data ?? [],
+    caseShares: caseSharesRes.data ?? [],
     auditLog: auditRes.data ?? [],
   };
 
@@ -379,12 +395,51 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
     await admin.from('missing_documents').delete().in('case_id', caseIds);
     await admin.from('reports').delete().in('case_id', caseIds);
 
-    const { data: docs } = await admin.from('documents').select('id').in('case_id', caseIds);
+    const { data: docs } = await admin.from('documents').select('id, storage_path').in('case_id', caseIds);
     if (docs && docs.length > 0) {
-      await admin.from('pages').delete().in('document_id', docs.map((d) => d.id));
+      const docIds = docs.map((d) => d.id as string);
+      await admin.from('pages').delete().in('document_id', docIds);
+
+      // Remove document files from Storage
+      const docStoragePaths = docs
+        .map((d) => d.storage_path as string)
+        .filter(Boolean);
+      if (docStoragePaths.length > 0) {
+        await admin.storage.from('documents').remove(docStoragePaths);
+      }
+
+      // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
+      const ocrImagePaths: string[] = [];
+      for (const docId of docIds) {
+        const { data: listed } = await admin.storage
+          .from('documents')
+          .list(`ocr-images/${docId}`);
+        if (listed && listed.length > 0) {
+          ocrImagePaths.push(...listed.map((f) => `ocr-images/${docId}/${f.name}`));
+        }
+      }
+      if (ocrImagePaths.length > 0) {
+        // Supabase remove() supports up to 1000 paths per call
+        for (let i = 0; i < ocrImagePaths.length; i += 1000) {
+          await admin.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
+        }
+      }
     }
     await admin.from('documents').delete().in('case_id', caseIds);
     await admin.from('cases').delete().in('id', caseIds);
+  }
+
+  // Remove signature image from Storage (if uploaded)
+  const { data: profileRow } = await admin
+    .from('profiles')
+    .select('signature_image_path')
+    .eq('id', user.id)
+    .single();
+  const sigPath = (profileRow?.signature_image_path as string | null);
+  if (sigPath) {
+    await admin.storage.from('signatures').remove([sigPath]).catch(() => {
+      // File may not exist — proceed with DB cleanup
+    });
   }
 
   // Deliberate: audit logs are deleted with the account per GDPR Art. 17 (right to erasure).
