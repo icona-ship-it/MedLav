@@ -4,7 +4,7 @@ import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
-export const PAGES_PER_CHUNK = 15;
+export const PAGES_PER_CHUNK = 25;
 /** Overlap pages between consecutive chunks to prevent mid-document splits. */
 const OVERLAP_PAGES = 2;
 

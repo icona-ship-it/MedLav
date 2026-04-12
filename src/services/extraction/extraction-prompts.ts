@@ -217,12 +217,12 @@ IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, ammi
 7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
    - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
    - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
-8. **DOCUMENTI NON CLINICI**: Fatture, ricevute, note spese, comunicazioni, lettere, moduli assicurativi, documenti amministrativi, atti giudiziari, memorie difensive, perizie avversarie, ricorsi — TUTTI devono generare eventi. Usa:
+8. **DOCUMENTI NON CLINICI**: Usa:
    - eventType: "spesa_medica" per fatture/ricevute (includi importo, prestazione, struttura)
-   - eventType: "documento_amministrativo" per lettere, comunicazioni, moduli, atti giudiziari, memorie difensive, ricorsi, conclusioni
+   - eventType: "documento_amministrativo" SOLO per contenuti giuridici sostanziali: domande/conclusioni delle parti, quesiti del giudice, contestazioni specifiche, richieste risarcitorie con importi. UN SOLO evento per documento legale che ne riassuma il contenuto essenziale.
    - eventType: "certificato" per certificati medici, INAIL, invalidità
-   ATTENZIONE: Da memorie difensive, perizie CTP/CTU avversarie e atti giudiziari, estrai ANCHE tutti i fatti clinici citati (interventi, ricoveri, diagnosi, date) come eventi clinici normali (visita, intervento, diagnosi, ricovero, etc.). Un fatto clinico resta un fatto clinico indipendentemente dal documento che lo cita.
-   NON segnare NESSUN documento come "nessun evento". Ogni documento caricato ha un valore informativo.
+   **Da memorie difensive, perizie CTP/CTU e atti giudiziari**: estrai come eventi CLINICI normali (visita, intervento, diagnosi, ricovero, etc.) SOLO i fatti clinici del PAZIENTE citati nel testo. Un fatto clinico resta un fatto clinico indipendentemente dal documento che lo cita.
+   **NON estrarre da documenti legali**: intestazioni, protocolli, nomi avvocati, riferimenti a leggi/articoli come eventi separati, premesse giuridiche generiche, elenchi di normativa. Questi NON sono fatti del paziente.
 
 ## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
 - NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.

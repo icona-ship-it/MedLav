@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { addManualEvent, bulkVerifyEvents, bulkDeleteVerificationEvents } from '../../actions';
 import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
+import { formatDate } from '@/lib/format';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
@@ -161,6 +162,9 @@ function isVerificationEvent(e: EventRow): boolean {
 }
 
 type VerificationSubFilter = 'all' | 'date' | 'data' | 'other';
+type EventViewTab = 'clinical' | 'admin' | 'all';
+
+const NON_CLINICAL_TYPES = new Set(['documento_amministrativo', 'spesa_medica', 'certificato']);
 
 function getVerificationType(e: EventRow): VerificationSubFilter {
   if (!e.event_date || e.event_date === '' || e.date_precision === 'sconosciuta') return 'date';
@@ -184,6 +188,7 @@ export function EventsTab({
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
+  const [eventViewTab, setEventViewTab] = useState<EventViewTab>('clinical');
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
   const [verificationSubFilter, setVerificationSubFilter] = useState<VerificationSubFilter>('all');
@@ -203,11 +208,26 @@ export function EventsTab({
   }, []);
 
   const altroEvents = events.filter((e) => e.event_type === 'altro');
+  const clinicalEvents = events.filter((e) => !NON_CLINICAL_TYPES.has(e.event_type));
+  const adminEvents = events.filter((e) => NON_CLINICAL_TYPES.has(e.event_type));
 
   // Split events into verification group
   const verificationEvents = events.filter((e) => isVerificationEvent(e));
 
-  const filteredEvents = events.filter((event) => {
+  // Summary stats
+  const surgeryCount = events.filter((e) => e.event_type === 'intervento').length;
+  const diagnosisCount = events.filter((e) => e.event_type === 'diagnosi').length;
+  const datesWithEvents = events.filter((e) => e.event_date && e.event_date !== '').map((e) => e.event_date);
+  const dateRange = datesWithEvents.length > 0
+    ? { from: datesWithEvents[0], to: datesWithEvents[datesWithEvents.length - 1] }
+    : null;
+
+  // Tab-based base events
+  const tabEvents = eventViewTab === 'clinical' ? clinicalEvents
+    : eventViewTab === 'admin' ? adminEvents
+    : events;
+
+  const filteredEvents = tabEvents.filter((event) => {
     if (showOnlyVerification) {
       if (!isVerificationEvent(event)) return false;
       if (verificationSubFilter !== 'all' && getVerificationType(event) !== verificationSubFilter) return false;
@@ -252,16 +272,44 @@ export function EventsTab({
   return (
     <Card>
       <CardHeader>
+        {/* Summary box */}
+        {events.length > 0 && (
+          <div className="mb-3 rounded-lg bg-muted/50 px-4 py-3 text-sm">
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground">
+              <span><strong className="text-foreground">{events.length}</strong> eventi totali</span>
+              <span><strong className="text-foreground">{clinicalEvents.length}</strong> clinici</span>
+              {adminEvents.length > 0 && <span><strong className="text-foreground">{adminEvents.length}</strong> documenti/spese</span>}
+              {surgeryCount > 0 && <span><strong className="text-foreground">{surgeryCount}</strong> interventi</span>}
+              {diagnosisCount > 0 && <span><strong className="text-foreground">{diagnosisCount}</strong> diagnosi</span>}
+              {dateRange && <span>Periodo: <strong className="text-foreground">{formatDate(dateRange.from)} — {formatDate(dateRange.to)}</strong></span>}
+              {verificationEvents.length > 0 && <span className="text-yellow-600"><strong>{verificationEvents.length}</strong> da verificare</span>}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Eventi Clinici</CardTitle>
-            <CardDescription>
-              {filteredEvents.length < events.length
-                ? `${filteredEvents.length} di ${events.length} eventi`
-                : `${events.length} eventi estratti`}
-              {verificationEvents.length > 0 && (
-                <span className="text-yellow-600"> ({verificationEvents.length} da verificare)</span>
+            {/* Clinical / Admin / All tabs */}
+            <div className="flex items-center gap-1 mb-1">
+              <button type="button" onClick={() => { setEventViewTab('clinical'); setEventTypeFilter(null); setShowOnlyVerification(false); }}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${eventViewTab === 'clinical' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                Cronistoria ({clinicalEvents.length})
+              </button>
+              {adminEvents.length > 0 && (
+                <button type="button" onClick={() => { setEventViewTab('admin'); setEventTypeFilter(null); setShowOnlyVerification(false); }}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${eventViewTab === 'admin' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                  Documenti ({adminEvents.length})
+                </button>
               )}
+              <button type="button" onClick={() => { setEventViewTab('all'); setEventTypeFilter(null); setShowOnlyVerification(false); }}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${eventViewTab === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                Tutti ({events.length})
+              </button>
+            </div>
+            <CardDescription>
+              {filteredEvents.length < tabEvents.length
+                ? `${filteredEvents.length} di ${tabEvents.length} eventi`
+                : `${tabEvents.length} eventi`}
               {displayNormal.length + displayVerification.length > visibleCount && (
                 <span className="text-muted-foreground"> — mostrando {Math.min(visibleCount, displayNormal.length + displayVerification.length)}</span>
               )}
