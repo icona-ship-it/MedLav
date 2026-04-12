@@ -83,8 +83,13 @@ function markDiscrepancies(
       ? `${event.eventDate}|${event.eventType}`
       : `__NO_DATE_${i}|${event.eventType}`;
     const peers = groups.get(key) ?? [];
-    const discrepancy = findDiscrepancyInGroup(event, i, events, peers);
-    return { ...event, discrepancyNote: discrepancy };
+    const { discrepancy, confidenceCap, requiresVerification } = findDiscrepancyInGroup(event, i, events, peers);
+    return {
+      ...event,
+      discrepancyNote: discrepancy,
+      ...(confidenceCap !== undefined ? { confidence: Math.min(event.confidence, confidenceCap) } : {}),
+      ...(requiresVerification ? { requiresVerification: true } : {}),
+    };
   });
 }
 
@@ -92,22 +97,32 @@ function markDiscrepancies(
  * Check if an event has a potential duplicate within its date|type group
  * from a different document, with conflicting information.
  */
+interface DiscrepancyResult {
+  discrepancy: string | null;
+  confidenceCap?: number;
+  requiresVerification: boolean;
+}
+
 function findDiscrepancyInGroup(
   event: ExtractedEvent & { documentId: string },
   currentIndex: number,
   allEvents: Array<ExtractedEvent & { documentId: string }>,
   peerIndices: number[],
-): string | null {
+): DiscrepancyResult {
+  const NONE: DiscrepancyResult = { discrepancy: null, requiresVerification: false };
+
   // Early exit: no peers or only self → no discrepancy possible
-  if (peerIndices.length <= 1) return null;
+  if (peerIndices.length <= 1) return NONE;
 
   // Early exit: all peers from the same document → no cross-doc discrepancy
   const hasMultipleDocs = peerIndices.some(
     (j) => j !== currentIndex && allEvents[j].documentId !== event.documentId,
   );
-  if (!hasMultipleDocs) return null;
+  if (!hasMultipleDocs) return NONE;
 
   const discrepancies: string[] = [];
+  let confidenceCap: number | undefined;
+  let requiresVerification = false;
 
   for (const j of peerIndices) {
     if (j === currentIndex) continue;
@@ -124,16 +139,15 @@ function findDiscrepancyInGroup(
         discrepancies.push(
           `⚠ DIAGNOSI DISCORDANTE — richiede verifica del perito: Fonte 1 (${event.sourceType}): "${event.diagnosis}" vs Fonte 2 (${other.sourceType}): "${other.diagnosis}". Verificare sul documento originale quale diagnosi sia corretta.`,
         );
-        // Lower confidence and flag for expert review
-        event.confidence = Math.min(event.confidence, 30);
-        event.requiresVerification = true;
+        confidenceCap = 30;
+        requiresVerification = true;
       }
 
       if (event.doctor && other.doctor && event.doctor !== other.doctor) {
         discrepancies.push(
           `⚠ MEDICO DISCORDANTE — richiede verifica: "${event.doctor}" vs "${other.doctor}". Verificare sul documento originale.`,
         );
-        event.requiresVerification = true;
+        requiresVerification = true;
       }
 
       // Mark as cross-referenced even without discrepancy
@@ -145,7 +159,11 @@ function findDiscrepancyInGroup(
     }
   }
 
-  return discrepancies.length > 0 ? discrepancies.join('; ') : null;
+  return {
+    discrepancy: discrepancies.length > 0 ? discrepancies.join('; ') : null,
+    confidenceCap,
+    requiresVerification,
+  };
 }
 
 /**

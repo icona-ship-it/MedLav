@@ -52,7 +52,7 @@ const SENTINEL_PATTERNS = [
   /Data non documentata/,
 ];
 
-const MIN_WORD_COUNT = 200;
+const MIN_WORD_COUNT = 500;
 
 /** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
@@ -110,9 +110,32 @@ export function validateReport(
     }
   }
 
-  // 5. Event coverage: no longer checked via [Ev.N] references (removed from report format).
-  // Reports now cite documents by type, author and date instead of numbered event refs.
-  const eventCoverage = 100; // Always passes — coverage enforced by prompt directives
+  // 5. Event coverage: check that a meaningful % of event dates appear in the report text.
+  // Reports cite by date (not [Ev.N]), so we check date string presence as a proxy.
+  let eventCoverage = 100;
+  if (context?.events && context.events.length > 0) {
+    const eventsWithDate = context.events.filter((e) => e.eventDate && e.eventDate !== '1900-01-01');
+    if (eventsWithDate.length > 0) {
+      const synthesisLower = synthesis.toLowerCase();
+      const coveredCount = eventsWithDate.filter((e) => {
+        // Check if the event date appears in DD/MM/YYYY or DD.MM.YYYY or YYYY-MM-DD format
+        const d = e.eventDate;
+        const parts = d.split('-');
+        if (parts.length !== 3) return true; // skip malformed dates
+        const ddmmyyyy = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        const ddmmyyyyDot = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        return synthesisLower.includes(d) || synthesisLower.includes(ddmmyyyy) || synthesisLower.includes(ddmmyyyyDot);
+      }).length;
+      eventCoverage = Math.round((coveredCount / eventsWithDate.length) * 100);
+      if (eventCoverage < 30) {
+        issues.push({
+          type: 'low_event_coverage',
+          severity: 'warning',
+          message: `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}). Possibile perdita di dati.`,
+        });
+      }
+    }
+  }
 
   // 6-9. Context-dependent checks (backward-compatible: only run when context provided)
   if (context) {

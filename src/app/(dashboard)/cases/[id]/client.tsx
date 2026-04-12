@@ -169,6 +169,28 @@ export function CaseDetailClient({
     (caseData.perizia_metadata as Record<string, unknown> | null)?.generationProgress as GenerationProgress | undefined
   ) ?? null;
 
+  // Extract pipeline warnings from perizia_metadata (saved at finalize when any step had issues)
+  const pipelineWarnings = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.pipelineWarnings as Array<{
+      step: string;
+      severity: 'warning' | 'critical';
+      message: string;
+      failedCount?: number;
+      totalCount?: number;
+      failedItems?: string[];
+    }> | undefined
+  ) ?? [];
+
+  // Extract processing progress from perizia_metadata (updated per pipeline phase)
+  const processingProgress = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.processingProgress as {
+      phase: string;
+      ocrCompleted?: number;
+      totalDocs?: number;
+      totalChunks?: number;
+    } | undefined
+  ) ?? null;
+
   // Extract PubMed references from perizia_metadata (saved after PubMed search step)
   const pubmedReferences = (
     (caseData.perizia_metadata as Record<string, unknown> | null)?.pubmedReferences as Array<{ query: string; category: 'diagnosis' | 'treatment' | 'causal_nexus'; articles: Array<{ pmid: string; title: string; authors: string; journal: string; year: string; doi?: string }> }> | undefined
@@ -239,16 +261,25 @@ export function CaseDetailClient({
                 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
                 : step.number === 2
                 ? (hasProcessingDocs || processingStage === 'elaborazione'
-                    ? 'In elaborazione...'
-                    : processingStage === 'errore' ? 'Errore' : 'Pronto')
-                : hasEvents ? `${events.length} eventi estratti` : 'In attesa')
+                    ? (processingProgress?.phase === 'extraction'
+                        ? `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`
+                        : processingProgress?.phase === 'ocr'
+                          ? 'Lettura documenti...'
+                          : 'In elaborazione...')
+                    : processingStage === 'errore' ? 'Errore'
+                    : processingStage === 'completato' ? 'Completata' : 'Pronto')
+                : hasEvents ? `${events.length} eventi estratti` : processingStage === 'completato' ? 'Nessun evento trovato' : 'In attesa')
             : (step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
             : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
-                ? 'In elaborazione...'
+                ? (processingProgress?.phase === 'extraction'
+                    ? `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`
+                    : processingProgress?.phase === 'ocr'
+                      ? 'Lettura documenti...'
+                      : 'In elaborazione...')
                 : processingStage === 'errore' ? 'Errore'
-                : 'Pronto')
+                : processingStage === 'completato' ? 'Completata' : 'Pronto')
             : processingStage === 'generazione_report'
                 ? (generationProgress
                     ? `Sezione ${generationProgress.currentSection}/${generationProgress.totalSections}`
@@ -354,6 +385,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pubmedReferences={[]}
+                pipelineWarnings={pipelineWarnings}
               />
             </div>
           )}
@@ -405,6 +437,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pubmedReferences={[]}
+                pipelineWarnings={pipelineWarnings}
               />
             </div>
           )}
@@ -469,6 +502,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pubmedReferences={pubmedReferences}
+                pipelineWarnings={pipelineWarnings}
               />
             </div>
           )}

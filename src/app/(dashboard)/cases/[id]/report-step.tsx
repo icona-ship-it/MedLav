@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download } from 'lucide-react';
+import { Loader2, Download, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -49,6 +49,15 @@ export interface GenerationProgress {
   currentSectionTitle: string;
 }
 
+export interface PipelineWarningItem {
+  step: string;
+  severity: 'warning' | 'critical';
+  message: string;
+  failedCount?: number;
+  totalCount?: number;
+  failedItems?: string[];
+}
+
 interface ReportStepProps {
   caseId: string;
   report: ReportRow | null;
@@ -62,6 +71,7 @@ interface ReportStepProps {
   onNavigateToStep: (step: number) => void;
   generationProgress?: GenerationProgress | null;
   pubmedReferences?: PubMedReference[];
+  pipelineWarnings?: PipelineWarningItem[];
 }
 
 // --- Component ---
@@ -79,6 +89,7 @@ export function ReportStep({
   onNavigateToStep,
   generationProgress,
   pubmedReferences = [],
+  pipelineWarnings = [],
 }: ReportStepProps) {
   const router = useRouter();
 
@@ -191,6 +202,11 @@ export function ReportStep({
     if (events.length > 0 && processingStage === 'completato') {
       return (
         <div className="flex flex-col">
+          {/* Warning banner for pipeline issues */}
+          {pipelineWarnings.length > 0 && (
+            <PipelineWarningsBanner warnings={pipelineWarnings} />
+          )}
+
           {/* Export toolbar for timeline data */}
           <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3 mb-4">
             <div className="flex items-center justify-between gap-2">
@@ -249,6 +265,24 @@ export function ReportStep({
       );
     }
 
+    // Processing completed but no events found (e.g. pipeline truncated by step limit)
+    if (processingStage === 'completato') {
+      return (
+        <Card className="border-orange-300/50">
+          <CardContent className="pt-6">
+            <div className="py-8 text-center space-y-2">
+              <p className="text-sm font-medium text-orange-700 dark:text-orange-400">
+                Elaborazione completata, ma nessun evento trovato.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Prova a rielaborare il caso. Se il problema persiste, i documenti potrebbero non contenere dati clinici estraibili.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card>
         <CardContent className="pt-6">
@@ -263,6 +297,11 @@ export function ReportStep({
   // --- Report available ---
   return (
     <div className="flex flex-col">
+      {/* Warning banner for pipeline issues */}
+      {pipelineWarnings.length > 0 && (
+        <PipelineWarningsBanner warnings={pipelineWarnings} />
+      )}
+
       {/* Action bar - toolbar at top for immediate visibility */}
       <ReportActionBar
         caseId={caseId}
@@ -396,6 +435,55 @@ export function ReportStep({
         report={report}
         onSaved={() => router.refresh()}
       />
+    </div>
+  );
+}
+
+// --- Pipeline Warnings Banner ---
+
+function PipelineWarningsBanner({ warnings }: { warnings: PipelineWarningItem[] }) {
+  const hasCritical = warnings.some((w) => w.severity === 'critical');
+  const borderColor = hasCritical
+    ? 'border-red-300 dark:border-red-800'
+    : 'border-orange-300 dark:border-orange-800';
+  const bgColor = hasCritical
+    ? 'bg-red-50 dark:bg-red-950/20'
+    : 'bg-orange-50 dark:bg-orange-950/20';
+  const iconColor = hasCritical
+    ? 'text-red-600 dark:text-red-400'
+    : 'text-orange-600 dark:text-orange-400';
+  const titleColor = hasCritical
+    ? 'text-red-800 dark:text-red-300'
+    : 'text-orange-800 dark:text-orange-300';
+
+  return (
+    <div className={`mb-4 rounded-lg border ${borderColor} ${bgColor} px-4 py-3`}>
+      <div className="flex gap-3">
+        <AlertTriangle className={`h-5 w-5 ${iconColor} shrink-0 mt-0.5`} />
+        <div className="space-y-2">
+          <p className={`text-sm font-medium ${titleColor}`}>
+            {warnings.length === 1 ? 'Problema durante l\'elaborazione' : `${warnings.length} problemi durante l'elaborazione`}
+          </p>
+          <ul className="space-y-1">
+            {warnings.map((w, i) => (
+              <li key={i} className="text-xs text-muted-foreground">
+                <span className={w.severity === 'critical' ? 'font-medium text-red-700 dark:text-red-400' : ''}>
+                  {w.message}
+                </span>
+                {w.failedItems && w.failedItems.length > 0 && (
+                  <span className="text-muted-foreground/70">
+                    {' '}({w.failedItems.slice(0, 3).join(', ')}
+                    {w.failedItems.length > 3 && ` +${w.failedItems.length - 3}`})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Il risultato potrebbe essere incompleto. Prova a rielaborare il caso.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

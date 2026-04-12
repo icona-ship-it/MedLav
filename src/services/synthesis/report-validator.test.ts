@@ -5,7 +5,7 @@ import type { ReportValidationContext, ReportIssue } from './report-validator';
 function buildFullReport(overrides?: { events?: number }): string {
   const eventCount = overrides?.events ?? 5;
   const eventLines = Array.from({ length: eventCount }, (_, i) =>
-    `In data 15.0${i + 1}.2024 il paziente veniva sottoposto a visita presso la struttura ospedaliera ove veniva riscontrata una condizione clinica meritevole di approfondimento diagnostico e terapeutico come da documentazione in atti.`,
+    `In data 15.0${i + 1}.2024 il paziente veniva sottoposto a visita specialistica ortopedica presso la struttura ospedaliera ove veniva riscontrata una condizione clinica meritevole di approfondimento diagnostico e terapeutico specifico come da documentazione medica in atti. Il sanitario procedeva alla valutazione clinica completa con esame obiettivo articolare e funzionale, rilevando limitazione della mobilita articolare e dolore alla palpazione della regione interessata dalla lesione traumatica pregressa.`,
   ).join('\n');
 
   return `## Dati della Documentazione Sanitaria
@@ -13,14 +13,23 @@ ${eventLines}
 
 ## Epicrisi
 Il paziente M.R. si presentava presso il Pronto Soccorso del Presidio Ospedaliero per dolore al ginocchio destro
-insorto a seguito di trauma contusivo. La documentazione analizzata comprende referti specialistici ortopedici,
-esami strumentali di imaging, cartella clinica del ricovero ordinario e lettere di dimissione ospedaliera.
-Si procede alla ricostruzione cronologica della vicenda clinica e alla valutazione medico-legale del caso.
+insorto a seguito di trauma contusivo occorso in data riferita. La documentazione analizzata comprende referti
+specialistici ortopedici, esami strumentali di imaging avanzato, cartella clinica del ricovero ordinario e lettere
+di dimissione ospedaliera con indicazioni terapeutiche e programma riabilitativo successivo.
+Si procede alla ricostruzione cronologica dettagliata della vicenda clinica e alla valutazione medico-legale
+completa del caso in esame, con particolare riferimento al nesso di causalita tra l'evento traumatico e le
+conseguenze cliniche documentate nella documentazione sanitaria acquisita agli atti del presente procedimento.
+Il decorso clinico documentato evidenzia un percorso terapeutico articolato che ha comportato multiple visite
+specialistiche e accertamenti diagnostici strumentali al fine di definire il quadro clinico complessivo.
 
 ## Conclusioni
-Alla luce di quanto sopra esposto, dalla documentazione in atti risultano i seguenti elementi rilevanti.
-I periodi di invalidita temporanea risultano congruenti con il decorso clinico documentato.
-Il danno biologico permanente e stimato nella misura del 15% secondo i criteri tabellari vigenti.`;
+Alla luce di quanto sopra esposto e sulla base della documentazione sanitaria esaminata, dalla disamina degli atti
+risultano i seguenti elementi rilevanti ai fini della valutazione medico-legale del caso in oggetto.
+I periodi di invalidita temporanea totale e parziale risultano congruenti con il decorso clinico documentato e
+con la tipologia delle lesioni riportate. Le risultanze degli accertamenti diagnostici strumentali confermano
+la presenza di esiti permanenti compatibili con il meccanismo lesivo riferito.
+Il danno biologico permanente e stimato nella misura del 15% secondo i criteri tabellari vigenti, tenuto conto
+degli esiti clinici documentati e della compromissione funzionale residua accertata in sede di ultimo controllo.`;
 }
 
 describe('validateReport', () => {

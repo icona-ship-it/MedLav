@@ -57,6 +57,8 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Scrivi in italiano
 - Usa intestazioni markdown (## per parti, ### per sotto-sezioni)
 - La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve essere COMPLETA — ogni evento fornito deve comparire
+- ABBREVIAZIONI MEDICHE: alla PRIMA occorrenza di ogni abbreviazione nel report, espandila con il significato tra parentesi. Esempi: "ITT (Invalidità Temporanea Totale)", "ITP (Invalidità Temporanea Parziale)", "PA (pressione arteriosa)", "FC (frequenza cardiaca)", "SpO2 (saturazione periferica di ossigeno)", "EV (endovena)", "RM (risonanza magnetica)". Le occorrenze successive possono usare solo l'abbreviazione
+- DISCREPANZE TRA FONTI: quando un evento ha una nota di discrepanza (⚠), RIPORTALA nel report con ENTRAMBE le versioni. Il perito deve poter vedere le informazioni contrastanti per decidere autonomamente
 - Scrivi SEMPRE in prosa discorsiva, MAI elenchi puntati per la narrazione clinica
 - Lo stile deve essere quello di una perizia depositabile in tribunale: formale, giuridico, con periodi complessi e subordinate
 - Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
@@ -657,9 +659,12 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     const doctor = e.doctor ? `\n   Medico: ${e.doctor}` : '';
     const facility = e.facility ? `\n   Struttura: ${e.facility}` : '';
     const confidenceQualifier = formatConfidenceQualifier(e.confidence);
+    const discrepancy = e.discrepancyNote && e.discrepancyNote.includes('⚠')
+      ? `\n   ${e.discrepancyNote}`
+      : '';
     return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}${confidenceQualifier}
    TITOLO: ${e.title}
-   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}`;
+   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}${discrepancy}`;
   }).join('\n\n');
 }
 

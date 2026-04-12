@@ -380,7 +380,7 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
     if (!donor) return event;
 
     inferredCount++;
-    const note = `[AUTO] Data INFERITA (non presente nel documento originale) — ereditata da evento nella stessa pagina: "${donor.title}". Verificare sul documento originale.`;
+    const note = `[AUTO] Data INFERITA (non presente nel documento originale) — ereditata da evento "${donor.title}" del ${donor.eventDate} nella stessa pagina. Verificare sul documento originale.`;
     return {
       ...event,
       eventDate: donor.eventDate,
@@ -625,12 +625,15 @@ function validateExtractedNamesAgainstOcr(
     let newRequiresVerification = event.requiresVerification;
     let notes = event.reliabilityNotes;
 
-    // Validate doctor name: must appear in OCR text (case-insensitive)
+    // Validate doctor name: must appear in OCR text (case-insensitive, word boundary)
     if (newDoctor && newDoctor.length >= 3) {
       const doctorLower = newDoctor.toLowerCase();
-      // Check if at least the surname (last word, >= 3 chars) appears in OCR
+      // Check if at least the surname (last word, >= 3 chars) appears as whole word in OCR
       const parts = doctorLower.split(/\s+/).filter((p) => p.length >= 3);
-      const surnameFound = parts.some((part) => ocrLower.includes(part));
+      const surnameFound = parts.some((part) => {
+        const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`).test(ocrLower);
+      });
       if (!surnameFound) {
         newDoctor = null;
         newConfidence = Math.min(newConfidence, 50);
@@ -642,12 +645,15 @@ function validateExtractedNamesAgainstOcr(
       }
     }
 
-    // Validate facility name: must appear in OCR text (case-insensitive)
+    // Validate facility name: must appear in OCR text (case-insensitive, word boundary)
     if (newFacility && newFacility.length >= 4) {
       const facilityLower = newFacility.toLowerCase();
-      // Check if the main keyword (>= 4 chars) appears in OCR
+      // Check if the main keyword (>= 4 chars) appears as whole word in OCR
       const parts = facilityLower.split(/\s+/).filter((p) => p.length >= 4);
-      const facilityFound = parts.some((part) => ocrLower.includes(part));
+      const facilityFound = parts.some((part) => {
+        const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`).test(ocrLower);
+      });
       if (!facilityFound) {
         newFacility = null;
         newConfidence = Math.min(newConfidence, 50);

@@ -599,15 +599,17 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
     const imgMatch = line.match(/^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)\s*$/);
     if (imgMatch) {
       const alt = imgMatch[1];
+      const mimeType = imgMatch[2];
       const base64Data = imgMatch[3];
       try {
         const imageBuffer = Buffer.from(base64Data, 'base64');
+        const docxImageType = mimeType === 'image/jpeg' || mimeType === 'image/jpg' ? 'jpg' : 'png';
         result.push(new Paragraph({
           children: [
             new ImageRun({
               data: imageBuffer,
               transformation: { width: 450, height: 350 },
-              type: 'png',
+              type: docxImageType,
             }),
           ],
           alignment: AlignmentType.CENTER,
