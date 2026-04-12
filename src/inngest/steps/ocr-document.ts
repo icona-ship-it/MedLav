@@ -110,6 +110,7 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
     });
 
     // Save OCR pages to database
+    let savedPageCount = 0;
     if (result.pages.length > 0) {
       const pageRows = result.pages.map((p) => ({
         document_id: doc.id,
@@ -121,7 +122,20 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       }));
 
       // Upsert to handle Inngest step retries — avoids duplicate pages
-      await supabase.from('pages').upsert(pageRows, { onConflict: 'document_id,page_number' });
+      const { error: upsertError } = await supabase.from('pages').upsert(pageRows, { onConflict: 'document_id,page_number' });
+      if (upsertError) {
+        throw new Error(`Pages upsert failed for doc ${doc.id}: ${upsertError.message}`);
+      }
+
+      // Verify pages were actually saved (belt-and-suspenders)
+      const { count } = await supabase
+        .from('pages')
+        .select('*', { count: 'exact', head: true })
+        .eq('document_id', doc.id);
+      savedPageCount = count ?? 0;
+      if (savedPageCount === 0) {
+        throw new Error(`Pages upsert returned no error but 0 pages found in DB for doc ${doc.id} — possible silent failure`);
+      }
 
       // Upload extracted images to Supabase Storage and update pages.image_path
       if (result.images.length > 0) {
@@ -131,17 +145,17 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
 
     await supabase
       .from('documents')
-      .update({ page_count: result.pageCount, updated_at: new Date().toISOString() })
+      .update({ page_count: savedPageCount || result.pageCount, updated_at: new Date().toISOString() })
       .eq('id', doc.id);
 
-    logger.info('pipeline', ` Step 2: OCR completed for doc ${doc.id} - ${result.pageCount} pages in ${Date.now() - ocrStartMs}ms`);
+    logger.info('pipeline', ` Step 2: OCR completed for doc ${doc.id} - ${savedPageCount} pages saved (${result.pageCount} from API) in ${Date.now() - ocrStartMs}ms`);
 
     return {
       documentId: doc.id,
       fileName: doc.fileName,
       documentType: doc.documentType,
-      fullText: result.fullText,
-      pageCount: result.pageCount,
+      fullText: '', // OCR text is stored in pages table — empty here to minimize Inngest step payload
+      pageCount: savedPageCount || result.pageCount,
       averageConfidence: result.averageConfidence,
       ocrPages: result.ocrPages ?? result.pageCount,
     };

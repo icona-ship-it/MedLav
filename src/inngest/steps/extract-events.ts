@@ -207,20 +207,33 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       .order('page_number', { ascending: true });
 
     if (!pages || pages.length === 0) {
-      // Bug #2: Pages may not be committed yet — retry once after 2s
-      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: no pages found in DB for doc ${ocrResult.documentId} range ${range.start}-${range.end}, retrying after 2s`);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const { data: retryPages } = await supabase
-        .from('pages')
-        .select('page_number, ocr_text')
-        .eq('document_id', ocrResult.documentId)
-        .gte('page_number', range.start)
-        .lte('page_number', range.end)
-        .order('page_number', { ascending: true });
-      if (!retryPages || retryPages.length === 0) {
-        throw new Error(`Pages not found for doc ${ocrResult.documentId} range ${range.start}-${range.end} after retry — will be retried by Inngest`);
+      // Pages may not be visible yet due to replication lag — retry with backoff
+      for (const delayMs of [3000, 5000]) {
+        logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: no pages in DB for doc ${ocrResult.documentId} range ${range.start}-${range.end}, retrying after ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const { data: retryPages } = await supabase
+          .from('pages')
+          .select('page_number, ocr_text')
+          .eq('document_id', ocrResult.documentId)
+          .gte('page_number', range.start)
+          .lte('page_number', range.end)
+          .order('page_number', { ascending: true });
+        if (retryPages && retryPages.length > 0) {
+          pages = retryPages;
+          break;
+        }
       }
-      pages = retryPages;
+      if (!pages || pages.length === 0) {
+        // Check if ANY pages exist for this document (distinguish total absence from range issue)
+        const { count } = await supabase
+          .from('pages')
+          .select('*', { count: 'exact', head: true })
+          .eq('document_id', ocrResult.documentId);
+        throw new Error(
+          `Pages not found for doc ${ocrResult.documentId} range ${range.start}-${range.end} after 2 retries. ` +
+          `Total pages in DB for this doc: ${count ?? 0}. OCR may have failed to save pages — will be retried by Inngest`,
+        );
+      }
     }
 
     // Bug #10: Filter out pages with empty/null OCR text before sending to Mistral
