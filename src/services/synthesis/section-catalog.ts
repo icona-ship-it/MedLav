@@ -146,6 +146,7 @@ Regole:
 - Scrivi in PROSA DISCORSIVA, MAI elenchi puntati per la narrazione clinica
 - Se sono disponibili immagini diagnostiche, inseriscile INLINE subito dopo la citazione pertinente
 - NON omettere NESSUN evento
+- VERIFICA COMPLETEZZA: conta il numero di documenti OCR ricevuti e assicurati che OGNI documento abbia un blocco corrispondente nel tuo output. Se hai ricevuto 10 documenti, il tuo output deve avere 10 blocchi. Cartelle del Pronto Soccorso, referti radiologici, visite specialistiche — NESSUNO deve mancare.
 ${NO_EVN_RULE}`,
   },
   {

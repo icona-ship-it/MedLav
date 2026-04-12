@@ -196,7 +196,10 @@ export async function createCase(formData: FormData) {
           module_id: moduleIdValue,
           module_category: moduleCategoryValue,
           pipeline_mode: pipelineModeValue,
-        } : {}),
+        } : {
+          // Auto-derive pipeline_mode from case_type for legacy case creation (no module selected)
+          ...(caseType === 'analisi_spese_mediche' ? { pipeline_mode: 'expenses_only' } : {}),
+        }),
       })
       .select('id')
       .single();

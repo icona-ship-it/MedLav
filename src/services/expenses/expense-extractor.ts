@@ -39,6 +39,8 @@ export interface ExtractedExpenseItem {
   isJustified: null;
   /** Additional notes (e.g., "ticket SSN", "privato") */
   notes: string | null;
+  /** Brief interpretation linking expense to diagnosis (e.g., "Coerente con trattamento frattura radiale") */
+  interpretation: string | null;
 }
 
 export interface ExpenseExtractionResult {
@@ -61,6 +63,7 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 - Per gli scontrini farmacia: il codice a barre o codice prodotto spesso identifica il farmaco
 - Importi in formato italiano: 1.500,00 = millecinquecento euro
 - Il campo isJustified è SEMPRE null — la valutazione di congruità spetta al medico legale
+- Per ogni spesa, fornisci una breve "interpretation" che spieghi la correlazione con la diagnosi (se disponibile). Es: "Coerente con il trattamento conservativo della frattura radiale", "Terapia antidolorifica post-traumatica", "Esame di controllo post-operatorio"
 
 ## CATEGORIE
 - farmaci: farmaci, parafarmaci, dispositivi medici da farmacia
@@ -108,7 +111,8 @@ Rispondi con un oggetto JSON con questa struttura esatta:
       "facility": "nome struttura/farmacia o null",
       "linkedDiagnosis": "diagnosi correlata o null",
       "isJustified": null,
-      "notes": "note aggiuntive o null"
+      "notes": "note aggiuntive o null",
+      "interpretation": "breve correlazione con la diagnosi o null"
     }
   ]
 }`;
@@ -204,6 +208,7 @@ function parseExpenseResponse(raw: string): ExpenseExtractionResult {
       linkedDiagnosis: typeof item.linkedDiagnosis === 'string' ? item.linkedDiagnosis : null,
       isJustified: null, // Always null — medical expert decides
       notes: typeof item.notes === 'string' ? item.notes : null,
+      interpretation: typeof item.interpretation === 'string' ? item.interpretation : null,
     });
 
     if (amount !== null) {

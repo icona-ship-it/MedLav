@@ -159,12 +159,14 @@ export function buildSectionUserPrompt(params: {
       const filteredOcr = filterOcrForSection(spec, documentsOcrText);
       if (filteredOcr.length > 0) {
         let ocrText = formatDocumentsOcrForPrompt(filteredOcr);
-        // Cap OCR text to prevent exceeding Mistral's ~128K token context window
-        // (~384K chars). Reserve 80K chars for OCR, rest for system prompt + events + other data.
-        const MAX_OCR_CHARS_PER_SECTION = 80_000;
+        // Cap OCR text to prevent exceeding Mistral's ~128K token context window (~384K chars).
+        // System prompt + events + other data use ~30-50K chars, leaving ~300K for OCR.
+        // For documentazione_sanitaria (the most important section), use higher cap to avoid omitting documents.
+        const MAX_OCR_CHARS_PER_SECTION = spec.id === 'documentazione_sanitaria' ? 300_000 : 150_000;
         if (ocrText && ocrText.length > MAX_OCR_CHARS_PER_SECTION) {
+          const originalLength = ocrText.length;
           ocrText = ocrText.slice(0, MAX_OCR_CHARS_PER_SECTION) + '\n\n[... testo OCR troncato per limiti di contesto. I documenti successivi non sono inclusi in questa sezione.]';
-          logger.warn('section-generator', `OCR text truncated to ${MAX_OCR_CHARS_PER_SECTION} chars for section "${spec.id}" (was ${ocrText.length})`);
+          logger.warn('section-generator', `OCR text truncated to ${MAX_OCR_CHARS_PER_SECTION} chars for section "${spec.id}" (was ${originalLength})`);
         }
         if (ocrText) parts.push(ocrText);
       }

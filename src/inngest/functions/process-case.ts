@@ -295,7 +295,10 @@ export const processCase = inngest.createFunction(
       };
       return {
         updatedMetadata: metadata,
-        pipelineMode: ((caseRow as Record<string, unknown>).pipeline_mode ?? 'full') as PipelineMode,
+        pipelineMode: (
+          (caseRow as Record<string, unknown>).pipeline_mode
+          ?? (caseRow.case_type === 'analisi_spese_mediche' ? 'expenses_only' : 'full')
+        ) as PipelineMode,
         refreshedTypes: typeMap,
       };
     });

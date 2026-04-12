@@ -111,6 +111,7 @@ export function ExpenseTable({ items, totalAmount, caseId }: ExpenseTableProps) 
               <th className="px-3 py-2 text-left font-medium">Categoria</th>
               <th className="px-3 py-2 text-left font-medium">Diagnosi</th>
               <th className="px-3 py-2 text-left font-medium">Note</th>
+              <th className="px-3 py-2 text-left font-medium">Interpretazione</th>
             </tr>
           </thead>
           <tbody>
@@ -139,11 +140,14 @@ export function ExpenseTable({ items, totalAmount, caseId }: ExpenseTableProps) 
                 <td className="px-3 py-2 text-muted-foreground text-xs max-w-[150px]">
                   {item.notes ?? '—'}
                 </td>
+                <td className="px-3 py-2 text-muted-foreground text-xs max-w-[250px]">
+                  {item.interpretation ?? '—'}
+                </td>
               </tr>
             ))}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                   Nessuna voce di spesa trovata.
                 </td>
               </tr>

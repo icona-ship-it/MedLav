@@ -114,6 +114,7 @@ const EXPENSE_CSV_HEADERS = [
   'Struttura',
   'Diagnosi Correlata',
   'Note',
+  'Interpretazione',
 ];
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
@@ -177,6 +178,7 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
       escapeCsvField(String(item.facility ?? '')),
       escapeCsvField(String(item.linkedDiagnosis ?? '')),
       escapeCsvField(String(item.notes ?? '')),
+      escapeCsvField(String(item.interpretation ?? '')),
     ];
     rows.push(row.join(SEP));
   }
@@ -189,7 +191,7 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
       '',
       'TOTALE',
       totalAmount.toFixed(2).replace('.', ','),
-      '', '', '', '', '', '',
+      '', '', '', '', '', '', '',
     ];
     rows.push(totalRow.join(SEP));
   }
