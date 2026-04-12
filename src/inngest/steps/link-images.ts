@@ -49,13 +49,13 @@ export async function linkImagesToEventsStep(caseId: string): Promise<void> {
     return;
   }
 
-  // Delete old event_images for this case's events
-  const eventIds = eventsRaw.map((e) => e.id);
-  if (eventIds.length > 0) {
+  // Delete old event_images for this case's events (batched to avoid URL length limit)
+  const eventIds = eventsRaw.map((e) => e.id as string);
+  for (let i = 0; i < eventIds.length; i += 200) {
     await supabase
       .from('event_images')
       .delete()
-      .in('event_id', eventIds);
+      .in('event_id', eventIds.slice(i, i + 200));
   }
 
   // Build links

@@ -106,6 +106,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Guard: reject if pipeline is already running (prevents double-click / race condition)
+    const currentStage = caseData.processing_stage as string;
+    if (currentStage === 'elaborazione' || currentStage === 'generazione_report') {
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione già in corso. Attendi il completamento o cancella prima di rielaborare.' },
+        { status: 409 },
+      );
+    }
+
     // Check that there are documents to process — BEFORE cleanup to avoid data loss
     const { count: docCount, error: countError } = await supabase
       .from('documents')
@@ -136,22 +145,35 @@ export async function POST(request: NextRequest) {
       logger.info('processing/start', `Re-processing case ${caseId}: cancelling previous pipeline + cleaning all data`);
       // Cancel any running pipeline first to prevent race conditions
       await inngest.send({ name: 'case/pipeline.cancelled', data: { caseId } });
-      await Promise.all([
+      const cleanupResults = await Promise.allSettled([
         supabase.from('events').delete().eq('case_id', caseId),
         supabase.from('anomalies').delete().eq('case_id', caseId),
         supabase.from('missing_documents').delete().eq('case_id', caseId),
         supabase.from('reports').delete().eq('case_id', caseId),
         supabase.from('event_images').delete().eq('case_id', caseId),
       ]);
+      const cleanupFailures = cleanupResults.filter((r) =>
+        r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error),
+      );
+      if (cleanupFailures.length > 0) {
+        logger.error('processing/start', `Re-processing cleanup: ${cleanupFailures.length}/5 deletes failed`);
+        return NextResponse.json(
+          { success: false, error: 'Errore durante la pulizia dei dati precedenti. Riprova.' },
+          { status: 500 },
+        );
+      }
       // Delete OCR pages per document (fresh OCR on every run)
       const { data: docs } = await supabase
         .from('documents')
         .select('id')
         .eq('case_id', caseId);
       if (docs && docs.length > 0) {
-        await Promise.all(
-          docs.map((d) => supabase.from('pages').delete().eq('document_id', d.id)),
-        );
+        for (const d of docs) {
+          const { error: pageDelError } = await supabase.from('pages').delete().eq('document_id', d.id);
+          if (pageDelError) {
+            logger.error('processing/start', `Failed to delete pages for doc ${d.id}: ${pageDelError.message}`);
+          }
+        }
       }
     }
 

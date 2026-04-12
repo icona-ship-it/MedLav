@@ -386,19 +386,29 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
 
   if (caseIds.length > 0) {
     // Delete in dependency order
+    // Delete in batches to avoid PostgREST URL length limit (~8KB)
+    const BATCH = 200;
     const { data: eventIds } = await admin.from('events').select('id').in('case_id', caseIds);
     if (eventIds && eventIds.length > 0) {
-      await admin.from('event_images').delete().in('event_id', eventIds.map((e) => e.id));
+      const eIds = eventIds.map((e) => e.id as string);
+      for (let i = 0; i < eIds.length; i += BATCH) {
+        await admin.from('event_images').delete().in('event_id', eIds.slice(i, i + BATCH));
+      }
     }
-    await admin.from('events').delete().in('case_id', caseIds);
-    await admin.from('anomalies').delete().in('case_id', caseIds);
-    await admin.from('missing_documents').delete().in('case_id', caseIds);
-    await admin.from('reports').delete().in('case_id', caseIds);
+    for (let i = 0; i < caseIds.length; i += BATCH) {
+      const batch = caseIds.slice(i, i + BATCH);
+      await admin.from('events').delete().in('case_id', batch);
+      await admin.from('anomalies').delete().in('case_id', batch);
+      await admin.from('missing_documents').delete().in('case_id', batch);
+      await admin.from('reports').delete().in('case_id', batch);
+    }
 
     const { data: docs } = await admin.from('documents').select('id, storage_path').in('case_id', caseIds);
     if (docs && docs.length > 0) {
       const docIds = docs.map((d) => d.id as string);
-      await admin.from('pages').delete().in('document_id', docIds);
+      for (let i = 0; i < docIds.length; i += BATCH) {
+        await admin.from('pages').delete().in('document_id', docIds.slice(i, i + BATCH));
+      }
 
       // Remove document files from Storage
       const docStoragePaths = docs
@@ -425,8 +435,11 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
         }
       }
     }
-    await admin.from('documents').delete().in('case_id', caseIds);
-    await admin.from('cases').delete().in('id', caseIds);
+    for (let i = 0; i < caseIds.length; i += BATCH) {
+      const batch = caseIds.slice(i, i + BATCH);
+      await admin.from('documents').delete().in('case_id', batch);
+      await admin.from('cases').delete().in('id', batch);
+    }
   }
 
   // Remove signature image from Storage (if uploaded)
