@@ -3,9 +3,12 @@
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
-  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2,
+  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2, ZoomIn,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Dialog, DialogContent,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +80,7 @@ export function EventCard({
 }) {
   const [isPending, startTransition] = useTransition();
   const [isVerifying, setIsVerifying] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const handleQuickVerify = () => {
     setIsVerifying(true);
@@ -169,25 +173,36 @@ export function EventCard({
               </span>
               <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
               {event.requires_verification ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleQuickVerify(); }}
-                  className="inline-flex items-center"
-                  title="Clicca per segnare come verificato"
-                >
-                  {(!event.event_date || event.event_date === '' || event.date_precision === 'sconosciuta') ? (
-                    <Badge variant="outline" className="text-xs cursor-pointer border-yellow-400 text-yellow-700 dark:text-yellow-400 hover:bg-green-100 hover:text-green-800 transition-colors">
-                      {isVerifying ? '...' : 'Data incerta ✓'}
-                    </Badge>
-                  ) : (event.confidence as number) < 50 || ((event.reliability_notes ?? '') as string).toLowerCase().includes('ocr') ? (
-                    <Badge variant="outline" className="text-xs cursor-pointer border-orange-400 text-orange-700 dark:text-orange-400 hover:bg-green-100 hover:text-green-800 transition-colors">
-                      {isVerifying ? '...' : 'Dati incerti ✓'}
-                    </Badge>
-                  ) : (
-                    <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors">
-                      {isVerifying ? '...' : 'Da verificare ✓'}
-                    </Badge>
-                  )}
-                </button>
+                (() => {
+                  const isDateIssue = !event.event_date || event.event_date === '' || event.date_precision === 'sconosciuta';
+                  const isDataIssue = !isDateIssue && ((event.confidence as number) < 50 || ((event.reliability_notes ?? '') as string).toLowerCase().includes('ocr'));
+                  const label = isDateIssue ? 'Data incerta' : isDataIssue ? 'Dati incerti' : 'Da verificare';
+                  const tooltip = isDateIssue
+                    ? 'La data di questo evento è mancante o incerta. Clicca per confermare che hai verificato.'
+                    : isDataIssue
+                    ? 'I dati di questo evento potrebbero essere imprecisi (OCR/bassa confidenza). Clicca per confermare che hai verificato.'
+                    : 'Questo evento richiede la tua verifica. Clicca per confermare.';
+                  const colors = isDateIssue
+                    ? 'border-yellow-400 text-yellow-700 dark:text-yellow-400'
+                    : isDataIssue
+                    ? 'border-orange-400 text-orange-700 dark:text-orange-400'
+                    : 'border-amber-500 text-amber-700 dark:text-amber-400';
+                  return (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickVerify();
+                        toast.success(`"${event.title.slice(0, 40)}..." segnato come verificato`);
+                      }}
+                      className="inline-flex items-center"
+                      title={tooltip}
+                    >
+                      <Badge variant="outline" className={`text-xs cursor-pointer ${colors} hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors`}>
+                        {isVerifying ? '...' : label}
+                      </Badge>
+                    </button>
+                  );
+                })()
               ) : event.requires_verification === false && (
                 <Badge variant="success" className="text-xs">Verificato</Badge>
               )}
@@ -240,9 +255,9 @@ export function EventCard({
                   <button
                     key={url}
                     type="button"
-                    className="rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-                    onClick={() => onImageClick(url)}
-                    aria-label={`Visualizza immagine ${idx + 1}`}
+                    className="group relative rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                    onClick={() => setLightboxUrl(url)}
+                    aria-label={`Ingrandisci immagine ${idx + 1}`}
                   >
                     <Image
                       src={url}
@@ -252,9 +267,24 @@ export function EventCard({
                       className="h-20 w-20 object-cover"
                       unoptimized
                     />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+                      <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </button>
                 ))}
               </div>
+              {/* Image lightbox */}
+              <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
+                <DialogContent className="max-w-4xl max-h-[90vh] p-2">
+                  {lightboxUrl && (
+                    <img
+                      src={lightboxUrl}
+                      alt="Immagine ingrandita"
+                      className="w-full h-auto max-h-[85vh] object-contain rounded"
+                    />
+                  )}
+                </DialogContent>
+              </Dialog>
             </div>
           )}
         </div>
