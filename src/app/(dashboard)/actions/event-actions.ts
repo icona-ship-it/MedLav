@@ -337,11 +337,16 @@ export async function getCaseEventImages(caseId: string): Promise<Record<string,
 
   const eventIds = events.map((e) => e.id);
 
-  // Get event_images links
-  const { data: eventImagesRaw } = await supabase
-    .from('event_images')
-    .select('event_id, image_path')
-    .in('event_id', eventIds);
+  // Get event_images links (batched to avoid PostgREST URL limit with large cases)
+  const eventImagesRaw: Array<Record<string, unknown>> = [];
+  const IMG_BATCH = 200;
+  for (let i = 0; i < eventIds.length; i += IMG_BATCH) {
+    const { data } = await supabase
+      .from('event_images')
+      .select('event_id, image_path')
+      .in('event_id', eventIds.slice(i, i + IMG_BATCH));
+    if (data) eventImagesRaw.push(...data);
+  }
 
   const result: Record<string, string[]> = {};
 

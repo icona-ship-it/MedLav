@@ -6,6 +6,43 @@ import type { ExtractionResult, ConsolidationStepResult } from './types';
 import { logger } from '@/lib/logger';
 
 /**
+ * Re-read all consolidated events from DB for downstream pipeline steps.
+ * Called after consolidation step to avoid serializing large arrays through Inngest.
+ */
+export async function fetchAllEventsForCase(caseId: string): Promise<ConsolidatedEvent[]> {
+  const supabase = createAdminClient();
+  const { data: rows, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('case_id', caseId)
+    .eq('is_deleted', false)
+    .order('order_number', { ascending: true });
+
+  if (error) throw new Error(`Failed to fetch events for case ${caseId}: ${error.message}`);
+  if (!rows || rows.length === 0) return [];
+
+  return rows.map((e) => ({
+    orderNumber: e.order_number as number,
+    documentId: (e.document_id ?? '') as string,
+    discrepancyNote: (e.discrepancy_note ?? null) as string | null,
+    eventDate: e.event_date as string,
+    datePrecision: e.date_precision as ConsolidatedEvent['datePrecision'],
+    eventType: e.event_type as ConsolidatedEvent['eventType'],
+    title: e.title as string,
+    description: e.description as string,
+    sourceType: e.source_type as ConsolidatedEvent['sourceType'],
+    diagnosis: (e.diagnosis ?? null) as string | null,
+    doctor: (e.doctor ?? null) as string | null,
+    facility: (e.facility ?? null) as string | null,
+    confidence: e.confidence as number,
+    requiresVerification: e.requires_verification as boolean,
+    reliabilityNotes: (e.reliability_notes ?? null) as string | null,
+    sourceText: (e.source_text ?? '') as string,
+    sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
+  }));
+}
+
+/**
  * Step 4: Read all events from DB (already inserted by extraction steps),
  * renumber order, and prepare for analysis.
  */
@@ -97,5 +134,8 @@ export async function consolidateEventsStep(
     throw new Error('CRITICAL: extraction reported events but DB has 0. Insert likely failed silently.');
   }
   logger.info('pipeline', ` Step 4: ${allEvents.length} total events in DB`);
-  return { allEvents, newEventsCount: allEvents.length };
+  // Return only counts — NOT the full allEvents array.
+  // allEvents can be 25MB+ for large cases, exceeding Inngest's 4MB step output limit.
+  // Downstream steps re-read events from DB via fetchAllEventsForCase().
+  return { newEventsCount: allEvents.length, totalEventsCount: allEvents.length };
 }

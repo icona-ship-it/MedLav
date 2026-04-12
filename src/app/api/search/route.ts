@@ -104,14 +104,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 3. Search events across all user cases
-  const { data: eventsData } = await supabase
-    .from('events')
-    .select('id, case_id, title, description, diagnosis, event_date, event_type')
-    .in('case_id', caseIds)
-    .eq('is_deleted', false)
-    .or(`title.ilike.%${query}%,description.ilike.%${query}%,diagnosis.ilike.%${query}%`)
-    .limit(MAX_RESULTS_PER_TYPE);
+  // 3. Search events across all user cases (batched for large caseIds arrays)
+  const eventsData: Array<Record<string, unknown>> = [];
+  const SEARCH_BATCH = 200;
+  for (let i = 0; i < caseIds.length; i += SEARCH_BATCH) {
+    const { data } = await supabase
+      .from('events')
+      .select('id, case_id, title, description, diagnosis, event_date, event_type')
+      .in('case_id', caseIds.slice(i, i + SEARCH_BATCH))
+      .eq('is_deleted', false)
+      .or(`title.ilike.%${query}%,description.ilike.%${query}%,diagnosis.ilike.%${query}%`)
+      .limit(MAX_RESULTS_PER_TYPE);
+    if (data) eventsData.push(...data);
+  }
 
   for (const event of eventsData ?? []) {
     const caseInfo = caseMap.get(event.case_id as string);
@@ -130,12 +135,16 @@ export async function GET(request: NextRequest) {
   }
 
   // 4. Search reports (synthesis text)
-  const { data: reportsData } = await supabase
-    .from('reports')
-    .select('id, case_id, version, synthesis')
-    .in('case_id', caseIds)
-    .ilike('synthesis', `%${query}%`)
-    .limit(MAX_RESULTS_PER_TYPE);
+  const reportsData: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < caseIds.length; i += SEARCH_BATCH) {
+    const { data } = await supabase
+      .from('reports')
+      .select('id, case_id, version, synthesis')
+      .in('case_id', caseIds.slice(i, i + SEARCH_BATCH))
+      .ilike('synthesis', `%${query}%`)
+      .limit(MAX_RESULTS_PER_TYPE);
+    if (data) reportsData.push(...data);
+  }
 
   for (const report of reportsData ?? []) {
     const caseInfo = caseMap.get(report.case_id as string);
@@ -154,12 +163,16 @@ export async function GET(request: NextRequest) {
   }
 
   // 5. Search anomalies
-  const { data: anomaliesData } = await supabase
-    .from('anomalies')
-    .select('id, case_id, anomaly_type, description, suggestion')
-    .in('case_id', caseIds)
-    .or(`description.ilike.%${query}%,suggestion.ilike.%${query}%`)
-    .limit(MAX_RESULTS_PER_TYPE);
+  const anomaliesData: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < caseIds.length; i += SEARCH_BATCH) {
+    const { data } = await supabase
+      .from('anomalies')
+      .select('id, case_id, anomaly_type, description, suggestion')
+      .in('case_id', caseIds.slice(i, i + SEARCH_BATCH))
+      .or(`description.ilike.%${query}%,suggestion.ilike.%${query}%`)
+      .limit(MAX_RESULTS_PER_TYPE);
+    if (data) anomaliesData.push(...data);
+  }
 
   for (const anomaly of anomaliesData ?? []) {
     const caseInfo = caseMap.get(anomaly.case_id as string);

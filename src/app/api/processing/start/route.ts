@@ -115,6 +115,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // TOCTOU protection: atomically set stage to 'elaborazione' only if still in expected state
+    // This prevents two concurrent requests from both passing the above check
+    const allowedStages = ['idle', 'completato', 'errore'];
+    const { data: lockResult, error: lockError } = await supabase
+      .from('cases')
+      .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+      .eq('id', caseId)
+      .in('processing_stage', allowedStages)
+      .select('id');
+    if (lockError || !lockResult || lockResult.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione già in corso. Attendi il completamento.' },
+        { status: 409 },
+      );
+    }
+
     // Check that there are documents to process — BEFORE cleanup to avoid data loss
     const { count: docCount, error: countError } = await supabase
       .from('documents')
@@ -145,6 +161,9 @@ export async function POST(request: NextRequest) {
       logger.info('processing/start', `Re-processing case ${caseId}: cancelling previous pipeline + cleaning all data`);
       // Cancel any running pipeline first to prevent race conditions
       await inngest.send({ name: 'case/pipeline.cancelled', data: { caseId } });
+      // Wait for Inngest to propagate cancellation before cleanup
+      // Without this, in-flight steps can write data AFTER cleanup deletes it
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       const cleanupResults = await Promise.allSettled([
         supabase.from('events').delete().eq('case_id', caseId),
         supabase.from('anomalies').delete().eq('case_id', caseId),
@@ -187,13 +206,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('case_id', caseId);
 
-    await supabase
-      .from('cases')
-      .update({
-        processing_stage: 'elaborazione',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', caseId);
+    // processing_stage already set to 'elaborazione' by atomic lock above
 
     // Send Inngest event to trigger processing
     await inngest.send({

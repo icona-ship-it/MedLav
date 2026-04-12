@@ -8,7 +8,7 @@ import { chunkArray } from '@/lib/array-utils';
 // Classification removed from pipeline — handled by Document Organizer (Pro) or user manual selection
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
 import type { ChunkJob } from '../steps/extract-events';
-import { consolidateEventsStep } from '../steps/consolidate-events';
+import { consolidateEventsStep, fetchAllEventsForCase } from '../steps/consolidate-events';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
 import { detectAnomaliesStep, detectMissingDocumentsStep } from '../steps/detect-issues';
 import { resolveAnomaliesStep } from '../steps/resolve-anomalies';
@@ -21,6 +21,7 @@ import {
 } from '../steps/generate-report';
 import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
+import type { PipelineWarning } from '../steps/finalize';
 import { enrichWithFullEvidence } from '@/services/pubmed/evidence-enricher';
 import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
@@ -72,14 +73,24 @@ async function handlePipelineFailure(event: { data: unknown }) {
       .single();
     const existingMetadata = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
 
-    await supabase
-      .from('cases')
-      .update({
-        processing_stage: 'errore',
-        perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: new Date().toISOString() },
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', caseId);
+    // Mark case as 'errore' — retry once if DB write fails (prevents stuck 'elaborazione' state)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { error: updateError } = await supabase
+        .from('cases')
+        .update({
+          processing_stage: 'errore',
+          perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', caseId);
+      if (!updateError) break;
+      if (attempt === 0) {
+        logger.warn('pipeline', `onFailure: first attempt to mark case ${caseId} as errore failed: ${updateError.message}, retrying...`);
+        await new Promise((r) => setTimeout(r, 1000));
+      } else {
+        logger.error('pipeline', `onFailure: CRITICAL — failed to mark case ${caseId} as errore after 2 attempts: ${updateError.message}`);
+      }
+    }
 
     // Reset stuck documents to 'errore' so they don't stay in intermediate states
     await supabase
@@ -149,13 +160,33 @@ export const processCase = inngest.createFunction(
   async ({ event, step }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
+    // Pipeline health tracking — accumulated across all steps, saved to perizia_metadata at finalize
+    const pipelineWarnings: PipelineWarning[] = [];
+
     // ── Step 0+1: Init pipeline + fetch metadata (combined to reduce overhead) ──
     const caseData = await step.run('init-pipeline', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
+      // Fetch case to preserve existing perizia_metadata
+      const { data: caseRow } = await supabase
+        .from('cases')
+        .select('perizia_metadata')
+        .eq('id', caseId)
+        .single();
+      const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+      // Clear stale warnings/progress from previous runs, set processing progress
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pipelineWarnings: _pw, processingProgress: _pp, ...cleanMeta } = existingMeta;
       await supabase
         .from('cases')
-        .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+        .update({
+          processing_stage: 'elaborazione',
+          perizia_metadata: {
+            ...cleanMeta,
+            processingProgress: { phase: 'ocr' },
+          },
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', caseId);
       logger.info('pipeline', `Marked case ${caseId} as elaborazione`);
       return fetchCaseMetadata(caseId, userId);
@@ -185,7 +216,33 @@ export const processCase = inngest.createFunction(
       .filter((r): r is OcrResult => r !== null);
 
     if (ocrResults.length === 0) {
-      throw new Error('All documents failed OCR processing');
+      throw new Error('Tutti i documenti hanno fallito l\'OCR. Verifica che i file siano leggibili.');
+    }
+
+    // OCR guard rail: if > 50% docs fail, likely a systemic issue
+    const ocrFailedCount = documents.length - ocrResults.length;
+    if (ocrFailedCount > 0) {
+      const failedDocNames = documents
+        .filter((d) => !ocrResults.some((r) => r.documentId === d.id))
+        .map((d) => d.fileName)
+        .slice(0, 20);
+
+      if (ocrFailedCount > documents.length / 2) {
+        throw new Error(
+          `OCR fallito su ${ocrFailedCount}/${documents.length} documenti (>50%). ` +
+          `Documenti falliti: ${failedDocNames.join(', ')}. Possibile errore sistemico.`,
+        );
+      }
+
+      pipelineWarnings.push({
+        step: 'ocr',
+        severity: 'warning',
+        message: `${ocrFailedCount} di ${documents.length} documenti hanno fallito l'OCR`,
+        failedCount: ocrFailedCount,
+        totalCount: documents.length,
+        failedItems: failedDocNames,
+      });
+      logger.warn('pipeline', `OCR partial failure: ${ocrFailedCount}/${documents.length} docs failed`);
     }
 
     // ── Step 3.0: Refresh types + metadata (combined to reduce step overhead) ──
@@ -303,7 +360,7 @@ export const processCase = inngest.createFunction(
       }
     }
 
-    // Mark docs as extracting (inline, no separate step to reduce overhead)
+    // Mark docs as extracting + update processing progress
     await step.run('start-extraction', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
@@ -314,6 +371,25 @@ export const processCase = inngest.createFunction(
           updated_at: new Date().toISOString(),
         }).in('id', docIds.slice(i, i + 500));
       }
+      // Update processing progress for UI
+      const { data: caseRow } = await supabase
+        .from('cases')
+        .select('perizia_metadata')
+        .eq('id', caseId)
+        .single();
+      const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+      await supabase.from('cases').update({
+        perizia_metadata: {
+          ...existingMeta,
+          processingProgress: {
+            phase: 'extraction',
+            ocrCompleted: ocrResults.length,
+            totalDocs: documents.length,
+            totalChunks: allChunkJobs.length,
+          },
+        },
+        updated_at: new Date().toISOString(),
+      }).eq('id', caseId);
       logger.info('pipeline', `Starting extraction: ${docIds.length} docs, ${allChunkJobs.length} chunks`);
     });
 
@@ -365,11 +441,45 @@ export const processCase = inngest.createFunction(
       }
     }
 
+    // Guard rails: detect extraction failures
+    const failedBatchCount = batchSettled.filter((r) => r.status === 'rejected').length;
+    const totalBatches = batchSettled.length;
+    const failedDocCount = markErrorJobs.length;
+
+    // Total failure: 0 events from any document
+    if (extractionResults.length === 0) {
+      throw new Error(
+        `Estrazione fallita: 0 eventi da ${ocrResults.length} documenti (${failedBatchCount}/${totalBatches} batch falliti). ` +
+        'Errore sistematico nell\'estrazione.',
+      );
+    }
+
+    // Partial failure: track in pipeline warnings
+    if (failedDocCount > 0) {
+      const failedDocNames = markErrorJobs.map((j) => {
+        const ocr = ocrResults.find((r) => r.documentId === j.documentId);
+        return ocr?.fileName ?? j.documentId;
+      });
+      pipelineWarnings.push({
+        step: 'extraction',
+        severity: failedDocCount > ocrResults.length / 2 ? 'critical' : 'warning',
+        message: `${failedDocCount} di ${ocrResults.length} documenti non hanno prodotto eventi`,
+        failedCount: failedDocCount,
+        totalCount: ocrResults.length,
+        failedItems: failedDocNames.slice(0, 20),
+      });
+      logger.warn('pipeline', `Extraction partial failure: ${failedDocCount}/${ocrResults.length} docs produced 0 events (${failedBatchCount}/${totalBatches} batches failed)`);
+    }
+
     // ── Step 4: Consolidate events ───────────────────────────────
     const consolidationResult = await step.run(
       'consolidate-events',
       () => consolidateEventsStep(caseId, extractionResults),
     );
+
+    // Re-read all events from DB for downstream steps.
+    // consolidationResult no longer includes allEvents to stay under Inngest's 4MB step output limit.
+    const allEvents = await step.run('fetch-all-events', () => fetchAllEventsForCase(caseId));
 
     // ── Step 4.5: Link images to events ──────────────────────────
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));
@@ -403,7 +513,7 @@ export const processCase = inngest.createFunction(
           const ocrText = pages.map((p) => (p.ocr_text as string) ?? '').join('\n\n---\n\n');
 
           // Try to find a diagnosis from extracted events for context
-          const diagnosisEvents = consolidationResult.allEvents
+          const diagnosisEvents = allEvents
             .filter((e) => e.eventType === 'diagnosi' && e.title)
             .map((e) => e.title);
           const finalDiagnosis = diagnosisEvents.length > 0 ? diagnosisEvents.join('; ') : undefined;
@@ -413,7 +523,7 @@ export const processCase = inngest.createFunction(
 
         // Step B: Algorithmic analysis on extracted events (backward compat)
         expenseResult = await step.run('analyze-expenses', () => {
-          const eventsForAnalysis = consolidationResult.allEvents.map((e) => ({
+          const eventsForAnalysis = allEvents.map((e) => ({
             event_type: e.eventType,
             title: e.title,
             description: e.description,
@@ -464,6 +574,7 @@ export const processCase = inngest.createFunction(
         synthesisResult: { reportVersion: 0, wordCount: 0 },
         synthesisWordCount: 0,
         pipelineCost: buildPipelineSummary([], ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0)),
+        pipelineWarnings,
       }));
 
       await step.run('send-notification', () => sendNotificationStep(caseId, userId));
@@ -474,7 +585,7 @@ export const processCase = inngest.createFunction(
         pipelineMode,
         documentsProcessed: extractionResults.length,
         newEventsInserted: consolidationResult.newEventsCount,
-        totalEvents: consolidationResult.allEvents.length,
+        totalEvents: allEvents.length,
         anomaliesDetected: 0,
         missingDocuments: 0,
         ...(expenseResult ? { expenseTotalItems: expenseResult.totalItems, expenseTotalAmount: expenseResult.totalAmount } : {}),
@@ -489,13 +600,13 @@ export const processCase = inngest.createFunction(
         analyzeDiagnosticImagesStep(caseId, updatedMetadata.caseType),
       ),
       step.run('detect-anomalies', () =>
-        detectAnomaliesStep(caseId, consolidationResult.allEvents, updatedMetadata.caseType, updatedMetadata.caseTypes),
+        detectAnomaliesStep(caseId, allEvents, updatedMetadata.caseType, updatedMetadata.caseTypes),
       ),
       step.run('detect-missing-documents', () =>
-        detectMissingDocumentsStep(caseId, consolidationResult.allEvents, updatedMetadata.caseType, updatedMetadata.caseTypes),
+        detectMissingDocumentsStep(caseId, allEvents, updatedMetadata.caseType, updatedMetadata.caseTypes),
       ),
       step.run('calculate-periods', () =>
-        calculatePeriodsStep(consolidationResult.allEvents, updatedMetadata.caseType),
+        calculatePeriodsStep(allEvents, updatedMetadata.caseType),
       ),
     ]);
 
@@ -504,24 +615,38 @@ export const processCase = inngest.createFunction(
     const missingDocs = missingSettled.status === 'fulfilled' ? missingSettled.value : [];
     const calculations = calcSettled.status === 'fulfilled' ? calcSettled.value : [];
 
-    if (imageSettled.status === 'rejected') logger.error('pipeline', `Image analysis failed: ${imageSettled.reason instanceof Error ? imageSettled.reason.message : 'unknown'}`);
-    if (anomalySettled.status === 'rejected') logger.error('pipeline', `Anomaly detection failed: ${anomalySettled.reason instanceof Error ? anomalySettled.reason.message : 'unknown'}`);
-    if (missingSettled.status === 'rejected') logger.error('pipeline', `Missing docs detection failed: ${missingSettled.reason instanceof Error ? missingSettled.reason.message : 'unknown'}`);
-    if (calcSettled.status === 'rejected') logger.error('pipeline', `Period calculation failed: ${calcSettled.reason instanceof Error ? calcSettled.reason.message : 'unknown'}`);
+    // Track analysis failures as pipeline warnings
+    const analysisSteps: Array<{ name: string; label: string; settled: PromiseSettledResult<unknown> }> = [
+      { name: 'image-analysis', label: 'Analisi immagini diagnostiche', settled: imageSettled },
+      { name: 'anomaly-detection', label: 'Rilevamento anomalie', settled: anomalySettled },
+      { name: 'missing-docs', label: 'Rilevamento documenti mancanti', settled: missingSettled },
+      { name: 'calculations', label: 'Calcoli medico-legali (ITT/ITP)', settled: calcSettled },
+    ];
+    for (const { name, label, settled } of analysisSteps) {
+      if (settled.status === 'rejected') {
+        const reason = settled.reason instanceof Error ? settled.reason.message : 'unknown';
+        logger.error('pipeline', `${label} failed: ${reason}`);
+        pipelineWarnings.push({
+          step: name,
+          severity: name === 'calculations' ? 'critical' : 'warning',
+          message: `${label} fallito: ${reason}`,
+        });
+      }
+    }
 
     // ── Step 5.5: LLM Anomaly Resolution ─────────────────────────
     // Anomalies are resolved and saved to DB, but NO pause for user review.
     // The report generates immediately. User reviews anomalies after seeing the report.
     const anomalies = await step.run(
       'resolve-anomalies',
-      () => resolveAnomaliesStep(caseId, rawAnomalies, consolidationResult.allEvents),
+      () => resolveAnomaliesStep(caseId, rawAnomalies, allEvents),
     );
 
     // ── PubMed evidence search (optional, non-blocking) ────────────
     let pubmedResults: PubMedSearchResult[] = [];
     try {
       pubmedResults = await step.run('search-pubmed', () =>
-        enrichWithFullEvidence(consolidationResult.allEvents, anomalies, updatedMetadata.caseType),
+        enrichWithFullEvidence(allEvents, anomalies, updatedMetadata.caseType),
       );
     } catch {
       logger.warn('pipeline', `PubMed search failed (non-blocking) for case ${caseId}`);
@@ -574,18 +699,28 @@ export const processCase = inngest.createFunction(
       documentSummaries = summarySettled
         .filter((r): r is PromiseFulfilledResult<DocumentSummary[]> => r.status === 'fulfilled')
         .flatMap((r) => r.value);
-      for (const r of summarySettled) {
-        if (r.status === 'rejected') {
-          logger.error('pipeline', `Summary batch failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+      const failedSummaryCount = summarySettled.filter((r) => r.status === 'rejected').length;
+      if (failedSummaryCount > 0) {
+        for (const r of summarySettled) {
+          if (r.status === 'rejected') {
+            logger.error('pipeline', `Summary batch failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
+          }
         }
+        pipelineWarnings.push({
+          step: 'summarization',
+          severity: failedSummaryCount > summaryBatches.length / 2 ? 'critical' : 'warning',
+          message: `${failedSummaryCount} di ${summaryBatches.length} batch di riassunti falliti — il report potrebbe avere meno contesto`,
+          failedCount: failedSummaryCount,
+          totalCount: summaryBatches.length,
+        });
       }
-      logger.info('pipeline', `Map-reduce: ${documentSummaries.length} document summaries generated`);
+      logger.info('pipeline', `Map-reduce: ${documentSummaries.length} document summaries generated (${failedSummaryCount} batches failed)`);
     }
 
     // ── Build synthesis params ────────────────────────────────────
     const synthesisParams = buildSynthesisParams(
       updatedMetadata,
-      consolidationResult.allEvents,
+      allEvents,
       anomalies,
       missingDocs,
       calculations,
@@ -602,7 +737,7 @@ export const processCase = inngest.createFunction(
     const classifiedDocTypes = [...new Set(ocrResults.map((r) => r.documentType))];
 
     const sectionPlan = await step.run('plan-report-sections', () =>
-      planReportSections(updatedMetadata, consolidationResult.allEvents, classifiedDocTypes),
+      planReportSections(updatedMetadata, allEvents, classifiedDocTypes),
     );
 
     if (sectionPlan.length === 0) {
@@ -708,6 +843,7 @@ export const processCase = inngest.createFunction(
       synthesisResult,
       synthesisWordCount,
       pipelineCost,
+      pipelineWarnings,
     }));
 
     // ── Send notification ────────────────────────────────────────
@@ -718,7 +854,7 @@ export const processCase = inngest.createFunction(
       caseId,
       documentsProcessed: extractionResults.length,
       newEventsInserted: consolidationResult.newEventsCount,
-      totalEvents: consolidationResult.allEvents.length,
+      totalEvents: allEvents.length,
       anomaliesDetected: anomalies.length,
       missingDocuments: missingDocs.length,
       reportVersion: synthesisResult.reportVersion,

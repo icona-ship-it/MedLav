@@ -47,12 +47,16 @@ export async function POST(request: NextRequest) {
           const stripe = getStripeClient();
           const subResponse = await stripe.subscriptions.retrieve(session.subscription as string);
           const sub = subResponse as unknown as { status: string; current_period_end: number };
-          await supabase.from('profiles').update({
+          const { error: updateError } = await supabase.from('profiles').update({
             stripe_customer_id: session.customer as string,
             subscription_status: sub.status,
             subscription_plan: 'pro',
             subscription_period_end: new Date(sub.current_period_end * 1000).toISOString(),
           }).eq('id', userId);
+          if (updateError) {
+            logger.error('stripe', `Failed to update profile after checkout for user ${userId}: ${updateError.message}`);
+            return NextResponse.json({ success: false, error: 'Profile update failed' }, { status: 500 });
+          }
           logger.info('stripe', `Checkout completed for user ${userId}`);
         }
         break;
@@ -61,10 +65,14 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as unknown as { customer: string; status: string; current_period_end: number };
         const customerId = subscription.customer;
-        await supabase.from('profiles').update({
+        const { error: updateError } = await supabase.from('profiles').update({
           subscription_status: subscription.status,
           subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
         }).eq('stripe_customer_id', customerId);
+        if (updateError) {
+          logger.error('stripe', `Failed to update subscription for customer ${customerId}: ${updateError.message}`);
+          return NextResponse.json({ success: false, error: 'Subscription update failed' }, { status: 500 });
+        }
         logger.info('stripe', `Subscription updated for customer ${customerId}: ${subscription.status}`);
         break;
       }
@@ -72,11 +80,15 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        await supabase.from('profiles').update({
+        const { error: updateError } = await supabase.from('profiles').update({
           subscription_status: 'canceled',
           subscription_plan: null,
           subscription_period_end: null,
         }).eq('stripe_customer_id', customerId);
+        if (updateError) {
+          logger.error('stripe', `Failed to cancel subscription for customer ${customerId}: ${updateError.message}`);
+          return NextResponse.json({ success: false, error: 'Subscription cancel failed' }, { status: 500 });
+        }
         logger.info('stripe', `Subscription deleted for customer ${customerId}`);
         break;
       }
@@ -84,9 +96,13 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
-        await supabase.from('profiles').update({
+        const { error: updateError } = await supabase.from('profiles').update({
           subscription_status: 'past_due',
         }).eq('stripe_customer_id', customerId);
+        if (updateError) {
+          logger.error('stripe', `Failed to mark past_due for customer ${customerId}: ${updateError.message}`);
+          return NextResponse.json({ success: false, error: 'Payment status update failed' }, { status: 500 });
+        }
         logger.warn('stripe', `Payment failed for customer ${customerId}`);
         break;
       }

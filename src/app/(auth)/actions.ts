@@ -61,7 +61,7 @@ export async function signUp(formData: FormData) {
   if (data.user) {
     const now = new Date().toISOString();
     const admin = createAdminClient();
-    await admin.from('profiles').upsert({
+    const { error: profileError } = await admin.from('profiles').upsert({
       id: data.user.id,
       email: data.user.email,
       full_name: fullName,
@@ -72,6 +72,12 @@ export async function signUp(formData: FormData) {
       created_at: now,
       updated_at: now,
     });
+    if (profileError) {
+      logger.error('auth', `Profile creation failed for user ${data.user.id}: ${profileError.message}`);
+      // Rollback: delete the auth user to avoid orphaned account
+      await admin.auth.admin.deleteUser(data.user.id);
+      return { error: 'Errore durante la creazione del profilo. Riprova.' };
+    }
   }
 
   // If email confirmation is enabled, show verification message instead of redirecting

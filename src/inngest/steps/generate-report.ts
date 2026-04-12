@@ -29,15 +29,21 @@ export async function fetchDocumentsOcrContext(caseId: string): Promise<Document
 
   if (!docs || docs.length === 0) return [];
 
-  const docIds = docs.map((d) => d.id);
+  const docIds = docs.map((d) => d.id as string);
 
-  const { data: pages } = await supabase
-    .from('pages')
-    .select('document_id, page_number, ocr_text')
-    .in('document_id', docIds)
-    .order('page_number', { ascending: true });
+  // Batch pages fetch to avoid PostgREST URL limit with 500+ documents
+  const pages: Array<Record<string, unknown>> = [];
+  const PAGE_BATCH = 200;
+  for (let i = 0; i < docIds.length; i += PAGE_BATCH) {
+    const { data } = await supabase
+      .from('pages')
+      .select('document_id, page_number, ocr_text')
+      .in('document_id', docIds.slice(i, i + PAGE_BATCH))
+      .order('page_number', { ascending: true });
+    if (data) pages.push(...data);
+  }
 
-  if (!pages) return [];
+  if (pages.length === 0) return [];
 
   const pagesByDoc = new Map<string, Array<{ pageNumber: number; ocrText: string }>>();
   for (const page of pages) {

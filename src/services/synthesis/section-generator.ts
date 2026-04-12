@@ -158,7 +158,14 @@ export function buildSectionUserPrompt(params: {
       // Direct OCR mode: filter and include raw OCR text
       const filteredOcr = filterOcrForSection(spec, documentsOcrText);
       if (filteredOcr.length > 0) {
-        const ocrText = formatDocumentsOcrForPrompt(filteredOcr);
+        let ocrText = formatDocumentsOcrForPrompt(filteredOcr);
+        // Cap OCR text to prevent exceeding Mistral's ~128K token context window
+        // (~384K chars). Reserve 80K chars for OCR, rest for system prompt + events + other data.
+        const MAX_OCR_CHARS_PER_SECTION = 80_000;
+        if (ocrText && ocrText.length > MAX_OCR_CHARS_PER_SECTION) {
+          ocrText = ocrText.slice(0, MAX_OCR_CHARS_PER_SECTION) + '\n\n[... testo OCR troncato per limiti di contesto. I documenti successivi non sono inclusi in questa sezione.]';
+          logger.warn('section-generator', `OCR text truncated to ${MAX_OCR_CHARS_PER_SECTION} chars for section "${spec.id}" (was ${ocrText.length})`);
+        }
         if (ocrText) parts.push(ocrText);
       }
     }

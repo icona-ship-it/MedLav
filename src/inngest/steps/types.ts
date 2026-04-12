@@ -24,6 +24,7 @@ export interface OcrResult {
   documentId: string;
   fileName: string;
   documentType: string;
+  /** @deprecated OCR text is stored in pages table. Empty string to minimize Inngest step payload. */
   fullText: string;
   pageCount: number;
   averageConfidence: number;
@@ -35,8 +36,10 @@ export interface ExtractionResult {
 }
 
 export interface ConsolidationStepResult {
-  allEvents: import('@/services/consolidation/event-consolidator').ConsolidatedEvent[];
+  /** @deprecated Use totalEventsCount. allEvents removed to avoid exceeding Inngest 4MB step output limit. */
+  allEvents?: import('@/services/consolidation/event-consolidator').ConsolidatedEvent[];
   newEventsCount: number;
+  totalEventsCount: number;
 }
 
 export interface SynthesisStepResult {

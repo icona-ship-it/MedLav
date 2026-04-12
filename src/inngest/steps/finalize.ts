@@ -99,7 +99,7 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
     metadata: {
       documentsProcessed: extractionResults.length,
       newEventsInserted: consolidationResult.newEventsCount,
-      totalEvents: consolidationResult.allEvents.length,
+      totalEvents: consolidationResult.totalEventsCount ?? consolidationResult.allEvents?.length ?? 0,
       anomaliesDetected: anomalies.length,
       missingDocuments: missingDocs.length,
       reportVersion: synthesisResult.reportVersion,
