@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Loader2, AlertTriangle, FileText, LayoutList } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
+import { EventsDocumentView } from './events-document-view';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
 
@@ -176,18 +177,21 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 
 export function EventsTab({
   caseId, events, eventImages, onImageClick,
-  highlightedEventOrderNumber,
+  highlightedEventOrderNumber, patientInitials, caseCode,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
   highlightedEventOrderNumber?: number | null;
+  patientInitials?: string | null;
+  caseCode?: string;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'document'>('cards');
   const [eventViewTab, setEventViewTab] = useState<EventViewTab>('clinical');
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
@@ -316,6 +320,19 @@ export function EventsTab({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-md border p-0.5">
+              <button type="button" onClick={() => setViewMode('cards')}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${viewMode === 'cards' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                title="Vista schede">
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => setViewMode('document')}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${viewMode === 'document' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                title="Vista documento (formato perizia)">
+                <FileText className="h-3.5 w-3.5" />
+              </button>
+            </div>
             {altroEvents.length > 0 && (
               <BatchRetagDialog
                 caseId={caseId}
@@ -333,6 +350,11 @@ export function EventsTab({
         </div>
       </CardHeader>
       <CardContent>
+        {/* Document view (A4 perizia format) */}
+        {viewMode === 'document' ? (
+          <EventsDocumentView events={events} patientInitials={patientInitials} caseCode={caseCode} />
+        ) : (
+        <>
         {/* Filters */}
         {events.length > 0 && (
           <div className="mb-4 space-y-2">
@@ -528,6 +550,8 @@ export function EventsTab({
             </p>
           )}
         </div>
+        </>
+        )}
       </CardContent>
     </Card>
   );
