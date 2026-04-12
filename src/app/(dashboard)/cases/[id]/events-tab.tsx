@@ -160,6 +160,14 @@ function isVerificationEvent(e: EventRow): boolean {
   return e.requires_verification || !e.event_date || e.event_date === '';
 }
 
+type VerificationSubFilter = 'all' | 'date' | 'data' | 'other';
+
+function getVerificationType(e: EventRow): VerificationSubFilter {
+  if (!e.event_date || e.event_date === '' || e.date_precision === 'sconosciuta') return 'date';
+  if ((e.confidence as number) < 50 || ((e.reliability_notes ?? '') as string).toLowerCase().includes('ocr')) return 'data';
+  return 'other';
+}
+
 // --- Events Tab ---
 
 export function EventsTab({
@@ -178,6 +186,7 @@ export function EventsTab({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
+  const [verificationSubFilter, setVerificationSubFilter] = useState<VerificationSubFilter>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [searchText, setSearchText] = useState('');
@@ -199,7 +208,10 @@ export function EventsTab({
   const verificationEvents = events.filter((e) => isVerificationEvent(e));
 
   const filteredEvents = events.filter((event) => {
-    if (showOnlyVerification && !isVerificationEvent(event)) return false;
+    if (showOnlyVerification) {
+      if (!isVerificationEvent(event)) return false;
+      if (verificationSubFilter !== 'all' && getVerificationType(event) !== verificationSubFilter) return false;
+    }
     if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
     if (dateFrom && event.event_date < dateFrom) return false;
     if (dateTo && event.event_date > dateTo) return false;
@@ -303,15 +315,44 @@ export function EventsTab({
                 );
               })}
               {verificationEvents.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => { setShowOnlyVerification(!showOnlyVerification); setEventTypeFilter(null); }}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    showOnlyVerification ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                  }`}
-                >
-                  Da verificare ({verificationEvents.length})
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setShowOnlyVerification(!showOnlyVerification); setVerificationSubFilter('all'); setEventTypeFilter(null); }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      showOnlyVerification && verificationSubFilter === 'all' ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                    }`}
+                  >
+                    Da verificare ({verificationEvents.length})
+                  </button>
+                  {showOnlyVerification && (() => {
+                    const dateCount = verificationEvents.filter((e) => getVerificationType(e) === 'date').length;
+                    const dataCount = verificationEvents.filter((e) => getVerificationType(e) === 'data').length;
+                    const otherCount = verificationEvents.filter((e) => getVerificationType(e) === 'other').length;
+                    return (
+                      <>
+                        {dateCount > 0 && (
+                          <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'date' ? 'all' : 'date')}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'date' ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100'}`}>
+                            Data incerta ({dateCount})
+                          </button>
+                        )}
+                        {dataCount > 0 && (
+                          <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'data' ? 'all' : 'data')}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'data' ? 'bg-orange-400 text-orange-900' : 'bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100'}`}>
+                            Dati incerti ({dataCount})
+                          </button>
+                        )}
+                        {otherCount > 0 && (
+                          <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'other' ? 'all' : 'other')}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'other' ? 'bg-red-400 text-red-900' : 'bg-red-50 text-red-700 border border-red-300 hover:bg-red-100'}`}>
+                            Da verificare ({otherCount})
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
               )}
             </div>
             {/* Date range + text search filters */}

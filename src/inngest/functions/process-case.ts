@@ -148,8 +148,8 @@ export const processCase = inngest.createFunction(
     id: 'process-case',
     retries: 3,
     concurrency: [
-      { limit: 50 },                              // global cap — protect Mistral rate limits
-      { limit: 10, key: 'event.data.userId' },     // per-user fairness
+      { limit: 100 },                              // global cap — Inngest Pro allows 100 concurrent steps
+      { limit: 50, key: 'event.data.userId' },      // per-user — high to maximize parallelism for large cases
     ],
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
