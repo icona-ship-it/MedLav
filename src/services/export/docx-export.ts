@@ -493,12 +493,90 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     }),
   );
 
+  // Build professional header with perito names (like benchmark)
+  const headerChildren: Paragraph[] = [];
+  if (periziaMetadata?.ctuName) {
+    const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const cellBorders = { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder };
+
+    const leftHeader: Paragraph[] = [
+      new Paragraph({
+        children: [new TextRun({ text: periziaMetadata.ctuName, bold: true, font: 'Courier New', size: 20 })],
+      }),
+    ];
+    if (periziaMetadata.ctuTitle) {
+      leftHeader.push(new Paragraph({
+        children: [new TextRun({ text: periziaMetadata.ctuTitle, font: 'Courier New', size: 16 })],
+      }));
+    }
+
+    const rightHeader: Paragraph[] = [];
+    if (periziaMetadata.collaboratoreName) {
+      rightHeader.push(new Paragraph({
+        children: [new TextRun({ text: periziaMetadata.collaboratoreName, bold: true, font: 'Courier New', size: 20 })],
+        alignment: AlignmentType.RIGHT,
+      }));
+      if (periziaMetadata.collaboratoreTitle) {
+        rightHeader.push(new Paragraph({
+          children: [new TextRun({ text: periziaMetadata.collaboratoreTitle, font: 'Courier New', size: 16 })],
+          alignment: AlignmentType.RIGHT,
+        }));
+      }
+    }
+
+    if (rightHeader.length > 0) {
+      headerChildren.push(new Paragraph({ children: [] })); // spacer
+      const headerTable = new Table({
+        rows: [new TableRow({
+          children: [
+            new TableCell({ children: leftHeader, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
+            new TableCell({ children: rightHeader, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
+          ],
+        })],
+        width: { size: 9000, type: WidthType.DXA },
+      });
+      // Tables can't go directly in Header, so we use paragraphs
+      headerChildren.push(...leftHeader);
+    } else {
+      headerChildren.push(...leftHeader);
+    }
+  }
+
+  // Footer with RG number on left, page number on right
+  const footerParagraphs: Paragraph[] = [];
+  if (periziaMetadata?.rgNumber) {
+    const footerNoBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const footerCellBorders = { top: footerNoBorder, left: footerNoBorder, right: footerNoBorder, bottom: footerNoBorder };
+    // Use two paragraphs since Table not supported in Footer by docx.js
+    footerParagraphs.push(new Paragraph({
+      children: [
+        new TextRun({ text: `Numero di Ruolo Generale ${periziaMetadata.rgNumber}`, font: 'Courier New', size: 18, color: '444444' }),
+      ],
+    }));
+    footerParagraphs.push(new Paragraph({
+      children: [
+        new TextRun({ children: [PageNumber.CURRENT], font: 'Courier New', size: 20 }),
+      ],
+      alignment: AlignmentType.RIGHT,
+    }));
+  } else {
+    footerParagraphs.push(new Paragraph({
+      children: [
+        new TextRun({ children: [PageNumber.CURRENT], font: 'Courier New', size: 20 }),
+      ],
+      alignment: AlignmentType.RIGHT,
+    }));
+  }
+
   const doc = new Document({
     styles: {
       default: {
         document: {
-          run: { font: 'Times New Roman', size: 24 }, // 12pt (half-points)
-          paragraph: { spacing: { line: 360 } }, // 1.5 line spacing (240 = single)
+          run: { font: 'Courier New', size: 24 }, // 12pt Courier New (benchmark style)
+          paragraph: {
+            spacing: { line: 276 }, // ~1.15 line spacing (240=single, 276=1.15)
+            alignment: AlignmentType.JUSTIFIED,
+          },
         },
       },
     },
@@ -506,29 +584,28 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
       properties: {
         page: {
           margin: {
-            top: 1440,
-            bottom: 1440,
-            left: 1440,
-            right: 1440,
+            top: 1440,    // 1 inch
+            bottom: 1440,  // 1 inch
+            left: 1800,    // 1.25 inch (wider for legal docs)
+            right: 1440,   // 1 inch
           },
         },
       },
       headers: {
-        default: buildWatermarkHeader(reportStatus),
-      },
-      footers: {
-        default: new Footer({
-          children: [
+        default: new Header({
+          children: headerChildren.length > 0 ? headerChildren : [
             new Paragraph({
-              children: [
-                new TextRun({ children: [PageNumber.CURRENT], size: 17, color: '444444' }),
-                new TextRun({ text: '/', size: 17, color: '444444' }),
-                new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 17, color: '444444' }),
-              ],
-              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({
+                text: getDocxWatermarkText(reportStatus),
+                color: 'C0C0C0', size: 18, italics: true, font: 'Courier New',
+              })],
+              alignment: AlignmentType.CENTER,
             }),
           ],
         }),
+      },
+      footers: {
+        default: new Footer({ children: footerParagraphs }),
       },
       children,
     }],

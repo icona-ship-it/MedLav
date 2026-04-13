@@ -516,9 +516,9 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Times New Roman', Georgia, 'DejaVu Serif', 'Liberation Serif', serif;
+    font-family: 'Courier New', Courier, 'DejaVu Sans Mono', monospace;
     font-size: 12pt;
-    line-height: 1.6;
+    line-height: 1.4;
     color: #000;
     max-width: 780px;
     margin: 0 auto;
