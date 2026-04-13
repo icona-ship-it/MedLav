@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 // Textarea removed — anomaly descriptions are read-only
 import { anomalyTypeLabels } from '@/lib/constants';
-import { updateAnomaly, dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
+import { dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
 import { createClient } from '@/lib/supabase/client';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 

@@ -64,32 +64,6 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Parse synthesis text to extract a specific section by heading.
- * Returns content between the heading and the next heading of same or higher level.
- */
-function extractSynthesisSection(synthesis: string, headingPattern: RegExp): string | null {
-  const lines = synthesis.split('\n');
-  let capturing = false;
-  const captured: string[] = [];
-
-  for (const line of lines) {
-    if (headingPattern.test(line)) {
-      capturing = true;
-      continue;
-    }
-    if (capturing && /^#{1,2}\s/.test(line)) {
-      break;
-    }
-    if (capturing) {
-      captured.push(line);
-    }
-  }
-
-  const result = captured.join('\n').trim();
-  return result.length > 0 ? result : null;
-}
-
-/**
  * Build the DOCUMENTAZIONE SANITARIA section from OCR pages.
  * Each document gets a heading, then full OCR text page by page.
  */
@@ -260,69 +234,6 @@ export function assembleFullReport(params: {
   }));
 
   return { sections, tableOfContents };
-}
-
-/**
- * Extract specialized sections between CRONOLOGIA and CONSIDERAZIONI/ELEMENTI.
- */
-function extractSpecializedSections(synthesis: string): Array<{ id: string; title: string; content: string }> {
-  const lines = synthesis.split('\n');
-  const results: Array<{ id: string; title: string; content: string }> = [];
-
-  let inSpecializedZone = false;
-  let currentTitle = '';
-  let currentContent: string[] = [];
-
-  const knownNonSpecialized = /^##\s*(PREMESSE|PROFILO\s*METOD|DOCUMENTAZIONE|RIASSUNTO|CRONOLOGIA|CONSIDERAZIONI|ELEMENTI\s*DI\s*RILIEVO|NESSO\s*CAUSALE|VALUTAZIONE|SPESE\s*MEDICHE|RISPOSTA\s*AI\s*QUESITI|CONCLUSIONI|ESAME\s*OBIETTIVO)/i;
-
-  for (const line of lines) {
-    // Detect end of CRONOLOGIA — start specialized zone
-    if (/^##\s*CRONOLOGIA/i.test(line)) {
-      inSpecializedZone = true;
-      continue;
-    }
-
-    // Detect start of CONSIDERAZIONI/ELEMENTI — end specialized zone
-    if (/^##\s*(CONSIDERAZIONI|ELEMENTI\s*DI\s*RILIEVO|NESSO\s*CAUSALE|VALUTAZIONE|CONCLUSIONI)/i.test(line)) {
-      // Save current if any
-      if (currentTitle && currentContent.length > 0) {
-        results.push({
-          id: `specialized-${results.length}`,
-          title: currentTitle,
-          content: currentContent.join('\n').trim(),
-        });
-      }
-      break;
-    }
-
-    if (!inSpecializedZone) continue;
-
-    // New h2 heading in specialized zone
-    if (/^##\s/.test(line) && !knownNonSpecialized.test(line)) {
-      if (currentTitle && currentContent.length > 0) {
-        results.push({
-          id: `specialized-${results.length}`,
-          title: currentTitle,
-          content: currentContent.join('\n').trim(),
-        });
-      }
-      currentTitle = line.replace(/^##\s*/, '').trim();
-      currentContent = [];
-    } else if (inSpecializedZone && currentTitle) {
-      currentContent.push(line);
-    }
-  }
-
-  // Save last one if loop ended
-  if (currentTitle && currentContent.length > 0) {
-    results.push({
-      id: `specialized-${results.length}`,
-      title: currentTitle,
-      content: currentContent.join('\n').trim(),
-    });
-  }
-
-  return results;
 }
 
 /**

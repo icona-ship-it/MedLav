@@ -62,7 +62,7 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
 
 export function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  eventImages, onImageClick,
+  eventImages, onImageClick: _onImageClick,
   isHighlighted, documentName,
 }: {
   event: EventRow;
@@ -264,6 +264,7 @@ export function EventCard({
               <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
                 <DialogContent className="max-w-4xl max-h-[90vh] p-2">
                   {lightboxUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={lightboxUrl}
                       alt="Immagine ingrandita"
