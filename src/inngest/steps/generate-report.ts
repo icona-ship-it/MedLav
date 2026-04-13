@@ -255,12 +255,14 @@ export async function generateAndSaveReport(
     generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
   }
 
-  // HARD FILTER: Strip hallucinated image references if no real images
-  let cleanSynthesis = r.synthesis;
-  const hasImages = synthesisParams.imageAnalysis && synthesisParams.imageAnalysis.length > 0;
-  if (!hasImages) {
-    cleanSynthesis = cleanSynthesis.replace(/!\[[^\]]*\]\(ocr-image:[^)]+\)\n*/g, '');
-  }
+  // HARD FILTER: Strip hallucinated image references
+  const realPaths = new Set(
+    (synthesisParams.imageAnalysis ?? []).filter((img) => img.storagePath).map((img) => img.storagePath!),
+  );
+  const cleanSynthesis = r.synthesis.replace(
+    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
+    (match, path) => realPaths.has(path) ? match : '',
+  );
 
   const result = await insertReportWithMetadata(caseId, cleanSynthesis, r.wordCount, generationMetadata);
   return { ...result, promptVersion: r.promptVersion, usage: r.usage };
@@ -322,12 +324,14 @@ export async function generateSummaryAndSaveReport(
     generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
   }
 
-  // HARD FILTER: Strip hallucinated image references if no real images
-  let cleanSynthesis = r.synthesis;
-  const hasImgs = synthesisParams.imageAnalysis && synthesisParams.imageAnalysis.length > 0;
-  if (!hasImgs) {
-    cleanSynthesis = cleanSynthesis.replace(/!\[[^\]]*\]\(ocr-image:[^)]+\)\n*/g, '');
-  }
+  // HARD FILTER: Strip hallucinated image references
+  const realPaths2 = new Set(
+    (synthesisParams.imageAnalysis ?? []).filter((img) => img.storagePath).map((img) => img.storagePath!),
+  );
+  const cleanSynthesis = r.synthesis.replace(
+    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
+    (match, path) => realPaths2.has(path) ? match : '',
+  );
 
   const result = await insertReportWithMetadata(caseId, cleanSynthesis, r.wordCount, generationMetadata);
   return { ...result, promptVersion: r.promptVersion, usage: r.usage };
@@ -434,17 +438,21 @@ export async function assembleSectionsAndSaveReport(
   let fullReport = reportParts.join('\n\n');
 
   // HARD FILTER: Strip hallucinated image references.
-  // If no real images were provided to the LLM (imageAnalysis empty),
-  // remove ALL ![...](ocr-image:...) — they are 100% hallucinated.
-  const hasRealImages = synthesisParams.imageAnalysis && synthesisParams.imageAnalysis.length > 0;
-  if (!hasRealImages) {
-    const before = fullReport;
-    fullReport = fullReport.replace(/!\[[^\]]*\]\(ocr-image:[^)]+\)\n*/g, '');
-    const stripped = before.length - fullReport.length;
-    if (stripped > 0) {
-      logger.warn('pipeline', `Stripped ${stripped} chars of hallucinated image references (no real images available)`);
-    }
-  }
+  // Build set of REAL image paths from imageAnalysis results.
+  // Any ocr-image: reference NOT in this set is hallucinated and gets stripped.
+  const realImagePaths = new Set(
+    (synthesisParams.imageAnalysis ?? [])
+      .filter((img) => img.storagePath)
+      .map((img) => img.storagePath!),
+  );
+  fullReport = fullReport.replace(
+    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
+    (match, path) => {
+      if (realImagePaths.has(path)) return match; // Real image — keep
+      logger.warn('pipeline', `Stripped hallucinated image ref: ocr-image:${path}`);
+      return ''; // Hallucinated — remove
+    },
+  );
 
   const totalWordCount = sections.reduce((sum, s) => sum + s.wordCount, 0);
 
