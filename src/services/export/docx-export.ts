@@ -595,8 +595,8 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
       continue;
     }
 
-    // Image: ![alt](data:mime;base64,...) or ![alt](url)
-    const imgMatch = line.match(/^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)\s*$/);
+    // Image: ![alt](data:mime;base64,...) — can be anywhere on the line
+    const imgMatch = line.match(/!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)/);
     if (imgMatch) {
       const alt = imgMatch[1];
       const mimeType = imgMatch[2];
@@ -626,6 +626,21 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
         // If image parsing fails, add text placeholder
         result.push(new Paragraph({
           children: [new TextRun({ text: `[Immagine: ${alt}]`, italics: true, color: '999999' })],
+        }));
+      }
+      i++;
+      continue;
+    }
+
+    // Unresolved ocr-image: placeholder — show as text note
+    const ocrImgMatch = line.match(/!\[([^\]]*)\]\(ocr-image:[^)]+\)/);
+    if (ocrImgMatch) {
+      const alt = ocrImgMatch[1];
+      if (alt) {
+        result.push(new Paragraph({
+          children: [new TextRun({ text: `[${alt}]`, italics: true, size: 20, color: '555555' })],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 100, after: 100 },
         }));
       }
       i++;
