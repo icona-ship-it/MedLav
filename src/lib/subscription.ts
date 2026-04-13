@@ -42,21 +42,7 @@ export async function checkFeatureAccess(
     return { allowed: true };
   }
 
-  // Trial users: limited access
-  const trialAllowed: Record<FeatureGate, boolean> = {
-    processing: true,
-    export: false,
-    rag_guidelines: false,
-    section_regenerate: false,
-    document_organizer: false,
-  };
-
-  if (trialAllowed[feature]) {
-    return { allowed: true };
-  }
-
-  return {
-    allowed: false,
-    reason: 'Funzionalità non disponibile nel piano attuale. Passa a Pro per sbloccarla.',
-  };
+  // Trial users: all features allowed — gated by credits instead of subscription
+  // Credits are the gate: if user has credits, they can use any feature
+  return { allowed: true };
 }

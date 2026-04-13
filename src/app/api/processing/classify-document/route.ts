@@ -11,6 +11,8 @@ import { ocrDocument } from '@/services/ocr/ocr-service';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 
+export const maxDuration = 120; // OCR + classification can take up to 2 min for large PDFs
+
 const requestSchema = z.object({
   documentId: z.string().uuid(),
   caseId: z.string().uuid(),
