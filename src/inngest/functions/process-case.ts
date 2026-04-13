@@ -836,12 +836,6 @@ export const processCase = inngest.createFunction(
         // Special handling for documentazione_sanitaria: split into batches
         // Each batch is a separate Inngest step → separate serverless invocation → no timeout
         if (spec.id === 'documentazione_sanitaria' && spec.needsOcr && ocrResults.length > DOC_BATCH_SIZE) {
-          // Fetch ALL OCR context ONCE (not per-batch)
-          const allOcrContext = await step.run('fetch-ocr-for-doc-sanitaria', async () => {
-            const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-            return fetchDocumentsOcrContext(caseId);
-          });
-
           const batchContents: string[] = [];
           const totalBatches = Math.ceil(ocrResults.length / DOC_BATCH_SIZE);
           let totalPromptTokens = 0;
@@ -855,8 +849,11 @@ export const processCase = inngest.createFunction(
             const batchResult = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
               await updateProgress(`${spec.title} (${b + 1}/${totalBatches})`);
 
-              // Filter OCR to this batch's documents only
-              const batchOcr = allOcrContext.filter((d: { documentId: string }) => batchDocIds.includes(d.documentId));
+              // Fetch OCR INSIDE each batch step to avoid Inngest 4MB payload limit.
+              // Each step is a separate invocation — data stays local, never serialized.
+              const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+              const allOcr = await fetchDocumentsOcrContext(caseId);
+              const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
 
               const { generateSingleSection } = await import('@/services/synthesis/section-generator');
               return generateSingleSection({
