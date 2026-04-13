@@ -77,13 +77,15 @@ export default async function AnalyticsPage() {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Caso ID</th>
+                  <th className="px-4 py-2 text-left font-medium">Data</th>
+                  <th className="px-4 py-2 text-left font-medium">Caso</th>
                   <th className="px-4 py-2 text-left font-medium">Costo</th>
                 </tr>
               </thead>
               <tbody>
-                {data.apiCosts.topCases.map((c) => (
-                  <tr key={c.caseId}>
+                {data.apiCosts.topCases.map((c, i) => (
+                  <tr key={`${c.caseId}-${i}`}>
+                    <td className="px-4 py-2 text-xs text-muted-foreground">{c.date}</td>
                     <td className="px-4 py-2 font-mono text-xs">{c.caseId.slice(0, 8)}...</td>
                     <td className="px-4 py-2 font-mono">${c.costUSD.toFixed(4)}</td>
                   </tr>

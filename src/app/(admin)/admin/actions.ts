@@ -74,7 +74,7 @@ export async function getProcessingDocuments() {
     .from('documents')
     .select('id, file_name, file_type, file_size, processing_status, processing_error, updated_at, created_at, case_id')
     .in('processing_status', INTERMEDIATE_STATUSES)
-    .order('updated_at', { ascending: true });
+    .order('updated_at', { ascending: false });
 
   if (!data || data.length === 0) return [];
 
@@ -172,7 +172,7 @@ export async function getStuckCases() {
     .from('cases')
     .select('id, code, processing_stage, patient_initials, updated_at, user_id')
     .in('processing_stage', ['elaborazione', 'generazione_report', 'revisione_classificazione', 'revisione_anomalie'])
-    .order('updated_at', { ascending: true });
+    .order('updated_at', { ascending: false });
 
   if (error) {
     logger.error('admin', `Failed to fetch stuck cases: ${error.message}`);

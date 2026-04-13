@@ -17,7 +17,7 @@ export interface ApiCostStats {
   totalCostUSD: number;
   avgCostPerCase: number;
   casesWithCost: number;
-  topCases: Array<{ caseId: string; costUSD: number }>;
+  topCases: Array<{ caseId: string; costUSD: number; date: string }>;
 }
 
 export interface AnalyticsData {
@@ -101,12 +101,13 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     // Cases by role
     admin.from('cases').select('case_role'),
 
-    // API costs from audit log (last 30 days)
+    // API costs from audit log (last 30 days) — newest first
     admin
       .from('audit_log')
-      .select('entity_id, metadata')
+      .select('entity_id, metadata, created_at')
       .eq('action', 'case.processing.completed')
-      .gte('created_at', thirtyDaysAgo),
+      .gte('created_at', thirtyDaysAgo)
+      .order('created_at', { ascending: false }),
   ]);
 
   // Cases per day
@@ -189,20 +190,23 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 
   // API costs
   let totalCostUSD = 0;
-  const caseCosts: Array<{ caseId: string; costUSD: number }> = [];
+  const caseCosts: Array<{ caseId: string; costUSD: number; date: string }> = [];
   for (const row of costAuditResult.data ?? []) {
     const meta = row.metadata as Record<string, unknown> | null;
     const apiUsage = meta?.apiUsage as { totalCostUSD?: number } | undefined;
     if (apiUsage?.totalCostUSD && typeof apiUsage.totalCostUSD === 'number') {
       totalCostUSD += apiUsage.totalCostUSD;
-      caseCosts.push({ caseId: row.entity_id as string, costUSD: apiUsage.totalCostUSD });
+      caseCosts.push({
+        caseId: row.entity_id as string,
+        costUSD: apiUsage.totalCostUSD,
+        date: (row.created_at as string).slice(0, 10),
+      });
     }
   }
   const casesWithCost = caseCosts.length;
   const avgCostPerCase = casesWithCost > 0 ? totalCostUSD / casesWithCost : 0;
-  const topCases = caseCosts
-    .sort((a, b) => b.costUSD - a.costUSD)
-    .slice(0, 5);
+  // Already sorted newest-first from DB query
+  const topCases = caseCosts.slice(0, 20);
 
   const apiCosts: ApiCostStats = {
     totalCostUSD: Math.round(totalCostUSD * 100) / 100,
