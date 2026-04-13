@@ -166,41 +166,53 @@ export function QualitySidebar({
           )}
 
           {highSeverity.length > 0 && (
-            <div className="flex items-start gap-2 text-xs text-orange-700 dark:text-orange-400">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-medium">
-                  {highSeverity.length} {highSeverity.length === 1 ? 'anomalia' : 'anomalie'} da verificare
-                </span>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Incongruenze rilevate nei dati clinici che richiedono attenzione.
-                </p>
-                {onSwitchToAnomalies && (
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0 ml-1 text-xs"
-                    onClick={onSwitchToAnomalies}
-                  >
-                    Vedi dettagli
-                  </Button>
-                )}
+            <Collapsible>
+              <div className="flex items-start gap-2 text-xs text-orange-700 dark:text-orange-400">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <CollapsibleTrigger className="font-medium hover:underline cursor-pointer">
+                    {highSeverity.length} {highSeverity.length === 1 ? 'anomalia' : 'anomalie'} da verificare — vedi dettagli
+                  </CollapsibleTrigger>
+                  <p className="text-[11px] opacity-80 mt-0.5">
+                    Incongruenze rilevate nei dati clinici che richiedono attenzione.
+                  </p>
+                  <CollapsibleContent className="mt-2 space-y-1.5">
+                    {highSeverity.map((anomaly) => (
+                      <div key={anomaly.id} className="rounded bg-orange-50 dark:bg-orange-950/20 px-2 py-1.5 text-[11px]">
+                        <p className="font-medium text-orange-800 dark:text-orange-300">
+                          [{anomaly.severity}] {anomaly.anomaly_type.replace(/_/g, ' ')}
+                        </p>
+                        <p className="opacity-80 mt-0.5">{anomaly.description.slice(0, 200)}{anomaly.description.length > 200 ? '...' : ''}</p>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </div>
               </div>
-            </div>
+            </Collapsible>
           )}
 
           {missingDocs.length > 0 && (
-            <div className="flex items-start gap-2 text-xs text-yellow-700 dark:text-yellow-400">
-              <FileQuestion className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <div>
-                <span>
-                  {missingDocs.length} doc. {missingDocs.length === 1 ? 'mancante' : 'mancanti'}
-                </span>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Documenti attesi per questo tipo di caso ma non ancora caricati.
-                </p>
+            <Collapsible>
+              <div className="flex items-start gap-2 text-xs text-yellow-700 dark:text-yellow-400">
+                <FileQuestion className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <CollapsibleTrigger className="font-medium hover:underline cursor-pointer">
+                    {missingDocs.length} doc. {missingDocs.length === 1 ? 'mancante' : 'mancanti'} — vedi elenco
+                  </CollapsibleTrigger>
+                  <p className="text-[11px] opacity-80 mt-0.5">
+                    Documenti attesi per questo tipo di caso ma non caricati.
+                  </p>
+                  <CollapsibleContent className="mt-2 space-y-1.5">
+                    {missingDocs.map((doc) => (
+                      <div key={doc.id} className="rounded bg-yellow-50 dark:bg-yellow-950/20 px-2 py-1.5 text-[11px]">
+                        <p className="font-medium text-yellow-800 dark:text-yellow-300">{doc.document_name}</p>
+                        <p className="opacity-70 mt-0.5">{doc.reason}</p>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </div>
               </div>
-            </div>
+            </Collapsible>
           )}
 
           {incompleteDataDocs.length > 0 && (
