@@ -14,10 +14,8 @@ interface FeatureAccessResult {
  * - Pro: everything allowed
  * - Canceled / past_due: deny all gated features (viewing existing data is still allowed)
  */
-export async function checkFeatureAccess(
-  userId: string,
-  feature: FeatureGate,
-): Promise<FeatureAccessResult> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function checkFeatureAccess(userId: string, feature: FeatureGate): Promise<FeatureAccessResult> {
   const supabase = await createClient();
 
   const { data: profile } = await supabase
