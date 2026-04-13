@@ -148,7 +148,7 @@ export async function GET(
     // Resolve ocr-image: placeholders to base64 data URIs for self-contained HTML
     let synthesis = data.report?.synthesis as string | null ?? null;
     if (synthesis) {
-      const images = await resolveOcrImages(synthesis);
+      const images = await resolveOcrImages(synthesis, caseId);
       if (images.size > 0) {
         synthesis = replaceWithDataUris(synthesis, images);
       }
