@@ -154,6 +154,13 @@ export async function GET(
       }
     }
 
+    // Anonymize synthesis BEFORE assembly (consistent with DOCX path)
+    if (shouldAnonymize && synthesis) {
+      const periziaMetadata = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const result = anonymizeText({ text: synthesis, periziaMetadata });
+      synthesis = result.anonymizedText;
+    }
+
     // Resolve signature image to base64
     let signatureImageBase64: string | undefined;
     if (data.signatureImagePath) {
