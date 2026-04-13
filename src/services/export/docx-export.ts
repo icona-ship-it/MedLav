@@ -89,28 +89,6 @@ function getDocxWatermarkText(reportStatus?: string): string {
 }
 
 /**
- * Build a DOCX Header containing the watermark text.
- */
-function buildWatermarkHeader(reportStatus?: string): Header {
-  const watermarkText = getDocxWatermarkText(reportStatus);
-  return new Header({
-    children: [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: watermarkText,
-            color: 'C0C0C0',
-            size: 18,
-            italics: true,
-          }),
-        ],
-        alignment: AlignmentType.CENTER,
-      }),
-    ],
-  });
-}
-
-/**
  * Build a signature block for the end of the report.
  * Supports dual signature (CTU + collaboratore) using a side-by-side layout.
  */
@@ -496,9 +474,6 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Build professional header with perito names (like benchmark)
   const headerChildren: Paragraph[] = [];
   if (periziaMetadata?.ctuName) {
-    const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-    const cellBorders = { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder };
-
     const leftHeader: Paragraph[] = [
       new Paragraph({
         children: [new TextRun({ text: periziaMetadata.ctuName, bold: true, font: 'Courier New', size: 20 })],
@@ -525,18 +500,10 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     }
 
     if (rightHeader.length > 0) {
-      headerChildren.push(new Paragraph({ children: [] })); // spacer
-      const headerTable = new Table({
-        rows: [new TableRow({
-          children: [
-            new TableCell({ children: leftHeader, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
-            new TableCell({ children: rightHeader, borders: cellBorders, width: { size: 4500, type: WidthType.DXA } }),
-          ],
-        })],
-        width: { size: 9000, type: WidthType.DXA },
-      });
-      // Tables can't go directly in Header, so we use paragraphs
+      // Tables can't go directly in docx Header, so we use flat paragraphs
       headerChildren.push(...leftHeader);
+      headerChildren.push(new Paragraph({ children: [] })); // spacer
+      headerChildren.push(...rightHeader);
     } else {
       headerChildren.push(...leftHeader);
     }
@@ -545,9 +512,6 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Footer with RG number on left, page number on right
   const footerParagraphs: Paragraph[] = [];
   if (periziaMetadata?.rgNumber) {
-    const footerNoBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-    const footerCellBorders = { top: footerNoBorder, left: footerNoBorder, right: footerNoBorder, bottom: footerNoBorder };
-    // Use two paragraphs since Table not supported in Footer by docx.js
     footerParagraphs.push(new Paragraph({
       children: [
         new TextRun({ text: `Numero di Ruolo Generale ${periziaMetadata.rgNumber}`, font: 'Courier New', size: 18, color: '444444' }),
