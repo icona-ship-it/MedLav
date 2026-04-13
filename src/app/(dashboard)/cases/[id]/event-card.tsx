@@ -172,39 +172,8 @@ export function EventCard({
                 {formatDate(event.event_date)}
               </span>
               <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
-              {event.requires_verification ? (
-                (() => {
-                  const isDateIssue = !event.event_date || event.event_date === '' || event.date_precision === 'sconosciuta';
-                  const isDataIssue = !isDateIssue && ((event.confidence as number) < 50 || ((event.reliability_notes ?? '') as string).toLowerCase().includes('ocr'));
-                  const label = isDateIssue ? 'Data incerta' : isDataIssue ? 'Dati incerti' : 'Da verificare';
-                  const tooltip = isDateIssue
-                    ? 'La data di questo evento è mancante o incerta. Clicca per confermare che hai verificato.'
-                    : isDataIssue
-                    ? 'I dati di questo evento potrebbero essere imprecisi (OCR/bassa confidenza). Clicca per confermare che hai verificato.'
-                    : 'Questo evento richiede la tua verifica. Clicca per confermare.';
-                  const colors = isDateIssue
-                    ? 'border-yellow-400 text-yellow-700 dark:text-yellow-400'
-                    : isDataIssue
-                    ? 'border-orange-400 text-orange-700 dark:text-orange-400'
-                    : 'border-amber-500 text-amber-700 dark:text-amber-400';
-                  return (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleQuickVerify();
-                        toast.success(`"${event.title.slice(0, 40)}..." segnato come verificato`);
-                      }}
-                      className="inline-flex items-center"
-                      title={tooltip}
-                    >
-                      <Badge variant="outline" className={`text-xs cursor-pointer ${colors} hover:bg-green-100 hover:text-green-800 dark:hover:bg-green-900 dark:hover:text-green-200 transition-colors`}>
-                        {isVerifying ? '...' : label}
-                      </Badge>
-                    </button>
-                  );
-                })()
-              ) : event.requires_verification === false && (
-                <Badge variant="success" className="text-xs">Verificato</Badge>
+              {event.requires_verification && (
+                <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" title="Da verificare" />
               )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>

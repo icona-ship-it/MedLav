@@ -1,134 +1,66 @@
 'use client';
 
 import { formatDate } from '@/lib/format';
-import { sourceLabels } from '@/lib/constants';
 import type { EventRow } from './types';
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  visita: 'Visita medica',
-  esame: 'Esame diagnostico',
-  diagnosi: 'Diagnosi',
-  intervento: 'Intervento chirurgico',
-  terapia: 'Terapia',
-  ricovero: 'Ricovero ospedaliero',
-  'follow-up': 'Controllo di follow-up',
-  referto: 'Referto',
-  prescrizione: 'Prescrizione',
-  consenso: 'Consenso informato',
-  complicanza: 'Complicanza',
-  spesa_medica: 'Spesa medica',
-  documento_amministrativo: 'Documento amministrativo',
-  certificato: 'Certificato',
-  altro: 'Documento',
-};
-
 /**
- * A4 document-style view of clinical events.
- * Renders events in the format used in real medical-legal reports:
- * Bold header (type + facility + date) followed by full description.
+ * A4 document view that exactly matches the perito's real perizia format.
+ * Clean, professional, no UI chrome — just the document content.
+ *
+ * Gold standard (from Dott. Lavini):
+ *   RX polso destro per trauma da caduta 22/10/2025
+ *   L'indagine odierna, condotta per trauma da caduta, fa rilevare...
+ *
+ *   Visita specialistica ortopedica 22/10/2025
+ *   Paziente di 80 anni in buona salute riferisce caduta accidentale...
  */
 export function EventsDocumentView({
   events,
-  patientInitials,
-  caseCode,
 }: {
   events: EventRow[];
   patientInitials?: string | null;
   caseCode?: string;
 }) {
-  // Filter out deleted and non-clinical noise
-  const clinicalEvents = events.filter(
-    (e) => e.event_type !== 'documento_amministrativo' && e.event_type !== 'spesa_medica',
-  );
-
-  const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
+  const clinicalEvents = events
+    .filter((e) => e.event_type !== 'documento_amministrativo' && e.event_type !== 'spesa_medica')
+    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
 
   return (
-    <div className="mx-auto max-w-[210mm] bg-white dark:bg-zinc-950 shadow-lg rounded-lg border">
-      {/* A4 page with print-friendly margins */}
-      <div className="px-16 py-12 font-serif text-[15px] leading-relaxed text-foreground">
-        {/* Header */}
-        <div className="text-center mb-8 border-b-2 border-primary pb-4">
-          <h1 className="text-xl font-bold tracking-wide">DOCUMENTAZIONE MEDICA</h1>
-          {patientInitials && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Paziente: {patientInitials}{caseCode ? ` — ${caseCode}` : ''}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">
-            {clinicalEvents.length} documenti in ordine cronologico
-          </p>
-        </div>
+    <div className="mx-auto max-w-[794px] bg-white dark:bg-zinc-950 shadow-lg rounded border print:shadow-none print:border-none">
+      <div className="px-[72px] py-[56px]" style={{ fontFamily: "'Times New Roman', Georgia, serif" }}>
 
-        {/* Events in perizia format */}
-        <div className="space-y-6">
+        <h2 className="text-center text-[15px] font-bold tracking-widest uppercase mb-10">
+          Documentazione Medica
+        </h2>
+
+        <div className="space-y-6 text-[13px] leading-[1.75]">
           {clinicalEvents.map((event) => {
-            const typeLabel = EVENT_TYPE_LABELS[event.event_type] ?? event.event_type;
-            const source = sourceLabels[event.source_type] ?? '';
-            const dateStr = formatDate(event.event_date);
+            const date = formatDate(event.event_date);
             const facility = event.facility ?? '';
-            const doctor = event.doctor ? `Dr. ${event.doctor}` : '';
+            const doctor = event.doctor ?? '';
 
-            // Build header: "Type, Facility/Doctor, Date"
-            const headerParts = [typeLabel];
-            if (facility) headerParts.push(facility);
-            if (doctor && !facility) headerParts.push(doctor);
-            const header = `${headerParts.join(', ')} del ${dateStr}`;
+            // Build header exactly like the perito:
+            // "RX polso destro per trauma da caduta 22/10/2025"
+            // "Cartella Pronto soccorso del 23/10/2025 n. 2025068117 AZIENDA OSPEDALIERA"
+            let header = event.title;
+            if (facility) header += ` ${facility}`;
+            header += ` ${date}`;
 
             return (
-              <div key={event.id} className="group">
-                {/* Document header — bold, like in real perizia */}
-                <p className="font-bold text-[15px] mb-1">
-                  {header}
-                  {source && (
-                    <span className="font-normal text-muted-foreground text-xs ml-2">({source})</span>
-                  )}
-                </p>
-
-                {/* Full description — verbatim reproduction */}
-                <div className="pl-0 text-[14.5px] leading-relaxed whitespace-pre-wrap">
-                  {event.description}
-                </div>
-
-                {/* Diagnosis if present */}
+              <div key={event.id}>
+                <p className="font-bold text-[13px]">{header}</p>
+                <p className="whitespace-pre-wrap">{event.description}</p>
                 {event.diagnosis && (
-                  <p className="mt-1 text-[14px]">
-                    <span className="font-semibold">Diagnosi:</span> {event.diagnosis}
-                  </p>
+                  <p className="mt-0.5"><span className="font-semibold">Diagnosi:</span> {event.diagnosis}</p>
                 )}
-
-                {/* Doctor if facility already shown */}
-                {doctor && facility && (
-                  <p className="mt-0.5 text-[13px] text-muted-foreground">{doctor}</p>
-                )}
-
-                {/* Expert notes */}
-                {event.expert_notes && (
-                  <div className="mt-2 rounded bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
-                    <p className="text-[13px] italic">
-                      <span className="font-semibold not-italic">Nota del perito:</span> {event.expert_notes}
-                    </p>
-                  </div>
-                )}
-
-                {/* Verification warning */}
-                {event.requires_verification && (
-                  <p className="mt-1 text-[12px] text-yellow-700 dark:text-yellow-400 italic">
-                    {(!event.event_date || event.date_precision === 'sconosciuta')
-                      ? '⚠ Data da verificare sul documento originale'
-                      : '⚠ Dati da verificare sul documento originale'}
-                  </p>
-                )}
+                {doctor && <p className="text-[12px] text-gray-500 dark:text-gray-400">{doctor.startsWith('Dr') ? doctor : `Dr. ${doctor}`}</p>}
               </div>
             );
           })}
-        </div>
 
-        {/* Footer */}
-        <div className="mt-12 pt-4 border-t text-center">
-          <p className="text-xs text-muted-foreground">
-            Cronistoria generata da LegMed il {now} — {clinicalEvents.length} documenti analizzati
-          </p>
+          {clinicalEvents.length === 0 && (
+            <p className="text-center text-gray-400 py-12">Nessun evento clinico estratto.</p>
+          )}
         </div>
       </div>
     </div>
