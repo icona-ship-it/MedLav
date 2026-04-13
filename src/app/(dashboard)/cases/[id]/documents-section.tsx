@@ -286,7 +286,7 @@ export function DocumentsSection({
               </div>
 
               {/* Batch classify button / progress */}
-              {uploadedDocs.length > 0 && !classifyingAll && (
+              {uploadedDocs.length > 0 && !classifyingAll && classificationProgress?.status !== 'running' && (
                 <Button
                   variant="outline"
                   size="sm"

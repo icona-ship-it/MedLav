@@ -74,6 +74,7 @@ export const classifyBatchJob = inngest.createFunction(
 
         if (!doc) return { success: false, docId };
 
+        let classifySuccess = false;
         try {
           // Check existing OCR pages
           const { data: existingPages } = await supabase
@@ -131,11 +132,22 @@ export const classifyBatchJob = inngest.createFunction(
             updated_at: new Date().toISOString(),
           }).eq('id', docId);
 
-          return { success: true, docId, type: classification.documentType };
+          classifySuccess = true;
         } catch (err) {
           logger.error('classify-batch', `Failed to classify doc ${docId}: ${err instanceof Error ? err.message : 'unknown'}`);
-          return { success: false, docId };
         }
+
+        // Update progress INSIDE the same step (saves Inngest step count)
+        const currentCompleted = classifySuccess ? completed + 1 : completed;
+        const currentErrors = classifySuccess ? errors : errors + 1;
+        const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
+        const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('cases').update({
+          perizia_metadata: { ...meta, classificationProgress: { completed: currentCompleted + currentErrors, total, errors: currentErrors, status: 'running' } },
+          updated_at: new Date().toISOString(),
+        }).eq('id', caseId);
+
+        return { success: classifySuccess, docId };
       });
 
       if (result.success) {
@@ -143,18 +155,6 @@ export const classifyBatchJob = inngest.createFunction(
       } else {
         errors++;
       }
-
-      // Update progress after each document
-      await step.run(`progress-${docId}`, async () => {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-        const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
-        const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-        await supabase.from('cases').update({
-          perizia_metadata: { ...meta, classificationProgress: { completed: completed + errors, total, errors, status: 'running' } },
-          updated_at: new Date().toISOString(),
-        }).eq('id', caseId);
-      });
     }
 
     // Finalize: clear progress, refund unused credits for errors
