@@ -794,6 +794,11 @@ export const processCase = inngest.createFunction(
       throw new Error('Section plan resulted in zero sections — cannot generate empty report');
     }
 
+    // ── Section generation with doc-sanitaria batching ──
+    // documentazione_sanitaria is split into batches of DOC_BATCH_SIZE documents
+    // to prevent Vercel timeout. Each batch is a separate Inngest step.
+    const DOC_BATCH_SIZE = 8;
+
     const accumulatedSections: GeneratedSection[] = [];
     let sectionGenerationFailed = false;
     for (let i = 0; i < sectionPlan.length; i++) {
@@ -803,34 +808,80 @@ export const processCase = inngest.createFunction(
         title: s.title,
         contextSummary: s.contextSummary,
       }));
-      try {
-        const section = await step.run(`gen-section-${spec.id}`, async () => {
-          // Update generation progress in DB so the UI can show section-by-section status
-          const { createAdminClient } = await import('@/lib/supabase/admin');
-          const supabase = createAdminClient();
-          const { data: caseRow } = await supabase
-            .from('cases')
-            .select('perizia_metadata')
-            .eq('id', caseId)
-            .single();
-          const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-          await supabase.from('cases').update({
-            perizia_metadata: {
-              ...existingMeta,
-              generationProgress: {
-                currentSection: i + 1,
-                totalSections: sectionPlan.length,
-                currentSectionTitle: spec.title,
-              },
-            },
-            updated_at: new Date().toISOString(),
-          }).eq('id', caseId);
 
-          return generateSectionStep(caseId, spec, synthesisParams, previousContext);
-        });
-        accumulatedSections.push(section);
+      // Helper to update generation progress in DB
+      const updateProgress = async (title: string) => {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const { data: caseRow } = await supabase
+          .from('cases')
+          .select('perizia_metadata')
+          .eq('id', caseId)
+          .single();
+        const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('cases').update({
+          perizia_metadata: {
+            ...existingMeta,
+            generationProgress: {
+              currentSection: i + 1,
+              totalSections: sectionPlan.length,
+              currentSectionTitle: title,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        }).eq('id', caseId);
+      };
+
+      try {
+        // Special handling for documentazione_sanitaria: split into batches
+        if (spec.id === 'documentazione_sanitaria' && spec.needsOcr && ocrResults.length > DOC_BATCH_SIZE) {
+          const batchContents: string[] = [];
+          const totalBatches = Math.ceil(ocrResults.length / DOC_BATCH_SIZE);
+
+          for (let b = 0; b < totalBatches; b++) {
+            const batchStart = b * DOC_BATCH_SIZE;
+            const batchEnd = Math.min(batchStart + DOC_BATCH_SIZE, ocrResults.length);
+            const batchDocIds = ocrResults.slice(batchStart, batchEnd).map((r) => r.documentId);
+
+            const batchContent = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
+              await updateProgress(`${spec.title} (${b + 1}/${totalBatches})`);
+
+              // Fetch only this batch's OCR
+              const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+              const allOcr = await fetchDocumentsOcrContext(caseId);
+              const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
+
+              const { generateSingleSection } = await import('@/services/synthesis/section-generator');
+              return generateSingleSection({
+                spec,
+                synthesisParams,
+                previousContext,
+                documentsOcrText: batchOcr,
+              });
+            });
+
+            if (batchContent.content) {
+              batchContents.push(batchContent.content);
+            }
+          }
+
+          // Combine all batches into one section
+          accumulatedSections.push({
+            id: spec.id,
+            title: spec.title,
+            content: batchContents.join('\n\n'),
+            contextSummary: `Documentazione sanitaria (${ocrResults.length} documenti in ${totalBatches} batch)`,
+            wordCount: batchContents.join(' ').split(/\s+/).length,
+          });
+        } else {
+          // Normal section: single step
+          const section = await step.run(`gen-section-${spec.id}`, async () => {
+            await updateProgress(spec.title);
+            return generateSectionStep(caseId, spec, synthesisParams, previousContext);
+          });
+          accumulatedSections.push(section);
+        }
       } catch (sectionError) {
-        // Save partial report with what we have so far, then re-throw
         logger.error('pipeline', `Section "${spec.id}" failed after retries, saving partial report (${accumulatedSections.length}/${sectionPlan.length} sections)`, {
           error: sectionError instanceof Error ? sectionError.message : 'unknown',
         });
