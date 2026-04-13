@@ -166,39 +166,38 @@ export function QualitySidebar({
           )}
 
           {anomalies.length > 0 && (
-            <Collapsible>
-              <div className="flex items-start gap-2 text-xs text-orange-700 dark:text-orange-400">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <CollapsibleTrigger className="font-medium hover:underline cursor-pointer">
-                    {anomalies.length} {anomalies.length === 1 ? 'anomalia' : 'anomalie'} rilevate{highSeverity.length > 0 ? ` (${highSeverity.length} ${highSeverity.length === 1 ? 'critica' : 'critiche'})` : ''} — vedi dettagli
-                  </CollapsibleTrigger>
-                  <p className="text-[11px] opacity-80 mt-0.5">
-                    Incongruenze rilevate nei dati clinici che richiedono attenzione.
-                  </p>
-                  <CollapsibleContent className="mt-2 space-y-1.5">
-                    {anomalies.map((anomaly) => (
-                      <div key={anomaly.id} className="rounded bg-orange-50 dark:bg-orange-950/20 px-2 py-1.5 text-[11px]">
-                        <p className="font-medium text-orange-800 dark:text-orange-300">
-                          [{anomaly.severity}] {anomaly.anomaly_type.replace(/_/g, ' ')}
-                        </p>
-                        <p className="opacity-80 mt-0.5">{anomaly.description.slice(0, 200)}{anomaly.description.length > 200 ? '...' : ''}</p>
-                      </div>
-                    ))}
-                    {onSwitchToAnomalies && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full mt-2 text-xs h-7"
-                        onClick={onSwitchToAnomalies}
-                      >
-                        Gestisci anomalie (conferma / ignora)
-                      </Button>
-                    )}
-                  </CollapsibleContent>
-                </div>
+            <div className="flex items-start gap-2 text-xs text-orange-700 dark:text-orange-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium">
+                  {anomalies.length} {anomalies.length === 1 ? 'anomalia' : 'anomalie'} rilevate
+                </p>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  {(() => {
+                    const counts: string[] = [];
+                    const critica = anomalies.filter((a) => a.severity === 'critica').length;
+                    const alta = anomalies.filter((a) => a.severity === 'alta').length;
+                    const media = anomalies.filter((a) => a.severity === 'media').length;
+                    const bassa = anomalies.filter((a) => a.severity === 'bassa').length;
+                    if (critica > 0) counts.push(`${critica} ${critica === 1 ? 'critica' : 'critiche'}`);
+                    if (alta > 0) counts.push(`${alta} ${alta === 1 ? 'alta' : 'alte'}`);
+                    if (media > 0) counts.push(`${media} ${media === 1 ? 'media' : 'medie'}`);
+                    if (bassa > 0) counts.push(`${bassa} ${bassa === 1 ? 'bassa' : 'basse'}`);
+                    return counts.join(', ');
+                  })()}
+                </p>
+                {onSwitchToAnomalies && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2 text-xs h-7"
+                    onClick={onSwitchToAnomalies}
+                  >
+                    Apri e gestisci anomalie
+                  </Button>
+                )}
               </div>
-            </Collapsible>
+            </div>
           )}
 
           {missingDocs.length > 0 && (
