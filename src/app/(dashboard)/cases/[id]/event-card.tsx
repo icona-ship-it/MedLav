@@ -174,7 +174,19 @@ export function EventCard({
               </span>
               <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
               {event.requires_verification && (
-                <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" title="Da verificare" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickVerify();
+                    toast.success('Evento verificato');
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors"
+                  title="Clicca per segnare come verificato"
+                >
+                  <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
+                  {isVerifying ? '...' : 'da verificare'}
+                </button>
               )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
