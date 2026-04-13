@@ -128,7 +128,7 @@ describe('synthesis-prompts', () => {
         caseRole: 'ctu',
       });
 
-      expect(prompt).toContain('ESCLUSIVAMENTE INLINE');
+      expect(prompt).toContain('NON INVENTARE MAI riferimenti a immagini');
       expect(prompt).not.toContain('includile in DUE posizioni');
     });
 

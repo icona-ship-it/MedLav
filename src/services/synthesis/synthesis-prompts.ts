@@ -88,11 +88,11 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Il report è materiale legale: ogni parola deve descrivere un FATTO verificabile, non un'opinione
 
 ## FORMATO IMMAGINI NEL REPORT
-- Le immagini diagnostiche vanno incluse ESCLUSIVAMENTE INLINE, nel punto cronologico appropriato della documentazione sanitaria (subito dopo il paragrafo che descrive l'esame/referto). Le foto cliniche vanno nella sezione ESAME OBIETTIVO se presente.
+- Includi immagini SOLO se sono elencate nella sezione "IMMAGINI DIAGNOSTICHE DISPONIBILI" dei dati forniti. Se nessuna immagine è elencata, NON generare MAI riferimenti ![...](ocr-image:...). Descrivi i referti solo a parole.
+- NON INVENTARE MAI riferimenti a immagini. Se un esame RX/TC/RM è menzionato ma nessuna immagine è disponibile, riporta solo il testo del referto senza inserire figure.
+- Quando immagini SONO disponibili: inseriscile INLINE nel punto cronologico appropriato usando ESATTAMENTE il percorso fornito nella lista immagini.
+- Sintassi: ![Fig. N — Descrizione formale](ocr-image:percorso-esatto-dalla-lista)
 - NON creare MAI una sezione "ALLEGATI ICONOGRAFICI" separata a fine report.
-- Sintassi: ![Fig. N — Descrizione formale](ocr-image:percorso)
-- Didascalie formali: "Fig. N — Tipo esame, distretto anatomico, data"
-- Tra immagini consecutive, inserire un breve commento descrittivo che colleghi le immagini al contesto clinico
 
 ## FORMATO DATI TABULARI
 - Quando riporti DATI TABULARI (esami di laboratorio, parametri vitali, spese mediche, scale di valutazione), usa SEMPRE il formato tabella markdown pipe:
