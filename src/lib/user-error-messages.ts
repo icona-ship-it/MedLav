@@ -50,7 +50,7 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
   },
   {
     pattern: /circuit.?breaker|service unavailable|503/i,
-    message: 'Il servizio AI è temporaneamente non disponibile. Riprova tra qualche minuto.',
+    message: 'Il servizio è temporaneamente non disponibile. Riprova tra qualche minuto.',
   },
   {
     pattern: /500|internal.*error|errore interno/i,

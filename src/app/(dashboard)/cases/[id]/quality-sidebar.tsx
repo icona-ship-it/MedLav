@@ -230,7 +230,7 @@ export function QualitySidebar({
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <div>
                 <span>
-                  {incompleteDataDocs.length} {incompleteDataDocs.length === 1 ? 'documento senza' : 'documenti senza'} eventi estratti
+                  {incompleteDataDocs.length} {incompleteDataDocs.length === 1 ? 'documento senza' : 'documenti senza'} dati clinici rilevabili
                 </span>
                 <p className="text-[11px] opacity-80 mt-0.5">
                   Documenti elaborati ma senza eventi rilevati. Verifica che il contenuto sia leggibile.

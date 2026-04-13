@@ -331,7 +331,7 @@ function AnomalyCard({
         toast.error(result.error);
         return;
       }
-      toast.success('Anomalia confermata — sara segnalata nel report');
+      toast.success('Anomalia confermata — sarà segnalata nel report');
       onChanged?.();
     });
   }, [anomaly.id, caseId, expertNote, onChanged]);
@@ -438,7 +438,7 @@ function AnomalyCard({
           {/* Expert note textarea */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              Nota del perito (opzionale — sara inclusa nel report)
+              Nota del perito (opzionale — sarà inclusa nel report)
             </label>
             <textarea
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"

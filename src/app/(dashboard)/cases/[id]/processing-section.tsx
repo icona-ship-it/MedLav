@@ -34,9 +34,9 @@ interface ProcessingSectionProps {
 // --- Pipeline steps preview ---
 
 const PIPELINE_STEPS = [
-  { icon: FileSearch, label: 'Lettura documenti', desc: 'OCR e riconoscimento testo' },
-  { icon: BrainCircuit, label: 'Analisi contenuti', desc: 'Estrazione eventi e dati clinici' },
-  { icon: ShieldCheck, label: 'Controllo qualità', desc: 'Verifica anomalie e coerenza' },
+  { icon: FileSearch, label: 'Lettura documenti', desc: 'Acquisizione testo dai documenti caricati' },
+  { icon: BrainCircuit, label: 'Analisi clinica', desc: 'Estrazione eventi e dati clinici' },
+  { icon: ShieldCheck, label: 'Verifica completezza', desc: 'Controllo anomalie e coerenza documentale' },
   { icon: FileText, label: 'Generazione report', desc: 'Report medico-legale strutturato' },
 ];
 

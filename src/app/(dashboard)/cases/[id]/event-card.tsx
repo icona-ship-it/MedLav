@@ -209,7 +209,7 @@ export function EventCard({
             <span className={confidenceColor(event.confidence)}>{confidenceLabel(event.confidence)}</span>
             {documentName && (
               <span className="flex items-center gap-1">
-                📄 <span className="font-medium">{documentName}</span>
+                Doc: <span className="font-medium">{documentName}</span>
               </span>
             )}
           </div>
