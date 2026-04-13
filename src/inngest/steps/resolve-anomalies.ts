@@ -66,8 +66,8 @@ export async function resolveAnomaliesStep(
 
     const status = r.resolution.resolved ? 'llm_resolved' : 'llm_confirmed';
     const resolutionNote = r.resolution.resolved
-      ? `Risolta automaticamente (confidenza: ${Math.round(r.resolution.confidence * 100)}%). Evidenza: ${r.resolution.evidence}`
-      : `Confermata dopo verifica OCR (confidenza: ${Math.round(r.resolution.confidence * 100)}%). ${r.resolution.reasoning}`;
+      ? `Risolta dopo verifica documentale. Evidenza: ${r.resolution.evidence}`
+      : `Confermata dopo verifica documentale. ${r.resolution.reasoning}`;
 
     const { error: updateError } = await supabase
       .from('anomalies')

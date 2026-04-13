@@ -363,8 +363,8 @@ describe('extraction-service', () => {
 
       const result = inferMissingDates(events);
 
-      expect(result[0].reliabilityNotes).toContain('INFERITA');
-      expect(result[0].reliabilityNotes).toContain('non presente nel documento originale');
+      expect(result[0].reliabilityNotes).toContain('Data approssimata');
+      expect(result[0].reliabilityNotes).toContain('Verificare sul documento originale');
     });
 
     it('should not infer if all events have sentinel dates', () => {

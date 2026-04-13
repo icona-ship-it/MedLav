@@ -381,7 +381,7 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
     if (!donor) return event;
 
     inferredCount++;
-    const note = `[AUTO] Data INFERITA (non presente nel documento originale) — ereditata da evento "${donor.title}" del ${donor.eventDate} nella stessa pagina. Verificare sul documento originale.`;
+    const note = `Data approssimata — desunta da "${donor.title}" del ${donor.eventDate} nella stessa pagina. Verificare sul documento originale.`;
     return {
       ...event,
       eventDate: donor.eventDate,
@@ -445,7 +445,7 @@ export function flagLegislativeReferences(events: ExtractedEvent[]): ExtractedEv
       ...event,
       confidence: Math.min(event.confidence, 10),
       requiresVerification: true,
-      reliabilityNotes: `[AUTO] Riferimento normativo generico — potrebbe non essere pertinente alla vicenda clinica del paziente. ${event.reliabilityNotes ?? ''}`.trim(),
+      reliabilityNotes: `Riferimento normativo generico — potrebbe non essere pertinente alla vicenda clinica del paziente. ${event.reliabilityNotes ?? ''}`.trim(),
     };
   });
 
@@ -695,8 +695,8 @@ function validateExtractedNamesAgainstOcr(
         newConfidence = Math.min(newConfidence, 50);
         newRequiresVerification = true;
         notes = notes
-          ? `${notes} | Nome medico non riscontrato nel testo OCR originale — rimosso per sicurezza`
-          : 'Nome medico non riscontrato nel testo OCR originale — rimosso per sicurezza';
+          ? `${notes} | Nome medico non riscontrato nel documento originale — rimosso per verifica`
+          : 'Nome medico non riscontrato nel documento originale — rimosso per verifica';
         modified = true;
       }
     }
@@ -715,8 +715,8 @@ function validateExtractedNamesAgainstOcr(
         newConfidence = Math.min(newConfidence, 50);
         newRequiresVerification = true;
         notes = notes
-          ? `${notes} | Nome struttura non riscontrato nel testo OCR originale — rimosso per sicurezza`
-          : 'Nome struttura non riscontrato nel testo OCR originale — rimosso per sicurezza';
+          ? `${notes} | Nome struttura non riscontrato nel documento originale — rimosso per verifica`
+          : 'Nome struttura non riscontrato nel documento originale — rimosso per verifica';
         modified = true;
       }
     }
@@ -838,8 +838,8 @@ function flagUnverifiedEvents(
         requiresVerification: true,
         reliabilityNotes: ((event.reliabilityNotes || '') +
           (isCritical
-            ? ' [AUTO] Evento critico senza testo sorgente — richiede revisione manuale.'
-            : ' [AUTO] Testo sorgente assente o troppo breve.')).trim(),
+            ? ' Evento critico senza riscontro testuale — richiede revisione.'
+            : ' Testo sorgente assente o troppo breve.')).trim(),
       };
     }
 
@@ -854,8 +854,8 @@ function flagUnverifiedEvents(
         requiresVerification: true,
         reliabilityNotes: ((event.reliabilityNotes || '') +
           (isCritical
-            ? ' [AUTO] Evento critico: testo sorgente non trovato nel documento — possibile imprecisione, richiede revisione.'
-            : ' [AUTO] Testo sorgente non trovato nel documento — verificare.')).trim(),
+            ? ' Evento critico: testo sorgente non riscontrato nel documento — possibile imprecisione, richiede revisione.'
+            : ' Testo sorgente non riscontrato nel documento — verificare.')).trim(),
       };
     }
 

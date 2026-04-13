@@ -219,7 +219,7 @@ export function AnomalyReviewStep({
               </li>
             </ul>
             <p className="text-xs text-blue-600 dark:text-blue-500">
-              Le anomalie con badge verde &quot;Risolta automaticamente&quot; non richiedono azione. Non e obbligatorio revisionare tutto: le anomalie non gestite verranno comunque segnalate nel report.
+              Le anomalie con badge verde &quot;Risolta&quot; non richiedono azione. Non e obbligatorio revisionare tutto: le anomalie non gestite verranno comunque segnalate nel report.
             </p>
           </div>
         </CollapsibleContent>

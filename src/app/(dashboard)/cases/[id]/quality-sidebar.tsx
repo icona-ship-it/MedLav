@@ -300,7 +300,7 @@ export function QualitySidebar({
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5" /> Qualità OCR
+                  <Eye className="h-3.5 w-3.5" /> Qualità lettura
                 </span>
                 <span className={`font-medium ${confidenceColor(ocrConfidence)}`}>
                   {ocrConfidence}% — {confidenceLabel(ocrConfidence)}
@@ -325,7 +325,7 @@ export function QualitySidebar({
           onClick={onOpenOcr}
         >
           <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-          Avanzate: visualizza OCR
+          Avanzate: visualizza testo originale
         </Button>
       )}
     </div>
