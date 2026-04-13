@@ -118,6 +118,29 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {/* Prezzi crediti per operazione */}
+      <section className="rounded-lg border bg-card p-4">
+        <h2 className="text-lg font-semibold mb-3">Prezzi crediti per operazione</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { op: 'Analisi completa', cr: 30 },
+            { op: 'Solo estrazione', cr: 15 },
+            { op: 'Analisi spese', cr: 10 },
+            { op: 'Anonimizzazione', cr: 5 },
+            { op: 'Categorizzazione AI', cr: '1/doc' },
+            { op: 'Rigenerazione sezione', cr: 5 },
+            { op: 'Rigenerazione report', cr: 20 },
+            { op: 'Split PDF', cr: '3/parte' },
+          ].map((item) => (
+            <div key={item.op} className="rounded-md border px-3 py-2">
+              <p className="text-xs text-muted-foreground">{item.op}</p>
+              <p className="text-lg font-bold">{item.cr} <span className="text-xs font-normal text-muted-foreground">crediti</span></p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">Trial: 30 cr gratis | Pro: 900 cr/mese a &euro;69 | Extra: 100=&euro;9, 300=&euro;24, 1000=&euro;69</p>
+      </section>
+
       {/* Stuck Cases Alert */}
       {stuckCases.length > 0 && (
         <section className="rounded-lg border-2 border-orange-300 dark:border-orange-700 bg-orange-50/50 dark:bg-orange-950/20 p-4">

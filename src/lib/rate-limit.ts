@@ -140,10 +140,10 @@ export async function checkRateLimit(params: RateLimitParams): Promise<RateLimit
  * Rate limit presets for different endpoints.
  */
 export const RATE_LIMITS = {
-  /** Auth endpoints: 10 requests per minute */
-  AUTH: { limit: 10, windowMs: 60_000 },
-  /** Processing start: 5 requests per minute */
-  PROCESSING: { limit: 5, windowMs: 60_000 },
-  /** General API: 60 requests per minute */
-  API: { limit: 60, windowMs: 60_000 },
+  /** Auth endpoints: 30 requests per minute (login, signup, password reset) */
+  AUTH: { limit: 30, windowMs: 60_000 },
+  /** Heavy operations: 20 requests per minute (start processing, cancel, split PDF) */
+  PROCESSING: { limit: 20, windowMs: 60_000 },
+  /** General API: 200 requests per minute (export, search, classify, regenerate) */
+  API: { limit: 200, windowMs: 60_000 },
 } as const;

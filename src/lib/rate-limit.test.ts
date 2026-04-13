@@ -118,8 +118,8 @@ describe('rate-limit (in-memory fallback)', () => {
     const { RATE_LIMITS } = await import('./rate-limit');
 
     // Assert
-    expect(RATE_LIMITS.AUTH).toEqual({ limit: 10, windowMs: 60_000 });
-    expect(RATE_LIMITS.PROCESSING).toEqual({ limit: 5, windowMs: 60_000 });
-    expect(RATE_LIMITS.API).toEqual({ limit: 60, windowMs: 60_000 });
+    expect(RATE_LIMITS.AUTH).toEqual({ limit: 30, windowMs: 60_000 });
+    expect(RATE_LIMITS.PROCESSING).toEqual({ limit: 20, windowMs: 60_000 });
+    expect(RATE_LIMITS.API).toEqual({ limit: 200, windowMs: 60_000 });
   });
 });
