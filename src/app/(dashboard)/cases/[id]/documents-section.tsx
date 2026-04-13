@@ -169,21 +169,30 @@ export function DocumentsSection({
 
     setClassifyingAll(true);
 
-    // Parallel classification for all documents
-    const results = await Promise.allSettled(
-      docsToClassify.map((doc) =>
-        fetch('/api/processing/classify-document', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-          body: JSON.stringify({ documentId: doc.id, caseId }),
-        }).then((res) => res.json() as Promise<{ success: boolean }>),
-      ),
-    );
+    // Process in batches of 3 to avoid rate limiting
+    const BATCH_SIZE = 3;
+    let successCount = 0;
+    let errCount = 0;
 
-    const successCount = results.filter(
-      (r) => r.status === 'fulfilled' && r.value.success,
-    ).length;
-    const errCount = docsToClassify.length - successCount;
+    for (let i = 0; i < docsToClassify.length; i += BATCH_SIZE) {
+      const batch = docsToClassify.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((doc) =>
+          fetch('/api/processing/classify-document', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+            body: JSON.stringify({ documentId: doc.id, caseId }),
+          }).then((res) => res.json() as Promise<{ success: boolean }>),
+        ),
+      );
+
+      successCount += results.filter(
+        (r) => r.status === 'fulfilled' && r.value.success,
+      ).length;
+      errCount += batch.length - results.filter(
+        (r) => r.status === 'fulfilled' && r.value.success,
+      ).length;
+    }
 
     if (errCount === 0) {
       toast.success(`${successCount} documenti categorizzati`);
