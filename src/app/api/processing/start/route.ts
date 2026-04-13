@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('id, user_id, processing_stage')
+      .select('id, user_id, processing_stage, pipeline_mode')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -138,13 +138,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get pipeline mode for fixed credit cost
-    const { data: caseForMode } = await supabase
-      .from('cases')
-      .select('pipeline_mode')
-      .eq('id', caseId)
-      .single();
-    const pipelineMode = (caseForMode?.pipeline_mode as string) ?? 'full';
+    // Get pipeline mode for fixed credit cost (already fetched with caseData)
+    const pipelineMode = (caseData.pipeline_mode as string) ?? 'full';
     const creditCost = getElaborationCost(pipelineMode);
 
     // Credit check — block if insufficient

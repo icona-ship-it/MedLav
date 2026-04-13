@@ -40,7 +40,7 @@ function SubscriptionButton({
   async function handlePortal() {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      const res = await fetch('/api/stripe/portal', { method: 'POST', headers: { ...csrfHeaders() } });
       const data = (await res.json()) as PortalResponse;
       if (data.success && data.data?.url) {
         window.location.href = data.data.url;

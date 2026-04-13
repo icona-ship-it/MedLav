@@ -48,6 +48,18 @@ export async function POST(request: NextRequest) {
     }
     authenticatedUserId = user.id;
 
+    // Rate limit BEFORE credit deduction — don't charge for rate-limited requests
+    const rateCheck = await checkRateLimit({
+      key: `regen-section:${user.id}`,
+      ...RATE_LIMITS.PROCESSING,
+    });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppi tentativi. Riprova tra qualche minuto.' },
+        { status: 429 },
+      );
+    }
+
     // Credit check for section regeneration
     const deduction = await deductCredits(
       user.id,
@@ -61,17 +73,6 @@ export async function POST(request: NextRequest) {
       );
     }
     creditsDeducted = true;
-
-    const rateCheck = await checkRateLimit({
-      key: `regen-section:${user.id}`,
-      ...RATE_LIMITS.PROCESSING,
-    });
-    if (!rateCheck.success) {
-      return NextResponse.json(
-        { success: false, error: 'Troppi tentativi. Riprova tra qualche minuto.' },
-        { status: 429 },
-      );
-    }
 
     const body = await request.json() as unknown;
     const parsed = requestSchema.safeParse(body);

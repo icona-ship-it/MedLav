@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -10,11 +11,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
+  const rateCheck = await checkRateLimit({ key: `credits-history:${user.id}`, ...RATE_LIMITS.API });
+  if (!rateCheck.success) {
+    return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
+  }
+
   const limit = Math.min(
-    parseInt(request.nextUrl.searchParams.get('limit') ?? '50', 10),
+    Math.max(1, parseInt(request.nextUrl.searchParams.get('limit') ?? '50', 10) || 50),
     100,
   );
-  const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10);
+  const offset = Math.max(0, parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10) || 0);
 
   const admin = createAdminClient();
   const { data, error } = await admin
