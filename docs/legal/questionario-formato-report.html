@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Guida al Formato Report per Modulo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f8f9fa; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 30px; }
+
+  .header { text-align: center; margin-bottom: 50px; padding-bottom: 30px; border-bottom: 3px solid #2563eb; }
+  .header h1 { font-size: 28px; color: #2563eb; margin-bottom: 8px; }
+  .header p { color: #64748b; font-size: 15px; }
+  .header .subtitle { font-size: 18px; color: #334155; margin-top: 15px; font-weight: 600; }
+
+  .intro { background: #eff6ff; border-left: 4px solid #2563eb; padding: 20px 25px; margin-bottom: 40px; border-radius: 0 8px 8px 0; }
+  .intro h2 { color: #2563eb; font-size: 18px; margin-bottom: 10px; }
+  .intro p { font-size: 14px; color: #334155; }
+
+  .module { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; page-break-inside: avoid; }
+  .module h2 { font-size: 20px; color: #1e3a5f; margin-bottom: 5px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+  .module .module-desc { color: #64748b; font-size: 13px; margin-bottom: 20px; }
+  .module .module-meta { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+  .module .tag { background: #f1f5f9; padding: 4px 12px; border-radius: 20px; font-size: 12px; color: #475569; }
+  .module .tag.cost { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+
+  .question { margin-bottom: 20px; }
+  .question label { display: block; font-weight: 600; font-size: 14px; color: #1e3a5f; margin-bottom: 6px; }
+  .question label .num { color: #2563eb; margin-right: 5px; }
+  .question .hint { font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-style: italic; }
+  .question textarea, .question input[type="text"] { width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
+  .question textarea { min-height: 80px; }
+  .question textarea:focus, .question input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+  .section-list { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px 20px; margin: 15px 0; }
+  .section-list h4 { font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .section-list ol { padding-left: 20px; }
+  .section-list li { font-size: 14px; margin-bottom: 4px; color: #334155; }
+  .section-list li .ai { color: #2563eb; font-size: 11px; font-weight: 600; }
+  .section-list li .manual { color: #dc2626; font-size: 11px; font-weight: 600; }
+
+  .example { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin: 15px 0; }
+  .example h4 { font-size: 13px; color: #92400e; margin-bottom: 8px; }
+  .example pre { font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; color: #78350f; line-height: 1.5; }
+
+  .divider { border: none; border-top: 2px dashed #e2e8f0; margin: 40px 0; }
+
+  .general { background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 30px; margin-bottom: 30px; }
+  .general h2 { color: #166534; }
+
+  .footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; }
+
+  @media print {
+    body { background: white; }
+    .container { padding: 20px; }
+    .module { box-shadow: none; border: 1px solid #ccc; }
+    .question textarea { border: 1px solid #999; min-height: 120px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>LegMed</h1>
+    <p>Questionario per la definizione del formato report ideale</p>
+    <p class="subtitle">Da compilare con il medico legale di riferimento</p>
+  </div>
+
+  <div class="intro">
+    <h2>Scopo di questo documento</h2>
+    <p>
+      LegMed genera automaticamente report medico-legali da documentazione clinica.
+      Per migliorare la qualità dell'output, abbiamo bisogno del <strong>formato esatto</strong> che il perito
+      si aspetta per ogni tipo di analisi. Per ciascun modulo, chiediamo: quali sezioni deve avere il report,
+      in che ordine, cosa deve contenere ogni sezione, e cosa deve compilare il perito manualmente.
+    </p>
+    <p style="margin-top: 10px;">
+      <strong>Come compilare:</strong> Per ogni modulo, risponda alle domande nel riquadro.
+      Se un modulo non è di suo interesse, può saltarlo. Allegare un esempio di report reale
+      per ogni modulo sarebbe estremamente utile.
+    </p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- SEZIONE GENERALE -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="general">
+    <h2>Domande generali (valide per tutti i moduli)</h2>
+
+    <div class="question">
+      <label><span class="num">G1.</span> Intestazione del documento</label>
+      <div class="hint">Come deve apparire l'intestazione? Es: nomi dei periti a sinistra e destra, istituzione al centro, linea separatrice</div>
+      <textarea placeholder="Descriva il formato dell'intestazione ideale..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G2.</span> Font e formattazione</label>
+      <div class="hint">Il benchmark usa Courier New 12pt. È quello che preferisce? O preferisce Times New Roman, Arial, altro?</div>
+      <textarea placeholder="Font preferito, dimensione, spaziatura..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G3.</span> Footer / Piè di pagina</label>
+      <div class="hint">Cosa deve comparire nel footer? Es: numero di ruolo generale a sinistra, numero pagina a destra</div>
+      <textarea placeholder="Formato del footer..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G4.</span> Blocco firma finale</label>
+      <div class="hint">Come deve essere strutturato? Firma singola o doppia (CTU + collaboratore)? Con luogo e data?</div>
+      <textarea placeholder="Formato del blocco firma..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G5.</span> Stile dei quesiti</label>
+      <div class="hint">I quesiti del giudice vanno in corsivo? Numerati? Con che formato? Es: "I) Letti gli atti..."</div>
+      <textarea placeholder="Formato dei quesiti..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G6.</span> Sezione documentazione sanitaria</label>
+      <div class="hint">Come deve essere riprodotta? Ogni documento come blocco separato con tipo+data? Integrale o sintetizzata?</div>
+      <textarea placeholder="Formato della cronistoria documentale..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">G7.</span> Tono e linguaggio</label>
+      <div class="hint">Oggettivo e neutrale? Formale giuridico? Ci sono formulazioni standard da usare sempre?</div>
+      <textarea placeholder="Tono, stile, formulazioni ricorrenti..."></textarea>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 1: PERIZIA MEDICO LEGALE -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>1. Perizia Medico Legale</h2>
+    <p class="module-desc">Per privato, studio legale, assicurazione, agenzie infortunistiche</p>
+    <div class="module-meta">
+      <span class="tag">Stragiudiziale</span>
+      <span class="tag">5 sotto-tipi: RC Civile, Stradale, Infortuni, Malattia, Resp. Professionale</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="section-list">
+      <h4>Sezioni attuali generate dall'AI</h4>
+      <ol>
+        <li>Premessa e conferimento incarico <span class="ai">[AI]</span></li>
+        <li>Anamnesi patologica remota <span class="ai">[AI]</span></li>
+        <li>Dati della documentazione sanitaria <span class="ai">[AI]</span></li>
+        <li>Epicrisi (sintesi fatti + ITT/ITP) <span class="ai">[AI]</span></li>
+        <li>Conclusioni medico-legali <span class="ai">[AI]</span></li>
+        <li>Visita clinica <span class="manual">[PERITO compila]</span></li>
+        <li>Considerazioni medico-legali <span class="manual">[PERITO compila]</span></li>
+      </ol>
+    </div>
+
+    <div class="question">
+      <label><span class="num">1.1</span> Queste sezioni sono corrette? Manca qualcosa? L'ordine va bene?</label>
+      <textarea placeholder="Sezioni da aggiungere, rimuovere, riordinare..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">1.2</span> La premessa come deve essere strutturata?</label>
+      <div class="hint">Es: "Il sottoscritto Dott. X, specialista in Y, veniva incaricato da Z di..."</div>
+      <textarea placeholder="Formato della premessa..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">1.3</span> Le conclusioni: cosa devono contenere esattamente?</label>
+      <div class="hint">Nesso causale? Quantificazione danno biologico? ITT/ITP? Spese congrue?</div>
+      <textarea placeholder="Contenuto delle conclusioni..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">1.4</span> Ci sono differenze tra i sotto-tipi? (RC Civile vs Stradale vs Infortuni vs Malattia vs Resp. Prof.)</label>
+      <textarea placeholder="Differenze specifiche per sotto-tipo..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">1.5</span> Può allegare un esempio di perizia stragiudiziale completa che consideri "perfetta"?</label>
+      <div class="hint">Se possibile, con dati anonimizzati. Anche una bozza va bene.</div>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 2: CTU/ATP CIVILE -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>2. CTU/ATP in Ambito Civile</h2>
+    <p class="module-desc">Consulenza tecnica d'ufficio in sede civile</p>
+    <div class="module-meta">
+      <span class="tag">Ruolo: CTU</span>
+      <span class="tag">4 sotto-tipi: RC Civile, Infortuni, Malattia, Resp. Professionale</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="section-list">
+      <h4>Sezioni attuali generate dall'AI</h4>
+      <ol>
+        <li>Premessa e conferimento incarico <span class="ai">[AI]</span></li>
+        <li>Quesiti del giudice <span class="manual">[PERITO compila]</span></li>
+        <li>Verbale delle operazioni peritali <span class="manual">[PERITO compila]</span></li>
+        <li>Anamnesi patologica remota <span class="ai">[AI]</span></li>
+        <li>Dati della documentazione sanitaria <span class="ai">[AI]</span></li>
+        <li>Visita medico-legale <span class="manual">[PERITO compila]</span></li>
+        <li>Epicrisi <span class="ai">[AI]</span></li>
+        <li>Considerazioni medico-legali <span class="manual">[PERITO compila]</span></li>
+        <li>Risposte ai quesiti <span class="ai">[AI]</span></li>
+        <li>Bibliografia <span class="manual">[PERITO compila]</span></li>
+      </ol>
+    </div>
+
+    <div class="example">
+      <h4>Formato benchmark (dal documento Del Balzo/Lavini)</h4>
+      <pre>
+TRIBUNALE ORDINARIO DI BOLZANO
+Procedimenti Speciali Sommari
+
+Numero di Ruolo Generale n° 3424/2024
+
+                    * * * * *
+
+                              Ill.mo Signor
+                              Dott. Simon Tschager
+                              Giudice Istruttore
+                              c/o il Tribunale di Bolzano
+
+In data 02.05.2025, la Signoria Vostra Illustrissima
+conferiva ai sottoscritti Dott.ssa Giovanna Del Balzo,
+Medico Legale [...] incarico di Consulenza Tecnica
+medico legale nel Ricorso ex Art. 696 bis c.p.c.
+
+Parte Ricorrente:
+Erich Resch, nato a Nova Levante (BZ) [...]
+
+Parte Resistente:
+Dolomiti Sportclinic S.r.l. [...]
+
+Il compito affidato al Collegio di CC.TT.U. era
+precisato nei seguenti quesiti:
+"... I) Letti gli atti e i documenti di causa [...]"</pre>
+    </div>
+
+    <div class="question">
+      <label><span class="num">2.1</span> Il report CTU deve seguire esattamente questo formato?</label>
+      <textarea placeholder="Confermi questo formato? Modifiche necessarie?"></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">2.2</span> La premessa deve contenere: tribunale, giudice, parti, CTP, date, quesiti?</label>
+      <textarea placeholder="Quali informazioni nella premessa CTU..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">2.3</span> Le risposte ai quesiti: devono essere punto per punto, ricalcando i quesiti?</label>
+      <textarea placeholder="Formato risposte ai quesiti..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">2.4</span> La sezione "Osservazioni alla bozza" serve? Come deve essere strutturata?</label>
+      <textarea placeholder="Formato osservazioni bozza..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">2.5</span> Può allegare un esempio di CTU civile completa?</label>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 3: CTU/ATP PREVIDENZIALE -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>3. CTU/ATP in Ambito Previdenziale</h2>
+    <p class="module-desc">Ricorsi previdenziali e assistenziali (D.Lgs. 62/2024, invalidità civile, L.104, L.222, accompagnamento)</p>
+    <div class="module-meta">
+      <span class="tag">Ruolo: CTU</span>
+      <span class="tag">7 sotto-tipi</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">3.1</span> La struttura del report previdenziale è diversa da quella civile?</label>
+      <div class="hint">Es: valutazione funzionale, tabelle percentuali, riferimento a specifiche leggi</div>
+      <textarea placeholder="Differenze strutturali rispetto alla CTU civile..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">3.2</span> Per il D.Lgs. 62/2024: ci sono sezioni specifiche obbligatorie?</label>
+      <textarea placeholder="Sezioni specifiche per D.Lgs. 62/2024..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">3.3</span> Per invalidità civile / L.104 / accompagnamento: il formato è lo stesso?</label>
+      <textarea placeholder="Differenze per sotto-tipo previdenziale..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">3.4</span> Può allegare un esempio di CTU previdenziale?</label>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 4: CTU/ATP INAIL -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>4. CTU/ATP in Ambito INAIL</h2>
+    <p class="module-desc">Malattia professionale e infortunio sul lavoro</p>
+    <div class="module-meta">
+      <span class="tag">Ruolo: CTU</span>
+      <span class="tag">2 sotto-tipi: Malattia professionale, Infortunio</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">4.1</span> Il report INAIL ha sezioni specifiche? (es: nesso di causalità con l'attività lavorativa)</label>
+      <textarea placeholder="Sezioni specifiche INAIL..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">4.2</span> Ci sono tabelle INAIL specifiche da utilizzare per la valutazione?</label>
+      <textarea placeholder="Tabelle di riferimento INAIL..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">4.3</span> Può allegare un esempio?</label>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 5: PARERE PRO VERITATE -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>5. Parere Pro Veritate</h2>
+    <p class="module-desc">Parere motivato sulla sussistenza di profili di responsabilità professionale medica</p>
+    <div class="module-meta">
+      <span class="tag">Stragiudiziale</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">5.1</span> Quali sezioni deve avere il parere pro veritate?</label>
+      <div class="hint">Es: Premessa, Fatto, Documentazione esaminata, Analisi medico-legale, Conclusioni</div>
+      <textarea placeholder="Struttura del parere pro veritate..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">5.2</span> Il tono è diverso da una perizia? Più discorsivo?</label>
+      <textarea placeholder="Tono e stile del parere..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">5.3</span> Può allegare un esempio?</label>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULO 6: PARERE SCOPO RISERVA -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>6. Parere Scopo Riserva</h2>
+    <p class="module-desc">Parere preventivo a scopo prognostico o di riserva tecnica per assicurazioni</p>
+    <div class="module-meta">
+      <span class="tag">Stragiudiziale</span>
+      <span class="tag cost">30 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">6.1</span> Quali sezioni deve avere?</label>
+      <textarea placeholder="Struttura del parere scopo riserva..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">6.2</span> Deve contenere una stima di rischio/costo? In che formato?</label>
+      <textarea placeholder="Formato stima prognostica..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">6.3</span> Può allegare un esempio?</label>
+      <input type="text" placeholder="Nome file allegato o 'invierò via email'">
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- MODULI 7-10: OUTPUT SEMPLICI -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="module">
+    <h2>7-8. Analisi Documenti (Sanitari e Giudiziari)</h2>
+    <p class="module-desc">Cronistoria estrattiva della documentazione — NON genera report, solo timeline eventi</p>
+    <div class="module-meta">
+      <span class="tag">Solo estrazione</span>
+      <span class="tag cost">15 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">7.1</span> Come deve essere formattata la cronistoria?</label>
+      <div class="hint">Attualmente: lista cronologica con data, tipo documento, contenuto estratto. Ogni documento come blocco separato.</div>
+      <textarea placeholder="Formato cronistoria ideale..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">7.2</span> Il contenuto di ogni documento deve essere integrale o sintetizzato?</label>
+      <textarea placeholder="Integrale / sintetizzato / dipende dal tipo..."></textarea>
+    </div>
+  </div>
+
+  <div class="module">
+    <h2>9. Analisi Spese Mediche</h2>
+    <p class="module-desc">Gestione congruità spese mediche e farmacologiche</p>
+    <div class="module-meta">
+      <span class="tag">Solo spese</span>
+      <span class="tag cost">10 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">9.1</span> Quali colonne deve avere la tabella spese?</label>
+      <div class="hint">Attualmente: Descrizione, Importo, N. scontrino/fattura, Tipo farmaco, Interpretazione, Congruità</div>
+      <textarea placeholder="Colonne tabella spese..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">9.2</span> La congruità deve essere valutata dall'AI o lasciata al perito?</label>
+      <textarea placeholder="Chi valuta la congruità..."></textarea>
+    </div>
+  </div>
+
+  <div class="module">
+    <h2>10. Anonimizzatore</h2>
+    <p class="module-desc">Anonimizzazione e pseudonimizzazione documenti</p>
+    <div class="module-meta">
+      <span class="tag">Solo anonimizzazione</span>
+      <span class="tag cost">5 crediti</span>
+    </div>
+
+    <div class="question">
+      <label><span class="num">10.1</span> Cosa deve essere anonimizzato?</label>
+      <div class="hint">Attualmente: nomi, date di nascita, indirizzi, codici fiscali, numeri telefono</div>
+      <textarea placeholder="Elementi da anonimizzare..."></textarea>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- PRIORITÀ -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <div class="general">
+    <h2>Priorità di sviluppo</h2>
+
+    <div class="question">
+      <label><span class="num">P1.</span> Qual è il modulo PIÙ importante da perfezionare per primo?</label>
+      <textarea placeholder="Es: CTU civile responsabilità professionale, perché è il più richiesto..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">P2.</span> Ci sono moduli che non servono o che possiamo rimandare?</label>
+      <textarea placeholder="Moduli da escludere o rimandare..."></textarea>
+    </div>
+
+    <div class="question">
+      <label><span class="num">P3.</span> Note aggiuntive o richieste specifiche</label>
+      <textarea placeholder="Qualsiasi altra indicazione..."></textarea>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>LegMed — Questionario formato report v1.0 — Aprile 2026</p>
+    <p>Documento confidenziale. Compilare e restituire a info@legmed.it</p>
+  </div>
+
+</div>
+</body>
+</html>
