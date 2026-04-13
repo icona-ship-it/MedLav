@@ -325,7 +325,7 @@ export function ReportStep({
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="report">Report</TabsTrigger>
-          <TabsTrigger value="timeline">Cronistoria ({events.length} eventi)</TabsTrigger>
+          <TabsTrigger value="timeline">Cronistoria</TabsTrigger>
           {pubmedReferences.length > 0 && pubmedReferences.some(r => r.articles.length > 0) && (
             <TabsTrigger value="pubmed">
               Evidenze PubMed ({pubmedReferences.reduce((s, r) => s + r.articles.length, 0)})
