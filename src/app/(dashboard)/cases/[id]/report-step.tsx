@@ -40,6 +40,10 @@ const ReportDialog = dynamic(
   () => import('./report-dialog').then((m) => ({ default: m.ReportDialog })),
   { loading: () => null },
 );
+const AnomaliesSection = dynamic(
+  () => import('./anomalies-section').then((m) => ({ default: m.AnomaliesSection })),
+  { loading: () => null },
+);
 
 // --- Types ---
 
@@ -100,6 +104,7 @@ export function ReportStep({
   const [qualitySheetOpen, setQualitySheetOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [anomalyDialogOpen, setAnomalyDialogOpen] = useState(false);
 
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
@@ -361,7 +366,7 @@ export function ReportStep({
                   missingDocs={missingDocs}
                   documents={documents}
                   documentPages={documentPages}
-                  onSwitchToAnomalies={() => onNavigateToStep(4)}
+                  onSwitchToAnomalies={() => setAnomalyDialogOpen(true)}
                   onOpenOcr={() => setOcrDialogOpen(true)}
                 />
               </div>
@@ -402,7 +407,7 @@ export function ReportStep({
               documentPages={documentPages}
               onSwitchToAnomalies={() => {
                 setQualitySheetOpen(false);
-                onNavigateToStep(4);
+                setAnomalyDialogOpen(true);
               }}
               onOpenOcr={() => {
                 setQualitySheetOpen(false);
@@ -435,6 +440,22 @@ export function ReportStep({
         report={report}
         onSaved={() => router.refresh()}
       />
+
+      {/* Anomaly Review Dialog */}
+      <Dialog open={anomalyDialogOpen} onOpenChange={setAnomalyDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Anomalie e Documenti Mancanti</DialogTitle>
+          </DialogHeader>
+          <AnomaliesSection
+            caseId={caseId}
+            anomalies={anomalies}
+            events={events}
+            documents={documents}
+            onChanged={() => router.refresh()}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

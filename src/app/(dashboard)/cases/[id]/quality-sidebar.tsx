@@ -185,6 +185,16 @@ export function QualitySidebar({
                         <p className="opacity-80 mt-0.5">{anomaly.description.slice(0, 200)}{anomaly.description.length > 200 ? '...' : ''}</p>
                       </div>
                     ))}
+                    {onSwitchToAnomalies && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full mt-2 text-xs h-7"
+                        onClick={onSwitchToAnomalies}
+                      >
+                        Gestisci anomalie (conferma / ignora)
+                      </Button>
+                    )}
                   </CollapsibleContent>
                 </div>
               </div>
