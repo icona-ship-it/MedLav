@@ -1,17 +1,24 @@
 /**
  * Credit cost constants for all AI operations.
+ * FLAT pricing per operation — no per-page calculation.
  *
- * Pricing model (confirmed):
- * - Trial: 30 credits one-time
- * - Pro €69/month: 900 credits/month (no rollover)
+ * - Trial: 30 credits one-time (= 1 full analysis)
+ * - Pro €69/month: 900 credits/month (= 30 full analyses)
  * - Extra packs: 100=€9, 300=€24, 1000=€69
  */
 
+import type { PipelineMode } from '@/types/modules';
+
+/** Fixed credit costs per operation */
 export const CREDIT_COSTS = {
-  /** Fixed base cost per case elaboration */
-  elaborazione_base: 5,
-  /** Per-page cost for case elaboration (added to base) */
-  elaborazione_per_page: 1,
+  /** Full analysis: OCR + extraction + report */
+  elaborazione_completa: 30,
+  /** Extraction only: OCR + events */
+  elaborazione_estrazione: 15,
+  /** Expenses only: OCR + expense table */
+  elaborazione_spese: 10,
+  /** Anonymization only: OCR + redact */
+  elaborazione_anonimizzazione: 5,
   /** AI document classification (per document) */
   categorizzazione: 1,
   /** Regenerate a single report section */
@@ -24,18 +31,36 @@ export const CREDIT_COSTS = {
 
 export type CreditOperation = keyof typeof CREDIT_COSTS;
 
+/** Map pipeline_mode to credit cost */
+export function getElaborationCost(pipelineMode: PipelineMode | string): number {
+  switch (pipelineMode) {
+    case 'full': return CREDIT_COSTS.elaborazione_completa;
+    case 'extraction_only': return CREDIT_COSTS.elaborazione_estrazione;
+    case 'expenses_only': return CREDIT_COSTS.elaborazione_spese;
+    case 'anonymize_only': return CREDIT_COSTS.elaborazione_anonimizzazione;
+    default: return CREDIT_COSTS.elaborazione_completa;
+  }
+}
+
+/** Human-readable label for pipeline mode cost */
+export function getElaborationLabel(pipelineMode: PipelineMode | string): string {
+  switch (pipelineMode) {
+    case 'full': return 'Analisi completa';
+    case 'extraction_only': return 'Solo estrazione';
+    case 'expenses_only': return 'Analisi spese';
+    case 'anonymize_only': return 'Anonimizzazione';
+    default: return 'Analisi completa';
+  }
+}
+
 /** Plan credit allocations */
 export const PLAN_CREDITS = {
   trial: {
-    /** One-time grant for new trial users */
     initialGrant: 30,
-    /** No monthly allowance */
     monthlyAllowance: 0,
   },
   pro: {
-    /** No initial grant (monthly covers it) */
     initialGrant: 0,
-    /** Monthly allowance — resets each billing cycle, does NOT roll over */
     monthlyAllowance: 900,
   },
 } as const;
@@ -46,11 +71,3 @@ export const CREDIT_PACKS = [
   { credits: 300, priceEur: 24, stripePriceEnv: 'STRIPE_PRICE_CREDITS_300' },
   { credits: 1000, priceEur: 69, stripePriceEnv: 'STRIPE_PRICE_CREDITS_1000' },
 ] as const;
-
-/**
- * Estimate total credits needed for a case elaboration.
- * @param totalPages - sum of pages across all documents in the case
- */
-export function estimateElaborationCredits(totalPages: number): number {
-  return CREDIT_COSTS.elaborazione_base + (totalPages * CREDIT_COSTS.elaborazione_per_page);
-}

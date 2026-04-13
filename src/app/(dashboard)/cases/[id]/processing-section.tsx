@@ -18,6 +18,7 @@ import { ProcessingProgress } from '@/components/processing-progress';
 // Classification review removed — now handled by Document Organizer (Pro) or skipped
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
+import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
 import type { Document } from './types';
 
 // --- Types ---
@@ -29,6 +30,7 @@ interface ProcessingSectionProps {
   hasUploadedDocs: boolean;
   processingStage?: string;
   lastError?: string;
+  pipelineMode?: string;
 }
 
 // --- Pipeline steps preview ---
@@ -49,7 +51,10 @@ export function ProcessingSection({
   hasUploadedDocs,
   processingStage,
   lastError,
+  pipelineMode = 'full',
 }: ProcessingSectionProps) {
+  const creditCost = getElaborationCost(pipelineMode);
+  const creditLabel = getElaborationLabel(pipelineMode);
   const router = useRouter();
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
@@ -273,11 +278,17 @@ export function ProcessingSection({
                       {isStartingProcessing ? (
                         <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso...</>
                       ) : (
-                        <><Play className="mr-2 h-5 w-5" />Avvia Elaborazione</>
+                        <>
+                          <Play className="mr-2 h-5 w-5" />
+                          Avvia Elaborazione
+                          <Badge variant="secondary" className="ml-2 text-sm px-2 py-0.5 bg-white/20 text-white border-0">
+                            {creditCost} crediti
+                          </Badge>
+                        </>
                       )}
                     </Button>
                     <p className="text-xs text-muted-foreground text-center mt-2">
-                      Puoi avviare fino a 5 elaborazioni contemporaneamente.
+                      {creditLabel} — {creditCost} crediti verranno scalati dal tuo saldo.
                     </p>
                   </div>
                 </>

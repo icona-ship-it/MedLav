@@ -6,7 +6,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 import { validateCaseForProcessing } from '@/lib/pipeline-limits';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
-import { estimateElaborationCredits } from '@/services/credits/credit-costs';
+import { getElaborationCost } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -138,22 +138,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Estimate page count for credit calculation
-    // Sum page_count from documents (set during OCR), else estimate 10 pages/doc
-    const { data: docsForPages } = await supabase
-      .from('documents')
-      .select('page_count')
-      .eq('case_id', caseId);
-
-    const totalPages = docsForPages
-      ? docsForPages.reduce((sum, d) => sum + ((d.page_count as number) || 10), 0)
-      : docCount * 10;
-
-    const estimatedCredits = estimateElaborationCredits(totalPages);
+    // Get pipeline mode for fixed credit cost
+    const { data: caseForMode } = await supabase
+      .from('cases')
+      .select('pipeline_mode')
+      .eq('id', caseId)
+      .single();
+    const pipelineMode = (caseForMode?.pipeline_mode as string) ?? 'full';
+    const creditCost = getElaborationCost(pipelineMode);
 
     // Credit check — block if insufficient
     const balance = await getBalance(user.id);
-    if (balance.total < estimatedCredits) {
+    if (balance.total < creditCost) {
       // Release the processing lock since we're rejecting
       await supabase
         .from('cases')
@@ -163,8 +159,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Crediti insufficienti: servono circa ${estimatedCredits}, hai ${balance.total}. Acquista crediti per continuare.`,
-          creditsNeeded: estimatedCredits,
+          error: `Crediti insufficienti: servono ${creditCost}, hai ${balance.total}. Acquista crediti per continuare.`,
+          creditsNeeded: creditCost,
           creditsAvailable: balance.total,
         },
         { status: 402 },
@@ -174,10 +170,10 @@ export async function POST(request: NextRequest) {
     // Deduct credits upfront
     const deduction = await deductCredits(
       user.id,
-      estimatedCredits,
+      creditCost,
       'elaborazione',
       caseId,
-      { totalPages, docCount, estimatedCredits },
+      { pipelineMode, docCount },
     );
 
     if (!deduction.success) {
@@ -217,7 +213,7 @@ export async function POST(request: NextRequest) {
         logger.error('processing/start', `Re-processing cleanup: ${cleanupFailures.length}/5 deletes failed`);
 
         // Refund credits since we can't proceed
-        await refundCredits(user.id, estimatedCredits, 'elaborazione', caseId, {
+        await refundCredits(user.id, creditCost, 'elaborazione', caseId, {
           reason: 'cleanup_failed_during_reprocessing',
         });
 

@@ -349,6 +349,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
@@ -417,6 +418,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
@@ -482,6 +484,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
