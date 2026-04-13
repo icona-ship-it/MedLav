@@ -1,5 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendReportReadyEmail } from '@/services/email/email-service';
+import { refundCredits } from '@/services/credits/credit-service';
+import { estimateElaborationCredits } from '@/services/credits/credit-costs';
 import type { ExtractionResult, ConsolidationStepResult, SynthesisStepResult } from './types';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -88,6 +90,40 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
 
   if (pipelineWarnings.length > 0) {
     logger.warn('pipeline', `Case ${caseId} completed with ${pipelineWarnings.length} warning(s): ${pipelineWarnings.map((w) => w.message).join('; ')}`);
+  }
+
+  // Credit adjustment: refund overcharge if estimated pages > actual pages
+  // At processing/start we estimated credits based on page_count (or 10/doc fallback).
+  // Now we know the REAL total from OCR. Refund the difference if we overcharged.
+  if (pipelineCost) {
+    const realPages = pipelineCost.totalOcrPages;
+    const realCredits = estimateElaborationCredits(realPages);
+
+    // Find what was actually charged by looking at the consumption transaction
+    const { data: chargeTransaction } = await supabase
+      .from('credit_transactions')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('entity_id', caseId)
+      .eq('type', 'consumption')
+      .eq('operation', 'elaborazione')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (chargeTransaction && chargeTransaction.length > 0) {
+      const chargedCredits = Math.abs(chargeTransaction[0].amount as number);
+
+      if (chargedCredits > realCredits) {
+        const refundAmount = chargedCredits - realCredits;
+        await refundCredits(userId, refundAmount, 'elaborazione', caseId, {
+          reason: 'credit_adjustment',
+          estimated: chargedCredits,
+          actual: realCredits,
+          realPages,
+        });
+        logger.info('pipeline', `Credit adjustment: refunded ${refundAmount} credits (charged ${chargedCredits}, actual ${realCredits}, ${realPages} pages)`, { caseId });
+      }
+    }
   }
 
   // Audit log (no sensitive data)

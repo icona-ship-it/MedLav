@@ -3,56 +3,27 @@ import { getPlanLimits, PLANS } from './config';
 
 describe('stripe config', () => {
   describe('getPlanLimits', () => {
-    it('should return 5 cases for trial plan', () => {
-      // Arrange & Act
-      const limits = getPlanLimits('trial');
-
-      // Assert
-      expect(limits.casesLimit).toBe(5);
-    });
-
-    it('should return Infinity for pro plan', () => {
-      // Arrange & Act
-      const limits = getPlanLimits('pro');
-
-      // Assert
-      expect(limits.casesLimit).toBe(Infinity);
-    });
-
-    it('should return Infinity for enterprise plan', () => {
-      // Arrange & Act
-      const limits = getPlanLimits('enterprise');
-
-      // Assert
-      expect(limits.casesLimit).toBe(Infinity);
-    });
-
-    it('should default to trial for unknown plans', () => {
-      // Arrange & Act
-      const limits = getPlanLimits('nonexistent-plan');
-
-      // Assert
-      expect(limits.casesLimit).toBe(PLANS.trial.casesLimit);
-    });
-
-    it('should default to trial for empty string', () => {
-      // Arrange & Act
-      const limits = getPlanLimits('');
-
-      // Assert
-      expect(limits.casesLimit).toBe(PLANS.trial.casesLimit);
+    it('should return Infinity for all plans (cases gated by credits)', () => {
+      expect(getPlanLimits('trial').casesLimit).toBe(Infinity);
+      expect(getPlanLimits('pro').casesLimit).toBe(Infinity);
+      expect(getPlanLimits('enterprise').casesLimit).toBe(Infinity);
+      expect(getPlanLimits('nonexistent-plan').casesLimit).toBe(Infinity);
+      expect(getPlanLimits('').casesLimit).toBe(Infinity);
     });
   });
 
   describe('PLANS constant', () => {
-    it('should define trial with casesLimit of 5', () => {
-      expect(PLANS.trial.casesLimit).toBe(5);
+    it('should define trial with 30 credits', () => {
+      expect(PLANS.trial.casesLimit).toBe(Infinity);
       expect(PLANS.trial.name).toBe('Trial');
+      expect(PLANS.trial.credits).toBe(30);
     });
 
-    it('should define pro with unlimited cases', () => {
+    it('should define pro with 900 credits/month at €69', () => {
       expect(PLANS.pro.casesLimit).toBe(Infinity);
       expect(PLANS.pro.name).toBe('Pro');
+      expect(PLANS.pro.credits).toBe(900);
+      expect(PLANS.pro.monthlyPrice).toBe(69);
     });
 
     it('should define enterprise with unlimited cases', () => {

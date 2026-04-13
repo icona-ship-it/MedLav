@@ -101,6 +101,45 @@ async function handlePipelineFailure(event: { data: unknown }) {
 
     logger.error('pipeline', `Pipeline failed permanently for case ${caseId}: ${errorMessage}`);
 
+    // Refund credits for failed pipeline
+    try {
+      const { data: caseForRefund } = await supabase
+        .from('cases')
+        .select('user_id')
+        .eq('id', caseId)
+        .single();
+      if (caseForRefund) {
+        // Find the consumption transaction for this case to know how much to refund
+        const { data: transactions } = await supabase
+          .from('credit_transactions')
+          .select('amount')
+          .eq('user_id', caseForRefund.user_id)
+          .eq('entity_id', caseId)
+          .eq('type', 'consumption')
+          .eq('operation', 'elaborazione')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (transactions && transactions.length > 0) {
+          const refundAmount = Math.abs(transactions[0].amount as number);
+          const { refundCredits } = await import('@/services/credits/credit-service');
+          await refundCredits(
+            caseForRefund.user_id as string,
+            refundAmount,
+            'elaborazione',
+            caseId,
+            { reason: 'pipeline_failed', error: errorMessage.slice(0, 200) },
+          );
+          logger.info('pipeline', `Refunded ${refundAmount} credits for failed case ${caseId}`);
+        }
+      }
+    } catch (refundErr) {
+      logger.error('pipeline', 'Failed to refund credits after pipeline failure', {
+        caseId,
+        error: refundErr instanceof Error ? refundErr.message : 'unknown',
+      });
+    }
+
     // Report to Sentry with safe context (no patient data)
     Sentry.captureException(
       errorObj instanceof Error ? errorObj : new Error(errorMessage),
@@ -140,8 +179,8 @@ async function handlePipelineFailure(event: { data: unknown }) {
 }
 
 // ─── Unified Pipeline ───────────────────────────────────────────────
-// Single function: OCR → Classification → waitForEvent → Extraction → Report
-// Classification and anomaly review use waitForEvent gates.
+// Single function: OCR → Extraction → Consolidation → Report
+// Classification is handled on-demand in the UI (Step 1) before pipeline start.
 
 export const processCase = inngest.createFunction(
   {

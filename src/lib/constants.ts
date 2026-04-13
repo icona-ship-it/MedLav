@@ -75,7 +75,6 @@ export const DOCUMENT_TYPES = [
   { value: 'memoria_difensiva', label: 'Memoria Difensiva' },
   { value: 'perizia_ctp', label: 'Perizia CTP' },
   { value: 'perizia_ctu', label: 'Perizia CTU' },
-  { value: 'misto', label: 'Documento Misto (piu\' tipi)' },
   { value: 'altro', label: 'Altro' },
 ] as const;
 

@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getStripeClient } from '@/lib/stripe/client';
+import { getStripeClient, isStripeMockMode } from '@/lib/stripe/client';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 
 export async function POST(request: NextRequest) {
   const csrfError = await validateCsrfToken(request);
   if (csrfError) return csrfError;
+
+  if (isStripeMockMode()) {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
+    return NextResponse.json({ success: true, data: { url: `${siteUrl}/settings` } });
+  }
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

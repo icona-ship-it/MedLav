@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getStripeClient } from '@/lib/stripe/client';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getStripeClient, isStripeMockMode } from '@/lib/stripe/client';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { PLANS } from '@/lib/stripe/config';
+import { CREDIT_PACKS } from '@/services/credits/credit-costs';
+import { grantMonthlyCredits } from '@/services/credits/credit-service';
+import { PLAN_CREDITS } from '@/services/credits/credit-costs';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -34,10 +38,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Dati non validi' }, { status: 400 });
     }
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
+
+    // ─── Mock mode: grant Pro directly without Stripe ───
+    if (isStripeMockMode()) {
+      const admin = createAdminClient();
+
+      // Activate Pro subscription in profile
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+      await admin.from('profiles').update({
+        subscription_status: 'active',
+        subscription_plan: 'pro',
+        subscription_period_end: nextMonth.toISOString(),
+      }).eq('id', user.id);
+
+      // Grant monthly credits
+      await grantMonthlyCredits(user.id, PLAN_CREDITS.pro.monthlyAllowance, nextMonth);
+
+      return NextResponse.json({
+        success: true,
+        data: { url: `${siteUrl}/settings?checkout=success` },
+      });
+    }
+
+    // ─── Real Stripe mode ───
+
     // Validate priceId against known prices to prevent arbitrary price injection
+    const creditPackPriceIds = CREDIT_PACKS
+      .map((p) => process.env[p.stripePriceEnv])
+      .filter(Boolean);
     const allowedPriceIds = [
       PLANS.pro.priceMonthly,
       PLANS.pro.priceYearly,
+      ...creditPackPriceIds,
     ].filter(Boolean);
 
     if (!allowedPriceIds.includes(parsed.data.priceId)) {
@@ -70,8 +105,6 @@ export async function POST(request: NextRequest) {
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id);
     }
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://legmed.it';
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

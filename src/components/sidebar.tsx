@@ -5,7 +5,6 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   FolderOpen,
-  FolderSearch,
   HelpCircle,
   Plus,
   Settings,
@@ -18,11 +17,11 @@ import { signOut } from '@/app/(auth)/actions';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { GlobalSearch } from '@/components/global-search';
+import { CreditBadge } from '@/components/credit-badge';
 
 export const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'I Miei Casi', href: '/cases', icon: FolderOpen },
-  { name: 'Organizza Documenti', href: '/document-organizer', icon: FolderSearch },
 ] as const;
 
 export const FOOTER_ITEMS = [
@@ -90,6 +89,9 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
       {/* Footer */}
       <div className="border-t p-3">
+        {/* Credit balance */}
+        <CreditBadge />
+
         <div className="flex items-center justify-between px-3 py-1">
           <span className="text-xs text-muted-foreground">Tema</span>
           <ThemeToggle />

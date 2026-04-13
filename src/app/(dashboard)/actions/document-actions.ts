@@ -350,6 +350,54 @@ export async function retryDocument(params: { documentId: string; caseId: string
   return { success: true };
 }
 
+/** Valid document types matching the DB enum */
+const VALID_DOCUMENT_TYPES = new Set([
+  'cartella_clinica', 'referto_specialistico', 'esame_strumentale',
+  'esame_laboratorio', 'lettera_dimissione', 'certificato',
+  'perizia_precedente', 'spese_mediche', 'memoria_difensiva',
+  'perizia_ctp', 'perizia_ctu', 'altro',
+]);
+
+/**
+ * Update the document_type on an already-uploaded document.
+ * Free action — no credits required.
+ */
+export async function updateDocumentType(params: { documentId: string; caseId: string; documentType: string }) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Validate document type against known enum values
+  if (!VALID_DOCUMENT_TYPES.has(params.documentType)) {
+    return { error: 'Tipo documento non valido' };
+  }
+
+  // Verify case ownership
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { error } = await supabase
+    .from('documents')
+    .update({
+      document_type: params.documentType,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.documentId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore aggiornamento tipo documento' };
+
+  revalidateCase(params.caseId);
+  return { success: true };
+}
+
 // --- OCR Pages ---
 
 export interface DocumentPage {

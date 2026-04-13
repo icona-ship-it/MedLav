@@ -12,7 +12,8 @@ import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-lega
 import { regenerateSection } from '@/services/synthesis/section-regenerator';
 import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
-import { checkFeatureAccess } from '@/lib/subscription';
+import { deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 800; // section regeneration needs margin for LLM timeout + retries
@@ -29,6 +30,10 @@ const requestSchema = z.object({
  * Preserves all other sections, creates a new version.
  */
 export async function POST(request: NextRequest) {
+  // Track userId outside try for refund in catch
+  let authenticatedUserId: string | null = null;
+  let creditsDeducted = false;
+
   try {
     // CSRF validation
     const csrfError = validateCsrfToken(request);
@@ -41,15 +46,21 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
+    authenticatedUserId = user.id;
 
-    // Feature gate: check subscription allows section regeneration
-    const gate = await checkFeatureAccess(user.id, 'section_regenerate');
-    if (!gate.allowed) {
+    // Credit check for section regeneration
+    const deduction = await deductCredits(
+      user.id,
+      CREDIT_COSTS.rigenerazione_sezione,
+      'rigenerazione_sezione',
+    );
+    if (!deduction.success) {
       return NextResponse.json(
-        { success: false, error: gate.reason ?? 'Funzionalità non disponibile nel piano attuale. Passa a Pro.' },
-        { status: 403 },
+        { success: false, error: deduction.error },
+        { status: 402 },
       );
     }
+    creditsDeducted = true;
 
     const rateCheck = await checkRateLimit({
       key: `regen-section:${user.id}`,
@@ -202,6 +213,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('processing/regenerate-section', 'Section regeneration failed', { error: error instanceof Error ? error.message : 'unknown' });
-    return NextResponse.json({ success: false, error: 'Errore rigenerazione sezione.' }, { status: 500 });
+
+    // Refund credits on failure
+    if (authenticatedUserId && creditsDeducted) {
+      await refundCredits(authenticatedUserId, CREDIT_COSTS.rigenerazione_sezione, 'rigenerazione_sezione', undefined, {
+        reason: 'regeneration_failed',
+      });
+    }
+
+    return NextResponse.json({ success: false, error: 'Errore rigenerazione sezione. Il credito è stato rimborsato.' }, { status: 500 });
   }
 }

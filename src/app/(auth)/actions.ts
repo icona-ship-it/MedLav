@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { grantCredits } from '@/services/credits/credit-service';
+import { PLAN_CREDITS } from '@/services/credits/credit-costs';
 
 export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
@@ -78,6 +80,9 @@ export async function signUp(formData: FormData) {
       await admin.auth.admin.deleteUser(data.user.id);
       return { error: 'Errore durante la creazione del profilo. Riprova.' };
     }
+
+    // Grant trial credits
+    await grantCredits(data.user.id, PLAN_CREDITS.trial.initialGrant, 'trial_grant');
   }
 
   // If email confirmation is enabled, show verification message instead of redirecting

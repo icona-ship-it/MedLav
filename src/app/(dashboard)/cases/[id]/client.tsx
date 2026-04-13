@@ -62,7 +62,7 @@ const ANONYMIZE_WIZARD_STEPS = [
 // --- Helpers ---
 
 function isDocProcessing(status: string): boolean {
-  return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
+  return ['in_coda', 'ocr_in_corso', 'classificazione_completata', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
 function computeExtractionAutoStep(

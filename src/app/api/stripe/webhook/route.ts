@@ -3,6 +3,8 @@ import { getStripeClient } from '@/lib/stripe/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { grantMonthlyCredits, grantCredits, revokeMonthlyCredits } from '@/services/credits/credit-service';
+import { PLAN_CREDITS } from '@/services/credits/credit-costs';
 import type Stripe from 'stripe';
 
 const uuidSchema = z.string().uuid();
@@ -43,6 +45,21 @@ export async function POST(request: NextRequest) {
           logger.warn('stripe', `Invalid or missing userId in checkout metadata: ${rawUserId}`);
           break;
         }
+
+        // Credit pack purchase (one-time payment)
+        if (session.mode === 'payment' && session.metadata?.creditPack) {
+          const credits = parseInt(session.metadata.creditPack, 10);
+          if (credits > 0) {
+            await grantCredits(userId, credits, 'purchase', {
+              stripeSessionId: session.id,
+              pack: credits,
+            });
+            logger.info('stripe', `Credit pack purchased: ${credits} credits for user ${userId}`);
+          }
+          break;
+        }
+
+        // Subscription checkout
         if (session.subscription) {
           const stripe = getStripeClient();
           const subResponse = await stripe.subscriptions.retrieve(session.subscription as string);
@@ -57,6 +74,11 @@ export async function POST(request: NextRequest) {
             logger.error('stripe', `Failed to update profile after checkout for user ${userId}: ${updateError.message}`);
             return NextResponse.json({ success: false, error: 'Profile update failed' }, { status: 500 });
           }
+
+          // Grant monthly credits for new Pro subscription
+          const resetAt = new Date(sub.current_period_end * 1000);
+          await grantMonthlyCredits(userId, PLAN_CREDITS.pro.monthlyAllowance, resetAt);
+
           logger.info('stripe', `Checkout completed for user ${userId}`);
         }
         break;
@@ -73,6 +95,20 @@ export async function POST(request: NextRequest) {
           logger.error('stripe', `Failed to update subscription for customer ${customerId}: ${updateError.message}`);
           return NextResponse.json({ success: false, error: 'Subscription update failed' }, { status: 500 });
         }
+
+        // Refresh monthly credits on renewal
+        if (subscription.status === 'active') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('stripe_customer_id', customerId)
+            .single();
+          if (profile) {
+            const resetAt = new Date(subscription.current_period_end * 1000);
+            await grantMonthlyCredits(profile.id, PLAN_CREDITS.pro.monthlyAllowance, resetAt);
+          }
+        }
+
         logger.info('stripe', `Subscription updated for customer ${customerId}: ${subscription.status}`);
         break;
       }
@@ -89,6 +125,17 @@ export async function POST(request: NextRequest) {
           logger.error('stripe', `Failed to cancel subscription for customer ${customerId}: ${updateError.message}`);
           return NextResponse.json({ success: false, error: 'Subscription cancel failed' }, { status: 500 });
         }
+
+        // Revoke monthly credits (purchased credits remain)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('stripe_customer_id', customerId)
+          .single();
+        if (profile) {
+          await revokeMonthlyCredits(profile.id);
+        }
+
         logger.info('stripe', `Subscription deleted for customer ${customerId}`);
         break;
       }

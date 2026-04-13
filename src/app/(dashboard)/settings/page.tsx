@@ -9,7 +9,8 @@ import {
 } from '@/components/ui/select';
 import { getProfile, updateProfile, changePassword, updateRetentionPolicy, updateEmailNotifications, exportMyData, deleteMyAccount, uploadSignature, deleteSignature } from './actions';
 import type { ProfileData } from './actions';
-import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail, Pen, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail, Pen, Trash2, Upload, Coins, ShoppingCart } from 'lucide-react';
+import { csrfHeaders } from '@/lib/csrf-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 
@@ -166,6 +167,168 @@ function SignatureCard({
             </Button>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Credits Section ---
+
+interface CreditBalance {
+  purchased: number;
+  monthlyRemaining: number;
+  total: number;
+  monthlyAllowance: number;
+}
+
+interface CreditTransaction {
+  id: string;
+  amount: number;
+  balance_after: number;
+  type: string;
+  operation: string | null;
+  created_at: string;
+}
+
+const TRANSACTION_LABELS: Record<string, string> = {
+  consumption: 'Consumo',
+  refund: 'Rimborso',
+  purchase: 'Acquisto',
+  monthly_grant: 'Crediti mensili',
+  trial_grant: 'Crediti trial',
+};
+
+const OPERATION_LABELS: Record<string, string> = {
+  elaborazione: 'Elaborazione caso',
+  categorizzazione: 'Categorizzazione AI',
+  rigenerazione_sezione: 'Rigenerazione sezione',
+  rigenerazione_report: 'Rigenerazione report',
+  split_pdf: 'Divisione PDF',
+  acquisto: 'Acquisto crediti',
+  registrazione: 'Registrazione',
+  subscription: 'Abbonamento Pro',
+};
+
+function CreditsSection() {
+  const [balance, setBalance] = useState<CreditBalance | null>(null);
+  const [history, setHistory] = useState<CreditTransaction[]>([]);
+  const [purchasing, setPurchasing] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const [balRes, histRes] = await Promise.all([
+        fetch('/api/credits/balance').then((r) => r.json() as Promise<{ success: boolean; data?: CreditBalance }>),
+        fetch('/api/credits/history?limit=20').then((r) => r.json() as Promise<{ success: boolean; data?: CreditTransaction[] }>),
+      ]);
+      if (balRes.success && balRes.data) setBalance(balRes.data);
+      if (histRes.success && histRes.data) setHistory(histRes.data);
+    }
+    load();
+  }, []);
+
+  async function handlePurchase(credits: number) {
+    setPurchasing(credits);
+    try {
+      const res = await fetch('/api/credits/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ credits }),
+      });
+      const data = await res.json() as { success: boolean; data?: { url: string }; error?: string };
+      if (data.success && data.data?.url) {
+        window.location.href = data.data.url;
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setPurchasing(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Coins className="h-5 w-5" />
+          Crediti
+        </CardTitle>
+        <CardDescription>Il tuo saldo crediti e storico utilizzo</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Balance display */}
+        {balance && (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-md border p-4 text-center">
+              <p className="text-2xl font-bold">{balance.total}</p>
+              <p className="text-xs text-muted-foreground">Totale disponibile</p>
+            </div>
+            <div className="rounded-md border p-4 text-center">
+              <p className="text-2xl font-bold">{balance.monthlyRemaining}</p>
+              <p className="text-xs text-muted-foreground">Mensili rimanenti</p>
+            </div>
+            <div className="rounded-md border p-4 text-center">
+              <p className="text-2xl font-bold">{balance.purchased}</p>
+              <p className="text-xs text-muted-foreground">Acquistati</p>
+            </div>
+          </div>
+        )}
+
+        {/* Buy credits */}
+        <div>
+          <p className="text-sm font-medium mb-3">Acquista crediti extra</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { credits: 100, price: 9 },
+              { credits: 300, price: 24 },
+              { credits: 1000, price: 69 },
+            ].map((pack) => (
+              <Button
+                key={pack.credits}
+                variant="outline"
+                className="flex flex-col h-auto py-3"
+                onClick={() => handlePurchase(pack.credits)}
+                disabled={purchasing !== null}
+              >
+                {purchasing === pack.credits ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShoppingCart className="h-4 w-4" />
+                )}
+                <span className="font-bold">{pack.credits} crediti</span>
+                <span className="text-xs text-muted-foreground">&euro;{pack.price}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Transaction history */}
+        {history.length > 0 && (
+          <div>
+            <p className="text-sm font-medium mb-3">Ultime operazioni</p>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto">
+              {history.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between text-sm rounded-md px-3 py-2 border-l-4 border-l-muted-foreground/20">
+                  <div>
+                    <span className="font-medium">
+                      {TRANSACTION_LABELS[tx.type] ?? tx.type}
+                    </span>
+                    {tx.operation && (
+                      <span className="text-muted-foreground ml-1">
+                        — {OPERATION_LABELS[tx.operation] ?? tx.operation}
+                      </span>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(tx.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <span className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {tx.amount > 0 ? '+' : ''}{tx.amount}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -444,7 +607,7 @@ export default function SettingsPage() {
                     ? 'Accesso completo a tutte le funzionalità Pro'
                     : profile?.subscriptionStatus === 'past_due'
                       ? 'Aggiorna il metodo di pagamento per continuare'
-                      : 'Piano gratuito — 5 casi inclusi'}
+                      : 'Piano gratuito — 30 crediti inclusi'}
                 </p>
               </div>
             </div>
@@ -462,14 +625,14 @@ export default function SettingsPage() {
                 <div className="flex-1">
                   <p className="text-sm font-medium">Passa a Pro per sbloccare tutto</p>
                   <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    <li>Casi illimitati (invece di 5)</li>
+                    <li>900 crediti/mese (~25 casi medi)</li>
                     <li>RAG linee guida cliniche</li>
+                    <li>Rigenerazione sezioni report</li>
                     <li>Calcoli medico-legali automatici (ITT/ITP)</li>
-                    <li>Export PCT per tribunale</li>
                     <li>Supporto prioritario</li>
                   </ul>
                   <p className="mt-3 text-sm font-semibold">
-                    A partire da &euro;39/mese (annuale) o &euro;49/mese
+                    &euro;69/mese o &euro;55/mese (annuale)
                   </p>
                   <p className="text-xs text-muted-foreground">IVA esclusa</p>
                   <Button size="sm" className="mt-3" asChild>
@@ -481,6 +644,9 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Credits */}
+      <CreditsSection />
 
       {/* Data Retention */}
       <Card>

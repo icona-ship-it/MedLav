@@ -35,7 +35,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
       period: '',
       description: 'Prova LegMed senza impegno',
       features: [
-        '5 casi inclusi',
+        '30 crediti inclusi (~1 caso medio)',
         'Pipeline OCR completa',
         'Report medico-legale strutturato',
         'Export DOCX, CSV, HTML',
@@ -52,14 +52,15 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
       period: '/mese',
       description: 'Per il professionista medico-legale',
       features: [
-        'Casi illimitati',
+        '900 crediti/mese (~25 casi medi)',
         'Tutto del Trial, più:',
-        'RAG linee guida cliniche',
+        'Categorizzazione AI documenti',
         'Rigenerazione sezioni report',
+        'RAG linee guida cliniche',
         'Calcoli medico-legali (ITT/ITP)',
-        'Export PCT per tribunale',
         'Anonimizzazione report',
         'Notifiche email',
+        'Pacchetti crediti extra acquistabili',
         'Supporto prioritario',
       ],
       cta: 'Inizia con Pro',
@@ -73,6 +74,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
       description: 'Per studi e organizzazioni',
       features: [
         'Tutto del Pro, più:',
+        'Crediti personalizzati',
         'Utenti multipli',
         'SSO (Single Sign-On)',
         'SLA garantito',
@@ -90,19 +92,19 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
 const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: 'Posso provare LegMed prima di pagare?',
-    answer: 'Sì, il piano Trial è completamente gratuito e include 5 casi. Non serve carta di credito per iniziare.',
+    answer: 'Sì, il piano Trial è completamente gratuito e include 30 crediti per provare un\'elaborazione completa. Non serve carta di credito per iniziare.',
   },
   {
-    question: 'Come funziona la fatturazione?',
-    answer: 'La fatturazione avviene tramite Stripe, con addebito mensile o annuale (con sconto del 20%). Ricevi fattura elettronica ad ogni pagamento.',
+    question: 'Come funzionano i crediti?',
+    answer: 'Ogni operazione AI ha un costo in crediti: elaborazione caso (5 + 1 per pagina), categorizzazione AI (1 per documento), rigenerazione sezione (5). Il piano Pro include 900 crediti/mese. Puoi acquistare crediti extra quando vuoi.',
   },
   {
-    question: 'Posso passare dal piano mensile a quello annuale?',
-    answer: 'Sì, puoi cambiare piano in qualsiasi momento dalla sezione Impostazioni. Il passaggio è immediato e il credito residuo viene scalato dal nuovo piano.',
+    question: 'Cosa succede se finisco i crediti mensili?',
+    answer: 'Puoi acquistare pacchetti extra (100 crediti a €9, 300 a €24, 1000 a €69). I crediti acquistati non scadono. I crediti mensili del piano Pro si resettano ad ogni ciclo di fatturazione.',
   },
   {
     question: 'Cosa succede se cancello l\'abbonamento?',
-    answer: 'Puoi continuare ad usare LegMed fino alla fine del periodo già pagato. I tuoi dati rimangono accessibili, ma non potrai creare nuovi casi oltre il limite del piano Trial.',
+    answer: 'Puoi continuare ad usare LegMed con i crediti acquistati rimasti. I crediti mensili vengono revocati alla cancellazione, ma i crediti acquistati extra restano disponibili.',
   },
   {
     question: 'I prezzi includono l\'IVA?',

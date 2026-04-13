@@ -3,9 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getPlanLimits } from '@/lib/stripe/config';
 import { validateCsrfToken } from '@/lib/csrf';
 import { validateCaseForProcessing } from '@/lib/pipeline-limits';
+import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { estimateElaborationCredits } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -59,14 +60,13 @@ export async function POST(request: NextRequest) {
 
     const { caseId } = parsed.data;
 
-    // Check subscription plan limits
+    // Check subscription status (blocked for canceled/past_due)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('subscription_status, subscription_plan')
+      .select('subscription_status')
       .eq('id', user.id)
       .single();
 
-    const plan = (profile?.subscription_plan as string) ?? 'trial';
     const status = (profile?.subscription_status as string) ?? 'trial';
 
     if (status === 'canceled' || status === 'past_due') {
@@ -74,21 +74,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Abbonamento non attivo. Aggiorna il tuo piano per continuare.' },
         { status: 403 },
       );
-    }
-
-    const { casesLimit } = getPlanLimits(plan);
-    if (casesLimit !== Infinity) {
-      const { count: totalCases } = await supabase
-        .from('cases')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-
-      if (totalCases && totalCases >= casesLimit) {
-        return NextResponse.json(
-          { success: false, error: `Hai raggiunto il limite di ${casesLimit} casi del piano ${plan}. Passa al piano Pro per casi illimitati.` },
-          { status: 403 },
-        );
-      }
     }
 
     // Verify case ownership
@@ -153,6 +138,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Estimate page count for credit calculation
+    // Sum page_count from documents (set during OCR), else estimate 10 pages/doc
+    const { data: docsForPages } = await supabase
+      .from('documents')
+      .select('page_count')
+      .eq('case_id', caseId);
+
+    const totalPages = docsForPages
+      ? docsForPages.reduce((sum, d) => sum + ((d.page_count as number) || 10), 0)
+      : docCount * 10;
+
+    const estimatedCredits = estimateElaborationCredits(totalPages);
+
+    // Credit check — block if insufficient
+    const balance = await getBalance(user.id);
+    if (balance.total < estimatedCredits) {
+      // Release the processing lock since we're rejecting
+      await supabase
+        .from('cases')
+        .update({ processing_stage: caseData.processing_stage, updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Crediti insufficienti: servono circa ${estimatedCredits}, hai ${balance.total}. Acquista crediti per continuare.`,
+          creditsNeeded: estimatedCredits,
+          creditsAvailable: balance.total,
+        },
+        { status: 402 },
+      );
+    }
+
+    // Deduct credits upfront
+    const deduction = await deductCredits(
+      user.id,
+      estimatedCredits,
+      'elaborazione',
+      caseId,
+      { totalPages, docCount, estimatedCredits },
+    );
+
+    if (!deduction.success) {
+      await supabase
+        .from('cases')
+        .update({ processing_stage: caseData.processing_stage, updated_at: new Date().toISOString() })
+        .eq('id', caseId);
+
+      return NextResponse.json(
+        { success: false, error: deduction.error },
+        { status: 402 },
+      );
+    }
+
     // Re-processing cleanup: if the case was already processed, clean ALL derived data
     // including OCR pages — every analysis runs fresh for maximum quality
     // This runs AFTER validation so user doesn't lose data on rejected requests
@@ -176,6 +215,12 @@ export async function POST(request: NextRequest) {
       );
       if (cleanupFailures.length > 0) {
         logger.error('processing/start', `Re-processing cleanup: ${cleanupFailures.length}/5 deletes failed`);
+
+        // Refund credits since we can't proceed
+        await refundCredits(user.id, estimatedCredits, 'elaborazione', caseId, {
+          reason: 'cleanup_failed_during_reprocessing',
+        });
+
         return NextResponse.json(
           { success: false, error: 'Errore durante la pulizia dei dati precedenti. Riprova.' },
           { status: 500 },

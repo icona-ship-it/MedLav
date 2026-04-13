@@ -9,3 +9,4 @@ export * from './audit';
 export * from './guidelines';
 export * from './report-ratings';
 export * from './case-shares';
+export * from './credits';
