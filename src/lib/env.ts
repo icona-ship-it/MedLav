@@ -14,17 +14,9 @@ const requiredEnvSchema = z.object({
 });
 
 const optionalEnvSchema = z.object({
-  STRIPE_SECRET_KEY: z.string().min(1).optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
-  RESEND_API_KEY: z.string().min(1).optional(),
-  INNGEST_SIGNING_KEY: z.string().min(1).optional(),
-  INNGEST_EVENT_KEY: z.string().min(1).optional(),
+  // Only validate format of vars that are actually set (empty string = not set)
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
-  ADMIN_EMAILS: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).optional(),
-  SENTRY_DSN: z.string().min(1).optional(),
-  DATABASE_URL: z.string().min(1).optional(),
 });
 
 export function validateEnv(): void {
@@ -52,9 +44,9 @@ export function validateEnv(): void {
     logger.warn('env', 'ADMIN_EMAILS not set — admin endpoints will deny all access');
   }
   if (!process.env.STRIPE_SECRET_KEY) {
-    logger.warn('env', 'STRIPE_SECRET_KEY not set — payments will not work');
+    logger.info('env', 'STRIPE_SECRET_KEY not set — running in mock payment mode (credits granted directly)');
   }
   if (!process.env.RESEND_API_KEY) {
-    logger.warn('env', 'RESEND_API_KEY not set — email notifications will not work');
+    logger.info('env', 'RESEND_API_KEY not set — email notifications disabled');
   }
 }

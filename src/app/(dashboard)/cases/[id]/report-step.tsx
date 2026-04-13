@@ -90,7 +90,7 @@ export function ReportStep({
   documentPages,
   eventImages,
   processingStage,
-  onNavigateToStep: _onNavigateToStep,
+  // onNavigateToStep reserved for future use (e.g. "go back to documents" button)
   generationProgress,
   pubmedReferences = [],
   pipelineWarnings = [],

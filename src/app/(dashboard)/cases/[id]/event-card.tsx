@@ -62,7 +62,7 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
 
 export function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  eventImages, onImageClick: _onImageClick,
+  eventImages,
   isHighlighted, documentName,
 }: {
   event: EventRow;
