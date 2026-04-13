@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminUser } from '@/lib/admin';
+import { logger } from '@/lib/logger';
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -109,6 +110,12 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       .gte('created_at', thirtyDaysAgo)
       .order('created_at', { ascending: false }),
   ]);
+
+  // Log any query errors
+  const queryResults = [casesResult, docsCompletedResult, docsFailedResult, docsAllResult, ratingsResult, errorsResult, auditResult, caseTypesResult, caseRolesResult, costAuditResult];
+  for (const r of queryResults) {
+    if (r.error) logger.error('analytics', `Query failed: ${r.error.message}`);
+  }
 
   // Cases per day
   const casesPerDay = new Map<string, number>();

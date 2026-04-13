@@ -27,6 +27,8 @@ export async function getSystemStats() {
     admin.from('events').select('*', { count: 'exact', head: true }).eq('is_deleted', false),
   ]);
 
+  if (usersResult.error) logger.error('admin', `Stats query failed: ${usersResult.error.message}`);
+
   return {
     totalUsers: usersResult.count ?? 0,
     totalCases: casesResult.count ?? 0,
@@ -70,12 +72,13 @@ export async function getProcessingDocuments() {
   const admin = createAdminClient();
   const now = new Date();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('documents')
     .select('id, file_name, file_type, file_size, processing_status, processing_error, updated_at, created_at, case_id')
     .in('processing_status', INTERMEDIATE_STATUSES)
     .order('updated_at', { ascending: false });
 
+  if (error) logger.error('admin', `Processing docs query failed: ${error.message}`);
   if (!data || data.length === 0) return [];
 
   // Fetch associated case codes
@@ -107,13 +110,14 @@ export async function getRecentErrors() {
   const admin = createAdminClient();
   const now = new Date();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('documents')
     .select('id, file_name, processing_status, processing_error, updated_at, case_id')
     .eq('processing_status', 'errore')
     .order('updated_at', { ascending: false })
     .limit(20);
 
+  if (error) logger.error('admin', `Recent errors query failed: ${error.message}`);
   if (!data || data.length === 0) return [];
 
   const caseIds = [...new Set(data.map((d) => d.case_id))];
@@ -136,13 +140,14 @@ export async function getRecentCompletions() {
   const admin = createAdminClient();
   const now = new Date();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('documents')
     .select('id, file_name, processing_status, updated_at, created_at, case_id')
     .eq('processing_status', 'completato')
     .order('updated_at', { ascending: false })
     .limit(10);
 
+  if (error) logger.error('admin', `Recent completions query failed: ${error.message}`);
   if (!data || data.length === 0) return [];
 
   const caseIds = [...new Set(data.map((d) => d.case_id))];
@@ -304,10 +309,11 @@ export async function getAverageRating(): Promise<{ avg: number | null; count: n
   await verifyAdmin();
   const admin = createAdminClient();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('report_ratings')
     .select('rating');
 
+  if (error) logger.error('admin', `Ratings query failed: ${error.message}`);
   if (!data || data.length === 0) return { avg: null, count: 0 };
 
   const sum = data.reduce((acc, r) => acc + (r.rating as number), 0);
@@ -327,12 +333,13 @@ export async function getRecentCosts(): Promise<RecentCosts> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('audit_log')
     .select('metadata')
     .eq('action', 'case.processing.completed')
     .gte('created_at', thirtyDaysAgo.toISOString());
 
+  if (error) logger.error('admin', `Costs query failed: ${error.message}`);
   if (!data || data.length === 0) {
     return { totalCostUSD: 0, avgCostPerCase: 0, casesWithCostData: 0 };
   }
