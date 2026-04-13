@@ -191,6 +191,16 @@ export function CaseDetailClient({
     } | undefined
   ) ?? null;
 
+  // Extract classification progress from perizia_metadata (updated by Inngest classify-batch)
+  const classificationProgress = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.classificationProgress as {
+      completed: number;
+      total: number;
+      errors: number;
+      status: 'running' | 'done';
+    } | undefined
+  ) ?? null;
+
   // Extract PubMed references from perizia_metadata (saved after PubMed search step)
   const pubmedReferences = (
     (caseData.perizia_metadata as Record<string, unknown> | null)?.pubmedReferences as Array<{ query: string; category: 'diagnosis' | 'treatment' | 'causal_nexus'; articles: Array<{ pmid: string; title: string; authors: string; journal: string; year: string; doi?: string }> }> | undefined
@@ -229,7 +239,8 @@ export function CaseDetailClient({
     }
   }, [autoStep]);
 
-  const needsPolling = processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione');
+  const isClassifying = classificationProgress?.status === 'running';
+  const needsPolling = processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione' || isClassifying);
   useEffect(() => {
     if (!needsPolling) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
@@ -306,6 +317,7 @@ export function CaseDetailClient({
                 documents={localDocuments}
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
+                classificationProgress={classificationProgress}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -334,6 +346,7 @@ export function CaseDetailClient({
                 documents={localDocuments}
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
+                classificationProgress={classificationProgress}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -403,6 +416,7 @@ export function CaseDetailClient({
                 documents={localDocuments}
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
+                classificationProgress={classificationProgress}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -457,6 +471,7 @@ export function CaseDetailClient({
                 documents={localDocuments}
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
+                classificationProgress={classificationProgress}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>

@@ -30,12 +30,20 @@ import type { Document } from './types';
 
 // --- Types ---
 
+export interface ClassificationProgress {
+  completed: number;
+  total: number;
+  errors: number;
+  status: 'running' | 'done';
+}
+
 interface DocumentsSectionProps {
   caseId: string;
   documents: Document[];
   processingLabels: Record<string, string>;
   hasUploadedDocs: boolean;
   onProceedToNext: () => void;
+  classificationProgress?: ClassificationProgress | null;
 }
 
 // --- Helpers ---
@@ -65,6 +73,7 @@ export function DocumentsSection({
   processingLabels,
   hasUploadedDocs,
   onProceedToNext,
+  classificationProgress,
 }: DocumentsSectionProps) {
   const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
@@ -169,39 +178,32 @@ export function DocumentsSection({
 
     setClassifyingAll(true);
 
-    // Process in batches of 3 to avoid rate limiting
-    const BATCH_SIZE = 3;
-    let successCount = 0;
-    let errCount = 0;
+    try {
+      const res = await fetch('/api/processing/classify-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({
+          caseId,
+          documentIds: docsToClassify.map((d) => d.id),
+        }),
+      });
+      const data = await res.json() as { success: boolean; error?: string };
 
-    for (let i = 0; i < docsToClassify.length; i += BATCH_SIZE) {
-      const batch = docsToClassify.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((doc) =>
-          fetch('/api/processing/classify-document', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-            body: JSON.stringify({ documentId: doc.id, caseId }),
-          }).then((res) => res.json() as Promise<{ success: boolean }>),
-        ),
-      );
+      if (!data.success) {
+        toast.error(data.error ?? 'Errore nell\'avvio della categorizzazione');
+        setClassifyingAll(false);
+        return;
+      }
 
-      successCount += results.filter(
-        (r) => r.status === 'fulfilled' && r.value.success,
-      ).length;
-      errCount += batch.length - results.filter(
-        (r) => r.status === 'fulfilled' && r.value.success,
-      ).length;
-    }
-
-    if (errCount === 0) {
-      toast.success(`${successCount} documenti categorizzati`);
-    } else {
-      toast.warning(`${successCount} categorizzati, ${errCount} con errori`);
+      toast.success('Categorizzazione AI avviata in background');
+      // Progress is now tracked via classificationProgress prop (from perizia_metadata)
+      // Polling in client.tsx will keep refreshing until done
+      router.refresh();
+    } catch {
+      toast.error('Errore nell\'avvio della categorizzazione');
     }
 
     setClassifyingAll(false);
-    router.refresh();
   }, [documents, caseId, router]);
 
   const completedCount = documents.filter((d) => d.processing_status === 'completato').length;
@@ -283,29 +285,55 @@ export function DocumentsSection({
                 </div>
               </div>
 
-              {/* Batch classify button */}
-              {uploadedDocs.length > 0 && (
+              {/* Batch classify button / progress */}
+              {uploadedDocs.length > 0 && !classifyingAll && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleClassifyAll}
-                  disabled={classifyingAll || classifyingDocId !== null}
+                  disabled={classifyingDocId !== null}
                   className="shrink-0"
                 >
-                  {classifyingAll ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  <span className="ml-1.5">
-                    {classifyingAll ? 'Categorizzazione...' : `Categorizza tutti con AI`}
-                  </span>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="ml-1.5">Categorizza tutti con AI</span>
                   <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
                     {uploadedDocs.length * CREDIT_COSTS.categorizzazione} cr
                   </Badge>
                 </Button>
               )}
             </div>
+
+            {/* Classify progress bar (from Inngest via perizia_metadata) */}
+            {classificationProgress && classificationProgress.status === 'running' && (
+              <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm font-medium">
+                      Categorizzazione AI: {classificationProgress.completed} di {classificationProgress.total}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {classificationProgress.errors > 0 && `${classificationProgress.errors} errori`}
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${Math.round((classificationProgress.completed / classificationProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Analisi in background — puoi chiudere questa pagina, la categorizzazione continua.
+                </p>
+              </div>
+            )}
+            {classificationProgress && classificationProgress.status === 'done' && (
+              <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-800 dark:text-green-200">
+                Categorizzazione completata: {classificationProgress.completed - classificationProgress.errors} di {classificationProgress.total} documenti categorizzati
+                {classificationProgress.errors > 0 && `, ${classificationProgress.errors} con errori`}
+              </div>
+            )}
 
             {/* Document cards with inline type + actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, Loader2, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
@@ -129,6 +129,14 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
   const errorCount = progress.filter((p) => p.status === 'error').length;
   const allDone = progress.length > 0 && progress.every((p) => p.status === 'done' || p.status === 'error');
 
+  // Auto-clear progress list 2s after all done (documents list below takes over)
+  useEffect(() => {
+    if (allDone && errorCount === 0) {
+      const timer = setTimeout(() => setProgress([]), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [allDone, errorCount]);
+
   return (
     <div className="space-y-4">
       {/* Drop zone */}
@@ -146,21 +154,18 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
             fileInputRef.current?.click();
           }
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition-colors ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
           isDragOver
             ? 'border-primary bg-primary/5'
             : 'border-muted-foreground/25 hover:border-primary/50'
         } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
       >
-        <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
-        <p className="mb-2 text-base font-medium">
-          Trascina qui i documenti del caso
+        <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
+        <p className="text-sm font-medium">
+          Trascina qui i documenti o <span className="text-primary underline">seleziona file</span>
         </p>
-        <p className="text-sm text-muted-foreground">
-          oppure clicca per selezionare i file
-        </p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Formati accettati: PDF, immagini (JPG, PNG, TIFF), documenti Word ed Excel
+        <p className="mt-1 text-xs text-muted-foreground">
+          PDF, immagini, Word, Excel
         </p>
         <input
           ref={fileInputRef}
