@@ -215,7 +215,8 @@ export const processCase = inngest.createFunction(
       const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
       // Clear stale warnings/progress from previous runs, set processing progress
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { pipelineWarnings: _pw, processingProgress: _pp, ...cleanMeta } = existingMeta;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pipelineWarnings: _pw, processingProgress: _pp, classificationProgress: _cp, ...cleanMeta } = existingMeta;
       await supabase
         .from('cases')
         .update({
