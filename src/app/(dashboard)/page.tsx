@@ -24,6 +24,7 @@ import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
 import { MODULE_CATEGORIES, MODULE_CATALOG } from '@/types/modules';
 import type { ModuleCategoryId } from '@/types/modules';
+import { getElaborationCost } from '@/services/credits/credit-costs';
 
 // ---------------------------------------------------------------------------
 // Icon + color mapping per category
@@ -69,6 +70,13 @@ function isCategoryVisible(categoryId: ModuleCategoryId): boolean {
   return getVisibleModules(categoryId).length > 0;
 }
 
+/** Credit cost for a category (uses pipelineMode of first module) */
+function getCategoryCreditCost(categoryId: ModuleCategoryId): number {
+  const modules = getVisibleModules(categoryId);
+  if (modules.length === 0) return 0;
+  return getElaborationCost(modules[0].pipelineMode);
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -107,13 +115,19 @@ export default async function DashboardPage() {
             const Icon = CATEGORY_ICONS[cat.id];
             const count = getModuleCount(cat.id);
             const href = getCategoryHref(cat.id);
+            const creditCost = getCategoryCreditCost(cat.id);
 
             return (
               <Link key={cat.id} href={href} className="group block">
                 <Card className="h-full rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
                   <CardContent className="flex flex-col gap-4 p-6">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
-                      <Icon className="h-6 w-6" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <Badge variant="secondary" className="text-xs font-semibold">
+                        {creditCost} crediti
+                      </Badge>
                     </div>
                     <div>
                       <h3 className="text-lg font-bold">{cat.label}</h3>
@@ -148,6 +162,7 @@ export default async function DashboardPage() {
           {otherCategories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat.id];
             const href = getCategoryHref(cat.id);
+            const creditCost = getCategoryCreditCost(cat.id);
 
             return (
               <Link key={cat.id} href={href} className="group block">
@@ -162,6 +177,9 @@ export default async function DashboardPage() {
                         {cat.description}
                       </p>
                     </div>
+                    <Badge variant="outline" className="shrink-0 text-xs">
+                      {creditCost} cr
+                    </Badge>
                     <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
                   </CardContent>
                 </Card>

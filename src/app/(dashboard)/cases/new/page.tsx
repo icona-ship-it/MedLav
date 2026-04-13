@@ -30,6 +30,7 @@ import {
   MODULE_CATEGORIES,
 } from '@/lib/constants';
 import type { ModuleDefinition, ModuleCategory, ModuleCategoryId } from '@/types/modules';
+import { getElaborationCost } from '@/services/credits/credit-costs';
 
 // --- Category icon mapping ---
 
@@ -145,11 +146,16 @@ function CategoryPicker({ category, modules }: { category: ModuleCategory; modul
           >
             <Card className="h-full rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
               <CardContent className="flex flex-col gap-3 p-6">
-                <div>
-                  <h3 className="text-lg font-bold">{mod.label}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                    {mod.description}
-                  </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg font-bold">{mod.label}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                      {mod.description}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-xs font-semibold">
+                    {getElaborationCost(mod.pipelineMode)} crediti
+                  </Badge>
                 </div>
                 <div className="mt-auto flex items-center justify-end pt-2">
                   <span className="flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
