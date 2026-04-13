@@ -185,7 +185,7 @@ function parseReviewResponse(content: string, existingEventCount: number): Revie
       facility: e.facility ?? null,
       confidence: Math.min(e.confidence, 70),
       requiresVerification: true,
-      reliabilityNotes: 'Aggiunto dal revisore LLM — verificare manualmente',
+      reliabilityNotes: 'Aggiunto in seconda analisi — verificare manualmente',
       sourceText: e.sourceText,
       sourcePages: e.sourcePages,
     }));

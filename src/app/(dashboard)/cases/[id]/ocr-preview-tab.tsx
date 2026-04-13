@@ -132,7 +132,7 @@ function DocumentOcrSection({
           ))}
           {pages.length === 0 && (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              Nessuna pagina OCR disponibile per questo documento.
+              Nessun testo disponibile per questo documento.
             </p>
           )}
         </div>
@@ -160,7 +160,7 @@ export function OcrPreviewTab({ caseId, documents, documentPages }: OcrPreviewTa
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          Testo OCR Estratto
+          Testo Estratto dai Documenti
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           {pagesWithText} di {totalPages} pagine con testo estratto

@@ -232,7 +232,7 @@ function StatusBadge({ status }: { status: string | null }) {
   if (status === 'llm_resolved') {
     return (
       <Badge variant="outline" className="text-xs border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
-        <ShieldCheck className="mr-1 h-3 w-3" />Risolta automaticamente
+        <ShieldCheck className="mr-1 h-3 w-3" />Risolta
       </Badge>
     );
   }
@@ -240,7 +240,7 @@ function StatusBadge({ status }: { status: string | null }) {
   if (status === 'llm_confirmed') {
     return (
       <Badge variant="outline" className="text-xs border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30">
-        <ShieldAlert className="mr-1 h-3 w-3" />Verificata IA — da revisionare
+        <ShieldAlert className="mr-1 h-3 w-3" />Confermata — da revisionare
       </Badge>
     );
   }
@@ -562,9 +562,9 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
                 >
                   {showAutoResolved ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   {showAutoResolved ? (
-                    <><EyeOff className="mr-0.5 h-3 w-3" />Nascondi risolte automaticamente ({autoResolved.length})</>
+                    <><EyeOff className="mr-0.5 h-3 w-3" />Nascondi risolte ({autoResolved.length})</>
                   ) : (
-                    <><Eye className="mr-0.5 h-3 w-3" />Mostra risolte automaticamente ({autoResolved.length})</>
+                    <><Eye className="mr-0.5 h-3 w-3" />Mostra risolte ({autoResolved.length})</>
                   )}
                 </button>
                 {showAutoResolved && (
@@ -586,7 +586,7 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
 
             {actionable.length === 0 && userActioned.length === 0 && autoResolved.length > 0 && !showAutoResolved && (
               <p className="text-center text-sm text-muted-foreground py-4">
-                Tutte le anomalie sono state risolte automaticamente.
+                Tutte le anomalie sono state risolte.
               </p>
             )}
           </div>

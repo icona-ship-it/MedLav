@@ -484,6 +484,9 @@ export const processCase = inngest.createFunction(
     // NOT inside step.run — avoids serializing full array through Inngest step output (4MB limit).
     // Non-step code re-executes on each Inngest re-invocation; it's just a DB read — cheap and safe.
     const allEvents = await fetchAllEventsForCase(caseId);
+    if (allEvents.length === 0 && consolidationResult.totalEventsCount > 0) {
+      throw new Error(`CRITICAL: consolidation reported ${consolidationResult.totalEventsCount} events but fetchAllEventsForCase returned 0 — DB read may have failed`);
+    }
 
     // ── Step 4.5: Link images to events ──────────────────────────
     await step.run('link-images-to-events', () => linkImagesToEventsStep(caseId));

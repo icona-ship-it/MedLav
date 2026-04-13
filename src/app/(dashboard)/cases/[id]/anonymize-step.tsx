@@ -119,7 +119,7 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             Rileva e sostituisce automaticamente i dati personali (nomi, codici fiscali, date, indirizzi, ecc.)
-            nel testo OCR dei documenti caricati.
+            nel testo dei documenti caricati.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">

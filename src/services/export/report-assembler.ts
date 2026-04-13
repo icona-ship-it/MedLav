@@ -102,7 +102,7 @@ function buildDocumentazioneSanitaria(docs: DocumentWithPages[]): string {
     parts.push(`### ${doc.fileName} (${typeLabel})`);
 
     if (doc.pages.length === 0) {
-      parts.push('*Testo OCR non disponibile per questo documento.*');
+      parts.push('*Testo non disponibile per questo documento.*');
     } else {
       for (const page of doc.pages) {
         if (page.ocrText.trim()) {

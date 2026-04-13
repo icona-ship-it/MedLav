@@ -42,7 +42,7 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
         onClick={() => setIsOpen(!isOpen)}
       >
         {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        Testo OCR originale
+        Testo documento originale
         {parsedPages.length > 0 && (
           <span className="text-xs text-muted-foreground ml-1">
             (pag. {parsedPages.join(', ')})
