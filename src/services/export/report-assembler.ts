@@ -189,15 +189,18 @@ export function assembleFullReport(params: {
   }).join('\n');
   addSection('doc-esaminata', 'DOCUMENTAZIONE ESAMINATA', docList.length > 0 ? docList : 'Nessun documento allegato.');
 
-  // 4. DATI DOCUMENTAZIONE SANITARIA (OCR text)
-  const ocrContent = buildDocumentazioneSanitaria(documentsWithPages);
-  addSection('doc-sanitaria', 'DATI DOCUMENTAZIONE SANITARIA', ocrContent, true);
+  // 4. DATI DOCUMENTAZIONE SANITARIA (OCR text) — only if NO synthesis
+  // When synthesis exists, it already contains the elaborated documentation.
+  // Adding raw OCR would duplicate content.
+  const synthText = synthesis ?? '';
+  if (!synthText) {
+    const ocrContent = buildDocumentazioneSanitaria(documentsWithPages);
+    addSection('doc-sanitaria', 'DATI DOCUMENTAZIONE SANITARIA', ocrContent, true);
+  }
 
   // 5. SYNTHESIS (LLM-generated report) — use as-is in markdown format.
   // This matches exactly what the user sees in the preview.
   // Each ## heading in the synthesis becomes a separate section.
-  const synthText = synthesis ?? '';
-
   if (synthText) {
     // Parse synthesis into sections by ## headings
     const synthSections = synthText.split(/^(?=## )/m).filter((s) => s.trim().length > 0);
@@ -212,6 +215,12 @@ export function assembleFullReport(params: {
         }
       }
     }
+  }
+
+  // CALCOLI MEDICO-LEGALI (ITT/ITP) — always add if available
+  const calcText = formatCalculationsText(calculations);
+  if (calcText) {
+    addSection('calcoli', 'PERIODI MEDICO-LEGALI CALCOLATI', calcText);
   }
 
   // ESAME OBIETTIVO (from perizia metadata, not LLM)
