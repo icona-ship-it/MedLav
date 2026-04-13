@@ -345,53 +345,19 @@ function AnomalyCard({
           <StatusBadge status={anomaly.status} />
           <span className="text-sm font-medium">{anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type}</span>
         </div>
-        {!isEditing && !resolved && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsEditing(true)}>
-            <Pencil className="mr-1 h-3 w-3" />Modifica
-          </Button>
-        )}
       </div>
 
-      {/* Body: description + suggestion + edit form */}
-      {isEditing ? (
-        <div className="space-y-2">
-          <Textarea
-            className="text-sm"
-            rows={3}
-            value={editDescription}
-            onChange={(e) => setEditDescription(e.target.value)}
-            placeholder="Descrizione anomalia..."
-          />
-          <Textarea
-            className="text-sm"
-            rows={2}
-            value={editSuggestion}
-            onChange={(e) => setEditSuggestion(e.target.value)}
-            placeholder="Suggerimento (opzionale)..."
-          />
-          <div className="flex items-center gap-1">
-            <Button size="sm" onClick={handleSave} disabled={isSaving || !editDescription.trim()}>
-              <Save className="mr-1 h-3 w-3" />Salva
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setEditDescription(anomaly.description); setEditSuggestion(anomaly.suggestion ?? ''); }}>
-              <X className="mr-1 h-3 w-3" />Annulla
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <p className="text-sm">{anomaly.description}</p>
-          {anomaly.suggestion && (
-            <p className="mt-2 text-sm text-muted-foreground italic">
-              Suggerimento: {anomaly.suggestion}
-            </p>
-          )}
-          {anomaly.resolution_note && (
-            <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
-              {anomaly.resolution_note}
-            </p>
-          )}
-        </>
+      {/* Body: description + suggestion (read-only) */}
+      <p className="text-sm">{anomaly.description}</p>
+      {anomaly.suggestion && (
+        <p className="mt-2 text-sm text-muted-foreground italic">
+          {anomaly.suggestion}
+        </p>
+      )}
+      {anomaly.resolution_note && (
+        <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
+          {anomaly.resolution_note}
+        </p>
       )}
 
       {/* Event/document references */}
@@ -406,7 +372,7 @@ function AnomalyCard({
       )}
 
       {/* Guidance: "Come risolvere?" — collapsible, only for unresolved */}
-      {!resolved && !isEditing && guidance && (
+      {!resolved && guidance && (
         <div className="mt-3">
           <button
             type="button"
@@ -433,7 +399,7 @@ function AnomalyCard({
       )}
 
       {/* Expert note + actions — only for unresolved anomalies */}
-      {!resolved && !isEditing && (
+      {!resolved && (
         <div className="mt-3 pt-2 border-t border-dashed space-y-3">
           {/* Expert note textarea */}
           <div className="space-y-1.5">
