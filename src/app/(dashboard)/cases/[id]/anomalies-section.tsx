@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Pencil, X, Save, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, FileWarning, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+// Textarea removed — anomaly descriptions are read-only
 import { anomalyTypeLabels } from '@/lib/constants';
 import { updateAnomaly, dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
 import { createClient } from '@/lib/supabase/client';
@@ -279,13 +279,9 @@ function AnomalyCard({
   caseId: string;
   onChanged?: (dismissedId?: string) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
   const needsAction = anomaly.status === 'detected' || anomaly.status === 'llm_confirmed';
   const [showGuide, setShowGuide] = useState(needsAction);
-  const [editDescription, setEditDescription] = useState(anomaly.description);
-  const [editSuggestion, setEditSuggestion] = useState(anomaly.suggestion ?? '');
   const [expertNote, setExpertNote] = useState(anomaly.resolution_note ?? '');
-  const [isSaving, startSave] = useTransition();
   const [isDismissing, startDismiss] = useTransition();
   const [isConfirming, startConfirm] = useTransition();
 
@@ -293,24 +289,6 @@ function AnomalyCard({
   const references = resolveEventReferences(involvedEvents, events, documents);
   const resolved = isResolved(anomaly.status);
   const guidance = anomalyGuidance[anomaly.anomaly_type];
-
-  const handleSave = useCallback(() => {
-    startSave(async () => {
-      const result = await updateAnomaly({
-        anomalyId: anomaly.id,
-        caseId,
-        description: editDescription,
-        suggestion: editSuggestion.trim() || null,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Anomalia aggiornata');
-      setIsEditing(false);
-      onChanged?.();
-    });
-  }, [anomaly.id, caseId, editDescription, editSuggestion, onChanged]);
 
   const handleDismiss = useCallback(() => {
     startDismiss(async () => {
