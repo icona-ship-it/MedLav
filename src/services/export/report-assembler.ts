@@ -193,60 +193,37 @@ export function assembleFullReport(params: {
   const ocrContent = buildDocumentazioneSanitaria(documentsWithPages);
   addSection('doc-sanitaria', 'DATI DOCUMENTAZIONE SANITARIA', ocrContent, true);
 
-  // 5-7. LLM sections from synthesis
+  // 5. SYNTHESIS (LLM-generated report) — use as-is in markdown format.
+  // This matches exactly what the user sees in the preview.
+  // Each ## heading in the synthesis becomes a separate section.
   const synthText = synthesis ?? '';
 
-  const riassunto = extractSynthesisSection(synthText, /^##\s*RIASSUNTO/i);
-  if (riassunto) addSection('riassunto', 'RIASSUNTO DEL CASO', riassunto);
-
-  const cronologia = extractSynthesisSection(synthText, /^##\s*CRONOLOGIA/i);
-  if (cronologia) addSection('cronologia', 'CRONOLOGIA MEDICO-LEGALE', cronologia);
-
-  // EVIDENZE CLINICHE — fatti medici raggruppati per tipo fonte (A/B/C/D)
-  if (events && events.length > 0) {
-    const evidenzeContent = buildEvidenzeCliniche(events);
-    addSection('evidenze-cliniche', 'EVIDENZE CLINICHE', evidenzeContent);
+  if (synthText) {
+    // Parse synthesis into sections by ## headings
+    const synthSections = synthText.split(/^(?=## )/m).filter((s) => s.trim().length > 0);
+    for (const sectionText of synthSections) {
+      const headingMatch = sectionText.match(/^## (.+)/);
+      if (headingMatch) {
+        const title = headingMatch[1].trim();
+        const content = sectionText.replace(/^## .+\n+/, '').trim();
+        if (content.length > 0) {
+          const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+          addSection(id, title, content, true);
+        }
+      }
+    }
   }
 
-  // Specialized sections (between CRONOLOGIA and CONSIDERAZIONI/ELEMENTI)
-  const specializedSections = extractSpecializedSections(synthText);
-  for (const spec of specializedSections) {
-    addSection(spec.id, spec.title, spec.content);
-  }
-
-  // 8. ESAME OBIETTIVO
+  // ESAME OBIETTIVO (from perizia metadata, not LLM)
   if (pm.esameObiettivo) {
     addSection('esame-obiettivo', 'ESAME OBIETTIVO', pm.esameObiettivo);
   }
 
-  // 9. CONSIDERAZIONI MEDICO-LEGALI / ELEMENTI DI RILIEVO
-  const considerazioni = extractSynthesisSection(synthText, /^##\s*(CONSIDERAZIONI|ELEMENTI DI RILIEVO)/i);
-  if (considerazioni) addSection('considerazioni', 'CONSIDERAZIONI MEDICO-LEGALI', considerazioni);
-
-  // 10. NESSO CAUSALE
-  const nesso = extractSynthesisSection(synthText, /^##\s*NESSO\s*CAUSALE/i);
-  if (nesso) addSection('nesso-causale', 'NESSO CAUSALE', nesso);
-
-  // 11. VALUTAZIONE DANNO BIOLOGICO
-  const danno = extractSynthesisSection(synthText, /^##\s*VALUTAZIONE\s*(DEL\s*)?DANNO/i);
-  const calcText = formatCalculationsText(calculations);
-  const dannoContent = [danno, calcText].filter(Boolean).join('\n\n');
-  if (dannoContent) addSection('danno-biologico', 'VALUTAZIONE DEL DANNO BIOLOGICO', dannoContent);
-
-  // 12. SPESE MEDICHE (from synthesis LLM output or perizia metadata)
-  const speseMedicheFromSynthesis = extractSynthesisSection(synthText, /^##\s*SPESE\s*MEDICHE\s*(DOCUMENTATE)?/i);
-  const speseMedicheContent = [speseMedicheFromSynthesis, pm.speseMediche].filter(Boolean).join('\n\n');
-  if (speseMedicheContent) {
-    addSection('spese-mediche', 'SPESE MEDICHE DOCUMENTATE', speseMedicheContent);
+  // EVIDENZE CLINICHE — only if NO synthesis (fallback for cases without report)
+  if (events && events.length > 0 && !synthText) {
+    const evidenzeContent = buildEvidenzeCliniche(events);
+    addSection('evidenze-cliniche', 'EVIDENZE CLINICHE', evidenzeContent);
   }
-
-  // 13. RISPOSTA AI QUESITI
-  const rispostaQuesiti = extractSynthesisSection(synthText, /^##\s*RISPOSTA\s*AI\s*QUESITI/i);
-  if (rispostaQuesiti) addSection('risposta-quesiti', 'RISPOSTA AI QUESITI', rispostaQuesiti);
-
-  // 14. CONCLUSIONI
-  const conclusioni = extractSynthesisSection(synthText, /^##\s*CONCLUSIONI/i);
-  if (conclusioni) addSection('conclusioni', 'CONCLUSIONI', conclusioni);
 
   // 15. ANOMALIE RILEVATE
   if (anomalies.length > 0) {
