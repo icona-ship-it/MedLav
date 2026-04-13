@@ -3,11 +3,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, X, Loader2, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
 import { getFileIcon, formatFileSize } from '@/lib/format';
-import { DOCUMENT_TYPES } from '@/lib/constants';
 import { toUserMessage } from '@/lib/user-error-messages';
 
 interface FileUploadProps {
@@ -24,7 +22,6 @@ interface UploadProgress {
 
 export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
-  const [fileTypes, setFileTypes] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -41,11 +38,6 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
   }, []);
 
   const removeFile = (index: number) => {
-    const removed = files[index];
-    if (removed) {
-      const key = `${removed.name}-${removed.size}`;
-      setFileTypes((ft) => Object.fromEntries(Object.entries(ft).filter(([k]) => k !== key)));
-    }
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -81,11 +73,9 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      // Update status: uploading
       newProgress[i] = { ...newProgress[i], status: 'uploading' };
       setProgress([...newProgress]);
 
-      // Upload directly to Supabase Storage from the browser
       const ext = file.name.split('.').pop() ?? 'bin';
       const storagePath = `${user.id}/${caseId}/${crypto.randomUUID()}.${ext}`;
 
@@ -102,18 +92,17 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         continue;
       }
 
-      // Save metadata via server action
       newProgress[i] = { ...newProgress[i], status: 'saving' };
       setProgress([...newProgress]);
 
-      const fileKey = `${file.name}-${file.size}`;
+      // All documents upload as 'altro' — user categorizes after upload
       const result = await saveDocumentMetadata({
         caseId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
         storagePath,
-        documentType: fileTypes[fileKey] || 'altro',
+        documentType: 'altro',
       });
 
       if (result?.error) {
@@ -127,11 +116,9 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       successCount++;
     }
 
-    // Update case document count
     if (successCount > 0) {
       await updateCaseDocumentCount(caseId);
       setFiles([]);
-      setFileTypes({});
       onUploadComplete?.();
     }
 
@@ -189,10 +176,9 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         />
       </div>
 
-      {/* File list (before upload) */}
+      {/* File list (before upload) — names only, no type selection */}
       {files.length > 0 && !isUploading && progress.length === 0 && (
         <div className="space-y-3">
-          {/* Header + warnings ON TOP */}
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">{files.length} file selezionati</p>
             <Button onClick={handleUpload} size="lg">
@@ -201,35 +187,23 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
             </Button>
           </div>
 
-          {files.every((f) => !fileTypes[`${f.name}-${f.size}`] || fileTypes[`${f.name}-${f.size}`] === 'altro') && (
-            <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/20 p-3 text-sm text-yellow-800 dark:text-yellow-200">
-              <Info className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>
-                Consiglio: seleziona il tipo di documento per un&apos;analisi piu precisa.
-              </span>
-            </div>
-          )}
-
           {files.some((f) => f.size > 10 * 1024 * 1024) && (
             <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Alcuni file sono molto grandi. Se un PDF contiene tipi diversi di documenti (es. cartelle cliniche + atti legali), puoi usare &quot;Dividi PDF&quot; dal menu del documento dopo il caricamento.
+                Alcuni file sono molto grandi. Dopo il caricamento, puoi usare &quot;Dividi PDF&quot; dal menu del documento.
               </span>
             </div>
           )}
 
-          {/* Scrollable file list */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
-          {files.map((file, index) => {
-            const Icon = getFileIcon(file.type);
-            const fileKey = `${file.name}-${file.size}`;
-            return (
-              <div
-                key={fileKey}
-                className="rounded-md border px-3 py-2 space-y-1.5"
-              >
-                <div className="flex items-center justify-between gap-2">
+            {files.map((file, index) => {
+              const Icon = getFileIcon(file.type);
+              return (
+                <div
+                  key={`${file.name}-${file.size}`}
+                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate text-sm">{file.name}</span>
@@ -247,27 +221,10 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
-                <Select
-                  value={fileTypes[fileKey] || 'altro'}
-                  onValueChange={(value) => setFileTypes((prev) => ({ ...prev, [fileKey]: value }))}
-                >
-                  <SelectTrigger className="w-full h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_TYPES.map((dt) => (
-                      <SelectItem key={dt.value} value={dt.value}>
-                        {dt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
 
-          {/* Bottom upload button (duplicated for convenience when scrolling) */}
           <Button onClick={handleUpload} className="w-full" size="lg">
             <Upload className="h-4 w-4" />
             Carica {files.length} {files.length === 1 ? 'documento' : 'documenti'}
@@ -278,7 +235,6 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       {/* Upload progress */}
       {progress.length > 0 && (
         <div className="space-y-3" aria-live="polite">
-          {/* Global progress header + bar */}
           <div className="space-y-2">
             <p className="text-sm font-bold">
               Caricamento: {doneCount + errorCount} di {progress.length} documenti
@@ -296,7 +252,6 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
             )}
           </div>
 
-          {/* Compact scrollable file list */}
           <div className="max-h-[300px] overflow-y-auto space-y-1">
             {progress.map((p) => (
               <div
