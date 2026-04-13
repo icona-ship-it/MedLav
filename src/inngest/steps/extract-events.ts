@@ -246,9 +246,17 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: ${pages.length - nonEmptyPages.length} pages with empty OCR text filtered out`);
     }
 
-    const chunkText = nonEmptyPages.map((p) =>
+    let chunkText = nonEmptyPages.map((p) =>
       `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
     ).join('\n\n');
+
+    // Safety cap: prevent oversized chunks from causing Mistral timeout.
+    // 30K chars ≈ 8K tokens — well within extraction context but fast enough to avoid timeout.
+    const MAX_CHUNK_CHARS = 30_000;
+    if (chunkText.length > MAX_CHUNK_CHARS) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: text too large (${chunkText.length} chars), truncating to ${MAX_CHUNK_CHARS}`);
+      chunkText = chunkText.slice(0, MAX_CHUNK_CHARS) + '\n\n[... testo troncato — le pagine rimanenti di questo chunk verranno elaborate nel chunk successivo]';
+    }
 
     const chunkLabel = totalChunks > 1
       ? `${ocrResult.fileName} [pag ${range.start}-${range.end}]`
