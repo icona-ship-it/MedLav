@@ -73,7 +73,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
-    const rateCheck = await checkRateLimit({ key: `quesito:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    const rateCheck = await checkRateLimit({ key: `quesito:${user.id}`, ...RATE_LIMITS.API });
     if (!rateCheck.success) {
       return NextResponse.json({ success: false, error: 'Troppe richieste. Riprova tra poco.' }, { status: 429 });
     }

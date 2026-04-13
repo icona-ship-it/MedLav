@@ -49,9 +49,10 @@ export async function POST(request: NextRequest) {
     authenticatedUserId = user.id;
 
     // Rate limit BEFORE credit deduction — don't charge for rate-limited requests
+    // Use API limit (60/min) not PROCESSING (5/min) — user may regenerate many sections
     const rateCheck = await checkRateLimit({
       key: `regen-section:${user.id}`,
-      ...RATE_LIMITS.PROCESSING,
+      ...RATE_LIMITS.API,
     });
     if (!rateCheck.success) {
       return NextResponse.json(
