@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  let creditsCharged = 0;
 
   try {
     // Step 1: Download PDF from Storage
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
     if (!deduction.success) {
       return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
     }
+    creditsCharged = totalCredits;
 
     // Step 6: Upload split PDFs and create document records
     const newDocIds: string[] = [];
@@ -270,8 +272,13 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'unknown';
     logger.error('split-document', `Split failed: ${message}`, { documentId });
 
+    // Refund credits if they were deducted before the error
+    if (creditsCharged > 0) {
+      await refundCredits(user.id, creditsCharged, 'split_pdf', documentId, { reason: 'split_failed' });
+    }
+
     return NextResponse.json(
-      { success: false, error: 'Errore nella divisione del PDF. Riprova.' },
+      { success: false, error: 'Errore nella divisione del PDF. Crediti rimborsati. Riprova.' },
       { status: 500 },
     );
   }

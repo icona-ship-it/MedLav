@@ -834,22 +834,29 @@ export const processCase = inngest.createFunction(
 
       try {
         // Special handling for documentazione_sanitaria: split into batches
+        // Each batch is a separate Inngest step → separate serverless invocation → no timeout
         if (spec.id === 'documentazione_sanitaria' && spec.needsOcr && ocrResults.length > DOC_BATCH_SIZE) {
+          // Fetch ALL OCR context ONCE (not per-batch)
+          const allOcrContext = await step.run('fetch-ocr-for-doc-sanitaria', async () => {
+            const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+            return fetchDocumentsOcrContext(caseId);
+          });
+
           const batchContents: string[] = [];
           const totalBatches = Math.ceil(ocrResults.length / DOC_BATCH_SIZE);
+          let totalPromptTokens = 0;
+          let totalCompletionTokens = 0;
 
           for (let b = 0; b < totalBatches; b++) {
             const batchStart = b * DOC_BATCH_SIZE;
             const batchEnd = Math.min(batchStart + DOC_BATCH_SIZE, ocrResults.length);
             const batchDocIds = ocrResults.slice(batchStart, batchEnd).map((r) => r.documentId);
 
-            const batchContent = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
+            const batchResult = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
               await updateProgress(`${spec.title} (${b + 1}/${totalBatches})`);
 
-              // Fetch only this batch's OCR
-              const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-              const allOcr = await fetchDocumentsOcrContext(caseId);
-              const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
+              // Filter OCR to this batch's documents only
+              const batchOcr = allOcrContext.filter((d: { documentId: string }) => batchDocIds.includes(d.documentId));
 
               const { generateSingleSection } = await import('@/services/synthesis/section-generator');
               return generateSingleSection({
@@ -860,18 +867,37 @@ export const processCase = inngest.createFunction(
               });
             });
 
-            if (batchContent.content) {
-              batchContents.push(batchContent.content);
+            if (batchResult.content) {
+              batchContents.push(batchResult.content);
+            } else {
+              logger.warn('pipeline', `Batch ${b}/${totalBatches} for documentazione_sanitaria returned empty content`, { caseId });
+            }
+
+            // Aggregate token usage
+            if (batchResult.usage) {
+              totalPromptTokens += batchResult.usage.promptTokens;
+              totalCompletionTokens += batchResult.usage.completionTokens;
             }
           }
 
-          // Combine all batches into one section
+          // Combine all batches into one section with proper context summary
+          const combinedContent = batchContents.join('\n\n');
+          const { summarizeForContext } = await import('@/services/synthesis/section-generator');
+          const contextSummary = spec.contextMaxChars > 0
+            ? summarizeForContext(combinedContent, spec.contextMaxChars)
+            : '';
+
           accumulatedSections.push({
             id: spec.id,
             title: spec.title,
-            content: batchContents.join('\n\n'),
-            contextSummary: `Documentazione sanitaria (${ocrResults.length} documenti in ${totalBatches} batch)`,
-            wordCount: batchContents.join(' ').split(/\s+/).length,
+            content: combinedContent,
+            contextSummary,
+            wordCount: combinedContent.split(/\s+/).filter((w) => w.length > 0).length,
+            usage: totalPromptTokens > 0 ? {
+              promptTokens: totalPromptTokens,
+              completionTokens: totalCompletionTokens,
+              totalTokens: totalPromptTokens + totalCompletionTokens,
+            } : undefined,
           });
         } else {
           // Normal section: single step
