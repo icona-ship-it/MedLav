@@ -63,7 +63,7 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
 export function EventCard({
   event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
   eventImages, onImageClick,
-  isHighlighted,
+  isHighlighted, documentName,
 }: {
   event: EventRow;
   caseId: string;
@@ -77,6 +77,7 @@ export function EventCard({
   eventImages: Record<string, string[]>;
   onImageClick: (url: string) => void;
   isHighlighted?: boolean;
+  documentName?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -203,9 +204,14 @@ export function EventCard({
           {event.diagnosis && <p className="text-sm"><span className="font-medium">Diagnosi:</span> {event.diagnosis}</p>}
           {event.doctor && <p className="text-sm"><span className="font-medium">Medico:</span> {event.doctor}</p>}
           {event.facility && <p className="text-sm"><span className="font-medium">Struttura:</span> {event.facility}</p>}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
             <span>Fonte: {sourceLabels[event.source_type] ?? event.source_type}</span>
             <span className={confidenceColor(event.confidence)}>{confidenceLabel(event.confidence)}</span>
+            {documentName && (
+              <span className="flex items-center gap-1">
+                📄 <span className="font-medium">{documentName}</span>
+              </span>
+            )}
           </div>
           {event.reliability_notes && <p className="text-sm text-muted-foreground italic">{event.reliability_notes}</p>}
           {event.expert_notes && (

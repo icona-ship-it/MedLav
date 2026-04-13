@@ -177,7 +177,7 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 
 export function EventsTab({
   caseId, events, eventImages, onImageClick,
-  highlightedEventOrderNumber, patientInitials, caseCode,
+  highlightedEventOrderNumber, patientInitials, caseCode, documents,
 }: {
   caseId: string;
   events: EventRow[];
@@ -186,12 +186,14 @@ export function EventsTab({
   highlightedEventOrderNumber?: number | null;
   patientInitials?: string | null;
   caseCode?: string;
+  documents?: Array<{ id: string; file_name: string }>;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'cards' | 'document'>('cards');
+  const docNameMap = new Map((documents ?? []).map((d) => [d.id, d.file_name]));
   const [eventViewTab, setEventViewTab] = useState<EventViewTab>('clinical');
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
   const [showOnlyVerification, setShowOnlyVerification] = useState(false);
@@ -270,6 +272,7 @@ export function EventsTab({
       eventImages={eventImages}
       onImageClick={onImageClick}
       isHighlighted={highlightedEventOrderNumber === event.order_number}
+      documentName={event.document_id ? docNameMap.get(event.document_id) : undefined}
     />
   );
 
@@ -293,8 +296,8 @@ export function EventsTab({
 
         <div className="flex items-center justify-between">
           <div>
-            {/* Clinical / Admin / All tabs */}
-            <div className="flex items-center gap-1 mb-1">
+            {/* Clinical / Admin / All tabs — hidden in document view */}
+            <div className={`flex items-center gap-1 mb-1 ${viewMode === 'document' ? 'hidden' : ''}`}>
               <button type="button" onClick={() => { setEventViewTab('clinical'); setEventTypeFilter(null); setShowOnlyVerification(false); }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${eventViewTab === 'clinical' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                 Cronistoria ({clinicalEvents.length})
@@ -310,27 +313,29 @@ export function EventsTab({
                 Tutti ({events.length})
               </button>
             </div>
-            <CardDescription>
-              {filteredEvents.length < tabEvents.length
-                ? `${filteredEvents.length} di ${tabEvents.length} eventi`
-                : `${tabEvents.length} eventi`}
-              {displayNormal.length + displayVerification.length > visibleCount && (
-                <span className="text-muted-foreground"> — mostrando {Math.min(visibleCount, displayNormal.length + displayVerification.length)}</span>
-              )}
-            </CardDescription>
+            {viewMode !== 'document' && (
+              <CardDescription>
+                {filteredEvents.length < tabEvents.length
+                  ? `${filteredEvents.length} di ${tabEvents.length} eventi`
+                  : `${tabEvents.length} eventi`}
+                {displayNormal.length + displayVerification.length > visibleCount && (
+                  <span className="text-muted-foreground"> — mostrando {Math.min(visibleCount, displayNormal.length + displayVerification.length)}</span>
+                )}
+              </CardDescription>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {/* View mode toggle */}
-            <div className="flex items-center rounded-md border p-0.5">
+            {/* View mode toggle — prominent button */}
+            <div className="flex items-center rounded-lg border p-0.5 gap-0.5">
               <button type="button" onClick={() => setViewMode('cards')}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${viewMode === 'cards' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                title="Vista schede">
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${viewMode === 'cards' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                 <LayoutList className="h-3.5 w-3.5" />
+                Schede
               </button>
               <button type="button" onClick={() => setViewMode('document')}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${viewMode === 'document' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                title="Vista documento (formato perizia)">
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${viewMode === 'document' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                 <FileText className="h-3.5 w-3.5" />
+                Anteprima Perizia
               </button>
             </div>
             {altroEvents.length > 0 && (
