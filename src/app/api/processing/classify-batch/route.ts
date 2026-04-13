@@ -74,16 +74,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
   }
 
-  // Send Inngest event
-  await inngest.send({
-    name: 'case/documents.classify-batch',
-    data: {
-      caseId,
-      userId: user.id,
-      documentIds,
-      totalCredits,
-    },
-  });
+  // Send Inngest event — refund credits if event delivery fails
+  try {
+    await inngest.send({
+      name: 'case/documents.classify-batch',
+      data: {
+        caseId,
+        userId: user.id,
+        documentIds,
+        totalCredits,
+      },
+    });
+  } catch {
+    // Inngest unreachable — refund credits
+    const { refundCredits } = await import('@/services/credits/credit-service');
+    await refundCredits(user.id, totalCredits, 'categorizzazione', caseId, { reason: 'inngest_send_failed' });
+    return NextResponse.json({ success: false, error: 'Servizio non disponibile. Crediti rimborsati. Riprova.' }, { status: 503 });
+  }
 
   return NextResponse.json({
     success: true,
