@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Documentazione per Consulente Legale</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Georgia', serif; line-height: 1.8; color: #222; max-width: 780px; margin: 0 auto; padding: 48px 28px; }
+  h1 { font-size: 26px; color: #1e3a5f; margin-bottom: 8px; }
+  .subtitle { font-size: 15px; color: #666; margin-bottom: 32px; border-bottom: 2px solid #1e3a5f; padding-bottom: 12px; }
+  h2 { font-size: 19px; color: #1e3a5f; margin: 36px 0 14px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+  p { font-size: 14.5px; margin-bottom: 12px; }
+  li { font-size: 14.5px; margin-bottom: 6px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  .box { padding: 16px 20px; border-radius: 6px; margin: 16px 0; font-size: 14px; }
+  .box-red { background: #fef2f2; border-left: 4px solid #dc2626; }
+  .box-yellow { background: #fefce8; border-left: 4px solid #ca8a04; }
+  .box-green { background: #f0fdf4; border-left: 4px solid #16a34a; }
+  .box-blue { background: #eff6ff; border-left: 4px solid #2563eb; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid #d1d5db; padding: 10px 14px; text-align: left; vertical-align: top; }
+  th { background: #f0f4ff; font-weight: 600; }
+  .footer { margin-top: 48px; padding-top: 16px; border-top: 2px solid #1e3a5f; font-size: 12px; color: #888; }
+  @media print { body { padding: 20px; font-size: 13px; } h2 { page-break-after: avoid; } }
+</style>
+</head>
+<body>
+
+<h1>LegMed</h1>
+<p class="subtitle">Documentazione completa per consulenza legale — 14 Aprile 2026</p>
+
+<h2>1. Cosa fa LegMed, in parole semplici</h2>
+
+<p>LegMed e un <strong>sito web a pagamento</strong> (in abbonamento mensile) pensato per i <strong>medici legali</strong> — cioe quei professionisti che, su incarico di un giudice, di un avvocato o di un paziente, devono analizzare la documentazione clinica di una persona e scrivere una relazione peritale.</p>
+
+<p><strong>Il problema che risolve:</strong> Quando un medico legale riceve un caso, deve leggere centinaia di pagine di cartelle cliniche, referti, esami, lettere di dimissione. Deve riordinare tutto in ordine cronologico, trascrivere le evidenze e individuare le criticita. Questo lavoro manuale richiede ore o giorni.</p>
+
+<p><strong>Come funziona:</strong></p>
+<ol>
+  <li>Il medico legale si registra sul sito e crea un "caso"</li>
+  <li>Carica i documenti clinici del paziente (file PDF, foto, documenti Word)</li>
+  <li>Il sistema legge automaticamente i documenti, estrae i fatti clinici, li ordina e genera una bozza di relazione</li>
+  <li>Il medico legale revisiona la bozza, la corregge, aggiunge le proprie valutazioni professionali e la usa come base per la sua perizia</li>
+</ol>
+
+<div class="box box-blue">
+  <strong>Punto fondamentale:</strong> LegMed produce un <strong>documento di lavoro</strong>, NON la perizia finale. Il medico legale e l'unico responsabile della perizia che deposita in tribunale. Il nostro software e uno strumento di supporto, come un assistente che prepara la documentazione.
+</div>
+
+<h2>2. Quali dati vengono trattati</h2>
+
+<div class="box box-red">
+  <strong>Attenzione — dati sanitari:</strong> Il cuore dell'applicazione e l'analisi di <strong>documentazione medica</strong> di pazienti reali. Il Regolamento Europeo sulla Privacy (conosciuto come "GDPR") classifica i dati sanitari come "dati di categoria speciale" — cioe la categoria piu sensibile e protetta. L'Articolo 9 del GDPR vieta il trattamento di dati sanitari salvo specifiche eccezioni legali.
+</div>
+
+<table>
+  <tr><th style="width:30%">Tipo di dato</th><th>Cosa contiene</th><th>Da dove arriva</th></tr>
+  <tr>
+    <td><strong>Dati sanitari del paziente</strong></td>
+    <td>Diagnosi, referti medici, esami del sangue, descrizioni di radiografie, interventi chirurgici, terapie farmacologiche, ricoveri</td>
+    <td>Presenti nei documenti che il medico legale carica</td>
+  </tr>
+  <tr>
+    <td><strong>Dati identificativi del paziente</strong></td>
+    <td>Nome e cognome, codice fiscale, data di nascita, indirizzo</td>
+    <td>Presenti nei documenti caricati (il sistema non li richiede esplicitamente)</td>
+  </tr>
+  <tr>
+    <td><strong>Dati del procedimento</strong></td>
+    <td>Tribunale, numero del procedimento, nomi delle parti, quesiti del giudice</td>
+    <td>Compilati manualmente dal medico legale</td>
+  </tr>
+  <tr>
+    <td><strong>Dati del medico legale</strong></td>
+    <td>Nome, email, studio professionale, firma digitale</td>
+    <td>Forniti alla registrazione</td>
+  </tr>
+  <tr>
+    <td><strong>Dati di pagamento</strong></td>
+    <td>Carta di credito, fatturazione</td>
+    <td>Gestiti interamente da Stripe (servizio di pagamento certificato). Noi non vediamo ne conserviamo i dati della carta.</td>
+  </tr>
+</table>
+
+<h2>3. Dove vanno fisicamente questi dati</h2>
+
+<p><strong>Tutti i servizi sono fisicamente in Europa.</strong> Nessun dato esce dall'Unione Europea.</p>
+
+<table>
+  <tr><th>Cosa fa</th><th>Chi lo fa</th><th>Dove si trova</th><th>Cosa vede dei dati</th></tr>
+  <tr>
+    <td><strong>Conserva i dati e i documenti</strong></td>
+    <td>Supabase (azienda americana con server europei)</td>
+    <td>Francoforte, Germania</td>
+    <td>Tutto: il database con gli eventi clinici, i documenti caricati, i report generati</td>
+  </tr>
+  <tr>
+    <td><strong>Legge i documenti e genera il report</strong> (intelligenza artificiale)</td>
+    <td>Mistral AI (azienda francese)</td>
+    <td>Parigi, Francia</td>
+    <td>Riceve il testo dei documenti clinici per analizzarli. Da verificare se conserva copie dopo l'elaborazione.</td>
+  </tr>
+  <tr>
+    <td><strong>Fa funzionare il sito web</strong></td>
+    <td>Vercel (azienda americana con server europei)</td>
+    <td>Francoforte, Germania</td>
+    <td>I dati transitano ma non vengono conservati</td>
+  </tr>
+  <tr>
+    <td><strong>Gestisce i pagamenti</strong></td>
+    <td>Stripe</td>
+    <td>Europa</td>
+    <td>Solo dati di pagamento — nessun dato sanitario</td>
+  </tr>
+  <tr>
+    <td><strong>Invia email</strong></td>
+    <td>Resend</td>
+    <td>Europa</td>
+    <td>Solo email del medico legale e codice caso — nessun dato clinico nel testo</td>
+  </tr>
+  <tr>
+    <td><strong>Monitora errori tecnici</strong></td>
+    <td>Sentry</td>
+    <td>Francoforte, Germania</td>
+    <td>Solo errori del software. Un filtro automatico rimuove qualsiasi dato personale prima dell'invio.</td>
+  </tr>
+  <tr>
+    <td><strong>Gestisce le elaborazioni in background</strong></td>
+    <td>Inngest</td>
+    <td>Europa</td>
+    <td>Coordina i passaggi dell'elaborazione (OCR, estrazione, report). Riceve metadati del caso (ID, stato) — non il contenuto clinico, che viene letto direttamente dal database.</td>
+  </tr>
+  <tr>
+    <td><strong>Limita le richieste eccessive</strong> (rate limiting)</td>
+    <td>Upstash Redis</td>
+    <td>Francoforte, Germania</td>
+    <td>Solo contatori anonimi delle richieste per utente. Nessun dato clinico o personale.</td>
+  </tr>
+</table>
+
+<div class="box box-yellow">
+  <strong>Il punto piu delicato e Mistral AI:</strong> Quando il medico legale avvia l'analisi, i documenti clinici vengono elaborati dai server di Mistral AI a Parigi in due modi:
+  <ul style="margin-top:8px">
+    <li><strong>OCR (lettura documenti):</strong> I file PDF e le immagini vengono inviati al servizio OCR di Mistral, che ne estrae il testo. Questo include anche le immagini contenute nei documenti (radiografie, referti fotografici).</li>
+    <li><strong>Analisi e generazione:</strong> Il testo estratto viene inviato al modello linguistico di Mistral per l'estrazione dei fatti clinici e la generazione della bozza di relazione.</li>
+  </ul>
+  <p style="margin-top:10px">Mistral e un'azienda francese (quindi europea). Secondo i loro <strong>Termini di Servizio API</strong> (verificati): <strong>i dati inviati tramite API non vengono usati per addestrare i modelli</strong> e hanno <strong>zero data retention</strong> — i dati non vengono conservati dopo l'elaborazione. Tuttavia dobbiamo verificare formalmente con l'avvocato: (a) se la policy di zero retention di Mistral e sufficiente per dati sanitari ex Art. 9, (b) se serve un DPA (Data Processing Agreement) specifico per dati di categoria speciale.</p>
+</div>
+
+<h2>4. Protezioni di sicurezza gia operative</h2>
+
+<ul>
+  <li><strong>Ogni utente vede solo i propri dati:</strong> E tecnicamente impossibile per un medico legale vedere i casi di un altro. Il database ha regole di isolamento su ogni singola riga.</li>
+  <li><strong>Connessioni cifrate:</strong> Tutti i dati viaggiano su connessioni protette (come l'home banking).</li>
+  <li><strong>Dati cifrati anche quando sono "fermi":</strong> I dati salvati sul server sono cifrati.</li>
+  <li><strong>Nessun dato clinico nei registri tecnici:</strong> I log del sistema (usati per diagnosticare problemi) contengono solo codici interni, mai nomi o dati medici.</li>
+  <li><strong>Cancellazione completa su richiesta:</strong> L'utente puo eliminare il proprio account. Tutto viene cancellato: database, documenti, immagini, cronologia.</li>
+  <li><strong>Esportazione dati:</strong> L'utente puo scaricare tutti i propri dati in qualsiasi momento.</li>
+  <li><strong>Cancellazione automatica:</strong> I casi vecchi vengono eliminati automaticamente dopo un periodo configurabile (default: 1 anno).</li>
+</ul>
+
+<h2>5. La questione dei ruoli</h2>
+
+<div class="box box-yellow">
+  <strong>Chi e responsabile di cosa?</strong>
+  <p style="margin-top:8px">Nel mondo della privacy, ci sono due figure chiave:</p>
+  <ul style="margin-top:8px">
+    <li>Il <strong>"titolare del trattamento"</strong> — chi decide perche e come i dati vengono usati</li>
+    <li>Il <strong>"responsabile del trattamento"</strong> — chi elabora i dati per conto del titolare</li>
+  </ul>
+  <p style="margin-top:10px">Nel nostro caso: il <strong>medico legale</strong> ha un incarico (dal giudice o dall'avvocato) che lo autorizza a esaminare i dati del paziente. Quando usa LegMed, ci affida questi dati perche li elaboriamo. La domanda e: <strong>noi siamo "responsabili" che trattano per conto del medico legale? O siamo "co-titolari"?</strong> E il paziente, deve essere informato?</p>
+</div>
+
+<h2>6. L'intelligenza artificiale</h2>
+
+<p>Il sistema usa intelligenza artificiale (modelli di Mistral AI, azienda francese con server a Parigi) per:</p>
+<ul>
+  <li><strong>Leggere i documenti</strong> (OCR): converte PDF e immagini in testo, incluse immagini diagnostiche (radiografie, TAC, risonanze) contenute nei documenti</li>
+  <li><strong>Classificare i documenti</strong>: identifica il tipo (cartella clinica, referto, esame, ecc.)</li>
+  <li><strong>Estrarre i fatti clinici</strong>: date, diagnosi, interventi, terapie, esami</li>
+  <li><strong>Ordinare gli eventi</strong> in cronologia e rilevare incongruenze</li>
+  <li><strong>Generare una bozza di relazione</strong> strutturata per sezioni</li>
+</ul>
+
+<p><strong>Cosa NON fa l'intelligenza artificiale:</strong></p>
+<ul>
+  <li>NON formula diagnosi</li>
+  <li>NON esprime giudizi medico-legali</li>
+  <li>NON decide sulla responsabilita medica</li>
+</ul>
+
+<p>L'Unione Europea sta introducendo l'AI Act, un regolamento sull'intelligenza artificiale. I sistemi usati in ambito sanitario potrebbero avere obblighi specifici.</p>
+
+<h2>7. Documenti legali gia pronti</h2>
+
+<ul>
+  <li><strong>Privacy Policy</strong> — pubblicata sul sito, spiega come trattiamo i dati</li>
+  <li><strong>Termini di Servizio</strong> — condizioni d'uso dell'applicazione</li>
+  <li><strong>Cookie Policy</strong> — con banner di consenso</li>
+  <li><strong>Pagina Sicurezza</strong> — descrive le misure di protezione</li>
+  <li><strong>Valutazione d'Impatto preliminare</strong> — analisi interna dei rischi del trattamento</li>
+</ul>
+
+<p>Tutti questi documenti necessitano di revisione legale.</p>
+
+<h2>8. Cosa chiediamo a lei</h2>
+
+<ol>
+  <li><strong>Base legale per il trattamento:</strong> Quale eccezione dell'Art. 9 ci consente di trattare dati sanitari? Il consenso esplicito del paziente (Art. 9.2.a)? La finalita di medicina preventiva o del lavoro (Art. 9.2.h)? O il mandato professionale del medico legale e sufficiente?</li>
+  <li><strong>Ruoli nel trattamento:</strong> LegMed e "responsabile del trattamento" che elabora dati per conto del medico legale (titolare)? O siamo co-titolari? Questo determina se serve un contratto di nomina a responsabile per ogni utente registrato.</li>
+  <li><strong>Contratti con i fornitori:</strong> I nostri sub-fornitori (Mistral AI, Supabase, Vercel) hanno contratti standard per il trattamento dati. Sono sufficienti per dati sanitari o servono clausole aggiuntive specifiche per l'Art. 9?</li>
+  <li><strong>Valutazione d'impatto (DPIA):</strong> Abbiamo una bozza. Serve una versione formale strutturata secondo le linee guida del Garante? Deve essere depositata o solo tenuta a disposizione?</li>
+  <li><strong>Responsabile protezione dati (DPO):</strong> Con un target iniziale di 20-100 utenti che trattano dati sanitari, il nostro trattamento si configura come "su larga scala"? Se serve un DPO, puo essere esterno?</li>
+  <li><strong>Revisione documenti legali:</strong> La nostra Privacy Policy e i Termini di Servizio sono adeguati per un servizio che tratta dati sanitari tramite intelligenza artificiale? Mancano clausole specifiche?</li>
+  <li><strong>Informativa al paziente:</strong> Il paziente ha diritto a sapere che i suoi dati vengono elaborati da un sistema di intelligenza artificiale? Chi deve informarlo — noi o il medico legale? In che forma?</li>
+  <li><strong>Decisioni automatizzate (Art. 22 GDPR):</strong> Il GDPR da ai cittadini il diritto di non essere sottoposti a decisioni basate unicamente su elaborazione automatizzata. Il nostro caso e diverso perche il medico legale revisiona sempre il risultato, ma serve una valutazione formale su questo punto.</li>
+  <li><strong>Assicurazione:</strong> Che tipo di polizza di responsabilita civile professionale serve per un software che tratta dati sanitari? Quali coperture sono consigliate (errori del software, violazione dati, interruzione servizio)?</li>
+  <li><strong>AI Act europeo:</strong> Il nostro sistema rientra nella classificazione "alto rischio" dell'AI Act (ambito sanitario)? Se si, quali obblighi di documentazione, trasparenza e supervisione umana ne derivano? Con che tempistiche?</li>
+</ol>
+
+<div class="footer">
+  <strong>LegMed</strong> — legmed.vercel.app<br>
+  Documento riservato per consulenza legale — 14 Aprile 2026
+</div>
+
+</body>
+</html>

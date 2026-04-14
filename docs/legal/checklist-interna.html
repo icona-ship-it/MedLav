@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Cose da affrontare con l'avvocato</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Georgia', serif; line-height: 1.8; color: #222; max-width: 780px; margin: 0 auto; padding: 48px 28px; }
+  h1 { font-size: 24px; color: #059669; margin-bottom: 8px; }
+  .subtitle { font-size: 15px; color: #666; margin-bottom: 32px; border-bottom: 2px solid #059669; padding-bottom: 12px; }
+  h2 { font-size: 18px; color: #059669; margin: 32px 0 14px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+  p { font-size: 14.5px; margin-bottom: 10px; }
+  li { font-size: 14.5px; margin-bottom: 8px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  .topic { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 22px; margin: 14px 0; }
+  .topic-title { font-size: 15px; font-weight: 700; color: #1e3a5f; margin-bottom: 6px; }
+  .topic-why { font-size: 13.5px; color: #555; margin-bottom: 8px; font-style: italic; }
+  .topic-question { font-size: 14px; color: #222; }
+  .urgent { border-left: 4px solid #dc2626; }
+  .important { border-left: 4px solid #f59e0b; }
+  .ask { border-left: 4px solid #3b82f6; }
+  .box-green { background: #f0fdf4; padding: 16px 20px; border-left: 4px solid #16a34a; border-radius: 6px; margin: 16px 0; font-size: 14px; }
+  .footer { margin-top: 48px; padding-top: 16px; border-top: 2px solid #059669; font-size: 12px; color: #888; }
+  @media print { body { padding: 20px; } }
+</style>
+</head>
+<body>
+
+<h1>Cose da affrontare con l'avvocato</h1>
+<p class="subtitle">Promemoria interno — Incontro del 14 Aprile 2026</p>
+
+<div class="box-green">
+  <strong>Prima dell'incontro:</strong> stampare il documento "Briefing per Consulente Legale" e portarne una copia per l'avvocato. Quel documento spiega tutto sull'app — qui ci sono solo le domande e i temi da discutere.
+</div>
+
+<h2>Le 10 questioni da affrontare</h2>
+
+<div class="topic urgent">
+  <div class="topic-title">1. Con che diritto trattiamo i dati sanitari dei pazienti?</div>
+  <div class="topic-why">Perche e importante: La legge sulla privacy vieta di trattare dati sanitari, con poche eccezioni. Se non abbiamo una base legale valida, tutto il servizio e illegale.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Il consenso del paziente e necessario? Se si, chi deve raccoglierlo — noi o il medico legale?</li>
+      <li>Il mandato professionale del medico legale (incarico dal giudice o dall'avvocato) e sufficiente come base legale?</li>
+      <li>Che formula di consenso dobbiamo usare?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic urgent">
+  <div class="topic-title">2. Che ruolo abbiamo noi nel trattamento dei dati?</div>
+  <div class="topic-why">Perche e importante: La legge distingue tra chi "decide" come usare i dati (titolare) e chi li "elabora" per conto di altri (responsabile). Il nostro ruolo determina i nostri obblighi.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>LegMed e "titolare" o "responsabile" del trattamento?</li>
+      <li>Il medico legale e il vero titolare?</li>
+      <li>Serve un contratto scritto tra noi e ogni medico legale che si registra?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic urgent">
+  <div class="topic-title">3. Il paziente deve sapere che usiamo l'intelligenza artificiale?</div>
+  <div class="topic-why">Perche e importante: I dati del paziente vengono inviati a un sistema di intelligenza artificiale (Mistral AI) per essere analizzati. Il paziente potrebbe avere diritto a saperlo.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Il medico legale deve informare il paziente che usa un software come LegMed?</li>
+      <li>Serve un'informativa specifica per il paziente?</li>
+      <li>Chi deve fornirla — noi o il medico legale?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic important">
+  <div class="topic-title">4. Contratti con i nostri fornitori tecnologici</div>
+  <div class="topic-why">Perche e importante: I dati dei pazienti passano attraverso server di altre aziende (Mistral AI per l'analisi, Supabase per l'archiviazione). La legge richiede contratti scritti con tutti i fornitori che toccano dati personali.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Servono contratti speciali per dati sanitari? (chiamati "accordi sul trattamento dei dati" o DPA)</li>
+      <li>Quali clausole devono contenere?</li>
+      <li>I contratti standard dei fornitori (che tutti accettano online) sono sufficienti?</li>
+      <li>In particolare per Mistral AI: il fatto che sia un'azienda francese con server in Francia e sufficiente?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic important">
+  <div class="topic-title">5. Valutazione d'impatto sulla privacy</div>
+  <div class="topic-why">Perche e importante: La legge obbliga a fare una valutazione formale dei rischi quando si trattano dati sanitari su larga scala. Noi ne abbiamo gia preparata una bozza, ma potrebbe non essere sufficiente.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>La nostra bozza di valutazione d'impatto (DPIA) e sufficiente?</li>
+      <li>Serve un documento piu formale o strutturato diversamente?</li>
+      <li>Deve essere approvata da qualcuno?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic important">
+  <div class="topic-title">6. Serve un responsabile della protezione dati (DPO)?</div>
+  <div class="topic-why">Perche e importante: La legge prevede che alcune organizzazioni nominino una figura dedicata alla protezione dei dati. Questo obbligo si applica quando si trattano dati sanitari "su larga scala".</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Con 20-100 utenti previsti il primo anno, siamo considerati "larga scala"?</li>
+      <li>Se serve, possiamo nominare un DPO esterno?</li>
+      <li>Quanto costa indicativamente?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic ask">
+  <div class="topic-title">7. Revisione dei documenti legali pubblicati</div>
+  <div class="topic-why">Perche e importante: Abbiamo gia pubblicato Privacy Policy, Termini di Servizio e Cookie Policy. Ma non sono stati revisionati da un legale e potrebbero non essere adeguati per un servizio che tratta dati sanitari.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Puo revisionare Privacy Policy e Termini di Servizio?</li>
+      <li>Manca qualcosa di specifico per dati sanitari?</li>
+      <li>Il disclaimer "il report e solo un documento di lavoro" e formulato correttamente?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic ask">
+  <div class="topic-title">8. Regolamento europeo sull'intelligenza artificiale (AI Act)</div>
+  <div class="topic-why">Perche e importante: L'Unione Europea sta implementando un nuovo regolamento che classifica i sistemi di intelligenza artificiale per livello di rischio. Quelli usati in ambito sanitario potrebbero avere obblighi specifici (documentazione, trasparenza, supervisione umana).</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>LegMed rientra nella definizione di "sistema AI ad alto rischio"?</li>
+      <li>Se si, quali obblighi ne derivano e con che tempistiche?</li>
+      <li>Il fatto che il medico legale revisioni sempre il risultato ci protegge (supervisione umana)?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic ask">
+  <div class="topic-title">9. Decisioni automatizzate</div>
+  <div class="topic-why">Perche e importante: La legge sulla privacy da ai cittadini il diritto di non essere sottoposti a decisioni basate solo su elaborazione automatizzata. Nel nostro caso il medico legale revisiona sempre il risultato, ma serve una valutazione formale.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Il fatto che il medico legale revisioni e approvi sempre il report ci esclude dall'Articolo 22 del GDPR?</li>
+      <li>Dobbiamo documentare formalmente questa "supervisione umana"?</li>
+    </ul>
+  </div>
+</div>
+
+<div class="topic ask">
+  <div class="topic-title">10. Assicurazione e responsabilita</div>
+  <div class="topic-why">Perche e importante: Se il software producesse un report con errori e il medico legale lo usasse senza accorgersi, potrebbe esserci una questione di responsabilita.</div>
+  <div class="topic-question">
+    <strong>Chiedere:</strong>
+    <ul>
+      <li>Che tipo di polizza serve? (errori software, violazione dati, interruzione servizio)</li>
+      <li>Il disclaimer nei Termini di Servizio ("documento di lavoro, non perizia") ci tutela?</li>
+      <li>Come limitare la nostra responsabilita in modo legalmente valido?</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Cosa portare all'incontro</h2>
+<ol>
+  <li>Copia stampata del "Briefing per Consulente Legale" (per l'avvocato)</li>
+  <li>Questa checklist (per noi, come promemoria)</li>
+  <li>Un portatile con l'app aperta per mostrare il flusso se necessario</li>
+  <li>La Privacy Policy e i Termini di Servizio attuali (accessibili dal sito)</li>
+</ol>
+
+<h2>Dopo l'incontro</h2>
+<p>In base alle risposte dell'avvocato, dovremo probabilmente:</p>
+<ul>
+  <li>Aggiornare Privacy Policy e Termini di Servizio</li>
+  <li>Preparare contratti con i fornitori (se necessario)</li>
+  <li>Completare la valutazione d'impatto</li>
+  <li>Eventualmente nominare un responsabile della protezione dati</li>
+  <li>Implementare la raccolta di consenso del paziente (se richiesta)</li>
+  <li>Stipulare un'assicurazione (se consigliata)</li>
+</ul>
+
+<div class="footer">
+  Documento interno — NON condividere con terzi<br>
+  LegMed | 14 Aprile 2026
+</div>
+
+</body>
+</html>
