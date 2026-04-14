@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Piano Miglioramento Prompt AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f8f9fa; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 30px; }
+  .header { text-align: center; margin-bottom: 40px; padding-bottom: 25px; border-bottom: 3px solid #2563eb; }
+  .header h1 { font-size: 26px; color: #2563eb; }
+  .header p { color: #64748b; font-size: 14px; margin-top: 8px; }
+
+  .finding { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+  .finding h2 { font-size: 18px; color: #1e3a5f; margin-bottom: 10px; }
+  .finding .source { font-size: 11px; color: #94a3b8; margin-bottom: 10px; }
+  .finding .impact { background: #d1fae5; color: #065f46; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; margin-bottom: 10px; }
+
+  .before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
+  .before, .after { border-radius: 8px; padding: 15px; font-size: 13px; }
+  .before { background: #fef2f2; border: 1px solid #fca5a5; }
+  .before h4 { color: #991b1b; font-size: 12px; margin-bottom: 8px; }
+  .after { background: #f0fdf4; border: 1px solid #86efac; }
+  .after h4 { color: #166534; font-size: 12px; margin-bottom: 8px; }
+
+  .prompt-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.5; white-space: pre-wrap; color: #334155; max-height: 250px; overflow-y: auto; margin: 10px 0; }
+
+  .priority { display: flex; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+  .priority .tag { padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .tag.p1 { background: #dc2626; color: white; }
+  .tag.p2 { background: #f59e0b; color: white; }
+  .tag.p3 { background: #2563eb; color: white; }
+
+  .section-title { font-size: 22px; color: #1e3a5f; margin: 35px 0 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+  .divider { border: none; border-top: 2px dashed #e2e8f0; margin: 35px 0; }
+  .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+  th, td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; }
+  th { background: #f1f5f9; font-weight: 600; }
+  @media print { body { background: white; } .finding { box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>Piano Miglioramento Prompt AI</h1>
+  <p>Basato su ricerca scientifica 2025-2026 su prompt engineering in ambito medico-legale</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 class="section-title">5 Tecniche dalla Ricerca Scientifica</h2>
+
+<div class="finding">
+  <h2>1. Few-Shot Examples (Esempi nel prompt)</h2>
+  <span class="impact">Impatto: +40% qualita output</span>
+  <div class="source">Fonte: PromptHub 2025, PMC Clinical Practice Tutorial, Nanonets Structured Outputs</div>
+  <p>Invece di dare solo istruzioni astratte, mostrare 1-2 esempi concreti di output atteso. La ricerca mostra che <strong>2-3 esempi</strong> sono ottimali (rendimenti decrescenti dopo 3). In ambiti specialistici come il medico-legale, il few-shot permette output di alta qualita senza fine-tuning del modello.</p>
+
+  <div class="before-after">
+    <div class="before">
+      <h4>PRIMA (solo istruzioni)</h4>
+      <p>Estrai tutti gli eventi clinici dal testo. Ogni evento deve avere data, tipo, titolo, descrizione, medico, struttura.</p>
+    </div>
+    <div class="after">
+      <h4>DOPO (istruzioni + esempio)</h4>
+      <p>Estrai tutti gli eventi clinici. Ecco un esempio di output corretto:</p>
+      <p style="font-family:monospace; font-size:11px; margin-top:5px;">[{"eventDate":"2024-03-15", "eventType":"visita", "title":"Visita ortopedica di controllo", "description":"Il paziente si presenta per controllo post-operatorio a 3 mesi dall'intervento di artroprotesi...", "doctor":"Dott. Rossi", "facility":"Ospedale Civile di Verona"}]</p>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <h2>2. Chain-of-Thought (Ragionamento step-by-step)</h2>
+  <span class="impact">Impatto: -38% allucinazioni, +10% accuratezza</span>
+  <div class="source">Fonte: Frontiers AI 2025, Chain-of-Medical-Thought (CoMT), PMC Hallucination Survey</div>
+  <p>Far ragionare il modello passo per passo prima di produrre l'output finale. Il <strong>Chain-of-Medical-Thought</strong> ha ridotto le allucinazioni catastrofiche del 38% nella generazione di report radiologici. Funziona particolarmente bene per l'estrazione di eventi complessi.</p>
+
+  <div class="before-after">
+    <div class="before">
+      <h4>PRIMA (output diretto)</h4>
+      <p>Analizza il testo e produci il JSON degli eventi.</p>
+    </div>
+    <div class="after">
+      <h4>DOPO (ragionamento + output)</h4>
+      <p>Per ogni documento:<br>
+      1. Identifica il TIPO di documento (referto, cartella, esame)<br>
+      2. Trova TUTTE le date menzionate<br>
+      3. Per ogni data, identifica cosa e successo<br>
+      4. Verifica che ogni evento abbia sourceText nel testo<br>
+      5. Produci il JSON finale</p>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <h2>3. Structured Prompts (Contesto-Dati-Compito-Formato)</h2>
+  <span class="impact">Impatto: -33% allucinazioni</span>
+  <div class="source">Fonte: Lakera Prompt Engineering Guide 2026, Certara Life Sciences 2025</div>
+  <p>Dividere il prompt in 4 blocchi chiari: <strong>CONTESTO</strong> (chi sei), <strong>DATI</strong> (cosa ricevi), <strong>COMPITO</strong> (cosa devi fare), <strong>FORMATO</strong> (come restituire). La ricerca mostra una riduzione del 33% nelle allucinazioni con prompt strutturati.</p>
+
+  <div class="prompt-box">## CONTESTO
+Sei un medico legale specialista che sta redigendo
+la sezione "Documentazione Sanitaria" di una perizia CTU.
+
+## DATI
+Ricevi il testo OCR di 4 documenti medici del paziente,
+gia ordinati cronologicamente.
+
+## COMPITO
+Per OGNI documento, riproduci FEDELMENTE il contenuto
+usando questo formato:
+**[Tipo doc], [Autore/Struttura], in data [DD.MM.YYYY]:**
+"[contenuto fedele dal testo OCR]"
+
+## FORMATO
+Markdown con heading ### per ogni documento.
+Ordine strettamente cronologico.
+Citazioni tra virgolette dal testo originale.</div>
+</div>
+
+<div class="finding">
+  <h2>4. Atomic Fact Extraction (Estrazione fatti atomici)</h2>
+  <span class="impact">Impatto: +25% completezza, -20% duplicati</span>
+  <div class="source">Fonte: NPJ Digital Medicine 2025, PMC Medical Evidence Summarization</div>
+  <p>Invece di estrarre "eventi" generici, estrarre <strong>fatti atomici</strong> (un singolo dato per riga). Questo riduce la complessita del compito per l'LLM e aumenta la completezza. Poi i fatti atomici vengono aggregati in eventi strutturati.</p>
+
+  <div class="before-after">
+    <div class="before">
+      <h4>PRIMA (evento complesso)</h4>
+      <p>Estrai ogni evento con 20 campi (data, tipo, titolo, descrizione, medico, struttura, diagnosi, confidenza, sourceText, sourcePages, ...)</p>
+    </div>
+    <div class="after">
+      <h4>DOPO (fatti atomici)</h4>
+      <p>Per ogni pagina, estrai fatti semplici:<br>
+      - "15.03.2024: visita ortopedica presso Osp. Verona"<br>
+      - "Dott. Rossi esegue controllo post-operatorio"<br>
+      - "Diagnosi: buon consolidamento frattura"<br>
+      <br>Poi il sistema li aggrega automaticamente.</p>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <h2>5. Hybrid Prompting (Istruzioni + Scaffolding + Vincoli)</h2>
+  <span class="impact">Impatto: migliori risultati complessivi</span>
+  <div class="source">Fonte: Frontiers AI Statistical Reasoning 2025, AJR Interventional Radiology</div>
+  <p>La combinazione di istruzioni esplicite + struttura di ragionamento + vincoli di formato produce i risultati migliori. Il <strong>hybrid prompting</strong> supera costantemente ogni singola tecnica usata da sola.</p>
+
+  <p style="margin-top:10px;">Applicato ai nostri prompt: combinare le 4 tecniche sopra in un unico prompt coerente.</p>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 class="section-title">Piano di Implementazione per LegMed</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Priorita</th>
+      <th>Prompt</th>
+      <th>Miglioramento</th>
+      <th>Impatto atteso</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag p1" style="font-size:11px;">P1</span></td>
+      <td><strong>Estrazione eventi</strong></td>
+      <td>
+        - Aggiungere 1 esempio completo di output (few-shot)<br>
+        - Chain-of-thought: "Prima identifica le date, poi gli eventi"<br>
+        - Ridurre da 14 a 8 tipi evento (meno confusione per l'LLM)<br>
+        - Formato Contesto-Dati-Compito-Formato
+      </td>
+      <td>Meno "da verificare", meno duplicati, piu consistenza tra run</td>
+    </tr>
+    <tr>
+      <td><span class="tag p1" style="font-size:11px;">P1</span></td>
+      <td><strong>Documentazione sanitaria</strong></td>
+      <td>
+        - Aggiungere esempio di sezione perfetta (dal benchmark Lavini)<br>
+        - Formato: "Tipo doc, Autore, Data: contenuto fedele"<br>
+        - Vincolo: "OGNI documento = 1 blocco con heading"
+      </td>
+      <td>Output identico al formato perizia reale</td>
+    </tr>
+    <tr>
+      <td><span class="tag p2" style="font-size:11px;">P2</span></td>
+      <td><strong>Conclusioni/Epicrisi</strong></td>
+      <td>
+        - Formulario peritale standard (frasi tipo)<br>
+        - Struttura: Fatto → Standard → Elementi pro/contro<br>
+        - Esempio di conclusioni ben scritte
+      </td>
+      <td>Tono professionale, struttura da perizia reale</td>
+    </tr>
+    <tr>
+      <td><span class="tag p2" style="font-size:11px;">P2</span></td>
+      <td><strong>Premessa/Intestazione</strong></td>
+      <td>
+        - Template fisso con variabili (tribunale, giudice, parti)<br>
+        - Formato benchmark Del Balzo/Lavini<br>
+        - Meno AI, piu template
+      </td>
+      <td>Intestazione identica a perizia reale</td>
+    </tr>
+    <tr>
+      <td><span class="tag p3" style="font-size:11px;">P3</span></td>
+      <td><strong>Revisione estrazione</strong></td>
+      <td>
+        - Chain-of-thought per trovare omissioni<br>
+        - Focus su: date mancanti, diagnosi incomplete, medici non estratti
+      </td>
+      <td>Meno eventi mancanti</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 class="section-title">Esempio concreto: Prompt Estrazione migliorato</h2>
+
+<div class="finding">
+  <h2>Prompt attuale vs Prompt migliorato</h2>
+
+  <div class="before-after">
+    <div class="before">
+      <h4>ATTUALE (~300 righe di regole)</h4>
+      <p style="font-size:12px;">
+        "Sei un assistente medico-legale specializzato nell'estrazione di eventi clinici..."<br><br>
+        14 tipi di evento<br>
+        20+ campi per evento<br>
+        Regole anti-allucinazione generiche<br>
+        Nessun esempio di output<br>
+        Nessun ragionamento step-by-step
+      </p>
+    </div>
+    <div class="after">
+      <h4>PROPOSTO (~150 righe + 1 esempio)</h4>
+      <p style="font-size:12px;">
+        Struttura CDCF (Contesto-Dati-Compito-Formato)<br>
+        8 tipi di evento (consolidati)<br>
+        10 campi essenziali per evento<br>
+        1 esempio completo di estrazione corretta<br>
+        Chain-of-thought: "Prima date, poi eventi"<br>
+        Vincoli specifici per tipo documento
+      </p>
+    </div>
+  </div>
+
+  <div class="prompt-box">## CONTESTO
+Sei un medico legale che analizza documentazione clinica
+per una perizia. Devi estrarre OGNI fatto clinico rilevante.
+
+## DATI
+Ricevi il testo OCR di un documento medico con marcatori
+[PAGE_START:N] e [PAGE_END:N] per ogni pagina.
+Tipo documento: {{documentType}}
+Nome file: {{fileName}}
+
+## COMPITO
+Segui questi passi in ordine:
+1. Leggi il testo e identifica TUTTE le date menzionate
+2. Per ogni data, identifica cosa e successo (visita, esame,
+   intervento, diagnosi, terapia, ricovero, referto, altro)
+3. Per ogni evento, copia il testo sorgente (max 200 char)
+4. Verifica che la data sia nel testo (NON inventare)
+5. Produci il JSON finale
+
+## FORMATO
+Array JSON. Ogni evento ha:
+- eventDate (YYYY-MM-DD)
+- eventType (visita|esame|diagnosi|intervento|terapia|
+  ricovero|referto|altro)
+- title (max 100 char)
+- description (dettagliata, dal testo originale)
+- doctor, facility, diagnosis (se presenti nel testo)
+- sourceText (citazione dal testo, max 200 char)
+- sourcePages [numeri pagina]
+- confidence (80-100 se chiaro, 50-79 se incerto)
+
+## ESEMPIO
+Input: "[PAGE_START:1] Pronto Soccorso 15.03.2024
+Paziente giunge per dolore al ginocchio dx post caduta.
+Esame obiettivo: tumefazione, limitazione funzionale.
+RX ginocchio dx: frattura composta piatto tibiale.
+Diagnosi: frattura piatto tibiale dx.
+Dimesso con tutore e stampelle. [PAGE_END:1]"
+
+Output:
+[
+  {
+    "eventDate": "2024-03-15",
+    "eventType": "visita",
+    "title": "Accesso Pronto Soccorso per trauma ginocchio",
+    "description": "Paziente giunge per dolore al ginocchio
+     destro post caduta. Esame obiettivo evidenzia
+     tumefazione e limitazione funzionale.",
+    "doctor": null,
+    "facility": "Pronto Soccorso",
+    "diagnosis": "Frattura composta piatto tibiale destro",
+    "sourceText": "Paziente giunge per dolore al ginocchio
+     dx post caduta. RX ginocchio dx: frattura composta
+     piatto tibiale.",
+    "sourcePages": [1],
+    "confidence": 95
+  }
+]</div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 class="section-title">Cosa serve dal Dott. Lavini</h2>
+
+<div class="finding" style="border-left: 4px solid #2563eb;">
+  <h2>Per applicare queste tecniche, servono:</h2>
+  <ol style="padding-left: 20px; line-height: 2.2; font-size: 14px;">
+    <li><strong>2-3 perizie complete</strong> (anonimizzate) come gold standard — una CTU, una stragiudiziale, una previdenziale</li>
+    <li><strong>1 esempio di cronistoria perfetta</strong> — come dovrebbe apparire la sezione documentazione sanitaria</li>
+    <li><strong>Le formulazioni standard</strong> — frasi tipo che un perito usa sempre ("Il sottoscritto, esaminati gli atti...", "Dalla disamina della documentazione...")</li>
+    <li><strong>Il questionario compilato</strong> — <code>docs/legal/questionario-formato-report.html</code></li>
+    <li><strong>Feedback su un caso test</strong> — elaborare un caso, il perito segna cosa va e cosa no</li>
+  </ol>
+  <p style="margin-top: 15px; color: #64748b; font-size: 13px;">Con questi input + le 5 tecniche di prompt engineering, in una sessione riscriviamo tutti i prompt e la qualita fa un salto enorme.</p>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 class="section-title">Struttura sezioni per modulo (da LegMed 360)</h2>
+
+<div class="finding">
+  <h2>Moduli prioritari (cavalli di battaglia)</h2>
+  <table>
+    <thead>
+      <tr><th>Modulo</th><th>Sezioni report</th><th>Note</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1. Perizia ML</strong><br>(RC civile, Infortuni, Malattia, Resp. prof.)</td>
+        <td>
+          1. Premessa incarico<br>
+          2. Anamnesi<br>
+          3. Documentazione sanitaria<br>
+          4. Epicrisi + ITT/ITP<br>
+          5. Visita [perito]<br>
+          6. Considerazioni ML [perito]<br>
+          7. Conclusioni
+        </td>
+        <td>Formato breve, pragmatico. No quesiti giudice.</td>
+      </tr>
+      <tr>
+        <td><strong>7. Cronistoria sanitaria</strong></td>
+        <td>
+          Solo estrazione cronologica.<br>
+          OGNI documento riprodotto integralmente<br>
+          con tipo + autore + data come intestazione.
+        </td>
+        <td>Output piu importante. Deve essere FEDELE e COMPLETO.</td>
+      </tr>
+      <tr>
+        <td><strong>8. Cronistoria giudiziaria</strong></td>
+        <td>
+          Stessa struttura della sanitaria<br>
+          ma per atti giudiziari (memorie, ricorsi, sentenze).
+        </td>
+        <td>Linguaggio giuridico, non medico.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="finding">
+  <h2>Moduli secondari</h2>
+  <table>
+    <thead>
+      <tr><th>Modulo</th><th>Sezioni report</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>2. CTU/ATP civile</td>
+        <td>Premessa + Quesiti + Metodologia + Doc sanitaria + Verbale [perito] + Visita [perito] + Epicrisi + Considerazioni [perito] + Risposte quesiti + Bibliografia</td>
+      </tr>
+      <tr>
+        <td>3. CTU/ATP previdenziale</td>
+        <td>Come civile + sezioni specifiche per tipo ricorso (D.Lgs 62/2024, inv. civile, L.104, L.222)</td>
+      </tr>
+      <tr>
+        <td>4. CTU/ATP INAIL</td>
+        <td>Come civile + nesso causale lavoro, tabelle INAIL</td>
+      </tr>
+      <tr>
+        <td>5. Parere pro veritate</td>
+        <td>Premessa + Fatto + Documentazione + Analisi ML + Conclusioni</td>
+      </tr>
+      <tr>
+        <td>6. Parere scopo riserva</td>
+        <td>Premessa + Documentazione + Valutazione prognostica + Stima</td>
+      </tr>
+      <tr>
+        <td>9. Analisi spese mediche</td>
+        <td>Tabella spese con: descrizione, importo, fattura, farmaco, diagnosi, interpretazione</td>
+      </tr>
+      <tr>
+        <td>10. Anonimizzatore</td>
+        <td>Testo con nomi/date/CF sostituiti da pseudonimi</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  <p>LegMed — Piano Miglioramento Prompt v1.0 — Aprile 2026</p>
+  <p>Basato su: PMC Clinical Practice Tutorial, Frontiers AI 2025, NPJ Digital Medicine, Lakera Guide 2026, CoMT Radiology</p>
+</div>
+
+</div>
+</body>
+</html>
