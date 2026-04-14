@@ -797,7 +797,7 @@ export const processCase = inngest.createFunction(
     // ── Section generation with doc-sanitaria batching ──
     // documentazione_sanitaria is split into batches of DOC_BATCH_SIZE documents
     // to prevent Vercel timeout. Each batch is a separate Inngest step.
-    const DOC_BATCH_SIZE = 8;
+    const DOC_BATCH_SIZE = 4;
 
     const accumulatedSections: GeneratedSection[] = [];
     let sectionGenerationFailed = false;
