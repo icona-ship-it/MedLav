@@ -55,102 +55,89 @@ export const classifyBatchJob = inngest.createFunction(
       }).eq('id', caseId);
     });
 
-    // Classify each document as a separate step
-    let completed = 0;
-    let errors = 0;
+    // Classify ALL documents in PARALLEL — each is a separate Inngest step
+    const classifyResults = await Promise.allSettled(
+      documentIds.map((docId) =>
+        step.run(`classify-${docId}`, async () => {
+          const { createAdminClient } = await import('@/lib/supabase/admin');
+          const supabase = createAdminClient();
 
-    for (const docId of documentIds) {
-      const result = await step.run(`classify-${docId}`, async () => {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
+          const { data: doc } = await supabase
+            .from('documents')
+            .select('id, file_name, file_type, storage_path')
+            .eq('id', docId)
+            .eq('case_id', caseId)
+            .single();
 
-        // Fetch document
-        const { data: doc } = await supabase
-          .from('documents')
-          .select('id, file_name, file_type, storage_path')
-          .eq('id', docId)
-          .eq('case_id', caseId)
-          .single();
+          if (!doc) return { success: false, docId };
 
-        if (!doc) return { success: false, docId };
+          try {
+            const { data: existingPages } = await supabase
+              .from('pages')
+              .select('ocr_text')
+              .eq('document_id', docId)
+              .order('page_number', { ascending: true })
+              .limit(3);
 
-        let classifySuccess = false;
-        try {
-          // Check existing OCR pages
-          const { data: existingPages } = await supabase
-            .from('pages')
-            .select('ocr_text')
-            .eq('document_id', docId)
-            .order('page_number', { ascending: true })
-            .limit(3);
+            let ocrText: string;
+            if (existingPages && existingPages.length > 0) {
+              ocrText = existingPages.map((p) => p.ocr_text as string).filter(Boolean).join('\n\n');
+            } else {
+              const signedUrl = await getSignedUrl(doc.storage_path);
+              const ocrResult = await ocrDocument({
+                documentId: docId,
+                fileName: doc.file_name,
+                fileType: doc.file_type,
+                signedUrl,
+              });
+              ocrText = ocrResult.fullText;
 
-          let ocrText: string;
-          if (existingPages && existingPages.length > 0) {
-            ocrText = existingPages.map((p) => p.ocr_text as string).filter(Boolean).join('\n\n');
-          } else {
-            const signedUrl = await getSignedUrl(doc.storage_path);
-            const ocrResult = await ocrDocument({
-              documentId: docId,
-              fileName: doc.file_name,
-              fileType: doc.file_type,
-              signedUrl,
-            });
-            ocrText = ocrResult.fullText;
-
-            // Save OCR pages for pipeline reuse
-            for (const page of ocrResult.pages) {
-              const { data: existingPage } = await supabase
-                .from('pages')
-                .select('id')
-                .eq('document_id', docId)
-                .eq('page_number', page.pageNumber)
-                .maybeSingle();
-              if (!existingPage) {
-                await supabase.from('pages').insert({
-                  document_id: docId,
-                  page_number: page.pageNumber,
-                  ocr_text: page.text,
-                  ocr_confidence: page.confidence,
-                });
+              for (const page of ocrResult.pages) {
+                const { data: existingPage } = await supabase
+                  .from('pages')
+                  .select('id')
+                  .eq('document_id', docId)
+                  .eq('page_number', page.pageNumber)
+                  .maybeSingle();
+                if (!existingPage) {
+                  await supabase.from('pages').insert({
+                    document_id: docId,
+                    page_number: page.pageNumber,
+                    ocr_text: page.text,
+                    ocr_confidence: page.confidence,
+                  });
+                }
               }
             }
+
+            const classification = await classifyDocument(ocrText, doc.file_name);
+
+            await supabase.from('documents').update({
+              document_type: classification.documentType,
+              classification_metadata: {
+                aiSuggestedType: classification.documentType,
+                confidence: classification.confidence,
+                reasoning: classification.reasoning,
+                classifiedAt: new Date().toISOString(),
+                classifiedBy: 'inngest-batch',
+              },
+              updated_at: new Date().toISOString(),
+            }).eq('id', docId);
+
+            return { success: true, docId, type: classification.documentType };
+          } catch (err) {
+            logger.error('classify-batch', `Failed to classify doc ${docId}: ${err instanceof Error ? err.message : 'unknown'}`);
+            return { success: false, docId };
           }
+        }),
+      ),
+    );
 
-          // Classify
-          const classification = await classifyDocument(ocrText, doc.file_name);
-
-          // Update document
-          await supabase.from('documents').update({
-            document_type: classification.documentType,
-            classification_metadata: {
-              aiSuggestedType: classification.documentType,
-              confidence: classification.confidence,
-              reasoning: classification.reasoning,
-              classifiedAt: new Date().toISOString(),
-              classifiedBy: 'inngest-batch',
-            },
-            updated_at: new Date().toISOString(),
-          }).eq('id', docId);
-
-          classifySuccess = true;
-        } catch (err) {
-          logger.error('classify-batch', `Failed to classify doc ${docId}: ${err instanceof Error ? err.message : 'unknown'}`);
-        }
-
-        // Update progress INSIDE the same step (saves Inngest step count)
-        const currentCompleted = classifySuccess ? completed + 1 : completed;
-        const currentErrors = classifySuccess ? errors : errors + 1;
-        const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
-        const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-        await supabase.from('cases').update({
-          perizia_metadata: { ...meta, classificationProgress: { completed: currentCompleted + currentErrors, total, errors: currentErrors, status: 'running' } },
-          updated_at: new Date().toISOString(),
-        }).eq('id', caseId);
-
-        return { success: classifySuccess, docId };
-      });
-
-      if (result.success) {
+    // Count results
+    let completed = 0;
+    let errors = 0;
+    for (const r of classifyResults) {
+      if (r.status === 'fulfilled' && r.value.success) {
         completed++;
       } else {
         errors++;
