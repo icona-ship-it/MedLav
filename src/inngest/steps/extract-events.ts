@@ -4,7 +4,7 @@ import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
 
-export const PAGES_PER_CHUNK = 15;
+export const PAGES_PER_CHUNK = 10;
 /** Overlap pages between consecutive chunks to prevent mid-document splits. */
 const OVERLAP_PAGES = 2;
 
@@ -251,11 +251,12 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     ).join('\n\n');
 
     // Safety cap: prevent oversized chunks from causing Mistral timeout.
-    // 30K chars ≈ 8K tokens — well within extraction context but fast enough to avoid timeout.
-    const MAX_CHUNK_CHARS = 30_000;
+    // 40K chars ≈ 10K tokens — within extraction context and fast enough.
+    // With PAGES_PER_CHUNK=10, typical chunks are 15-25K chars. Cap at 40K for safety.
+    const MAX_CHUNK_CHARS = 40_000;
     if (chunkText.length > MAX_CHUNK_CHARS) {
-      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: text too large (${chunkText.length} chars), truncating to ${MAX_CHUNK_CHARS}`);
-      chunkText = chunkText.slice(0, MAX_CHUNK_CHARS) + '\n\n[... testo troncato — le pagine rimanenti di questo chunk verranno elaborate nel chunk successivo]';
+      logger.error('pipeline', `CRITICAL: Chunk ${chunkIndex + 1} text truncated from ${chunkText.length} to ${MAX_CHUNK_CHARS} chars for doc ${ocrResult.documentId} pages ${range.start}-${range.end}. Some page content may be LOST in extraction.`);
+      chunkText = chunkText.slice(0, MAX_CHUNK_CHARS) + '\n\n[... ATTENZIONE: testo OCR troncato per limiti di contesto. Alcune pagine di questo segmento potrebbero non essere state analizzate completamente.]';
     }
 
     const chunkLabel = totalChunks > 1
