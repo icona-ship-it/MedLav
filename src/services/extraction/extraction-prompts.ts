@@ -315,26 +315,26 @@ CAMPI PER OGNI EVENTO (in questo ordine):
 - **sourceText**: Citazione ESATTA dal testo OCR (max 200 caratteri) che prova l'esistenza dell'evento
 - **sourcePages**: Array numeri pagina da marker [PAGE_START:N]
 
-ATTENZIONE: I valori nell'esempio sotto sono FITTIZI con nomi PLACEHOLDER. Se trovi "NOME_ESEMPIO_FITTIZIO", "STRUTTURA_PLACEHOLDER" o "DIAGNOSI_PLACEHOLDER" nel tuo output, stai copiando dall'esempio — FERMATI e usa i dati reali dal documento.
+L'esempio sotto mostra il FORMATO corretto. I dati sono inventati — tu devi usare SOLO dati dal testo OCR reale.
 
 \`\`\`json
 {
   "events": [
     {
-      "extraction_reasoning": "Trovato ricovero documentato a pagina 1 con data esplicita e diagnosi di ingresso",
+      "extraction_reasoning": "Pagina 1: trovata data 15.01.2024 con ricovero e diagnosi di ingresso esplicita",
       "eventDate": "2024-01-15",
       "datePrecision": "giorno",
       "eventType": "ricovero",
-      "title": "Ricovero per intervento chirurgico",
-      "description": "Paziente ricoverato presso reparto per intervento. Diagnosi di ingresso documentata. PA 130/80, FC 72.",
+      "title": "Ricovero presso Pronto Soccorso per trauma",
+      "description": "Paziente giunge in PS per trauma al ginocchio destro a seguito di caduta accidentale. All'ingresso: PA 140/85 mmHg, FC 88 bpm, SpO2 98%. Esame obiettivo: tumefazione e dolore al ginocchio dx, limitazione funzionale completa.",
       "sourceType": "cartella_clinica",
-      "diagnosis": "DIAGNOSI_PLACEHOLDER_NON_COPIARE",
-      "doctor": "NOME_ESEMPIO_FITTIZIO",
-      "facility": "STRUTTURA_PLACEHOLDER_NON_COPIARE",
-      "confidence": 90,
+      "diagnosis": "Frattura composta piatto tibiale destro",
+      "doctor": null,
+      "facility": "Pronto Soccorso",
+      "confidence": 95,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Ricovero presso reparto per intervento programmato",
+      "sourceText": "Pz giunge in PS per trauma ginocchio dx. PA 140/85, FC 88. Frattura composta piatto tibiale dx.",
       "sourcePages": [1]
     },
     {
@@ -488,7 +488,18 @@ Per sourceText, riporta una frase chiave ESATTA (max 200 caratteri) dal testo OC
 ${documentText}
 --- FINE TESTO DOCUMENTO ---
 
-Estrai TUTTI gli eventi clinici dal documento sopra. Politica ZERO DISCARD. Espandi abbreviazioni.
-Per OGNI evento compila PRIMA il campo extraction_reasoning (perché lo estrai e dove lo hai trovato), POI i campi dati.
-sourceText breve (max 200 char, citazione ESATTA dal testo), sourcePages obbligatori.`;
+Estrai TUTTI gli eventi clinici dal documento sopra seguendo questi passi:
+
+PASSO 1: Scorri il testo e identifica TUTTE le date menzionate.
+PASSO 2: Per ogni data, identifica cosa e successo (visita, esame, intervento, diagnosi, etc.).
+PASSO 3: Per ogni evento, trova il sourceText esatto nel testo OCR.
+PASSO 4: Compila extraction_reasoning PRIMA dei campi dati.
+PASSO 5: Verifica che NESSUNA data del testo sia stata omessa.
+
+REMINDER CRITICO (da seguire TASSATIVAMENTE):
+- ZERO DISCARD: ogni dato del paziente = un evento. Se hai dubbi, estrailo.
+- NON inventare MAI date, nomi, diagnosi non presenti nel testo.
+- sourceText: citazione ESATTA dal testo (max 200 char), sourcePages: obbligatori.
+- Espandi TUTTE le abbreviazioni mediche.
+- confidence 80+ per testo chiaro, 50-79 per scansioni, requiresVerification=true SOLO per illeggibili.`;
 }
