@@ -250,10 +250,11 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
     ).join('\n\n');
 
-    // Safety cap: prevent oversized chunks from causing Mistral timeout.
-    // 40K chars ≈ 10K tokens — within extraction context and fast enough.
-    // With PAGES_PER_CHUNK=10, typical chunks are 15-25K chars. Cap at 40K for safety.
-    const MAX_CHUNK_CHARS = 40_000;
+    // Safety cap — Mistral Large 3 supports 262K token context (~780K chars).
+    // With PAGES_PER_CHUNK=10, typical chunks are 15-25K chars (well under cap).
+    // Cap at 100K to handle even extremely dense documents without truncation.
+    // Each chunk is a separate Inngest step, so long LLM responses don't cause timeout.
+    const MAX_CHUNK_CHARS = 100_000;
     if (chunkText.length > MAX_CHUNK_CHARS) {
       logger.error('pipeline', `CRITICAL: Chunk ${chunkIndex + 1} text truncated from ${chunkText.length} to ${MAX_CHUNK_CHARS} chars for doc ${ocrResult.documentId} pages ${range.start}-${range.end}. Some page content may be LOST in extraction.`);
       chunkText = chunkText.slice(0, MAX_CHUNK_CHARS) + '\n\n[... ATTENZIONE: testo OCR troncato per limiti di contesto. Alcune pagine di questo segmento potrebbero non essere state analizzate completamente.]';

@@ -162,7 +162,9 @@ export function buildSectionUserPrompt(params: {
         // Cap OCR text to prevent Vercel timeout on large cases.
         // 80K chars (~16K words) is plenty for detailed reproduction and keeps LLM response under 4 min.
         // Previous 300K cap caused 16+ min responses → Vercel timeout on 28-doc cases.
-        const MAX_OCR_CHARS_PER_SECTION = spec.id === 'documentazione_sanitaria' ? 50_000 : 40_000;
+        // Mistral Large 3: 262K token context. Each batch has 4 docs max.
+        // 100K cap per batch = never truncates even very large documents.
+        const MAX_OCR_CHARS_PER_SECTION = 100_000;
         if (ocrText && ocrText.length > MAX_OCR_CHARS_PER_SECTION) {
           const originalLength = ocrText.length;
           ocrText = ocrText.slice(0, MAX_OCR_CHARS_PER_SECTION) + '\n\n[... testo OCR troncato per limiti di contesto. I documenti successivi non sono inclusi in questa sezione.]';
