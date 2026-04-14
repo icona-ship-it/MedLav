@@ -12,8 +12,8 @@ import type { ExtractedEvent } from './extraction-schemas';
 import type { CaseType } from '@/types';
 import { logger } from '@/lib/logger';
 
-// Max text length to send to reviewer (Mistral Large 128k context)
-const MAX_REVIEW_TEXT_CHARS = 100_000;
+// Max text length to send to reviewer (Mistral Large 3: 262K token context)
+const MAX_REVIEW_TEXT_CHARS = 200_000;
 
 // Fields that corrections can modify
 const CORRECTION_ALLOWED_FIELDS = new Set([

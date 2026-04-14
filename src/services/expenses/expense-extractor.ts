@@ -135,8 +135,8 @@ export async function extractExpensesFromOcr(
     return { items: [], totalAmount: null, currency: 'EUR' };
   }
 
-  // Cap OCR text to avoid exceeding context window
-  const MAX_OCR_CHARS = 50_000;
+  // Cap OCR text — Mistral Large 3 supports 262K tokens (~470K chars)
+  const MAX_OCR_CHARS = 150_000;
   const trimmedOcr = ocrText.length > MAX_OCR_CHARS
     ? ocrText.slice(0, MAX_OCR_CHARS) + '\n\n[... testo troncato per limiti di contesto]'
     : ocrText;

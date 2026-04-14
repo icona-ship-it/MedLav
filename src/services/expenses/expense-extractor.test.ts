@@ -171,13 +171,13 @@ describe('expense-extractor', () => {
   it('should truncate very long OCR text', async () => {
     mockLlmResult([]);
 
-    const longText = 'A'.repeat(60_000);
+    const longText = 'A'.repeat(160_000);
     await extractExpensesFromOcr(longText);
 
     const callArgs = mockStreamMistralChat.mock.calls[0][0];
     expect(callArgs.messages[1].content).toContain('[... testo troncato');
-    // Should be capped around 50K + prompt overhead
-    expect(callArgs.messages[1].content.length).toBeLessThan(55_000);
+    // Should be capped around 150K + prompt overhead
+    expect(callArgs.messages[1].content.length).toBeLessThan(155_000);
   });
 
   it('should handle negative amounts by setting to null', async () => {
