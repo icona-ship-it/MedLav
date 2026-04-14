@@ -386,7 +386,7 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
       ...event,
       eventDate: donor.eventDate,
       datePrecision: 'sconosciuta' as const,
-      confidence: Math.min(event.confidence, 25),
+      confidence: Math.max(10, Math.min(event.confidence - 30, 40)),
       requiresVerification: true,
       reliabilityNotes: event.reliabilityNotes
         ? `${event.reliabilityNotes} | ${note}`
@@ -415,8 +415,12 @@ const LEGISLATIVE_PATTERNS = [
 ];
 
 const PATIENT_KEYWORDS = [
-  'paziente', 'periziando', 'ricorrente', 'resistente', 'sig.', 'signor',
-  'danneggiato', 'vittima', 'lavoratore', 'assicurato', 'infortunato',
+  'paziente', 'periziando', 'ricorrente', 'resistente',
+  'sig.', 'signor', 'signora', 'sig.ra',
+  'danneggiato', 'danneggiata', 'vittima',
+  'lavoratore', 'lavoratrice', 'assicurato', 'assicurata',
+  'infortunato', 'infortunata', 'assistito', 'assistita',
+  'ricorsa', 'attore', 'attrice', 'convenuto', 'convenuta',
 ];
 
 /**
@@ -456,29 +460,41 @@ export function flagLegislativeReferences(events: ExtractedEvent[]): ExtractedEv
   return result;
 }
 
+/**
+ * Find the best date donor for an event without a date.
+ * Priority: same page > adjacent page (±1).
+ * When multiple donors exist on the same page, pick the one with the
+ * LATEST date (most recent), as undated events typically follow the main
+ * dated event on the page (e.g., lab values after admission note).
+ */
 function findDateDonor(
   sourcePages: number[],
   datedEventsByPage: Map<number, ExtractedEvent[]>,
 ): ExtractedEvent | null {
+  // Collect all candidate donors from same page, then adjacent pages
+  const candidates: ExtractedEvent[] = [];
+
   // Priority 1: exact same page
   for (const page of sourcePages) {
     const donors = datedEventsByPage.get(page);
-    if (donors && donors.length > 0) {
-      return donors[0];
-    }
+    if (donors) candidates.push(...donors);
   }
 
-  // Priority 2: adjacent page (±1)
-  for (const page of sourcePages) {
-    for (const offset of [-1, 1]) {
-      const donors = datedEventsByPage.get(page + offset);
-      if (donors && donors.length > 0) {
-        return donors[0];
+  // Priority 2: adjacent page (±1) — only if no same-page donors
+  if (candidates.length === 0) {
+    for (const page of sourcePages) {
+      for (const offset of [-1, 1]) {
+        const donors = datedEventsByPage.get(page + offset);
+        if (donors) candidates.push(...donors);
       }
     }
   }
 
-  return null;
+  if (candidates.length === 0) return null;
+
+  // Pick the LATEST date (most recent) — undated events typically follow the main dated event
+  candidates.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
+  return candidates[0];
 }
 
 /**
@@ -736,7 +752,17 @@ function validateExtractedNamesAgainstOcr(
   });
 
   if (nullifiedCount > 0) {
-    logger.warn('extraction', `Validated ${events.length} events against OCR: ${nullifiedCount} had names not found in source text (nullified for safety)`);
+    // Collect which names were nullified for audit trail (no patient data, only doctor/facility)
+    const nullifiedNames = validated
+      .filter((v, i) => v.doctor !== events[i].doctor || v.facility !== events[i].facility)
+      .map((v, i) => {
+        const parts: string[] = [];
+        if (events[i].doctor && !v.doctor) parts.push(`medico: "${events[i].doctor}"`);
+        if (events[i].facility && !v.facility) parts.push(`struttura: "${events[i].facility}"`);
+        return parts.join(', ');
+      })
+      .filter(Boolean);
+    logger.warn('extraction', `Name validation: ${nullifiedCount}/${events.length} events had names not in OCR text. Nullified: [${nullifiedNames.join(' | ')}]`);
   }
 
   return validated;

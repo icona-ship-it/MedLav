@@ -79,6 +79,7 @@ function normalizeEventType(raw: string): string {
   return EVENT_TYPE_ALIASES[lower] ?? 'altro';
 }
 
+
 function normalizeSourceType(raw: string): string {
   if (VALID_SOURCE_TYPES.has(raw)) return raw;
   const lower = raw.toLowerCase().replace(/[\s_-]+/g, '_');

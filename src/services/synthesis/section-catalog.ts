@@ -1,6 +1,13 @@
 import type { CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { SectionSpec, SectionCondition } from './section-generation-types';
+import {
+  DOCUMENT_ANALYSIS_FORMULATIONS,
+  DOCUMENTAZIONE_SANITARIA_EXAMPLE,
+  EPICRISI_FORMULATIONS,
+  EPICRISI_EXAMPLE,
+  CONCLUSIONS_FORMULATIONS,
+} from './peritale-formulations';
 
 // ── Token budget constants (calibrated for 5,000-8,000 word reports) ──
 
@@ -137,17 +144,17 @@ FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
 
 Regole:
 - Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
-- Diari clinici giornalieri: riportare TUTTI i giorni con variazioni cliniche (interventi, complicanze, modifiche terapia, parametri alterati, visite). NEL DUBBIO, INCLUDERE — il medico legale filtrerà. Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
-- Esami di laboratorio: riportare TUTTI i valori in tabella markdown. Valori alterati evidenziati in grassetto. Valori nella norma riportati con nota "(n.v.)" se lo spazio lo consente, altrimenti nota "restanti parametri nella norma"
-- Verbali operatori: riprodurre INTEGRALMENTE, sempre
-- Referti radiologici e strumentali: riprodurre INTEGRALMENTE
-- Lettere di dimissione: riprodurre INTEGRALMENTE diagnosi e terapia prescritta
-- Certificati di visite pre e post-operatorie: riprodurre INTEGRALMENTE
+- Diari clinici giornalieri: riportare TUTTI i giorni con variazioni cliniche. NEL DUBBIO, INCLUDERE. Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
+- Esami di laboratorio: TUTTI i valori in tabella markdown. Valori alterati in grassetto
+- Verbali operatori, referti radiologici/strumentali, lettere di dimissione: riprodurre INTEGRALMENTE
 - Scrivi in PROSA DISCORSIVA, MAI elenchi puntati per la narrazione clinica
-- Se sono disponibili immagini diagnostiche, inseriscile INLINE subito dopo la citazione pertinente
-- NON omettere NESSUN evento
-- VERIFICA COMPLETEZZA: conta il numero di documenti OCR ricevuti e assicurati che OGNI documento abbia un blocco corrispondente nel tuo output. Se hai ricevuto 10 documenti, il tuo output deve avere 10 blocchi. Cartelle del Pronto Soccorso, referti radiologici, visite specialistiche — NESSUNO deve mancare.
-${NO_EVN_RULE}`,
+- Immagini diagnostiche disponibili: inserirle INLINE subito dopo la citazione pertinente
+- VERIFICA COMPLETEZZA: ogni documento OCR ricevuto DEVE avere un blocco corrispondente nell'output
+${NO_EVN_RULE}
+
+${DOCUMENT_ANALYSIS_FORMULATIONS}
+
+${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
   },
   {
     id: 'spese_mediche',
@@ -223,18 +230,21 @@ ${NO_EVN_RULE}`,
     promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica documentata.
 
 L'epicrisi deve contenere:
-1. **Sintesi della vicenda clinica**: ricostruzione sintetica ma completa dei fatti principali emersi dalla documentazione, in ordine cronologico (2-4 paragrafi)
-2. **Dati per la valutazione del danno temporaneo**: se disponibili nei calcoli, riporta i periodi di Invalidita Temporanea Totale (ITT) e Parziale (ITP) con le date esatte
-3. **Dati per la valutazione del danno permanente**: riporta gli esiti clinici documentati che il perito valutera secondo le tabelle di riferimento
+1. **Sintesi della vicenda clinica**: ricostruzione sintetica ma completa dei fatti principali, in ordine cronologico (2-4 paragrafi)
+2. **Dati per la valutazione del danno temporaneo**: periodi ITT e ITP con date esatte se calcolati
+3. **Dati per la valutazione del danno permanente**: esiti clinici documentati
 
-NON esprimere giudizi sul nesso causale — il perito li formulera autonomamente.
-NON esprimere percentuali di invalidita permanente — il perito le determinera secondo le tabelle SIMLA.
-NON ripetere in dettaglio fatti gia esposti nella documentazione sanitaria — sintetizzare.
+NON esprimere giudizi sul nesso causale o percentuali di invalidita — il perito li formulera.
+NON ripetere in dettaglio fatti gia esposti nella documentazione — sintetizzare.
 Scrivi in prosa discorsiva formale.
 ${NO_EVN_RULE}
-Quando disponibili, cita le evidenze scientifiche pertinenti [Autore, Rivista, Anno] a supporto dei fatti documentati.
+Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno].
 
-*[Il perito completera questa sezione con le proprie valutazioni professionali su: nesso di causalita materiale e giuridica, quantificazione del danno biologico permanente (tabelle SIMLA), danno morale e esistenziale]*`,
+${EPICRISI_FORMULATIONS}
+
+${EPICRISI_EXAMPLE}
+
+*[Il perito completera questa sezione con le proprie valutazioni professionali su: nesso di causalita, danno biologico permanente (tabelle SIMLA), danno morale e esistenziale]*`,
   },
   {
     id: 'considerazioni_ml',
@@ -262,20 +272,26 @@ Quando disponibili, cita le evidenze scientifiche pertinenti [Autore, Rivista, A
     condition: 'has-quesiti',
     promptDirective: `Per CIASCUN quesito del Giudice (riportati nei dati perizia), genera un framework fattuale di risposta.
 
-Per ogni quesito:
-### Quesito N
-**Testo del quesito:** [riporta il quesito fedelmente]
+Per ogni quesito usa questa STRUTTURA:
 
-**Elementi documentali pertinenti:**
-- Elenca i fatti dalla documentazione rilevanti per rispondere al quesito
-- Includi date, documenti fonte e dati clinici pertinenti
-- Se disponibili, includi i dati quantitativi (periodi ITT/ITP, esiti documentati)
+### Quesito n. [N]: [testo del quesito fedelmente riportato]
+
+Dalla documentazione in atti risultano i seguenti elementi pertinenti:
+- [fatto documentato con fonte e data]
+- [fatto documentato con fonte e data]
+
+**Elementi a supporto:** [fatti documentali che concorrono alla risposta]
+**Elementi contrari o lacune:** [fatti contrari o mancanze documentali]
+**Documentazione integrativa necessaria:** [documenti che servirebbero per completare la risposta]
 
 *[Il perito inserira qui la propria risposta al quesito]*
 
 NON rispondere ai quesiti — presenta SOLO gli elementi documentali organizzati. Il perito formulera le risposte.
 ${NO_EVN_RULE}
-Se disponibili evidenze scientifiche (PubMed), citale a supporto degli elementi fattuali rilevanti per le risposte ai quesiti.`,
+
+${CONCLUSIONS_FORMULATIONS}
+
+Se disponibili evidenze scientifiche (PubMed), citale a supporto degli elementi fattuali.`,
   },
   {
     id: 'bibliografia',
@@ -468,7 +484,11 @@ Includi:
 NON esprimere percentuali di invalidita ne giudizi sul nesso causale — il perito li formulera.
 Scrivi in prosa formale e concisa.
 ${NO_EVN_RULE}
-Quando disponibili, cita le evidenze scientifiche pertinenti [Autore, Rivista, Anno] a supporto dei fatti documentati.
+Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno].
+
+${EPICRISI_FORMULATIONS}
+
+${EPICRISI_EXAMPLE}
 
 *[Il perito completera questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
   },

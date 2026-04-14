@@ -196,7 +196,7 @@ export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
 }
 
 /**
- * Simple Jaccard similarity on word sets.
+ * Jaccard similarity on word sets, enhanced with medical synonym normalization.
  */
 // Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars
 const MEDICAL_ABBREVIATIONS = new Set([
@@ -206,9 +206,40 @@ const MEDICAL_ABBREVIATIONS = new Set([
   'mcv', 'mch', 'rdw', 'mpv', 'fev', 'fvc', 'dlco', 'asa', 'bmi', 'nyha',
 ]);
 
+/**
+ * Italian medical synonyms: map abbreviations and variants to canonical forms.
+ * This improves similarity detection when different documents use different terms
+ * for the same thing (e.g., "ECG" vs "elettrocardiogramma", "TAC" vs "TC").
+ */
+const MEDICAL_SYNONYMS: Record<string, string> = {
+  'ecg': 'elettrocardiogramma', 'ekg': 'elettrocardiogramma', 'elettrocardiogramma': 'elettrocardiogramma',
+  'tac': 'tomografia', 'tc': 'tomografia', 'tomografia': 'tomografia',
+  'rmn': 'risonanza', 'rm': 'risonanza', 'risonanza': 'risonanza',
+  'rx': 'radiografia', 'radiografia': 'radiografia',
+  'eco': 'ecografia', 'ecografia': 'ecografia',
+  'emg': 'elettromiografia', 'elettromiografia': 'elettromiografia',
+  'eeg': 'elettroencefalogramma', 'elettroencefalogramma': 'elettroencefalogramma',
+  'pet': 'tomografia_pet', 'scintigrafia': 'scintigrafia',
+  'follow-up': 'controllo', 'followup': 'controllo', 'follow_up': 'controllo',
+  'post-operatorio': 'postoperatorio', 'postoperatorio': 'postoperatorio',
+  'pre-operatorio': 'preoperatorio', 'preoperatorio': 'preoperatorio',
+};
+
+function normalizeMedicalWord(word: string): string {
+  return MEDICAL_SYNONYMS[word] ?? word;
+}
+
 function calculateSimilarity(a: string, b: string): number {
-  const wordsA = new Set(a.split(/\s+/).filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)));
-  const wordsB = new Set(b.split(/\s+/).filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)));
+  const wordsA = new Set(
+    a.split(/\s+/)
+      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
+      .map(normalizeMedicalWord),
+  );
+  const wordsB = new Set(
+    b.split(/\s+/)
+      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
+      .map(normalizeMedicalWord),
+  );
 
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;

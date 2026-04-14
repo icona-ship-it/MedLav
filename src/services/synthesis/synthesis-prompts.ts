@@ -114,7 +114,18 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Tabelle di esami di laboratorio: riportare valori ESATTI dal testo OCR, con la stessa formattazione
 - Dato presente negli eventi ma NON nel testo OCR → segnalare [dato non verificabile nel testo OCR]
 - Gli eventi servono come INDICE e STRUTTURA cronologica; il CONTENUTO dettagliato viene dal testo OCR
-- Per ogni documento OCR, riprodurre il contenuto nella sezione appropriata in base al tipo documento`;
+- Per ogni documento OCR, riprodurre il contenuto nella sezione appropriata in base al tipo documento
+
+## FORMULAZIONI STANDARD DEL LINGUAGGIO PERITALE
+Usa queste formulazioni per il tono professionale del report:
+- "Dalla disamina della documentazione in atti risulta che..."
+- "Il quadro documentale evidenzia..."
+- "Come documentato nella cartella clinica del [struttura], in data [data]..."
+- "Dalla documentazione acquisita emerge che..."
+- "Il decorso clinico, quale risulta dalla documentazione sanitaria, e' caratterizzato da..."
+- "In data non risultante dalla documentazione in atti" (per date mancanti)
+- "Sotto il profilo della documentazione sanitaria, si rileva che..."
+NON usare MAI formulazioni colloquiali. Il report deve avere stile da perizia depositabile in tribunale.`;
 
 // ── Full-report mode (single call) ──
 

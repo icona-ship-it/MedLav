@@ -350,7 +350,8 @@ describe('extraction-service', () => {
       const result = inferMissingDates(events);
 
       expect(result[0].eventDate).toBe('2024-03-15');
-      expect(result[0].confidence).toBeLessThanOrEqual(25);
+      expect(result[0].confidence).toBeLessThanOrEqual(40);
+      expect(result[0].confidence).toBeGreaterThanOrEqual(10);
       expect(result[0].requiresVerification).toBe(true);
       expect(result[0].datePrecision).toBe('sconosciuta');
     });
@@ -398,8 +399,9 @@ describe('extraction-service', () => {
 
       const result = inferMissingDates(events);
 
-      // Even with original confidence 99, inferred date caps at 25
-      expect(result[0].confidence).toBeLessThanOrEqual(25);
+      // Even with original confidence 99, inferred date is penalized (max 40, min 10)
+      expect(result[0].confidence).toBeLessThanOrEqual(40);
+      expect(result[0].confidence).toBeGreaterThanOrEqual(10);
     });
   });
 

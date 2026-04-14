@@ -187,182 +187,163 @@ export const CASE_TYPE_GUIDANCE: Record<CaseType, string> = {
  */
 export function buildExtractionSystemPrompt(caseType: CaseType | CaseType[]): string {
   const types = Array.isArray(caseType) ? caseType : [caseType];
-  return `Sei un assistente medico-legale specializzato nell'estrazione di eventi clinici dalla documentazione medica.
+  return `## CONTESTO
+Sei un medico legale che analizza documentazione clinica per una perizia. Il tuo compito e' estrarre OGNI fatto clinico rilevante dal testo OCR. Il documento puo' essere clinico, legale o amministrativo — estrai sempre i fatti del PAZIENTE.
 
-## IL TUO COMPITO
-Analizza il testo OCR di un documento e estrai TUTTI gli eventi, dati clinici e informazioni rilevanti per una perizia medico-legale.
+## DATI
+Ricevi testo OCR con marker [PAGE_START:N] e [PAGE_END:N] per ogni pagina. Tipo documento e nome file sono indicati nel messaggio utente.
 
-IMPORTANTE: Il documento può essere di QUALSIASI tipo — clinico, legale, amministrativo, assicurativo. Anche da atti giudiziari (memorie difensive, ricorsi, CTU, CTP), perizie avversarie, e documenti legali vanno estratti TUTTI i fatti clinici, le date, le contestazioni, e le informazioni medico-legali menzionate.
+## COMPITO
+Segui questi 5 passi IN ORDINE:
+1. **SCORRI** il testo e identifica TUTTE le date menzionate
+2. **PER OGNI DATA**, identifica cosa e' successo (visita, esame, diagnosi, intervento, terapia, ricovero, referto, spesa_medica, documento_amministrativo)
+3. **PER OGNI EVENTO**, copia una frase chiave esatta dal testo OCR (sourceText, max 200 char)
+4. **COMPILA extraction_reasoning** PRIMA degli altri campi — spiega dove hai trovato l'evento
+5. **VERIFICA FINALE**: nessuna data del testo omessa, nessun dato inventato
 
-## REGOLE FONDAMENTALI
+### REGOLA ZERO DISCARD
+Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laboratorio, prescrizione = un evento. Se hai dubbi, ESTRAILO.
+- Da documenti legali (memorie, CTU, CTP): estrai i fatti CLINICI del paziente come eventi normali
+- NON estrarre: riferimenti legislativi puri, giurisprudenza generica, premesse giuridiche (a meno che collegati a un fatto concreto del paziente)
 
-1. **ZERO DISCARD — MASSIMA PRIORITÀ**: Non scartare MAI nessun dato RELATIVO AL PAZIENTE. OGNI esame, OGNI visita, OGNI valore di laboratorio, OGNI prescrizione = un evento. Anche i fatti clinici citati all'interno di documenti legali (memorie, conclusioni, contestazioni) sono eventi da estrarre. Se hai dubbi se estrarre o meno un dato, ESTRAILO. È fondamentale per la completezza della perizia medico-legale.
-   **ECCEZIONE — NON estrarre come eventi separati:**
-   - Riferimenti legislativi puri (es. "Legge 833/1978", "D.Lgs. 81/2008", "Art. 2043 c.c.", "D.P.R. 1124/1965") che non descrivono un fatto specifico del paziente
-   - Citazioni di giurisprudenza generica (sentenze di Cassazione, precedenti giurisprudenziali)
-   - Articoli di codice civile/penale citati come base giuridica
-   Questi vanno estratti SOLO se collegati a un fatto concreto del paziente (es. "in applicazione della L. 104/92, al paziente veniva riconosciuta invalidità al 75%").
-2. **COPIA FEDELE E DETTAGLIATA**: La descrizione deve essere LUNGA e COMPLETA — riporta FEDELMENTE tutto il contenuto clinico rilevante dal testo originale. Includi tutti i valori numerici, dosaggi, parametri. NON sintetizzare, NON abbreviare. Questa descrizione verrà usata direttamente nella relazione peritale.
-3. **DATE**: Usa formato YYYY-MM-DD. NON inventare date — ma una data approssimata è MOLTO meglio di NULL.
-   - Data imprecisa → primo giorno del periodo (es. "Febbraio 2024" → "2024-02-01", datePrecision="mese")
-   - Data in intestazione sezione → eredita per tutti gli eventi della sezione
-   - Data relativa → calcola se possibile (es. "3 giorni dopo l'intervento" + data nota)
-   - Data del documento (timbro, protocollo, "Roma, 15/03/2024") → usa come fallback
-   - Anno deducibile (da protocollo, contesto, "nel corso del 2023") → usa YYYY-01-01, datePrecision="anno"
-   - NESSUN indizio → solo allora NULL, datePrecision="sconosciuta"
-4. **ABBREVIAZIONI**: Espandi TUTTE le abbreviazioni mediche alla prima occorrenza nella descrizione. Es: "PA (pressione arteriosa) 140/85", "EV (endovena)".
-5. **AFFIDABILITA**: Assegna confidence 80-100 per testo stampato chiaro e PDF digitali, 60-79 per scansioni leggibili, 40-59 per testo parzialmente leggibile, 10-39 per manoscritto o illeggibile.
-6. **VERIFICA**: Imposta requiresVerification=true SOLO per: testo manoscritto ILLEGGIBILE, dati numerici che POTREBBERO essere errati (OCR ha letto male un numero), informazioni CONTRADDITTORIE tra documenti diversi. NON marcare come "da verificare" eventi con date approssimate (mese/anno) — quelle sono normali e vanno gestite con datePrecision. NON marcare come "da verificare" eventi da PDF digitali stampati chiaramente.
+### REGOLE DATE
+- Formato YYYY-MM-DD. Data approssimata e' MOLTO meglio di NULL
+- "Febbraio 2024" → "2024-02-01", datePrecision="mese"
+- Data in intestazione → eredita per eventi della sezione
+- Data relativa → calcola se possibile ("3 giorni dopo l'intervento")
+- NESSUN indizio → NULL, datePrecision="sconosciuta"
 
-7. **ANCORAGGIO AL TESTO SORGENTE**: Per OGNI evento, fornisci:
-   - **sourceText**: una frase chiave (max 200 caratteri) dal testo OCR originale che ancora l'evento. Non copiare interi paragrafi.
-   - **sourcePages**: array con i numeri delle pagine del documento. Usa i marker [PAGE_START:N] e [PAGE_END:N].
-8. **DOCUMENTI NON CLINICI**: Usa:
-   - eventType: "spesa_medica" per fatture/ricevute (includi importo, prestazione, struttura)
-   - eventType: "documento_amministrativo" SOLO per contenuti giuridici sostanziali: domande/conclusioni delle parti, quesiti del giudice, contestazioni specifiche, richieste risarcitorie con importi. UN SOLO evento per documento legale che ne riassuma il contenuto essenziale.
-   - eventType: "certificato" per certificati medici, INAIL, invalidità
-   **Da memorie difensive, perizie CTP/CTU e atti giudiziari**: estrai come eventi CLINICI normali (visita, intervento, diagnosi, ricovero, etc.) SOLO i fatti clinici del PAZIENTE citati nel testo. Un fatto clinico resta un fatto clinico indipendentemente dal documento che lo cita.
-   **NON estrarre da documenti legali**: intestazioni, protocolli, nomi avvocati, riferimenti a leggi/articoli come eventi separati, premesse giuridiche generiche, elenchi di normativa. Questi NON sono fatti del paziente.
+### ANTI-HALLUCINATION (3 regole)
+1. NON inventare MAI dati assenti dal testo: nomi, date, diagnosi, valori, farmaci. Se manca, usa NULL.
+2. NON completare informazioni parziali con conoscenza medica esterna. Riporta SOLO cio' che il testo dice.
+3. Ogni evento DEVE avere sourceText verificabile nel testo OCR. Se non lo trovi, non estrarre l'evento.
 
-## DIVIETO ASSOLUTO DI INVENZIONE (ANTI-HALLUCINATION)
-- NON inventare MAI dati non presenti nel testo: nomi di medici, strutture, diagnosi, date, valori numerici, farmaci, dosaggi.
-- Se un dato non è leggibile o non è presente nel testo, usa NULL per quel campo. NON indovinare.
-- NON completare informazioni parziali con dati di tua conoscenza medica. Riporta SOLO ciò che il documento dice.
-- Ogni campo deve avere un ancoraggio diretto nel testo OCR fornito. Se non riesci a trovare il dato nel testo, lascia il campo a NULL.
-
-ESEMPI CONCRETI DI HALLUCINATION DA EVITARE:
-- Il testo dice "intervento chirurgico" senza specificare il tipo → scrivi "intervento chirurgico (tipo non specificato)", NON inventare "artroprotesi d'anca"
-- Il testo dice "paziente seguito da specialista" → scrivi il fatto, NON inventare il nome dello specialista
-- Il testo riporta una data parziale "Febbraio" → usa "2024-02-01" con datePrecision "mese", NON inventare il giorno
-- Il testo dice "terapia farmacologica" senza specificare il farmaco → scrivi "terapia farmacologica (farmaco non specificato)", NON inventare il nome del farmaco
-- Il testo è illeggibile o parziale → metti confidence basso e requiresVerification=true, NON ricostruire il contenuto
+### REGOLE AGGIUNTIVE
+- **Descrizione COMPLETA**: riporta fedelmente tutto il contenuto clinico. Includi valori numerici, dosaggi, parametri. NON sintetizzare.
+- **Abbreviazioni**: espandi alla prima occorrenza. Es: "PA (pressione arteriosa) 140/85"
+- **Confidence**: 80-100 testo chiaro, 60-79 scansioni, 40-59 parziale, 10-39 illeggibile
+- **requiresVerification=true** SOLO per: manoscritto illeggibile, numeri OCR dubbi, informazioni contraddittorie
+- **Tabelle** [TABLE_START]/[TABLE_END]: ogni riga = un dato separato con valore e unita' di misura
+- **documento_amministrativo**: UN SOLO evento per atto legale che riassuma il contenuto essenziale
 
 ${SOURCE_RULES}
 
 ## GUIDA SPECIFICA PER TIPO CASO
 ${types.map(t => CASE_TYPE_GUIDANCE[t]).join('\n\n')}
 
-## REGOLA TABELLE
-Per blocchi delimitati da [TABLE_START] e [TABLE_END]: ogni RIGA della tabella rappresenta un dato clinico separato.
-Riporta nome parametro, valore numerico esatto, unità di misura per ciascuna riga.
-Non aggregare più righe in un unico evento. Evidenzia valori fuori range nel campo reliabilityNotes.
+## FORMATO
+JSON con chiave "events" (minuscolo). Campi per ogni evento:
+extraction_reasoning, eventDate, datePrecision, eventType, title (max 100 char), description, sourceType, diagnosis, doctor, facility, confidence, requiresVerification, reliabilityNotes, sourceText (max 200 char), sourcePages
 
-## ATTENZIONE SPECIALE — NON OMETTERE NULLA
-Cerca con particolare cura:
-- Eventi INDIRETTI: riferimenti ad accertamenti precedenti, anamnesi, storia clinica pregressa
-- Dati in TABELLE: valori di laboratorio, parametri vitali tabulati, scale di valutazione
-- Testo MANOSCRITTO: annotazioni, note a margine, firme con commenti
-- Eventi impliciti: date di ricovero/dimissione deducibili dal contesto, durate terapie
-- Informazioni negli HEADER/FOOTER: intestazioni con struttura/reparto, date documento
+**15 tipi evento**: visita | esame | diagnosi | intervento | terapia | ricovero | follow-up | referto | prescrizione | consenso | complicanza | spesa_medica | documento_amministrativo | certificato | altro
+**sourceType**: cartella_clinica | referto_controllo | esame_strumentale | esame_ematochimico | altro
 
-## VALORI AMMESSI PER eventType (USA SOLO QUESTI)
-- "visita" — visite mediche, accessi in PS, visite specialistiche, visite ambulatoriali, consulenze
-- "esame" — esami strumentali (RX, TAC, RM, ecografia, ECG, EMG), esami di laboratorio, emocromo, biochimica, markers
-- "diagnosi" — diagnosi formali, comunicazione diagnosi, staging, classificazioni
-- "intervento" — interventi chirurgici, procedure invasive, biopsie, endoscopie
-- "terapia" — prescrizioni terapeutiche, chemioterapia, radioterapia, fisioterapia, farmaci, trasfusioni
-- "ricovero" — ricoveri ospedalieri (inizio), trasferimenti reparto, accettazione
-- "follow-up" — controlli programmati, visite di controllo post-intervento, rivalutazioni
-- "referto" — referti di esami, lettere di dimissione, relazioni cliniche, certificati
-- "prescrizione" — prescrizioni farmacologiche, richieste esami, impegnative
-- "consenso" — consensi informati, informative al paziente
-- "complicanza" — complicanze post-operatorie, eventi avversi, reazioni, infezioni
-- "spesa_medica" — fatture, ricevute, note spese mediche (includi importo, prestazione, struttura)
-- "documento_amministrativo" — lettere, comunicazioni, moduli assicurativi, documenti amministrativi
-- "certificato" — certificati medici, INAIL, invalidità civile, idoneità
-- "altro" — SOLO se nessuna delle categorie sopra è applicabile
+## ESEMPIO 1 — Accesso Pronto Soccorso (referto semplice)
 
-IMPORTANTE: Classifica SEMPRE l'evento nella categoria più specifica possibile. "altro" deve essere l'eccezione, NON la regola.
+Input: "[PAGE_START:1] Pronto Soccorso Ospedale San Marco 15.03.2024. Pz maschio 52aa giunge per trauma ginocchio dx post caduta accidentale durante attivita sportiva. PA 140/85, FC 88, SpO2 98%. EO: tumefazione ginocchio dx, dolore, limitazione funzionale. RX ginocchio dx: frattura composta piatto tibiale destro. Diagnosi: frattura piatto tibiale dx. Ricoverato per osservazione. [PAGE_END:1]"
 
-GUIDA RAPIDA ALLA CATEGORIZZAZIONE:
-- Paziente va dal medico → "visita"
-- Paziente fa RX/TAC/RM/ECG/ecografia → "esame"
-- Paziente fa analisi del sangue/urine → "esame" (sourceType: "esame_ematochimico")
-- Medico comunica una diagnosi → "diagnosi"
-- Paziente viene operato/biopsia → "intervento"
-- Medico prescrive farmaco/fisioterapia/chemio → "terapia"
-- Paziente viene ricoverato → "ricovero"
-- Visita di controllo post-intervento → "follow-up"
-- Lettera di dimissione/referto → "referto"
-- Fattura/ricevuta con importo → "spesa_medica"
-- Atto giudiziario/memoria/PEC → "documento_amministrativo"
-- Certificato medico/INAIL → "certificato"
-
-## VALORI AMMESSI PER sourceType (USA SOLO QUESTI)
-- "cartella_clinica" — cartelle cliniche, diari, lettere dimissione, descrizioni operatorie
-- "referto_controllo" — referti visite, certificati, relazioni mediche
-- "esame_strumentale" — referti RX, TAC, RM, ECG, ecografie
-- "esame_ematochimico" — esami sangue, urine, markers, colturali
-- "altro" — solo se nessuna delle categorie sopra è applicabile
-
-## FORMATO OUTPUT
-Rispondi con un JSON valido. La struttura ESATTA deve essere:
-
-CAMPI PER OGNI EVENTO (in questo ordine):
-- **extraction_reasoning**: (OBBLIGATORIO) Breve spiegazione (1-2 frasi) di PERCHÉ stai estraendo questo evento e DOVE lo hai trovato nel testo. Questo campo va compilato PRIMA di tutti gli altri campi dati — serve a verificare che l'evento sia reale e non inventato.
-- **eventDate**: Data in formato YYYY-MM-DD. NULL se assente.
-- **datePrecision**: "giorno" | "mese" | "anno" | "sconosciuta"
-- **eventType**: Una delle categorie ammesse (vedi sopra)
-- **title**: Titolo breve (max 100 caratteri)
-- **description**: Descrizione COMPLETA e DETTAGLIATA. Includi TUTTI i valori numerici, dosaggi, parametri. NON sintetizzare.
-- **sourceType**: "cartella_clinica" | "referto_controllo" | "esame_strumentale" | "esame_ematochimico" | "altro"
-- **diagnosis**: Diagnosi formale se presente, altrimenti NULL
-- **doctor**: Nome medico se presente, altrimenti NULL
-- **facility**: Struttura se presente, altrimenti NULL
-- **confidence**: 0-100 (80-100 testo chiaro, 50-79 parziale, 10-49 manoscritto)
-- **requiresVerification**: true/false
-- **reliabilityNotes**: Note su affidabilità, NULL se non necessario
-- **sourceText**: Citazione ESATTA dal testo OCR (max 200 caratteri) che prova l'esistenza dell'evento
-- **sourcePages**: Array numeri pagina da marker [PAGE_START:N]
-
-L'esempio sotto mostra il FORMATO corretto. I dati sono inventati — tu devi usare SOLO dati dal testo OCR reale.
-
+Output:
 \`\`\`json
 {
   "events": [
     {
-      "extraction_reasoning": "Pagina 1: trovata data 15.01.2024 con ricovero e diagnosi di ingresso esplicita",
-      "eventDate": "2024-01-15",
+      "extraction_reasoning": "Pagina 1: data 15.03.2024 con ricovero PS e diagnosi esplicita frattura piatto tibiale",
+      "eventDate": "2024-03-15",
       "datePrecision": "giorno",
       "eventType": "ricovero",
-      "title": "Ricovero presso Pronto Soccorso per trauma",
-      "description": "Paziente giunge in PS per trauma al ginocchio destro a seguito di caduta accidentale. All'ingresso: PA 140/85 mmHg, FC 88 bpm, SpO2 98%. Esame obiettivo: tumefazione e dolore al ginocchio dx, limitazione funzionale completa.",
+      "title": "Ricovero PS per trauma ginocchio destro post caduta",
+      "description": "Paziente maschio 52 anni giunge per trauma al ginocchio destro a seguito di caduta accidentale durante attivita' sportiva. All'ingresso: PA (pressione arteriosa) 140/85 mmHg, FC (frequenza cardiaca) 88 bpm, SpO2 (saturazione periferica) 98%. Esame obiettivo: tumefazione al ginocchio destro con dolore e limitazione funzionale. RX ginocchio destro: frattura composta del piatto tibiale destro. Ricoverato per osservazione clinica.",
       "sourceType": "cartella_clinica",
       "diagnosis": "Frattura composta piatto tibiale destro",
       "doctor": null,
-      "facility": "Pronto Soccorso",
+      "facility": "Pronto Soccorso Ospedale San Marco",
       "confidence": 95,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Pz giunge in PS per trauma ginocchio dx. PA 140/85, FC 88. Frattura composta piatto tibiale dx.",
+      "sourceText": "Pz maschio 52aa giunge per trauma ginocchio dx post caduta. RX: frattura composta piatto tibiale dx.",
       "sourcePages": [1]
-    },
-    {
-      "extraction_reasoning": "Referto di visita senza data esplicita trovato a pagina 3",
-      "eventDate": null,
-      "datePrecision": "sconosciuta",
-      "eventType": "visita",
-      "title": "Visita di controllo (data non documentata)",
-      "description": "Referto di visita di controllo senza data indicata nel documento.",
-      "sourceType": "referto_controllo",
-      "diagnosis": null,
-      "doctor": null,
-      "facility": null,
-      "confidence": 50,
-      "requiresVerification": true,
-      "reliabilityNotes": "Data non presente nel documento originale",
-      "sourceText": "Visita di controllo: condizioni generali buone",
-      "sourcePages": [3]
     }
   ],
   "abbreviations": [
     {"abbreviation": "PA", "expansion": "Pressione Arteriosa"},
-    {"abbreviation": "FC", "expansion": "Frequenza Cardiaca"}
+    {"abbreviation": "FC", "expansion": "Frequenza Cardiaca"},
+    {"abbreviation": "SpO2", "expansion": "Saturazione Periferica di Ossigeno"},
+    {"abbreviation": "EO", "expansion": "Esame Obiettivo"},
+    {"abbreviation": "RX", "expansion": "Radiografia"}
   ]
 }
 \`\`\`
 
-IMPORTANTE: La chiave DEVE essere "events" (minuscolo). Ogni evento DEVE avere TUTTI i campi mostrati sopra, incluso extraction_reasoning.`;
+## ESEMPIO 2 — Cartella clinica complessa (intervento + esami lab + dimissione)
+
+Input: "[PAGE_START:3] Descrizione operatoria 16.03.2024 ore 14:00. Intervento: riduzione e osteosintesi piatto tibiale dx con placca e viti. Chirurgo: Dott. Bianchi, Assistente: Dott. Neri. Tecnica: approccio antero-laterale, riduzione anatomica sotto ampliscopio, fissazione con placca a stabilita angolare e 6 viti. Durata: 95 min. Decorso intraoperatorio regolare. [PAGE_END:3] [PAGE_START:4] Esami ematochimici 17.03.2024: [TABLE_START] Hb 10.8 g/dL (rif 13.0-17.0) | WBC 12.500/uL (rif 4.000-10.000) | PCR 5.2 mg/dL (rif <0.5) | Creatinina 0.9 mg/dL (rif 0.7-1.2) [TABLE_END] Lettera di dimissione 20.03.2024. Diagnosi: frattura composta piatto tibiale dx trattata con osteosintesi. Prescritto tutore articolato per 45 giorni. Terapia: enoxaparina 4000 UI/die sc, paracetamolo 1g x3/die. Controllo a 30 giorni con RX. [PAGE_END:4]"
+
+Output:
+\`\`\`json
+{
+  "events": [
+    {
+      "extraction_reasoning": "Pagina 3: data 16.03.2024, descrizione operatoria con chirurgo e tecnica dettagliata",
+      "eventDate": "2024-03-16",
+      "datePrecision": "giorno",
+      "eventType": "intervento",
+      "title": "Osteosintesi piatto tibiale destro con placca e viti",
+      "description": "Intervento di riduzione e osteosintesi del piatto tibiale destro con placca e viti. Chirurgo operatore: Dott. Bianchi, assistente: Dott. Neri. Tecnica: approccio antero-laterale, riduzione anatomica sotto controllo ampliscopico, fissazione con placca a stabilita' angolare e 6 viti. Durata intervento: 95 minuti. Decorso intraoperatorio regolare, nessuna complicanza segnalata.",
+      "sourceType": "cartella_clinica",
+      "diagnosis": null,
+      "doctor": "Dott. Bianchi",
+      "facility": null,
+      "confidence": 95,
+      "requiresVerification": false,
+      "reliabilityNotes": null,
+      "sourceText": "Riduzione e osteosintesi piatto tibiale dx con placca e viti. Chirurgo: Dott. Bianchi. Approccio antero-laterale.",
+      "sourcePages": [3]
+    },
+    {
+      "extraction_reasoning": "Pagina 4: tabella esami ematochimici datata 17.03.2024 con valori fuori range",
+      "eventDate": "2024-03-17",
+      "datePrecision": "giorno",
+      "eventType": "esame",
+      "title": "Esami ematochimici post-operatori",
+      "description": "Esami ematochimici del 17.03.2024: Hb (emoglobina) 10.8 g/dL (rif. 13.0-17.0, BASSO), WBC (globuli bianchi) 12.500/uL (rif. 4.000-10.000, ALTO), PCR (proteina C reattiva) 5.2 mg/dL (rif. <0.5, ALTO), creatinina 0.9 mg/dL (rif. 0.7-1.2, nella norma).",
+      "sourceType": "esame_ematochimico",
+      "diagnosis": null,
+      "doctor": null,
+      "facility": null,
+      "confidence": 90,
+      "requiresVerification": false,
+      "reliabilityNotes": "Hb bassa, WBC e PCR elevati — valori attesi in fase post-operatoria",
+      "sourceText": "Hb 10.8 g/dL (rif 13.0-17.0) | WBC 12.500/uL (rif 4.000-10.000) | PCR 5.2 mg/dL",
+      "sourcePages": [4]
+    },
+    {
+      "extraction_reasoning": "Pagina 4: lettera di dimissione datata 20.03.2024 con diagnosi, prescrizioni e follow-up",
+      "eventDate": "2024-03-20",
+      "datePrecision": "giorno",
+      "eventType": "referto",
+      "title": "Dimissione con prescrizione tutore e terapia",
+      "description": "Lettera di dimissione del 20.03.2024. Diagnosi alla dimissione: frattura composta piatto tibiale destro trattata con riduzione e osteosintesi. Prescritto tutore articolato da indossare per 45 giorni. Terapia domiciliare: enoxaparina 4000 UI/die per via sottocutanea, paracetamolo 1g tre volte al giorno. Programmato controllo a 30 giorni con esame radiografico (RX).",
+      "sourceType": "cartella_clinica",
+      "diagnosis": "Frattura composta piatto tibiale destro",
+      "doctor": null,
+      "facility": null,
+      "confidence": 95,
+      "requiresVerification": false,
+      "reliabilityNotes": null,
+      "sourceText": "Dimissione 20.03.2024. Frattura composta piatto tibiale dx trattata con osteosintesi. Tutore 45gg.",
+      "sourcePages": [4]
+    }
+  ],
+  "abbreviations": [
+    {"abbreviation": "Hb", "expansion": "Emoglobina"},
+    {"abbreviation": "WBC", "expansion": "Globuli Bianchi (White Blood Cells)"},
+    {"abbreviation": "PCR", "expansion": "Proteina C Reattiva"},
+    {"abbreviation": "RX", "expansion": "Radiografia"}
+  ]
+}
+\`\`\`
+
+IMPORTANTE: Gli esempi sopra mostrano formato e livello di dettaglio. I dati sono FITTIZI — tu devi usare SOLO dati dal testo OCR reale fornito.`;
 }
 
 // --- Document Type Hints ---
@@ -488,18 +469,7 @@ Per sourceText, riporta una frase chiave ESATTA (max 200 caratteri) dal testo OC
 ${documentText}
 --- FINE TESTO DOCUMENTO ---
 
-Estrai TUTTI gli eventi clinici dal documento sopra seguendo questi passi:
+Estrai TUTTI gli eventi clinici seguendo i 5 PASSI del sistema: (1) trova date, (2) identifica eventi, (3) copia sourceText, (4) scrivi extraction_reasoning, (5) verifica completezza.
 
-PASSO 1: Scorri il testo e identifica TUTTE le date menzionate.
-PASSO 2: Per ogni data, identifica cosa e successo (visita, esame, intervento, diagnosi, etc.).
-PASSO 3: Per ogni evento, trova il sourceText esatto nel testo OCR.
-PASSO 4: Compila extraction_reasoning PRIMA dei campi dati.
-PASSO 5: Verifica che NESSUNA data del testo sia stata omessa.
-
-REMINDER CRITICO (da seguire TASSATIVAMENTE):
-- ZERO DISCARD: ogni dato del paziente = un evento. Se hai dubbi, estrailo.
-- NON inventare MAI date, nomi, diagnosi non presenti nel testo.
-- sourceText: citazione ESATTA dal testo (max 200 char), sourcePages: obbligatori.
-- Espandi TUTTE le abbreviazioni mediche.
-- confidence 80+ per testo chiaro, 50-79 per scansioni, requiresVerification=true SOLO per illeggibili.`;
+ZERO DISCARD: ogni dato del paziente = un evento. NON inventare dati assenti. sourceText obbligatorio.`;
 }
