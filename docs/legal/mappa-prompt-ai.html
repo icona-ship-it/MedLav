@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Mappa completa dei Prompt AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f8f9fa; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 30px; }
+  .header { text-align: center; margin-bottom: 40px; padding-bottom: 25px; border-bottom: 3px solid #2563eb; }
+  .header h1 { font-size: 26px; color: #2563eb; }
+  .header p { color: #64748b; font-size: 14px; margin-top: 8px; }
+
+  .legend { background: #eff6ff; border-left: 4px solid #2563eb; padding: 15px 20px; margin-bottom: 30px; border-radius: 0 8px 8px 0; font-size: 13px; }
+  .legend h3 { color: #2563eb; margin-bottom: 8px; font-size: 15px; }
+
+  .pipeline { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 30px; justify-content: center; }
+  .pipeline .step { background: white; border: 2px solid #e2e8f0; border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 600; text-align: center; min-width: 100px; }
+  .pipeline .step.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+  .pipeline .arrow { display: flex; align-items: center; color: #94a3b8; font-size: 18px; }
+
+  .prompt-card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; page-break-inside: avoid; }
+  .prompt-card h2 { font-size: 18px; color: #1e3a5f; display: flex; align-items: center; gap: 10px; }
+  .prompt-card .num { background: #2563eb; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .prompt-card .meta { display: flex; gap: 10px; margin: 10px 0 15px; flex-wrap: wrap; }
+  .prompt-card .tag { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .tag.model { background: #dbeafe; color: #1d4ed8; }
+  .tag.when { background: #fef3c7; color: #92400e; }
+  .tag.cost { background: #d1fae5; color: #065f46; }
+
+  .what { margin-bottom: 12px; }
+  .what h3 { font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .what p { font-size: 14px; }
+
+  .prompt-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin: 10px 0; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; color: #334155; max-height: 300px; overflow-y: auto; }
+
+  .output-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 15px; margin: 10px 0; font-size: 13px; }
+  .output-box h4 { color: #166534; font-size: 12px; text-transform: uppercase; margin-bottom: 5px; }
+
+  .warning-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 12px 15px; margin: 10px 0; font-size: 13px; color: #991b1b; }
+
+  .divider { border: none; border-top: 2px dashed #e2e8f0; margin: 35px 0; }
+
+  .section-title { font-size: 20px; color: #1e3a5f; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+
+  .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; }
+
+  @media print { body { background: white; } .prompt-card { box-shadow: none; } .prompt-box { max-height: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>LegMed — Mappa dei Prompt AI</h1>
+  <p>Tutti i prompt usati dall'intelligenza artificiale, spiegati in modo semplice</p>
+  <p style="margin-top:10px; font-size:13px; color:#94a3b8;">Documento interno — Aprile 2026</p>
+</div>
+
+<div class="legend">
+  <h3>Come funziona il sistema</h3>
+  <p>LegMed usa <strong>Mistral AI</strong> (modello europeo, dati in EU) per analizzare documenti medico-legali. L'AI riceve istruzioni precise (<strong>prompt</strong>) che le dicono esattamente cosa fare e cosa NON fare. Ogni operazione ha il suo prompt specifico.</p>
+  <p style="margin-top:8px;">L'AI <strong>non esprime mai opinioni</strong> — presenta solo fatti dalla documentazione. Il medico legale formula autonomamente le proprie valutazioni.</p>
+</div>
+
+<!-- Pipeline overview -->
+<div class="pipeline">
+  <div class="step active">1. OCR<br><small>Legge i PDF</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step active">2. Classificazione<br><small>Tipo documento</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step active">3. Estrazione<br><small>Eventi clinici</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step active">4. Revisione<br><small>Verifica omissioni</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step active">5. Anomalie<br><small>Incongruenze</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step active">6. Report<br><small>Perizia strutturata</small></div>
+</div>
+
+<hr class="divider">
+<h2 class="section-title">Fase 1 — Lettura e classificazione documenti</h2>
+
+<!-- Prompt 1: Classification -->
+<div class="prompt-card">
+  <h2><span class="num">1</span> Classificazione documento</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: upload o categorizzazione AI</span>
+    <span class="tag cost">1 credito per doc</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Legge il nome del file e le prime 3000 lettere del testo OCR, poi classifica il documento in una delle 12 categorie: cartella clinica, referto specialistico, esame strumentale, esame laboratorio, lettera dimissione, certificato, perizia precedente, spese mediche, memoria difensiva, perizia CTP, perizia CTU, altro.</p>
+  </div>
+  <div class="prompt-box">Sei un sistema di classificazione documentale medico-legale italiano.
+
+Analizza il NOME FILE e il TESTO del documento per classificarlo in UNA delle seguenti categorie:
+- cartella_clinica: Cartella clinica ospedaliera, diario medico, SDO, verbale PS
+- referto_specialistico: Visita ortopedica, neurologica, cardiologica
+- esame_strumentale: RX, TAC, RM, ecografia, ECG, EMG
+- esame_laboratorio: Esami del sangue, urine, markers
+- lettera_dimissione: Lettera di dimissione ospedaliera
+- certificato: Certificato medico, INAIL, invalidita
+- perizia_precedente: Perizia medico-legale generica
+- spese_mediche: Fatture, ricevute, ticket
+- memoria_difensiva: Atto legale, ricorso, memoria
+- perizia_ctp / perizia_ctu: Consulenza di parte / d'ufficio
+- altro: Solo se NESSUNA categoria sopra
+
+Rispondi SOLO in JSON: { "documentType": "...", "confidence": 0-100, "reasoning": "..." }</div>
+  <div class="output-box">
+    <h4>Cosa produce</h4>
+    Tipo documento + confidenza (0-100%) + motivazione. Es: <code>{"documentType": "referto_specialistico", "confidence": 92, "reasoning": "Intestazione indica visita ortopedica"}</code>
+  </div>
+</div>
+
+<hr class="divider">
+<h2 class="section-title">Fase 2 — Estrazione eventi clinici</h2>
+
+<!-- Prompt 2: Extraction -->
+<div class="prompt-card">
+  <h2><span class="num">2</span> Estrazione eventi clinici</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: elaborazione caso (automatico)</span>
+    <span class="tag cost">Incluso nei 30 crediti</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Analizza il testo OCR di ogni documento e estrae <strong>tutti</strong> gli eventi clinici: visite, esami, diagnosi, interventi, terapie, ricoveri, follow-up, referti, prescrizioni, consensi, complicanze, spese mediche, documenti amministrativi, certificati. Per ogni evento salva: data, tipo, titolo, descrizione completa, medico, struttura, diagnosi, confidenza.</p>
+  </div>
+  <div class="prompt-box">Sei un assistente medico-legale specializzato nell'estrazione di eventi clinici.
+
+## REGOLE FONDAMENTALI
+1. ZERO DISCARD: Non scartare MAI nessun dato relativo al paziente
+2. COPIA FEDELE: Descrizione LUNGA e COMPLETA, riportare il testo originale
+3. DATE: Formato YYYY-MM-DD. NON inventare date mai presenti nel testo
+4. ABBREVIAZIONI: Espandi TUTTE (es: "fr. composta" → "frattura composta")
+5. CONFIDENZA: 80-100 per PDF chiari, 60-79 per scansioni, 40-59 per illeggibili
+6. VERIFICA: requiresVerification=true SOLO per testo manoscritto illeggibile
+7. ANCORAGGIO: Ogni evento DEVE avere sourceText (citazione dal testo originale)
+
+## 14 TIPI DI EVENTO
+visita, esame, diagnosi, intervento, terapia, ricovero, follow-up,
+referto, prescrizione, consenso, complicanza, spesa_medica,
+documento_amministrativo, certificato
+
+## ANTI-ALLUCINAZIONE
+- NON inventare date, nomi, strutture, valori, diagnosi
+- Se un dato non e nel testo, NON includerlo
+- Ogni evento DEVE essere tracciabile nel testo sorgente</div>
+  <div class="output-box">
+    <h4>Cosa produce</h4>
+    Array JSON di eventi. Ogni evento ha: data, tipo, titolo, descrizione, medico, struttura, diagnosi, confidenza (0-100), requiresVerification, sourceText, sourcePages.
+  </div>
+  <div class="warning-box">
+    <strong>Punto critico:</strong> Con molti documenti, l'AI puo estrarre numeri diversi di eventi tra un'elaborazione e l'altra (es: 471 vs 450). Questo perche i modelli linguistici non sono perfettamente deterministici. Il miglioramento dei prompt ridurra questa variabilita.
+  </div>
+</div>
+
+<!-- Prompt 3: Review -->
+<div class="prompt-card">
+  <h2><span class="num">3</span> Revisione estrazione (secondo passaggio)</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: dopo l'estrazione iniziale</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Confronta gli eventi estratti con il testo originale per trovare <strong>eventi mancanti</strong> e <strong>errori nei dati</strong> (date sbagliate, diagnosi incomplete, nomi errati). E un controllo qualita automatico.</p>
+  </div>
+  <div class="prompt-box">Sei un revisore medico-legale esperto. Ricevi eventi gia estratti + testo originale.
+
+Trova:
+1. Eventi MANCANTI: informazioni cliniche presenti nel testo ma non estratte
+2. Errori: date errate, diagnosi incomplete, nomi sbagliati
+
+REGOLE:
+- Solo eventi clinici SIGNIFICATIVI mancanti, non dettagli minori
+- Per correzioni, modifica SOLO: diagnosi, medico, struttura, data, precisione data
+- DIVIETO DI INVENZIONE: ogni evento DEVE avere sourceText verificabile</div>
+</div>
+
+<hr class="divider">
+<h2 class="section-title">Fase 3 — Analisi specializzate</h2>
+
+<!-- Prompt 4: Expenses -->
+<div class="prompt-card">
+  <h2><span class="num">4</span> Estrazione spese mediche</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: modulo analisi spese</span>
+    <span class="tag cost">10 crediti</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Analizza scontrini, fatture e ricevute mediche. Estrae ogni singola voce di spesa con: data, descrizione, importo, numero scontrino, tipo farmaco, categoria, struttura, diagnosi collegata, interpretazione.</p>
+  </div>
+  <div class="prompt-box">Sei un assistente specializzato nell'analisi di documenti di spesa medica.
+
+REGOLE:
+- Estrai TUTTE le voci, anche piccole (ticket, bolli)
+- NON inventare importi non presenti nel testo
+- isJustified e SEMPRE null (la congruita spetta al medico legale)
+- Per ogni spesa, fornisci 'interpretation' che spiega la correlazione con la diagnosi
+
+CATEGORIE: farmaci, visite_specialistiche, esami_diagnostici,
+interventi, riabilitazione, ausili_protesi, trasporti, altro</div>
+</div>
+
+<!-- Prompt 5: Image Analysis -->
+<div class="prompt-card">
+  <h2><span class="num">5</span> Analisi immagini diagnostiche</h2>
+  <div class="meta">
+    <span class="tag model">Pixtral Large (modello visione)</span>
+    <span class="tag when">Quando: immagini RX, TAC, RM trovate nei documenti</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Descrive immagini diagnostiche (radiografie, TAC, risonanze) in modo <strong>oggettivo</strong>. NON fa diagnosi, NON suggerisce trattamenti. Descrive solo cio che osserva nell'immagine.</p>
+  </div>
+  <div class="prompt-box">Sei un radiologo esperto. Descrivi questa immagine diagnostica in modo OGGETTIVO.
+
+REGOLE:
+- Descrivi SOLO cio che osservi
+- NON fare diagnosi
+- NON suggerire trattamenti
+- Usa terminologia medica appropriata
+- Max 3 frasi concise</div>
+</div>
+
+<!-- Prompt 6: Anomaly Resolution -->
+<div class="prompt-card">
+  <h2><span class="num">6</span> Verifica anomalie</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: anomalie rilevate algoritmicamente</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Quando il sistema rileva un'anomalia (es: gap temporale, dato incoerente), l'AI verifica nel testo OCR originale se esiste evidenza che <strong>risolve</strong> l'anomalia. Approccio ultra-conservativo: risolve SOLO con evidenza letterale ed esplicita.</p>
+  </div>
+  <div class="prompt-box">Verifica se un'anomalia rilevata algoritmicamente puo essere RISOLTA
+leggendo il testo OCR originale.
+
+REGOLE:
+- "resolved" = true SOLO con evidenza ESPLICITA e LETTERALE nel testo
+- "evidence" = citazione LETTERALE (copia-incolla esatto)
+- In caso di dubbio → "resolved": false
+- NON fare inferenze o deduzioni. Solo evidenza DIRETTA
+- Meglio un falso positivo che ignorare un problema reale</div>
+</div>
+
+<hr class="divider">
+<h2 class="section-title">Fase 4 — Generazione report</h2>
+
+<!-- Prompt 7: Section Generation -->
+<div class="prompt-card">
+  <h2><span class="num">7</span> Generazione sezioni report</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: generazione report (automatico)</span>
+    <span class="tag cost">Incluso nei 30 crediti</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Genera il report medico-legale <strong>sezione per sezione</strong>. Ogni sezione ha il suo prompt specifico. Il report e adattato al ruolo (CTU, CTP, Stragiudiziale) e al tipo di caso (ortopedica, oncologica, stradale, ecc.).</p>
+  </div>
+  <div class="prompt-box">Sei un sistema di organizzazione documentale medico-legale.
+Il tuo compito e strutturare e presentare FATTI dalla documentazione
+clinica, NON esprimere opinioni.
+
+REGOLE ASSOLUTE:
+- NON inventare MAI dati non presenti nella documentazione
+- Ogni affermazione DEVE essere ancorata a evidenza documentale
+- Usa formulazioni fattuali: "Dalla documentazione risulta che..."
+- NON usare MAI: "si ritiene", "appare evidente", "e verosimile"
+- OGNI evento fornito DEVE comparire nel report
+- Citare SEMPRE: [tipo documento, autore/struttura, data]</div>
+</div>
+
+<!-- Prompt 8: Role adaptation -->
+<div class="prompt-card">
+  <h2><span class="num">8</span> Adattamento per ruolo</h2>
+  <div class="meta">
+    <span class="tag when">Applicato a: tutte le sezioni del report</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Modifica il tono e la struttura del report in base al ruolo del perito. Tutti e 3 i ruoli sono <strong>oggettivi</strong> — la differenza sta nella struttura e nell'enfasi.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:15px;">
+    <div style="background:#eff6ff; border-radius:8px; padding:12px;">
+      <h4 style="color:#1d4ed8; font-size:13px;">CTU (Consulente d'Ufficio)</h4>
+      <p style="font-size:12px; margin-top:5px;">15 sezioni. Include quesiti del giudice, risposte ai quesiti, verbale operazioni. Presenta evidenze per ENTRAMBE le parti in modo equilibrato.</p>
+    </div>
+    <div style="background:#fef3c7; border-radius:8px; padding:12px;">
+      <h4 style="color:#92400e; font-size:13px;">CTP (Consulente di Parte)</h4>
+      <p style="font-size:12px; margin-top:5px;">14 sezioni. Stessa struttura del CTU senza osservazioni bozza. Evidenzia elementi a supporto E contrari senza bias.</p>
+    </div>
+    <div style="background:#d1fae5; border-radius:8px; padding:12px;">
+      <h4 style="color:#065f46; font-size:13px;">Stragiudiziale</h4>
+      <p style="font-size:12px; margin-top:5px;">8 sezioni. Piu breve e pragmatico. Include quadro documentale complessivo con elementi favorevoli/sfavorevoli.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Section catalog -->
+<div class="prompt-card">
+  <h2><span class="num">9</span> Catalogo sezioni per ruolo</h2>
+  <div class="what">
+    <h3>Sezioni generate dall'AI vs compilate dal perito</h3>
+  </div>
+
+  <table style="width:100%; border-collapse:collapse; font-size:13px; margin-top:10px;">
+    <thead>
+      <tr style="background:#f1f5f9;">
+        <th style="text-align:left; padding:8px; border-bottom:2px solid #e2e8f0;">Sezione</th>
+        <th style="text-align:center; padding:8px; border-bottom:2px solid #e2e8f0;">CTU</th>
+        <th style="text-align:center; padding:8px; border-bottom:2px solid #e2e8f0;">CTP</th>
+        <th style="text-align:center; padding:8px; border-bottom:2px solid #e2e8f0;">Strag.</th>
+        <th style="text-align:center; padding:8px; border-bottom:2px solid #e2e8f0;">Chi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Intestazione / Premessa</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Quesiti del Giudice</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center; color:#dc2626; font-weight:600;">Perito</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Profilo Metodologico</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Anamnesi</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr style="background:#eff6ff;"><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9; font-weight:600;">Documentazione Sanitaria</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Spese Mediche</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Verbale Operazioni Peritali</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center;">—</td><td style="text-align:center; color:#dc2626; font-weight:600;">Perito</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Visita Medico-Legale</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#dc2626; font-weight:600;">Perito</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Epicrisi</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Considerazioni Medico-Legali</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center; color:#dc2626; font-weight:600;">Perito</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Conclusioni / Risposte ai Quesiti</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center; color:#2563eb; font-weight:600;">AI</td></tr>
+      <tr><td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">Bibliografia</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">&#10003;</td><td style="text-align:center;">—</td><td style="text-align:center; color:#dc2626; font-weight:600;">Perito</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:10px; font-size:12px; color:#64748b;"><span style="color:#2563eb; font-weight:600;">AI</span> = generato automaticamente dall'intelligenza artificiale &nbsp;&nbsp; <span style="color:#dc2626; font-weight:600;">Perito</span> = placeholder con istruzioni, compilato dal medico legale</p>
+</div>
+
+<!-- Prompt 10: Document summarizer -->
+<div class="prompt-card">
+  <h2><span class="num">10</span> Riassunto documenti (casi grandi)</h2>
+  <div class="meta">
+    <span class="tag model">Mistral Large</span>
+    <span class="tag when">Quando: caso con 10+ documenti</span>
+  </div>
+  <div class="what">
+    <h3>Cosa fa</h3>
+    <p>Per casi con molti documenti, crea un riassunto di ogni documento (max 4000 caratteri) che viene usato al posto del testo OCR completo per la generazione del report. Serve a non superare i limiti di contesto del modello AI.</p>
+  </div>
+  <div class="prompt-box">Sei un medico legale. Riassumi il contenuto del documento in modo
+strutturato e conciso (max 4000 caratteri). Includi:
+- Tipo documento e date principali
+- Diagnosi, interventi, terapie
+- Nomi di medici e strutture
+- Esiti di esami (valori chiave)
+- Eventuali criticita o anomalie
+
+Scrivi in modo fattuale senza opinioni.</div>
+</div>
+
+<hr class="divider">
+<h2 class="section-title">Regole di sicurezza (applicate a TUTTI i prompt)</h2>
+
+<div class="prompt-card" style="border-left: 4px solid #dc2626;">
+  <h2 style="color:#dc2626;">Regole anti-allucinazione</h2>
+  <div class="what">
+    <p>Queste regole sono ripetute in ogni prompt per impedire all'AI di inventare informazioni:</p>
+  </div>
+  <div class="prompt-box" style="border-color:#fca5a5; background:#fef2f2;">1. NON inventare MAI date non presenti nel documento
+2. NON inventare nomi di medici o strutture
+3. NON inventare diagnosi, valori di esami o terapie
+4. NON aggiungere informazioni da conoscenza medica esterna
+5. Se un dato non e nel testo originale, NON includerlo
+6. Ogni affermazione DEVE essere tracciabile nel testo sorgente
+7. In caso di dubbio, segnalare come "da verificare"
+8. Usare SOLO formulazioni fattuali, MAI opinioni</div>
+</div>
+
+<div class="prompt-card" style="border-left: 4px solid #f59e0b;">
+  <h2 style="color:#92400e;">Limiti attuali da migliorare</h2>
+  <div class="what">
+    <p>Aree dove il sistema ha margini di miglioramento (richiede feedback dal medico legale):</p>
+  </div>
+  <ul style="margin-top:10px; padding-left:20px; font-size:14px; line-height:2;">
+    <li><strong>Variabilita tra run:</strong> Lo stesso caso elaborato due volte puo produrre numeri diversi di eventi</li>
+    <li><strong>Eventi "da verificare":</strong> ~20-30% degli eventi vengono flaggati come incerti</li>
+    <li><strong>Struttura report:</strong> Il formato delle sezioni non corrisponde ancora al gold standard delle perizie reali</li>
+    <li><strong>Documentazione sanitaria:</strong> La sezione dovrebbe riprodurre integralmente ogni documento, non sintetizzare</li>
+    <li><strong>Tono e formulazioni:</strong> Servono formulazioni standard del linguaggio peritale</li>
+  </ul>
+</div>
+
+<div class="footer">
+  <p>LegMed — Mappa Prompt AI v1.0 — Aprile 2026</p>
+  <p>12 prompt attivi | Modelli: Mistral Large + Pixtral Large | Dati in EU (Francoforte)</p>
+</div>
+
+</div>
+</body>
+</html>
