@@ -8,6 +8,9 @@ function buildFullReport(overrides?: { events?: number }): string {
     `In data 15.0${i + 1}.2024 il paziente veniva sottoposto a visita specialistica ortopedica presso la struttura ospedaliera ove veniva riscontrata una condizione clinica meritevole di approfondimento diagnostico e terapeutico specifico come da documentazione medica in atti. Il sanitario procedeva alla valutazione clinica completa con esame obiettivo articolare e funzionale, rilevando limitazione della mobilita articolare e dolore alla palpazione della regione interessata dalla lesione traumatica pregressa.`,
   ).join('\n');
 
+  // Audit P1-VAL-001: MIN_WORD_COUNT raised to 1000. Added distinct padding blocks
+  // to both Epicrisi and Conclusioni so the fixture stays above the threshold without
+  // triggering duplicate_content (each block is unique text, different from the rest).
   return `## Dati della Documentazione Sanitaria
 ${eventLines}
 
@@ -21,6 +24,14 @@ completa del caso in esame, con particolare riferimento al nesso di causalita tr
 conseguenze cliniche documentate nella documentazione sanitaria acquisita agli atti del presente procedimento.
 Il decorso clinico documentato evidenzia un percorso terapeutico articolato che ha comportato multiple visite
 specialistiche e accertamenti diagnostici strumentali al fine di definire il quadro clinico complessivo.
+L'anamnesi remota non riporta comorbidita rilevanti mentre l'anamnesi prossima evidenzia un meccanismo lesivo
+indiretto con prevalente interessamento delle strutture capsulari e legamentose dell'arto inferiore destro.
+Gli accertamenti strumentali eseguiti nelle fasi acute e subacute hanno consentito una stadiazione morfologica
+precisa della lesione, con documentazione fotografica intraoperatoria conservata nella cartella clinica prodotta.
+Il programma fisioterapico domiciliare ha previsto sedute ambulatoriali con progressione graduale del carico
+articolare e recupero funzionale monitorato mediante visite ambulatoriali mensili di controllo specialistico.
+L'iter terapeutico complessivamente osservato risulta conforme alle indicazioni delle linee guida ortopediche
+nazionali per il trattamento conservativo e chirurgico delle lesioni traumatiche dell'apparato locomotore.
 
 ## Conclusioni
 Alla luce di quanto sopra esposto e sulla base della documentazione sanitaria esaminata, dalla disamina degli atti
@@ -29,7 +40,32 @@ I periodi di invalidita temporanea totale e parziale risultano congruenti con il
 con la tipologia delle lesioni riportate. Le risultanze degli accertamenti diagnostici strumentali confermano
 la presenza di esiti permanenti compatibili con il meccanismo lesivo riferito.
 Il danno biologico permanente e stimato nella misura del 15% secondo i criteri tabellari vigenti, tenuto conto
-degli esiti clinici documentati e della compromissione funzionale residua accertata in sede di ultimo controllo.`;
+degli esiti clinici documentati e della compromissione funzionale residua accertata in sede di ultimo controllo.
+Si rileva la sussistenza del nesso di causalita tra il fatto traumatico ed i postumi documentati, non emergendo
+elementi capaci di interrompere la catena eziopatogenetica che lega l'evento alla menomazione permanente residua.
+La personalizzazione del danno biologico tiene conto delle specifiche ripercussioni sulla qualita della vita del
+periziando, con particolare riguardo alle attivita realizzatrici e alle abitudini precedenti il fatto lesivo.
+I criteri valutativi applicati seguono la metodologia propria della medicina legale italiana, con riferimento
+alle tabelle del Tribunale competente e ai barèmes internazionali adottati per analoghe fattispecie cliniche.
+La documentazione fotografica intraoperatoria corredata alla cartella clinica mostra il corretto posizionamento
+dei mezzi di sintesi utilizzati durante l'atto chirurgico, compatibile con la tecnica standard raccomandata.
+Le schede infermieristiche compilate durante la degenza non riportano eventi avversi di rilievo né complicanze
+maggiori riconducibili a deviazioni dal percorso terapeutico ordinariamente seguito nei casi analoghi.
+I referti ecografici successivi alla dimissione confermano il progressivo riassorbimento del versamento articolare
+e la regolare ripresa della vascolarizzazione dei tessuti molli coinvolti dall'evento traumatico originario.
+Il piano di reinserimento lavorativo concordato con il medico competente prevede il rientro graduale alle
+mansioni ordinarie con limitazioni temporanee per le attivita che comportano sollevamento di carichi pesanti.
+La valutazione ergonomica della postazione di lavoro effettuata dal datore di lavoro ha consentito di adottare
+accorgimenti organizzativi utili a ridurre il carico biomeccanico sull'arto inferiore interessato dalla lesione.
+La disamina delle tabelle posturali evidenzia una compromissione funzionale di grado lieve, compatibile con il
+quadro clinico obiettivato in sede di visita peritale ambulatoriale eseguita alla presenza del periziando stesso.
+La relazione del fisiatra curante attesta il regolare prosieguo del trattamento riabilitativo con indicazione di
+mantenere una attivita motoria controllata, tale da favorire il consolidamento dei risultati funzionali raggiunti.
+La valutazione del dolore cronico residuo tiene conto delle scale algometriche somministrate in sede di controllo,
+con rilevazione di punteggi moderati in occasione di sforzi intensi o di specifici movimenti di carico assiale.
+L'analisi delle spese mediche documentate evidenzia una congruenza complessiva con la natura e l'entita della
+lesione traumatica accertata, non emergendo voci incongrue rispetto alle tariffe medie di mercato applicate
+dalle strutture sanitarie della provincia di residenza del periziando nel periodo di riferimento temporale.`;
 }
 
 describe('validateReport', () => {

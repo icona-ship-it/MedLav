@@ -39,24 +39,25 @@ describe('evidence-enricher', () => {
     expect(mockSearchPubMed).not.toHaveBeenCalled();
   });
 
-  it('should search for top 2 most frequent diagnoses', async () => {
+  it('should search for top 4 most frequent diagnoses (MAX_DIAGNOSIS_SEARCHES=4)', async () => {
     const events = [
       { title: 'E1', description: 'D1', diagnosis: 'Frattura femore' },
       { title: 'E2', description: 'D2', diagnosis: 'Frattura femore' },
       { title: 'E3', description: 'D3', diagnosis: 'Frattura femore' },
       { title: 'E4', description: 'D4', diagnosis: 'Ernia discale' },
       { title: 'E5', description: 'D5', diagnosis: 'Ernia discale' },
-      { title: 'E6', description: 'D6', diagnosis: 'Cervicalgia' }, // 3rd unique — excluded
-      { title: 'E7', description: 'D7', diagnosis: 'Lombalgia' }, // 4th unique — excluded
+      { title: 'E6', description: 'D6', diagnosis: 'Cervicalgia' },
+      { title: 'E7', description: 'D7', diagnosis: 'Lombalgia' },
+      { title: 'E8', description: 'D8', diagnosis: 'Contusione' }, // 5th unique — excluded
     ];
 
     mockSearchPubMed.mockResolvedValue([MOCK_ARTICLE]);
 
     const result = await enrichWithPubMedEvidence(events, 'ortopedica');
 
-    // Should search 2 times: frattura femore, ernia discale
-    expect(mockSearchPubMed).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(2);
+    // Should search 4 times: frattura, ernia, cervicalgia, lombalgia
+    expect(mockSearchPubMed).toHaveBeenCalledTimes(4);
+    expect(result).toHaveLength(4);
     // First search should be for most frequent diagnosis
     expect(result[0].query).toBe('frattura femore');
     expect(result[0].category).toBe('diagnosis');
@@ -221,14 +222,17 @@ describe('enrichWithFullEvidence', () => {
     expect(result.find((r) => r.category === 'causal_nexus')).toBeDefined();
   });
 
-  it('should never exceed 5 total searches', async () => {
+  it('should never exceed 8 total searches (MAX_TOTAL_SEARCHES=8)', async () => {
     const events = [
       { title: 'E1', description: 'D1', diagnosis: 'Diagnosi A', event_type: 'visita' },
       { title: 'E2', description: 'D2', diagnosis: 'Diagnosi B', event_type: 'visita' },
       { title: 'E3', description: 'D3', diagnosis: 'Diagnosi C', event_type: 'visita' },
+      { title: 'E4', description: 'D4', diagnosis: 'Diagnosi D', event_type: 'visita' },
+      { title: 'E5', description: 'D5', diagnosis: 'Diagnosi E', event_type: 'visita' },
       { title: 'Intervento A', description: 'Op', diagnosis: null, event_type: 'intervento' },
       { title: 'Intervento B', description: 'Op', diagnosis: null, event_type: 'intervento' },
       { title: 'Intervento C', description: 'Op', diagnosis: null, event_type: 'intervento' },
+      { title: 'Intervento D', description: 'Op', diagnosis: null, event_type: 'intervento' },
       { title: 'Terapia A', description: 'T', diagnosis: null, event_type: 'terapia' },
     ];
     const anomalies = [
@@ -239,8 +243,8 @@ describe('enrichWithFullEvidence', () => {
 
     await enrichWithFullEvidence(events, anomalies, 'ortopedica');
 
-    // Max: 2 diagnosis + 2 treatment + 1 causal_nexus = 5
-    expect(mockSearchPubMed).toHaveBeenCalledTimes(5);
+    // Max: 4 diagnosis + 3 treatment + 1 causal_nexus = 8
+    expect(mockSearchPubMed).toHaveBeenCalledTimes(8);
   });
 
   it('should not trigger causal nexus when no diagnoses found', async () => {

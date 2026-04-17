@@ -9,8 +9,10 @@ export const PAGES_PER_CHUNK = 10;
 const OVERLAP_PAGES = 2;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
- * Each job calls Mistral LLM (30s-2min) sequentially within a batch.
- * With Inngest Pro (100 concurrent steps), 1 chunk per step maximizes parallelism. */
+ * Kept at 1 for maximum parallelism on Inngest Pro (100 concurrent steps).
+ * With the neutral-retry safeguard added in P0-EXT-001, a chunk can take up to
+ * 2× extraction timeout (~6 min). Batching would push step duration toward the
+ * Vercel 800s ceiling with retries — 1 chunk per step is the safe choice. */
 export const EXTRACTION_BATCH_SIZE = 1;
 
 // Enum validation — LLM can produce values outside the enum

@@ -127,7 +127,10 @@ export async function analyzeDiagnosticImagesStep(
     totalImagesCount += count ?? 0;
   }
 
-  const MAX_DIAGNOSTIC_IMAGES = 3;
+  // Audit P1-IMG-002: raised from 3 → 15 for maximum medico-legal coverage.
+  // Pixtral cost ~€0.007/image → €0.10/case marginal. Pre/post-op RX series,
+  // multi-slice RM, full TAC panels can easily require 10-15 images.
+  const MAX_DIAGNOSTIC_IMAGES = 15;
   const pagesWithImages: Array<Record<string, unknown>> = [];
   for (let i = 0; i < docIds.length && pagesWithImages.length < MAX_DIAGNOSTIC_IMAGES; i += 200) {
     const { data } = await supabase
@@ -176,7 +179,7 @@ export async function analyzeDiagnosticImagesStep(
   const results = await analyzeDocumentImages({
     images,
     caseType,
-    maxImages: 3,
+    maxImages: MAX_DIAGNOSTIC_IMAGES,
   });
 
   // Attach storage paths to results

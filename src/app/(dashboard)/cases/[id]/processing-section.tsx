@@ -262,7 +262,7 @@ export function ProcessingSection({
                       </Badge>
                       <Badge variant="outline" className="text-sm px-3 py-1">
                         <Clock className="mr-1.5 h-3.5 w-3.5" />
-                        Tempo stimato: ~{Math.max(2, documents.length * 2)} minuti per {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
+                        Tempo stimato: ~{Math.max(3, Math.ceil(documents.length / 2))}–{Math.max(5, documents.length)} minuti per {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
                       </Badge>
                     </div>
                   </div>

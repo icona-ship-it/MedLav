@@ -23,9 +23,12 @@ export interface PubMedSearchResult {
   articles: PubMedArticle[];
 }
 
-const MAX_DIAGNOSIS_SEARCHES = 2;
-const MAX_TREATMENT_SEARCHES = 2;
-const MAX_TOTAL_SEARCHES = 5;
+// Raised for comprehensive PubMed evidence coverage. Each search is cheap
+// (API calls are KB-scale) — 8 total searches give better bibliographic breadth
+// across multiple diagnoses / treatments in complex cases.
+const MAX_DIAGNOSIS_SEARCHES = 4;
+const MAX_TREATMENT_SEARCHES = 3;
+const MAX_TOTAL_SEARCHES = 8;
 
 /**
  * Common Italian→English medical term translations for PubMed search.

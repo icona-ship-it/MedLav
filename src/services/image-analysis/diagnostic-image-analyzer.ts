@@ -28,7 +28,8 @@ const IMAGE_TYPE_KEYWORDS: Record<string, string[]> = {
   altro: [],
 };
 
-const MAX_IMAGES_PER_CASE = 3;
+// Audit P1-IMG-002: raised from 3 → 15. Pixtral ~€0.007/image → €0.10/case.
+const MAX_IMAGES_PER_CASE = 15;
 
 /**
  * Analyze diagnostic images from a document using Mistral vision.

@@ -63,8 +63,8 @@ describe('diagnostic-image-analyzer', () => {
       expect(results.length).toBeLessThanOrEqual(3);
     });
 
-    it('should default maxImages to 5', async () => {
-      const images = Array.from({ length: 8 }, (_, i) => ({
+    it('should default maxImages to 15 (audit P1-IMG-002)', async () => {
+      const images = Array.from({ length: 20 }, (_, i) => ({
         base64: 'dGVzdA==',
         pageNumber: i + 1,
       }));
@@ -74,7 +74,7 @@ describe('diagnostic-image-analyzer', () => {
         caseType: 'ortopedica',
       });
 
-      expect(results.length).toBeLessThanOrEqual(5);
+      expect(results.length).toBeLessThanOrEqual(15);
     });
   });
 });

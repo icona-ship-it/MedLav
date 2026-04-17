@@ -16,8 +16,8 @@ export const classifyBatchJob = inngest.createFunction(
     id: 'classify-batch',
     retries: 2,
     concurrency: [
-      { limit: 20 },
-      { limit: 5, key: 'event.data.userId' },
+      { limit: 50 },                              // global cap on Inngest Pro
+      { limit: 30, key: 'event.data.userId' },    // per-user — classify is lightweight (3K char input, 256 token output), parallelize aggressively
     ],
     onFailure: async ({ event }) => {
       try {
@@ -44,13 +44,17 @@ export const classifyBatchJob = inngest.createFunction(
     const total = documentIds.length;
 
     // Update progress: starting
+    const startedAt = new Date().toISOString();
     await step.run('init-progress', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
       const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
       await supabase.from('cases').update({
-        perizia_metadata: { ...meta, classificationProgress: { completed: 0, total, errors: 0, status: 'running' } },
+        perizia_metadata: {
+          ...meta,
+          classificationProgress: { completed: 0, total, errors: 0, status: 'running', startedAt },
+        },
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
     });
@@ -124,6 +128,44 @@ export const classifyBatchJob = inngest.createFunction(
               updated_at: new Date().toISOString(),
             }).eq('id', docId);
 
+            // Live progress update — best-effort, race-free.
+            // Count documents in this batch that have classification_metadata populated.
+            // Postgres row-lock on `cases` serialises concurrent writes; the count query
+            // returns the latest visible state so we never write a stale count that
+            // accidentally decreases.
+            try {
+              const { count } = await supabase
+                .from('documents')
+                .select('id', { count: 'exact', head: true })
+                .eq('case_id', caseId)
+                .in('id', documentIds)
+                .not('classification_metadata', 'is', null);
+
+              const { data: progressRow } = await supabase
+                .from('cases')
+                .select('perizia_metadata')
+                .eq('id', caseId)
+                .single();
+              const meta = (progressRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+              const prev = (meta.classificationProgress ?? {}) as Record<string, unknown>;
+              await supabase.from('cases').update({
+                perizia_metadata: {
+                  ...meta,
+                  classificationProgress: {
+                    completed: count ?? 0,
+                    total,
+                    errors: (prev.errors as number) ?? 0,
+                    status: 'running',
+                    startedAt: (prev.startedAt as string) ?? startedAt,
+                  },
+                },
+                updated_at: new Date().toISOString(),
+              }).eq('id', caseId);
+            } catch (progressErr) {
+              // Never fail the classification because of a progress update
+              logger.warn('classify-batch', `Progress update failed for ${docId}: ${progressErr instanceof Error ? progressErr.message : 'unknown'}`);
+            }
+
             return { success: true, docId, type: classification.documentType };
           } catch (err) {
             logger.error('classify-batch', `Failed to classify doc ${docId}: ${err instanceof Error ? err.message : 'unknown'}`);
@@ -160,8 +202,19 @@ export const classifyBatchJob = inngest.createFunction(
       // Mark classification as done
       const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
       const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+      const prev = (meta.classificationProgress ?? {}) as Record<string, unknown>;
       await supabase.from('cases').update({
-        perizia_metadata: { ...meta, classificationProgress: { completed: completed + errors, total, errors, status: 'done' } },
+        perizia_metadata: {
+          ...meta,
+          classificationProgress: {
+            completed: completed + errors,
+            total,
+            errors,
+            status: 'done',
+            startedAt: (prev.startedAt as string) ?? startedAt,
+            completedAt: new Date().toISOString(),
+          },
+        },
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
 

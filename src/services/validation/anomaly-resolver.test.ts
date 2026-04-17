@@ -195,12 +195,13 @@ describe('resolveAnomalies', () => {
     expect(mockStreamMistralChat).not.toHaveBeenCalled();
   });
 
-  it('should prioritize high-severity anomalies when exceeding max', async () => {
-    // Create 8 anomalies: 2 critica, 3 alta, 3 bassa (MAX_ANOMALIES_PER_RUN = 5)
+  it('should prioritize high-severity anomalies when exceeding max (audit P1-VAL-004: MAX_ANOMALIES_PER_RUN=25)', async () => {
+    // Create 30 anomalies: 5 critica, 10 alta, 15 bassa. With MAX=25, the 5 lowest
+    // priority (bassa) should be skipped.
     const anomalies: DetectedAnomaly[] = [
-      ...Array.from({ length: 2 }, () => makeAnomaly({ severity: 'critica' })),
-      ...Array.from({ length: 3 }, () => makeAnomaly({ severity: 'alta' })),
-      ...Array.from({ length: 3 }, () => makeAnomaly({ severity: 'bassa' })),
+      ...Array.from({ length: 5 }, () => makeAnomaly({ severity: 'critica' })),
+      ...Array.from({ length: 10 }, () => makeAnomaly({ severity: 'alta' })),
+      ...Array.from({ length: 15 }, () => makeAnomaly({ severity: 'bassa' })),
     ];
 
     // All will return confirmed
@@ -216,11 +217,11 @@ describe('resolveAnomalies', () => {
 
     const result = await resolveAnomalies(anomalies, events, fetcher);
 
-    // Should have called LLM for max 5
-    expect(mockStreamMistralChat).toHaveBeenCalledTimes(5);
-    // 3 remaining anomalies should have null resolution (skipped)
+    // Should have called LLM for max 25
+    expect(mockStreamMistralChat).toHaveBeenCalledTimes(25);
+    // 5 remaining anomalies should have null resolution (skipped)
     const skipped = result.filter((r) => r.resolution === null);
-    expect(skipped.length).toBe(3);
+    expect(skipped.length).toBe(5);
     // Skipped ones should be bassa severity
     expect(skipped.every((r) => r.severity === 'bassa')).toBe(true);
   });

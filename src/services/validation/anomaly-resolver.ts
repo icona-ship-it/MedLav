@@ -28,8 +28,10 @@ export interface ResolvedAnomaly extends DetectedAnomaly {
 }
 
 /** Max anomalies to resolve per run (skip low-severity if exceeded).
- * Capped at 5 to stay within Vercel 800s budget (5 × ~120s = ~600s worst case). */
-const MAX_ANOMALIES_PER_RUN = 5;
+ * Audit P1-VAL-004: raised 5 → 25. Complex ICU/oncology cases can have 15-20
+ * clinical anomalies. Parallel resolution (inside resolveAnomaliesWithLLM)
+ * keeps wall time under Vercel 800s. Marginal cost ~€0.013 per resolution. */
+const MAX_ANOMALIES_PER_RUN = 25;
 /** Max OCR chars per anomaly to send to LLM. */
 const MAX_OCR_CHARS = 5000;
 
@@ -49,28 +51,26 @@ export async function resolveAnomalies(
   if (anomalies.length === 0) return [];
 
   // Prioritize: skip low-severity if too many anomalies
-  const toResolve = prioritizeAnomalies(anomalies);
+  const toResolveSet = new Set(prioritizeAnomalies(anomalies));
 
-  const results: ResolvedAnomaly[] = [];
+  // Resolve ALL selected anomalies in parallel — the Mistral semaphore (capacity 10)
+  // inside the client.ts serializes actual HTTP calls, so 25 parallel anomalies
+  // resolve in ~25/10 × ~60s = ~150s wall time, well under Vercel 800s.
+  const settled = await Promise.allSettled(
+    anomalies.map((anomaly, i) => {
+      if (!toResolveSet.has(i)) return Promise.resolve(null);
+      return resolveOneAnomaly(anomaly, i, allEvents, fetchOcrPages);
+    }),
+  );
 
-  for (let i = 0; i < anomalies.length; i++) {
-    const anomaly = anomalies[i];
-    const shouldResolve = toResolve.includes(i);
-
-    if (!shouldResolve) {
-      results.push({ ...anomaly, resolution: null });
-      continue;
+  const results: ResolvedAnomaly[] = anomalies.map((anomaly, i) => {
+    const outcome = settled[i];
+    if (outcome.status === 'fulfilled') {
+      return { ...anomaly, resolution: outcome.value };
     }
-
-    try {
-      const resolution = await resolveOneAnomaly(anomaly, i, allEvents, fetchOcrPages);
-      results.push({ ...anomaly, resolution });
-    } catch (error) {
-      // On failure, mark as confirmed (conservative)
-      logger.warn('anomaly-resolver', `Failed to resolve anomaly ${i}: ${error instanceof Error ? error.message : 'unknown'}`);
-      results.push({ ...anomaly, resolution: null });
-    }
-  }
+    logger.warn('anomaly-resolver', `Failed to resolve anomaly ${i}: ${outcome.reason instanceof Error ? outcome.reason.message : 'unknown'}`);
+    return { ...anomaly, resolution: null };
+  });
 
   const resolvedCount = results.filter((r) => r.resolution?.resolved).length;
   const confirmedCount = results.filter((r) => r.resolution && !r.resolution.resolved).length;

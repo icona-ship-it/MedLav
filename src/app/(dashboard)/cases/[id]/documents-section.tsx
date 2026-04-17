@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
@@ -35,6 +35,32 @@ export interface ClassificationProgress {
   total: number;
   errors: number;
   status: 'running' | 'done';
+  startedAt?: string;
+  completedAt?: string;
+}
+
+/**
+ * Format an estimated-time-remaining for the classification progress bar.
+ * Returns null if we can't estimate yet (just started, nothing completed).
+ */
+function formatEta(progress: ClassificationProgress, nowMs: number): string | null {
+  if (!progress.startedAt || progress.completed <= 0 || progress.completed >= progress.total) {
+    return null;
+  }
+  const startMs = new Date(progress.startedAt).getTime();
+  if (Number.isNaN(startMs)) return null;
+  const elapsedMs = nowMs - startMs;
+  if (elapsedMs <= 0) return null;
+  const perDocMs = elapsedMs / progress.completed;
+  const remaining = progress.total - progress.completed;
+  const etaMs = Math.max(0, Math.round(perDocMs * remaining));
+  if (etaMs < 1000) return 'pochi secondi';
+  const etaSec = Math.round(etaMs / 1000);
+  if (etaSec < 60) return `~${etaSec} sec rimanenti`;
+  const minutes = Math.floor(etaSec / 60);
+  const seconds = etaSec % 60;
+  if (minutes >= 10) return `~${minutes} min rimanenti`;
+  return `~${minutes} min ${seconds.toString().padStart(2, '0')} sec rimanenti`;
 }
 
 interface DocumentsSectionProps {
@@ -83,6 +109,37 @@ export function DocumentsSection({
   const [classifyingDocId, setClassifyingDocId] = useState<string | null>(null);
   const [classifyingAll, setClassifyingAll] = useState(false);
   const [splittingDocId, setSplittingDocId] = useState<string | null>(null);
+
+  // Ticker for live-updating ETA between polls
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (classificationProgress?.status !== 'running') return;
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [classificationProgress?.status]);
+
+  // Auto-refresh once when classification completes, so the page reflects the final state
+  // (classified types, counts, toast). Guard with a ref so we refresh only on transition.
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    const isRunning = classificationProgress?.status === 'running';
+    const wasRunning = wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (wasRunning && classificationProgress?.status === 'done') {
+      const errors = classificationProgress.errors ?? 0;
+      const ok = classificationProgress.completed - errors;
+      if (errors === 0) {
+        toast.success(`Categorizzazione completata: ${ok} documenti`);
+      } else {
+        toast.warning(`Categorizzazione completata: ${ok} riusciti, ${errors} con errori`);
+      }
+      router.refresh();
+    }
+  }, [classificationProgress?.status, classificationProgress?.completed, classificationProgress?.errors, router]);
+
+  const eta = classificationProgress && classificationProgress.status === 'running'
+    ? formatEta(classificationProgress, nowTick)
+    : null;
 
   const handleRetryDocument = useCallback(async (docId: string) => {
     setRetryingDocId(docId);
@@ -306,16 +363,26 @@ export function DocumentsSection({
             {/* Classify progress bar (from Inngest via perizia_metadata) */}
             {classificationProgress && classificationProgress.status === 'running' && (
               <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                     <span className="text-sm font-medium">
                       Categorizzazione AI: {classificationProgress.completed} di {classificationProgress.total}
                     </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      ({Math.round((classificationProgress.completed / classificationProgress.total) * 100)}%)
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {classificationProgress.errors > 0 && `${classificationProgress.errors} errori`}
-                  </span>
+                  <div className="flex items-center gap-2 text-xs shrink-0">
+                    {eta && (
+                      <span className="text-muted-foreground tabular-nums">{eta}</span>
+                    )}
+                    {classificationProgress.errors > 0 && (
+                      <span className="text-destructive">
+                        {classificationProgress.errors} {classificationProgress.errors === 1 ? 'errore' : 'errori'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                   <div
@@ -324,7 +391,7 @@ export function DocumentsSection({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Analisi in background — puoi chiudere questa pagina, la categorizzazione continua.
+                  Analisi in corso — puoi chiudere questa pagina, la categorizzazione continua in background.
                 </p>
               </div>
             )}

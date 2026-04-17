@@ -43,8 +43,11 @@ SEGNALI DA USARE:
 Rispondi SOLO in JSON con questo formato esatto:
 { "documentType": "categoria", "confidence": 0-100, "reasoning": "breve motivazione in italiano" }`;
 
-/** Max chars of OCR text to send for classification */
-const MAX_CLASSIFICATION_CHARS = 3000;
+/** Max chars of OCR text to send for classification.
+ * Audit P1-CLASS-001: raised from 3000 → 8000. Long PDFs with legal cover page
+ * were misclassified because only the first 3K chars were inspected.
+ * 8K covers header + body + signatures → robust classification. */
+const MAX_CLASSIFICATION_CHARS = 8000;
 
 export interface ClassificationResult {
   documentType: string;

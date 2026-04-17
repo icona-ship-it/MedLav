@@ -10,7 +10,10 @@ import { logger } from '@/lib/logger';
  * Groups images by page, uploads each to ocr-images/{docId}/p{N}-f{M}.png,
  * then updates the page row with semicolon-separated storage paths.
  */
-const MAX_OCR_IMAGES_TO_SAVE = 20;
+// Audit P1-OCR-002: raised from 20 → 80. Storage is cheap; medico-legal
+// completeness matters (a case with 50 RX/TAC referti should keep ALL images,
+// not silently truncate).
+const MAX_OCR_IMAGES_TO_SAVE = 80;
 
 async function saveOcrImagesToStorage(
   supabase: ReturnType<typeof createAdminClient>,

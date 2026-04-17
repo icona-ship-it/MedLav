@@ -95,9 +95,9 @@ describe('document-classifier', () => {
       expect(callArgs.label.length).toBeLessThanOrEqual(39); // 'classify-' + 30 chars
     });
 
-    it('should truncate OCR text to 3000 chars', async () => {
+    it('should truncate OCR text to 8000 chars (audit P1-CLASS-001)', async () => {
       // Arrange
-      const longText = 'x'.repeat(5000);
+      const longText = 'x'.repeat(15000);
       mockChat(JSON.stringify({ documentType: 'esame_laboratorio', confidence: 80, reasoning: 'ok' }));
 
       // Act
@@ -106,9 +106,8 @@ describe('document-classifier', () => {
       // Assert
       const callArgs = mockStreamChat.mock.calls[0][0];
       const userMsg = callArgs.messages.find((m: { role: string }) => m.role === 'user');
-      // The user message should contain at most 3000 chars of text
-      expect(userMsg.content).toContain('prime 3000 caratteri');
-      expect(userMsg.content).not.toContain('x'.repeat(3001));
+      expect(userMsg.content).toContain('prime 8000 caratteri');
+      expect(userMsg.content).not.toContain('x'.repeat(8001));
     });
 
     it('should handle response with null fields gracefully', async () => {
