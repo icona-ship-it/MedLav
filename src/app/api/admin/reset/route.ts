@@ -13,6 +13,15 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(request: NextRequest) {
   try {
+    // P0-SEC-005: destructive reset wipes ALL users' data via service role.
+    // Disabled in production unless ALLOW_DESTRUCTIVE_ADMIN=true is set explicitly.
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_ADMIN !== 'true') {
+      return NextResponse.json(
+        { success: false, error: 'Endpoint disabilitato in produzione' },
+        { status: 403 },
+      );
+    }
+
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
 

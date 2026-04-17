@@ -8,6 +8,7 @@ export interface ReportIssue {
   type:
     | 'missing_section'
     | 'sentinel_date_leak'
+    | 'sentinel_name_leak'
     | 'low_event_coverage'
     | 'empty_report'
     | 'too_short'
@@ -50,6 +51,25 @@ const SENTINEL_PATTERNS = [
   /\b01[./]01[./]1900\b/,
   /\b1900-01-01\b/,
   /Data non documentata/,
+];
+
+/**
+ * Names and facilities that appear ONLY in the few-shot examples inside the LLM prompts
+ * (peritale-formulations.ts, extraction-prompts.ts, synthesis-prompts.ts). Their presence
+ * in a generated report is a strong indicator that the model copied verbatim from the
+ * example instead of using the real case data.
+ *
+ * Each entry uses word boundaries + specific titled/compound forms to minimise false
+ * positives on common Italian surnames ("Rossi" alone would flag real patients).
+ */
+const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bDott\.?\s+Bianchi\b/i, label: 'Dott. Bianchi' },
+  { pattern: /\bDr\.?\s+Bianchi\b/i, label: 'Dr. Bianchi' },
+  { pattern: /\bDott\.?\s+Verdi\b/i, label: 'Dott. Verdi' },
+  { pattern: /\bDott\.?\s+Neri\b/i, label: 'Dott. Neri' },
+  { pattern: /\bOspedale\s+San\s+Marco\b/i, label: 'Ospedale San Marco' },
+  { pattern: /\bP\.?O\.?\s+San\s+Giovanni\b/i, label: 'P.O. San Giovanni' },
+  { pattern: /\bLaboratorio\s+Analisi\b/i, label: 'Laboratorio Analisi' },
 ];
 
 const MIN_WORD_COUNT = 500;
@@ -99,13 +119,30 @@ export function validateReport(
     }
   }
 
-  // 4. Sentinel date leak
+  // 4. Sentinel date leak — P0-VAL-002: promoted from warning to error.
+  // A report containing "01/01/1900" or "Data non documentata" cannot be deposited and must
+  // block saving so the pipeline retries (or escalates to manual review).
   for (const pattern of SENTINEL_PATTERNS) {
     if (pattern.test(synthesis)) {
       issues.push({
         type: 'sentinel_date_leak',
-        severity: 'warning',
+        severity: 'error',
         message: `Sentinel date found in report: ${pattern.source}`,
+      });
+    }
+  }
+
+  // 4b. Sentinel name leak — P1-EXT-009 / P1-SYN-004 / H-02.
+  // Warn if the report mentions names/facilities that appear ONLY in the few-shot prompt
+  // examples (peritale-formulations.ts, extraction-prompts.ts, synthesis-prompts.ts).
+  // Kept as warning (not error) to avoid false positives on real cases that legitimately
+  // contain common names — the perito sees the flag and verifies.
+  for (const { pattern, label } of SENTINEL_NAME_PATTERNS) {
+    if (pattern.test(synthesis)) {
+      issues.push({
+        type: 'sentinel_name_leak',
+        severity: 'warning',
+        message: `Possibile nome/struttura copiata dagli esempi del prompt: ${label}`,
       });
     }
   }

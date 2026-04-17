@@ -43,12 +43,15 @@ describe('validateReport', () => {
       expect(result.eventCoverage).toBe(100);
     });
 
-    it('should return valid even with warnings present', () => {
+    it('should block save when sentinel date leak is present (P0-VAL-002)', () => {
       const report = buildFullReport() + '\nIn data 01/01/1900 si segnala...';
       const result = validateReport(report, 5);
 
-      expect(result.valid).toBe(true);
-      expect(result.issues.some((i) => i.type === 'sentinel_date_leak')).toBe(true);
+      // Sentinel dates are now errors: they must prevent a report from being saved.
+      expect(result.valid).toBe(false);
+      expect(result.issues.some(
+        (i) => i.type === 'sentinel_date_leak' && i.severity === 'error',
+      )).toBe(true);
     });
   });
 

@@ -899,9 +899,8 @@ BEGIN
   SELECT rowsecurity FROM pg_tables WHERE schemaname = 'public' AND tablename = 'guideline_chunks' INTO _result;
   RAISE NOTICE '% RLS enabled: guideline_chunks', CASE WHEN _result THEN '  OK' ELSE '  FAIL' END;
 
-  -- Note: event_images does not have RLS in the migrations
   SELECT rowsecurity FROM pg_tables WHERE schemaname = 'public' AND tablename = 'event_images' INTO _result;
-  RAISE NOTICE '% RLS enabled: event_images (NOTE: not in migrations)', CASE WHEN _result THEN '  OK' ELSE '  WARN - not enabled' END;
+  RAISE NOTICE '% RLS enabled: event_images', CASE WHEN _result THEN '  OK' ELSE '  FAIL' END;
 
   RAISE NOTICE '';
 

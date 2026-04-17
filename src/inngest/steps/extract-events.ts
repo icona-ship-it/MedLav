@@ -277,11 +277,23 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       pageRange: `pag ${range.start}-${range.end}`,
     });
 
-    // If Mistral returned 0 events but the text has substantial content, retry with a simpler prompt
-    if (result.events.length === 0 && chunkText.length > 50) {
-      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: 0 events from ${chunkText.length} chars — retrying with simplified extraction`);
+    // If Mistral returned 0 events, retry ONLY when the chunk has substantial clinical content.
+    // Safeguard (audit P0-EXT-001): avoid coercive retries that pressure the LLM to fabricate
+    // events on administrative/empty pages (timbro + firma, intestazione legale, pagine vuote).
+    // Retry uses the SAME neutral prompt as pass 1 — no coercion.
+    const CLINICAL_KEYWORDS = [
+      'diagnosi', 'diagnostic', 'visita', 'esame', 'referto', 'terapia',
+      'intervento', 'ricovero', 'dimission', 'anamnesi', 'sintom', 'prognosi',
+      'paziente', 'medico', 'clinic', 'ospedale', 'cartella',
+    ];
+    const chunkLower = chunkText.toLowerCase();
+    const clinicalHits = CLINICAL_KEYWORDS.filter((k) => chunkLower.includes(k)).length;
+    const hasClinicalContent = clinicalHits >= 3;
+
+    if (result.events.length === 0 && chunkText.length > 50 && hasClinicalContent) {
+      logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: 0 events from ${chunkText.length} chars (${clinicalHits} clinical keywords) — neutral retry`);
       const retryResult = await extractEventsFromChunk({
-        chunkText: `IMPORTANTE: Questo documento contiene informazioni rilevanti per una perizia medico-legale. Può essere un documento clinico, legale (memoria difensiva, ricorso, perizia), amministrativo, o di spese mediche. Estrai TUTTI gli eventi, fatti clinici, date, interventi, diagnosi, spese e informazioni menzionate. Anche se è un atto giudiziario, estrai i fatti clinici citati al suo interno. NON restituire un array vuoto — ogni documento ha contenuto estraibile.\n\n${chunkText}`,
+        chunkText,
         chunkLabel: `${chunkLabel} [retry]`,
         documentType: ocrResult.documentType,
         caseType: caseTypes.length > 1 ? caseTypes : caseType,
