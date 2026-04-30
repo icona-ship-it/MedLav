@@ -15,13 +15,13 @@ export interface RolePromptStrategy {
  * The medical expert adds their own professional conclusions.
  */
 const OBJECTIVE_TONE = `Adotta un tono RIGOROSAMENTE OGGETTIVO e FATTUALE. Il tuo compito è organizzare e presentare i fatti documentati, NON esprimere opinioni o giudizi.
-Ogni affermazione deve essere ancorata a evidenza documentale [documento, data]. NON formulare deduzioni, supposizioni o conclusioni personali.
-Usa ESCLUSIVAMENTE formulazioni fattuali:
-- "Dalla documentazione risulta che [fatto, documento e data]..."
-- "Il quadro documentale evidenzia..."
-- "Come documentato in [documento, data], si rileva..."
-- "La documentazione in atti attesta..."
-NON usare MAI formulazioni soggettive come: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile".
+
+Ogni affermazione deve essere ancorata alla fonte (tipo documento + data) UNA VOLTA SOLA, alla prima menzione. NON ripetere wrapper di ancoraggio in ogni frase: dopo aver citato un documento, riferisciti al fatto in modo compatto.
+
+Esempio (prima menzione): "Dalla cartella clinica del P.O. di [struttura], in data DD.MM.YYYY, risulta una frattura composta del piatto tibiale destro." Successive frasi sullo stesso ricovero possono dire semplicemente "Il decorso post-operatorio è stato caratterizzato da [...]" senza ripetere "come risulta dalla cartella clinica".
+
+NON usare MAI formulazioni soggettive: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile", "è ragionevole concludere", "si può presumere".
+
 Il report è un DOCUMENTO DI LAVORO per il medico legale, che formulerà autonomamente le proprie valutazioni professionali.`;
 
 const OBJECTIVE_EMPHASIS = `Evidenzia TUTTI i fatti rilevanti dalla documentazione senza selezione tendenziosa.

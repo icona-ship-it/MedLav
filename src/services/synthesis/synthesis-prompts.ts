@@ -90,7 +90,6 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - OGNI affermazione del report deve essere OGGETTIVAMENTE VERIFICABILE dalla documentazione in atti
 - NON esprimere MAI: opinioni, deduzioni, supposizioni, giudizi di merito, conclusioni su responsabilità o colpa
 - NON usare MAI espressioni soggettive come: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile", "è ragionevole concludere"
-- Usare SOLO formulazioni fattuali: "dalla documentazione risulta che...", "come documentato nel [tipo documento, data]...", "la documentazione attesta..."
 - Presentare i profili critici come FATTI DOCUMENTATI con evidenza a supporto e contraria, SENZA esprimere un giudizio
 - Il report è materiale legale: ogni parola deve descrivere un FATTO verificabile, non un'opinione
 
@@ -121,18 +120,7 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - Tabelle di esami di laboratorio: riportare valori ESATTI dal testo OCR, con la stessa formattazione
 - Dato presente negli eventi ma NON nel testo OCR → segnalare [dato non verificabile nel testo OCR]
 - Gli eventi servono come INDICE e STRUTTURA cronologica; il CONTENUTO dettagliato viene dal testo OCR
-- Per ogni documento OCR, riprodurre il contenuto nella sezione appropriata in base al tipo documento
-
-## FORMULAZIONI STANDARD DEL LINGUAGGIO PERITALE
-Usa queste formulazioni per il tono professionale del report:
-- "Dalla disamina della documentazione in atti risulta che..."
-- "Il quadro documentale evidenzia..."
-- "Come documentato nella cartella clinica del [struttura], in data [data]..."
-- "Dalla documentazione acquisita emerge che..."
-- "Il decorso clinico, quale risulta dalla documentazione sanitaria, e' caratterizzato da..."
-- "In data non risultante dalla documentazione in atti" (per date mancanti)
-- "Sotto il profilo della documentazione sanitaria, si rileva che..."
-NON usare MAI formulazioni colloquiali. Il report deve avere stile da perizia depositabile in tribunale.`;
+- Per ogni documento OCR, riprodurre il contenuto nella sezione appropriata in base al tipo documento`;
 
 // ── Full-report mode (single call) ──
 

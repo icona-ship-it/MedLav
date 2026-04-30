@@ -421,13 +421,17 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'perizia-metadata'],
     contextMaxChars: 400,
     needsOcr: false,
-    promptDirective: `Genera la narrazione dell'evento indice (sinistro, trauma, intervento, evento avverso).
+    promptDirective: `Narrazione FOCALIZZATA dell'evento indice (sinistro, trauma, intervento, evento avverso). 1-2 paragrafi compatti, NON di più.
 Riporta:
-- La data e le circostanze dell'evento (luogo, dinamica, modalita)
-- Le prime cure prestate (pronto soccorso, primo accesso medico)
-- La diagnosi iniziale
+- Data e circostanze dell'evento (luogo, dinamica, modalità)
+- Prime cure prestate (pronto soccorso, primo accesso medico)
+- Diagnosi iniziale all'esito delle prime cure
 Stile narrativo in terza persona, ricostruzione fedele basata sulla documentazione.
-NON includere la storia clinica successiva (sara nella sezione documentazione medica).
+
+LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
+- NON includere l'iter diagnostico-terapeutico successivo all'evento — è oggetto della sezione "Iter Diagnostico-Terapeutico"
+- NON riprodurre integralmente i documenti citati — è oggetto della sezione "La Documentazione Medica Prodotta"
+- NON anticipare l'evoluzione clinica o la sintesi finale — è oggetto dell'Epicrisi
 ${NO_EVN_RULE}`,
   },
   {
@@ -437,12 +441,16 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 600,
     needsOcr: false,
-    promptDirective: `Genera una sintesi dell'iter diagnostico-terapeutico successivo all'evento.
+    promptDirective: `Sintesi NARRATIVA COMPATTA dell'iter diagnostico-terapeutico SUCCESSIVO all'evento indice. 2-4 paragrafi, una frase per fase clinica principale (non un paragrafo per ogni visita).
 Riporta in ordine cronologico:
-- Le visite e controlli successivi
-- Gli interventi e terapie effettuati
-- L'evoluzione clinica fino alla stabilizzazione
-Stile sintetico e oggettivo. I dettagli completi sono nella sezione Documentazione Medica.
+- Visite e controlli successivi (data + specialista, raggruppando se ravvicinate)
+- Interventi e terapie effettuati (data + tipo)
+- Evoluzione clinica fino alla stabilizzazione
+
+LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
+- NON ripetere l'evento indice o le prime cure — sono oggetto di "Il Fatto"
+- NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta". Qui è solo SINTESI narrativa
+- NON anticipare le conclusioni — sono oggetto di Epicrisi e Conclusioni
 ${NO_EVN_RULE}`,
   },
   {
@@ -505,12 +513,20 @@ ${NO_EVN_RULE}`,
     dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
-    promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica.
+    promptDirective: `Epicrisi come SINTESI FATTUALE CONCISA della vicenda clinica documentata. Massimo 1-2 paragrafi narrativi + dati ITT/ITP.
 Includi:
-1. Sintesi cronologica dei fatti principali (1-2 paragrafi)
-2. Dati per il danno biologico: periodi ITT/ITP se calcolati, esiti documentati
-NON esprimere percentuali di invalidita ne giudizi sul nesso causale — il perito li formulera.
-Scrivi in prosa formale e concisa.
+1. Sintesi cronologica dei fatti principali (1-2 paragrafi compatti)
+2. Dati per il danno biologico: periodi ITT/ITP calcolati, esiti documentati
+
+NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà.
+
+LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
+- NON ri-narrare l'evento indice in dettaglio — è oggetto di "Il Fatto"
+- NON ripetere l'iter diagnostico-terapeutico paragrafo per paragrafo — è oggetto di "Iter Diagnostico-Terapeutico"
+- NON riprodurre i documenti — è oggetto della "Documentazione Medica Prodotta"
+Qui SOLO sintesi essenziale e dati medico-legali calcolati.
+
+Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}
 Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno].
 
@@ -518,7 +534,7 @@ ${EPICRISI_FORMULATIONS}
 
 ${EPICRISI_EXAMPLE}
 
-*[Il perito completera questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
+*[Il perito completerà questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
   },
   {
     id: 'conclusioni',
