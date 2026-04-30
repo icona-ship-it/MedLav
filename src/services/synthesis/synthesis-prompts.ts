@@ -193,12 +193,14 @@ Esempio completo:
 
 #### Regole per la documentazione sanitaria:
 - Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE ("...")
-- Diari clinici giornalieri: un bullet (•) per ogni giorno con formato • DD.MM.YYYY: "..."
-- Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO, con Analita, Valore, Unità, Riferimento
-- Verbali operatori: riprodurre INTEGRALMENTE (descrizione intervento, tempi, chirurghi, note intraoperatorie)
+- Diari clinici: bullet (•) per i giorni con variazioni cliniche significative (sintomatologia, parametri alterati, terapie modificate, complicanze). I periodi clinicamente stabili raggruppali con date inizio-fine: • Dal DD.MM al DD.MM.YYYY: "decorso regolare, parametri stabili, terapia in corso senza modifiche". NON duplicare giorni con identico quadro clinico.
+- Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO, con Analita, Valore, Unità, Riferimento. Valori alterati in grassetto.
+- Verbali operatori: diagnosi pre-operatoria + tecnica chirurgica + diagnosi post-operatoria + complicanze intra/post-operatorie + esito immediato. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
+- Referti radiologici/strumentali: tecnica + reperti rilevanti + conclusione. Non riprodurre descrizioni anatomiche routinarie senza significato clinico.
+- Lettere di dimissione: diagnosi + terapia domiciliare + follow-up.
 - Indicare la categoria della fonte (A/B/C/D) tra parentesi alla fine di ogni citazione
 - Se sono disponibili immagini diagnostiche per quel documento, inserirle INLINE subito dopo la citazione
-FONDAMENTALE: questa sezione deve essere la più lunga e dettagliata del report. Ogni evento fornito DEVE comparire. NON sintetizzare — riprodurre fedelmente.
+FONDAMENTALE: OGNI evento fornito DEVE comparire — completezza dei FATTI non negoziabile. La concisione vincola la prosa che li veicola, non i fatti.
 
 ${hasPeriziaData && periziaMetadata?.speseMediche ? `### SPESE MEDICHE ESIBITE
 Elenco delle spese mediche documentate in tabella con Data, Descrizione, Struttura, Importo. Valutazione di congruità e necessità rispetto al quadro clinico.
@@ -216,16 +218,17 @@ Riporta i dati dell'esame obiettivo forniti. Le foto cliniche vanno inserite INL
 *Le sezioni seguenti costituiscono l'analisi e la sintesi prodotta dal sistema LegMed sulla base della documentazione sopra riportata.*
 
 ### RIASSUNTO DEL CASO
-Sintesi AMPIA e COMPLETA della vicenda clinica in 6-10 paragrafi. Questo è il quadro d'insieme che il medico legale legge per primo.
-Deve coprire:
+Sintesi CRONOLOGICA e DENSA della vicenda clinica in 3-5 paragrafi compatti. Quadro d'insieme che il medico legale legge per primo, NON ripetizione di dettagli già esposti.
+Deve coprire (in ordine, ma fondendo i punti in narrazione fluida):
 1. Presentazione del paziente e motivo del contenzioso
-2. Anamnesi remota rilevante (patologie pregresse, condizioni pre-esistenti)
-3. Evento indice (l'episodio clinico oggetto di valutazione) con cronologia essenziale
-4. Iter diagnostico-terapeutico principale
-5. Complicanze eventualmente insorte e loro gestione
-6. Esiti e situazione clinica attuale del paziente
-7. Documentazione esaminata e sua completezza
-Non ripetere i dettagli già esposti nelle sezioni documentali precedenti — qui serve un quadro d'insieme organico e completo.
+2. Anamnesi remota rilevante (solo se documentata)
+3. Evento indice con cronologia essenziale
+4. Iter diagnostico-terapeutico (sintesi delle fasi principali, non di ogni accesso)
+5. Complicanze eventualmente insorte
+6. Esiti e situazione clinica attuale
+7. Completezza/lacune documentali
+
+LIMITE: NON ripetere i dettagli già esposti nelle sezioni documentali precedenti. Una frase per fase clinica, non un paragrafo per ogni accesso.
 
 ### [SEZIONI SPECIALIZZATE PER TIPO CASO]
 Sezioni specifiche previste dalla tipologia del caso (es: Analisi intervento, Complicanze, Timeline diagnostica).
@@ -376,7 +379,7 @@ ${calculationsText}
 ${formatImageAnalysisForPrompt(imageAnalysis)}${documentContextSection}---
 
 Genera il report completo con TUTTE le sezioni specificate nelle istruzioni di sistema.
-IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, fedelmente e in dettaglio, senza omissioni. Scrivi in prosa narrativa discorsiva, NON elenchi puntati. Questa sezione deve essere la più lunga del report.${hasOcr && !hasSummaries ? '\nIMPORTANTE: Il testo OCR fornito è la FONTE PRIMARIA. Trascrivi FEDELMENTE il contenuto dei documenti originali usando il testo OCR. Il testo tra virgolette deve corrispondere esattamente al testo OCR.' : ''}${hasSummaries ? '\nIMPORTANTE: I riassunti AI dei documenti forniscono una visione completa del caso. Integra le informazioni dai riassunti con gli eventi strutturati per un report il più completo possibile.' : ''}
+IMPORTANTE: La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve riportare OGNI evento fornito sopra, FEDELMENTE — completezza dei FATTI non negoziabile. La PROSA tra le citazioni deve essere densa, senza ripetizioni cosmetiche né perifrasi. Scrivi in prosa narrativa discorsiva, NON elenchi puntati per la narrazione clinica.${hasOcr && !hasSummaries ? '\nIMPORTANTE: Il testo OCR fornito è la FONTE PRIMARIA. Trascrivi FEDELMENTE il contenuto dei documenti originali usando il testo OCR. Il testo tra virgolette deve corrispondere esattamente al testo OCR.' : ''}${hasSummaries ? '\nIMPORTANTE: I riassunti AI dei documenti forniscono una visione completa del caso. Integra le informazioni dai riassunti con gli eventi strutturati senza omettere fatti rilevanti.' : ''}
 IMPORTANTE: Il report deve essere OGGETTIVO e FATTUALE — presenta fatti documentati, NON opinioni. Il medico legale (${roleLabel}) formulerà autonomamente le proprie valutazioni professionali.
 IMPORTANTE: Se sono disponibili immagini diagnostiche, inseriscile SOLO INLINE nella documentazione sanitaria nel punto cronologico appropriato. NON creare una sezione ALLEGATI ICONOGRAFICI separata.`;
 }
@@ -424,8 +427,9 @@ Esempio completo:
 
 **Lettera di dimissione, P.O. San Giovanni, in data 05.10.2021:** "Decorso post-operatorio regolare. Si prescrive terapia con enoxaparina 4000 UI/die e FKT." (A)
 
-Per i diari clinici giornalieri usa il formato:
-• DD.MM.YYYY: "... contenuto del giorno ..."
+Per i diari clinici usa il formato bullet con raggruppamento dei periodi stabili:
+• DD.MM.YYYY: "... contenuto del giorno con variazioni cliniche ..."
+• Dal DD.MM al DD.MM.YYYY: "decorso regolare, parametri stabili, terapia in corso" (per periodi clinicamente stabili — NON duplicare giorni identici)
 
 FORMATO: Indica la categoria della fonte (A), (B), (C) o (D) tra parentesi alla fine di ogni citazione.
 
@@ -433,11 +437,12 @@ ${CHRONOLOGY_SOURCES_GUIDE}
 
 REGOLE:
 - Ordine rigorosamente cronologico
-- Il contenuto deve essere FEDELE alla documentazione — riprodurre, non sintetizzare
-- Includi TUTTI gli eventi forniti, nessuno deve essere escluso
+- Il contenuto deve essere FEDELE alla documentazione — virgolette dirette dove indicato
+- Includi TUTTI gli eventi forniti, nessuno deve essere escluso (completezza dei fatti non negoziabile)
 - Intestazione GRASSETTO con tipo documento, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
 - Tabelle esami lab: riportare TUTTI i valori, una tabella PER DATA/PRELIEVO
-- Verbali operatori: riprodurre INTEGRALMENTE
+- Verbali operatori: diagnosi pre/post + tecnica chirurgica + complicanze + esito (sintetizza narrazioni accessorie come anestesia routine, preparazione campo)
+- Referti radiologici/strumentali: tecnica + reperti + conclusione
 - Se la data è incerta, indica la migliore approssimazione disponibile
 - DIVIETO DI INVENZIONE: NON aggiungere fatti, diagnosi, date, nomi o dettagli clinici non presenti negli eventi forniti
 - OGGETTIVITÀ: riportare ESCLUSIVAMENTE i fatti documentati, senza commenti, interpretazioni o deduzioni personali
