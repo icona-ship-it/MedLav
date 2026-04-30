@@ -246,6 +246,10 @@ export async function generateAndSaveReport(
   logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars, OCR: ${ocrChars} chars)`);
 
   const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
+  if (r.hrs !== undefined) {
+    generationMetadata.hrs = r.hrs;
+    generationMetadata.hrsLevel = r.hrsLevel;
+  }
   if (ocrChars > 0) {
     generationMetadata.ocrTextProvided = true;
     generationMetadata.ocrTotalChars = ocrChars;
@@ -315,6 +319,10 @@ export async function generateSummaryAndSaveReport(
   logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
 
   const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
+  if (r.hrs !== undefined) {
+    generationMetadata.hrs = r.hrs;
+    generationMetadata.hrsLevel = r.hrsLevel;
+  }
   if (ocrTotalChars && ocrTotalChars > 0) {
     generationMetadata.ocrTextProvided = true;
     generationMetadata.ocrTotalChars = ocrTotalChars;
@@ -347,6 +355,7 @@ import { generateSingleSection } from '@/services/synthesis/section-generator';
 import { computeSectionalPromptVersion } from './prompt-version-sectional';
 import { validateReport } from '@/services/synthesis/report-validator';
 import type { ReportValidationContext } from '@/services/synthesis/report-validator';
+import { computeHrs, getHrsLevel } from '@/services/synthesis/hallucination-risk-scorer';
 import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { createEmptyUsage, mergeUsage } from '@/services/cost-tracking/cost-calculator';
@@ -501,6 +510,10 @@ export async function assembleSectionsAndSaveReport(
     }
   }
 
+  // Compute Hallucination Risk Score (informational, doesn't block save)
+  const hrs = computeHrs(validation);
+  const hrsLevel = getHrsLevel(hrs);
+
   // Build generation metadata
   const generationMetadata: Record<string, unknown> = {
     promptVersion,
@@ -509,11 +522,22 @@ export async function assembleSectionsAndSaveReport(
     sectionIds: sections.map((s) => s.id),
     sectionWordCounts: Object.fromEntries(sections.map((s) => [s.id, s.wordCount])),
     eventCoverage: Math.round(validation.eventCoverage),
+    hrs,
+    hrsLevel,
+    issueCount: validation.issues.length,
+    issuesByType: Object.fromEntries(
+      Array.from(
+        validation.issues.reduce((acc, i) => {
+          acc.set(i.type, (acc.get(i.type) ?? 0) + 1);
+          return acc;
+        }, new Map<string, number>()),
+      ),
+    ),
   };
 
   logger.info('pipeline',
     `Assembled report: ${sections.length} sections, ${totalWordCount} words, ` +
-    `${fullReport.length} chars, coverage: ${Math.round(validation.eventCoverage)}%`,
+    `${fullReport.length} chars, coverage: ${Math.round(validation.eventCoverage)}%, hrs: ${hrs} (${hrsLevel})`,
   );
 
   const result = await insertReportWithMetadata(caseId, fullReport, totalWordCount, generationMetadata);

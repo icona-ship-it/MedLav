@@ -27,6 +27,7 @@ import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { validateReport } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
+import { computeHrs, getHrsLevel } from './hallucination-risk-scorer';
 import { computePromptVersion } from './prompt-version';
 import type { DocumentSummary } from './document-summarizer';
 import type { PubMedSearchResult } from '../pubmed/evidence-enricher';
@@ -37,6 +38,10 @@ export interface SynthesisResult {
   wordCount: number;
   promptVersion: string;
   usage?: TokenUsage;
+  /** Hallucination Risk Score (0-100). 100 = no validator issues. */
+  hrs?: number;
+  /** Qualitative level matching hrs. */
+  hrsLevel?: 'eccellente' | 'buono' | 'da_rivedere' | 'critico';
 }
 
 export interface SynthesisParams {
@@ -425,10 +430,13 @@ function finalizeReport(
     }
   }
 
+  const hrs = computeHrs(validation);
+  const hrsLevel = getHrsLevel(hrs);
+
   logger.info('synthesis',
-    ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%, promptVersion: ${promptVersion}`,
+    ` Report: ${wordCount} words, valid: ${validation.valid}, event coverage: ${Math.round(validation.eventCoverage)}%, hrs: ${hrs} (${hrsLevel}), promptVersion: ${promptVersion}`,
   );
-  return { synthesis: cleaned, wordCount, promptVersion, usage };
+  return { synthesis: cleaned, wordCount, promptVersion, usage, hrs, hrsLevel };
 }
 
 // ── Formatting helpers ──

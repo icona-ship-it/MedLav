@@ -13,7 +13,16 @@ export const reports = pgTable('reports', {
   version: integer('version').notNull().default(1),
   status: reportStatusEnum('report_status').notNull().default('bozza'),
   synthesis: text('synthesis'), // sintesi medico-legale HTML
-  generationMetadata: jsonb('generation_metadata').$type<{ promptVersion?: string }>(),
+  generationMetadata: jsonb('generation_metadata').$type<{
+    promptVersion?: string;
+    hrs?: number; // Hallucination Risk Score 0-100
+    hrsLevel?: 'eccellente' | 'buono' | 'da_rivedere' | 'critico';
+    eventCoverage?: number;
+    issueCount?: number;
+    issuesByType?: Record<string, number>;
+    generationMode?: 'monolithic' | 'sectional';
+    [key: string]: unknown;
+  }>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
