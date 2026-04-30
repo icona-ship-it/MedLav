@@ -92,15 +92,22 @@ function mapOcrResponseToResult(params: {
     footerText: (page.footer ?? '').trim(),
   }));
 
-  // Filter repetitive headers/footers
+  // Capture document-level header/footer (most common, ≥50% repetition) BEFORE
+  // filtering wipes repetitive ones. These typically identify the document itself
+  // ("Cartella Clinica n. XYZ, Ospedale ABC") and improve synthesis citation accuracy.
+  const documentHeader = findMostCommonNonEmpty(rawPages.map((p) => p.headerText));
+  const documentFooter = findMostCommonNonEmpty(rawPages.map((p) => p.footerText));
+
+  // Filter repetitive headers/footers from individual pages (keeps unique page-level info only)
   filterRepetitiveHeadersFooters(rawPages);
 
   const pages: OcrPageResult[] = rawPages.map((page) => {
     let text = page.markdown ?? '';
+    const htmlTables = page.tables && page.tables.length > 0 ? [...page.tables] : undefined;
 
     // If there are HTML tables from OCR 3, insert them with markers
-    if (page.tables && page.tables.length > 0) {
-      for (const table of page.tables) {
+    if (htmlTables) {
+      for (const table of htmlTables) {
         text += `\n[TABLE_HTML_START]\n${table}\n[TABLE_HTML_END]\n`;
       }
     }
@@ -137,6 +144,9 @@ function mapOcrResponseToResult(params: {
       hasHandwriting: handwritingInfo.hasHandwriting,
       handwritingConfidence: handwritingInfo.confidence,
       images: pageImages,
+      header: page.headerText || undefined,
+      footer: page.footerText || undefined,
+      htmlTables,
     };
   });
 
@@ -160,7 +170,36 @@ function mapOcrResponseToResult(params: {
     fullText,
     images: allImages,
     ocrPages,
+    documentHeader,
+    documentFooter,
   };
+}
+
+/**
+ * Find the most common non-empty value across pages, used to identify
+ * document-level header/footer (typically the cartella identifier or page numbering).
+ * Returns undefined if no value occurs in >=50% of pages.
+ */
+function findMostCommonNonEmpty(values: string[]): string | undefined {
+  if (values.length < 2) return undefined;
+  const threshold = Math.max(2, Math.ceil(values.length * 0.5));
+
+  const counts = new Map<string, number>();
+  for (const v of values) {
+    const trimmed = v.trim();
+    if (trimmed.length < 5) continue;
+    counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+  }
+
+  let bestValue: string | undefined;
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count >= threshold && count > bestCount) {
+      bestValue = value;
+      bestCount = count;
+    }
+  }
+  return bestValue;
 }
 
 /**
