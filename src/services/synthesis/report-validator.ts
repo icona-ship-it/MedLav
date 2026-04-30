@@ -72,11 +72,13 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bLaboratorio\s+Analisi\b/i, label: 'Laboratorio Analisi' },
 ];
 
-// Audit P1-VAL-001: raised from 500 → 1000. A real CTU/CTP report is 5000-15000
-// words; stragiudiziale is 8 sezioni ~200 words each (~1600). 1000 is the safe
-// floor that still catches truncated outputs without rejecting legitimate short
-// stragiudiziali cases.
-const MIN_WORD_COUNT = 1000;
+// Truncation-detection floor only. Real LLM truncation (finishReason='length')
+// is caught upstream in section-generator.ts:269. This validator floor catches
+// only catastrophic short outputs (model crash, network error mid-stream).
+// 500 words is enough to detect that without rejecting legitimate concise
+// stragiudiziale reports — actual length is shaped by per-section token
+// budgets (section-catalog.ts) and prompt directives (synthesis-prompts.ts).
+const MIN_WORD_COUNT = 500;
 
 /** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;

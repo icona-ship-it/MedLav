@@ -9,15 +9,42 @@ import {
   CONCLUSIONS_FORMULATIONS,
 } from './peritale-formulations';
 
-// ── Token budget constants (calibrated for 5,000-8,000 word reports) ──
+// ── Token budget tiers (per-section, calibrated to natural output length) ──
+//
+// Token budget acts as both ceiling AND soft length signal to the LLM.
+// A 32K budget across every section was too permissive: short formal sections
+// (intestazione, conclusioni) ended up bloated. These tiers provide enough
+// headroom to never truncate real content while nudging the model toward
+// concision appropriate to each section's role in a deposit-ready perizia.
+//
+// Note on safety: completeness of facts is preserved by the prompt directives
+// ("OGNI evento DEVE comparire", anti-hallucination rules, OCR fidelity), NOT
+// by giving the model unlimited output budget. If a section truncates because
+// of budget, section-generator.ts:269 throws and Inngest retries — a section
+// that needs more room than HUGE has structural issues that retry won't fix.
+
+/** Short formal sections: intestazione, profilo metodologico, conclusioni 1-2 paragrafi. ~1000 words. */
+const TOKENS_TINY = 2_000;
+
+/** Brief narrative sections: anamnesi, il_fatto, fatto_storia_clinica, quesiti, spese in tabella. ~2200 words. */
+const TOKENS_SMALL = 4_000;
+
+/** Standard analytical sections: epicrisi, quadro_clinico, prognosi, oggetto_parere. ~3700 words. */
+const TOKENS_MEDIUM = 6_000;
+
+/** Long sections requiring multi-document synthesis: premesse, documentazione_atti, pareri_tecnici, analisi_condotta, bibliografia. ~6500 words. */
+const TOKENS_LARGE = 10_000;
+
+/** Multi-quesito frameworks: conclusioni_quesiti (CTU only — one block per quesito). ~9000 words. */
+const TOKENS_XLARGE = 14_000;
 
 /**
- * Token budget for ALL LLM-generated sections.
- * Set to Mistral Large max output (32,768 tokens) to prevent truncation.
- * This is a CEILING, not a target — LLM stops when content is complete.
- * No cost/time/quality impact: you pay for tokens generated, not budget allocated.
+ * Documentazione sanitaria (the largest section). Reproduction of medical documents
+ * with full fidelity. Real CTU sample: 3000-10000 words. 18000 words headroom is
+ * enough for the most complex multi-ricovero case while still acting as length
+ * signal vs the previous 24000-word ceiling.
  */
-const TOKENS_MAX = 32_768;
+const TOKENS_HUGE = 20_000;
 
 /** Placeholder sections — no LLM call. */
 const TOKENS_NONE = 0;
@@ -57,7 +84,7 @@ const CTU_SECTIONS: SectionSpec[] = [
   {
     id: 'intestazione',
     title: 'Intestazione',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 300,
     needsOcr: false,
@@ -76,7 +103,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'quesiti',
     title: 'Quesiti',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 500,
     needsOcr: false,
@@ -90,7 +117,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'profilo_metodologico',
     title: 'Profilo Metodologico',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 200,
     needsOcr: false,
@@ -105,7 +132,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_atti',
     title: 'Dati della Documentazione in Atti',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_LARGE,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
@@ -119,7 +146,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'premesse',
     title: 'Premesse',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_LARGE,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
@@ -132,7 +159,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'Dati della Documentazione Sanitaria',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_HUGE,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
@@ -159,7 +186,7 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche Esibite',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-expenses'],
     contextMaxChars: 300,
     needsOcr: true,
@@ -172,7 +199,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'pareri_tecnici',
     title: 'Precedenti Pareri Tecnici',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_LARGE,
     dataSources: ['events-perizie'],
     contextMaxChars: 500,
     needsOcr: true,
@@ -223,7 +250,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'epicrisi',
     title: 'Epicrisi',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 800,
     needsOcr: false,
@@ -265,7 +292,7 @@ ${EPICRISI_EXAMPLE}
   {
     id: 'conclusioni_quesiti',
     title: 'Conclusioni — Risposte ai Quesiti',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_XLARGE,
     dataSources: ['context-summaries', 'calculations', 'perizia-metadata', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -296,7 +323,7 @@ Se disponibili evidenze scientifiche (PubMed), citale a supporto degli elementi 
   {
     id: 'bibliografia',
     title: 'Bibliografia',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_LARGE,
     dataSources: ['pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -357,7 +384,7 @@ const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
   {
     id: 'intestazione_stragiudiziale',
     title: 'Intestazione',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 200,
     needsOcr: false,
@@ -374,7 +401,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'anamnesi',
     title: 'Dati Anamnestici',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-medical'],
     contextMaxChars: 400,
     needsOcr: false,
@@ -390,7 +417,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'il_fatto',
     title: 'Il Fatto',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-medical', 'perizia-metadata'],
     contextMaxChars: 400,
     needsOcr: false,
@@ -406,7 +433,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'fatto_storia_clinica',
     title: 'Iter Diagnostico-Terapeutico',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 600,
     needsOcr: false,
@@ -421,7 +448,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_HUGE,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -442,7 +469,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-expenses'],
     contextMaxChars: 200,
     needsOcr: true,
@@ -473,7 +500,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'epicrisi',
     title: 'Epicrisi',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -495,7 +522,7 @@ ${EPICRISI_EXAMPLE}
   {
     id: 'conclusioni',
     title: 'Conclusioni',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['context-summaries', 'calculations'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -513,7 +540,7 @@ const PARERE_PRO_VERITATE_SECTIONS: SectionSpec[] = [
   {
     id: 'intestazione_parere',
     title: 'Intestazione',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 200,
     needsOcr: false,
@@ -530,7 +557,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'oggetto_parere',
     title: 'Oggetto del Parere',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['perizia-metadata', 'events-medical'],
     contextMaxChars: 300,
     needsOcr: false,
@@ -546,7 +573,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_HUGE,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -567,7 +594,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'analisi_condotta',
     title: 'Analisi della Condotta Sanitaria',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_LARGE,
     dataSources: ['events-medical', 'context-summaries', 'guidelines'],
     contextMaxChars: 800,
     needsOcr: true,
@@ -604,7 +631,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'conclusioni_parere',
     title: 'Conclusioni',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['context-summaries', 'calculations'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -625,7 +652,7 @@ const PARERE_SCOPO_RISERVA_SECTIONS: SectionSpec[] = [
   {
     id: 'intestazione_parere',
     title: 'Intestazione',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 200,
     needsOcr: false,
@@ -643,7 +670,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_HUGE,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -664,7 +691,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'quadro_clinico',
     title: 'Quadro Clinico Attuale',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 600,
     needsOcr: true,
@@ -681,7 +708,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'prognosi',
     title: 'Valutazione Prognostica',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['events-medical', 'context-summaries', 'calculations', 'guidelines'],
     contextMaxChars: 600,
     needsOcr: false,
@@ -717,7 +744,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'conclusioni_parere',
     title: 'Conclusioni',
-    maxTokens: TOKENS_MAX,
+    maxTokens: TOKENS_TINY,
     dataSources: ['context-summaries', 'calculations'],
     contextMaxChars: 0,
     needsOcr: false,
