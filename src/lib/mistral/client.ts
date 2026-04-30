@@ -21,11 +21,15 @@ const MAX_RETRY_DELAY_MS = 30_000;
 // ── Deterministic seed for reproducible outputs ──
 export const DETERMINISTIC_SEED = 42;
 
-// Model constants — using -latest aliases for now.
-// TODO: pin to exact version IDs after verifying with Mistral List Models API.
+// Model constants — using -latest aliases.
+// Note: pixtral-large is being retired by Mistral on 2026-05-31. Mistral Large 3
+// (mistral-large-latest) became multimodal in Dec 2025 and is the official
+// vendor-recommended replacement for vision tasks. The PIXTRAL_LARGE export key
+// is kept for now to avoid touching every call site; it will be renamed to
+// VISION in a follow-up cosmetic refactor.
 export const MISTRAL_MODELS = {
-  /** Vision model for OCR and document analysis */
-  PIXTRAL_LARGE: 'pixtral-large-latest',
+  /** Vision model — points to Mistral Large 3 (multimodal) post pixtral retirement. */
+  PIXTRAL_LARGE: 'mistral-large-latest',
   /** Large model for complex reasoning (synthesis, review) */
   MISTRAL_LARGE: 'mistral-large-latest',
   /** Small model for fast structured extraction */
