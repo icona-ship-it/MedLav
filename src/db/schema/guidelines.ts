@@ -34,6 +34,10 @@ export const guidelineChunks = pgTable('guideline_chunks', {
   // queries use ::vector cast
   embedding: text('embedding'),
   tokenCount: integer('token_count'),
+  // tsvector_content is a GENERATED ALWAYS AS column (italian config) added in
+  // migration 0022_hybrid_rag_bm25.sql. Listed here for type completeness, but
+  // it is read-only — never write to it directly. Used by hybrid retrieval RPC.
+  tsvectorContent: text('tsvector_content'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_guideline_chunks_guideline_id').on(table.guidelineId),

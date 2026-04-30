@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 
 const DEFAULT_TOP_K = 5;
 const MIN_SIMILARITY = 0.3; // cosine similarity threshold
+const RRF_K = 60; // Reciprocal Rank Fusion constant (standard value, balances rank vs score)
 
 export interface RetrievedChunk {
   content: string;
@@ -13,11 +14,18 @@ export interface RetrievedChunk {
   guidelineSource: string;
   guidelineYear: number | null;
   similarity: number;
+  /** When using hybrid retrieval: 'dense' (semantic only), 'sparse' (BM25 only), or 'both'. */
+  retrievalMethod?: 'dense' | 'sparse' | 'both';
 }
 
 /**
  * Retrieve the most relevant guideline chunks for a query.
  * Uses pgvector cosine similarity search, filtered by case type.
+ *
+ * NOTE: For new code prefer retrieveRelevantGuidelinesHybrid which combines
+ * dense + sparse retrieval for better recall on rare medical terms. This
+ * dense-only function is kept for backward compat and as a fallback when
+ * the hybrid RPC is not yet deployed (pre-migration 0022).
  */
 export async function retrieveRelevantGuidelines(params: {
   query: string;
@@ -68,6 +76,78 @@ export async function retrieveRelevantGuidelines(params: {
 }
 
 /**
+ * Hybrid retrieval: combines dense (pgvector cosine) and sparse (BM25 via
+ * Postgres tsvector with italian config) using Reciprocal Rank Fusion.
+ *
+ * Why hybrid: dense embeddings catch semantic meaning ("dolore lombare" ≈
+ * "lombalgia"), sparse catches exact-term matches that semantics miss
+ * ("spondilite anchilosante" with rare technical name). RRF fuses both
+ * ranked lists into a single score, giving the best of both axes.
+ *
+ * Falls back to dense-only via retrieveRelevantGuidelines() if the hybrid
+ * RPC is missing — useful during the migration window.
+ *
+ * Requires migration 0022_hybrid_rag_bm25.sql to be applied (creates
+ * tsvector_content column + GIN index + match_guideline_chunks_hybrid RPC).
+ */
+export async function retrieveRelevantGuidelinesHybrid(params: {
+  query: string;
+  caseType: CaseType;
+  topK?: number;
+}): Promise<RetrievedChunk[]> {
+  const { query, caseType, topK = DEFAULT_TOP_K } = params;
+
+  const queryEmbedding = await generateQueryEmbedding(query);
+  const embeddingStr = `[${queryEmbedding.join(',')}]`;
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('match_guideline_chunks_hybrid', {
+    query_embedding: embeddingStr,
+    query_text: query,
+    match_case_type: caseType,
+    match_threshold: MIN_SIMILARITY,
+    match_count: topK,
+    rrf_k: RRF_K,
+  });
+
+  // Fallback: hybrid RPC not deployed yet → use dense-only.
+  // Detected by Postgres error code 42883 (function does not exist).
+  if (error) {
+    if (error.code === '42883' || /does not exist/i.test(error.message ?? '')) {
+      logger.warn('rag:retrieval', 'Hybrid RPC not found, falling back to dense-only. Apply migration 0022.');
+      return retrieveRelevantGuidelines({ query, caseType, topK });
+    }
+    logger.error('rag:retrieval', `Hybrid search failed: ${error.message}`);
+    return [];
+  }
+
+  const results = (data ?? []) as Array<{
+    content: string;
+    section_title: string | null;
+    guideline_title: string;
+    guideline_source: string;
+    guideline_year: number | null;
+    similarity: number;
+    retrieval_method: 'dense' | 'sparse' | 'both';
+  }>;
+
+  logger.info(
+    'rag:retrieval',
+    `Hybrid: ${results.length} chunks (${results.filter((r) => r.retrieval_method === 'both').length} both, ${results.filter((r) => r.retrieval_method === 'dense').length} dense-only, ${results.filter((r) => r.retrieval_method === 'sparse').length} sparse-only)`,
+  );
+
+  return results.map((r) => ({
+    content: r.content,
+    sectionTitle: r.section_title,
+    guidelineTitle: r.guideline_title,
+    guidelineSource: r.guideline_source,
+    guidelineYear: r.guideline_year ?? null,
+    similarity: r.similarity,
+    retrievalMethod: r.retrieval_method,
+  }));
+}
+
+/**
  * Build a context string from retrieved chunks for prompt injection.
  * Returns empty string if no relevant chunks found.
  * Supports caseTypes array: searches guidelines for all selected types.
@@ -97,7 +177,9 @@ export async function buildGuidelineContext(params: {
   const seenContent = new Set<string>();
 
   for (const ct of effectiveTypes) {
-    const chunks = await retrieveRelevantGuidelines({
+    // Prefer hybrid retrieval (dense + BM25). Falls back to dense-only if
+    // migration 0022_hybrid_rag_bm25.sql has not been applied yet.
+    const chunks = await retrieveRelevantGuidelinesHybrid({
       query,
       caseType: ct,
       topK: maxChunks,
