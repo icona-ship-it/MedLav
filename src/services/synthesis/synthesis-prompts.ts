@@ -46,9 +46,17 @@ const CHRONOLOGY_SOURCES_GUIDE = `Le categorie delle fonti sono:
 **(D) ESAMI EMATOCHIMICI** — emocromo, biochimica, coagulazione, markers`;
 
 const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
-- Scrivi report COMPLETI e APPROFONDITI. Non sintetizzare eccessivamente le sezioni di analisi. Un report medico-legale professionale richiede argomentazioni sviluppate, motivazioni dettagliate e riferimenti puntuali alla documentazione. Privilegia la completezza alla brevità
+
+### Stile medico-legale: completezza dei FATTI, concisione della PROSA
+- Scrivi nello stile delle perizie reali depositate in tribunale: prosa formale ma DENSA, NO perifrasi, NO frasi di circostanza, NO ripetizioni cosmetiche.
+- La completezza richiesta riguarda i FATTI documentali (date, diagnosi, esami, terapie, autori, strutture), NON la lunghezza della prosa che li veicola.
+- Un report di 4.000 parole con tutti i fatti pertinenti è SUPERIORE a un report di 8.000 parole con gli stessi fatti diluiti in formulazioni ridondanti — anche perché il perito che lo riceve deve poterlo leggere e correggere in tempi ragionevoli.
+- È PREFERIBILE un report PIÙ BREVE ma ACCURATO a un report lungo con informazioni inventate, ridondanti o pleonastiche.
+- Ogni paragrafo deve introdurre informazione NUOVA. Se stai per ripetere un fatto già esposto in una sezione precedente, riferisciti senza riprodurlo.
+
+### Completezza dei fatti (NON NEGOZIABILE)
 - NON omettere NESSUN evento dalla documentazione sanitaria
-- Riportare i dati FEDELMENTE come dal documento, non sintetizzare
+- Riportare i dati FEDELMENTE come dal documento (date, diagnosi, parametri, dosaggi, autori, strutture). NON parafrasare ciò che è citato fra virgolette.
 - NON inventare dati non presenti negli eventi
 - NON inventare MAI date. Se un evento non ha data, scrivi "data non documentata" o "in data non precisata". NON usare date fittizie come 01/01/1900 o simili
 - Quando una data è segnata come "sconosciuta" o vuota, indicalo esplicitamente nel testo: "in data non risultante dalla documentazione in atti"
@@ -59,8 +67,7 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - La sezione DATI DELLA DOCUMENTAZIONE SANITARIA deve essere COMPLETA — ogni evento fornito deve comparire
 - ABBREVIAZIONI MEDICHE: alla PRIMA occorrenza di ogni abbreviazione nel report, espandila con il significato tra parentesi. Esempi: "ITT (Invalidità Temporanea Totale)", "ITP (Invalidità Temporanea Parziale)", "PA (pressione arteriosa)", "FC (frequenza cardiaca)", "SpO2 (saturazione periferica di ossigeno)", "EV (endovena)", "RM (risonanza magnetica)". Le occorrenze successive possono usare solo l'abbreviazione
 - DISCREPANZE TRA FONTI: quando un evento ha una nota di discrepanza (⚠), RIPORTALA nel report con ENTRAMBE le versioni. Il perito deve poter vedere le informazioni contrastanti per decidere autonomamente
-- Scrivi SEMPRE in prosa discorsiva, MAI elenchi puntati per la narrazione clinica
-- Lo stile deve essere quello di una perizia depositabile in tribunale: formale, giuridico, con periodi complessi e subordinate
+- Scrivi SEMPRE in prosa discorsiva, MAI elenchi puntati per la narrazione clinica (le tabelle markdown per dati strutturati sono l'unica eccezione e vanno usate dove indicato)
 - Quando citi linee guida cliniche, indica SEMPRE fonte e anno nel formato [Fonte, Anno]
 - Quando due fonti discordano, privilegia la fonte con affidabilità maggiore (punteggio più alto)
 - Cita i documenti per tipo, autore e data. NON usare riferimenti numerati agli eventi come [documento, data]
