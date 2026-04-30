@@ -128,6 +128,11 @@ export default function PrivacyPage() {
               per l&apos;addestramento di modelli AI</strong>. L&apos;elaborazione avviene su server
               europei di Mistral AI (Parigi).
             </p>
+            <p className="mt-2">
+              Per dettagli completi sull&apos;uso dell&apos;intelligenza artificiale (modelli, ruolo del
+              perito, anti-allucinazione, conformità L. 132/2025 e AI Act):{' '}
+              <Link href="/info-ai" className="underline">Trasparenza AI</Link>.
+            </p>
           </section>
 
           <section>
