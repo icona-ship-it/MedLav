@@ -163,20 +163,20 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
-    promptDirective: `Genera la riproduzione DETTAGLIATA e FEDELE della documentazione sanitaria in ordine cronologico.
-Questa e la sezione PIU LUNGA e IMPORTANTE del report. OGNI evento fornito DEVE comparire.
+    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire come blocco distinto — questo è il principio di completezza non negoziabile. Il principio di concisione vincola la PROSA tra le citazioni, non i fatti.
 
 FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."
 
-Regole:
-- Intestazione GRASSETTO con tipo, autore/struttura e data, seguita da contenuto tra VIRGOLETTE
-- Diari clinici giornalieri: riportare TUTTI i giorni con variazioni cliniche. NEL DUBBIO, INCLUDERE. Periodi stabili raggruppati: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri nella norma"
-- Esami di laboratorio: TUTTI i valori in tabella markdown. Valori alterati in grassetto
-- Verbali operatori, referti radiologici/strumentali, lettere di dimissione: riprodurre INTEGRALMENTE
-- Scrivi in PROSA DISCORSIVA, MAI elenchi puntati per la narrazione clinica
-- Immagini diagnostiche disponibili: inserirle INLINE subito dopo la citazione pertinente
-- VERIFICA COMPLETEZZA: ogni documento OCR ricevuto DEVE avere un blocco corrispondente nell'output
+Regole di riproduzione fedele ma sintetica (mai a scapito dei fatti clinici):
+- Intestazione in GRASSETTO con tipo + autore/struttura + data, seguita dal contenuto fra VIRGOLETTE.
+- **Diari clinici (cartella clinica)**: riporta i giorni con variazioni cliniche rilevanti (sintomatologia, parametri alterati, terapie modificate, complicanze, eventi acuti, decisioni terapeutiche). I periodi clinicamente stabili raggruppali con date inizio-fine: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri vitali stabili, terapia [X] proseguita senza modifiche". Non duplicare giorni con identico quadro clinico.
+- **Verbali operatori**: riporta diagnosi pre-operatoria + tecnica chirurgica eseguita + diagnosi post-operatoria + eventuali complicanze intra/post-operatorie + esito immediato. Sintetizza le sezioni narrative accessorie (anestesia routine senza eventi, preparazione del campo).
+- **Referti radiologici/strumentali**: tecnica utilizzata + reperti rilevanti + conclusione/diagnosi del referto. Non riprodurre descrizioni anatomiche routinarie senza significato clinico.
+- **Lettere di dimissione**: diagnosi alla dimissione + terapia domiciliare prescritta + indicazioni follow-up. Sintetizza il riassunto del decorso (già esposto nei diari clinici della stessa cartella).
+- **Esami di laboratorio**: SEMPRE in tabella markdown pipe, una tabella separata per ogni data/prelievo. Valori alterati rispetto al range di riferimento in grassetto. Includi tutti i valori del documento, anche quelli nella norma (il perito necessita del quadro completo).
+- **Immagini diagnostiche disponibili nella lista**: inserisci INLINE subito dopo la citazione pertinente con la sintassi ![Fig. N — descrizione formale](ocr-image:percorso-esatto).
+- **Stile narrativo**: prosa discorsiva tra le citazioni (mai elenchi puntati per la narrazione clinica). Le tabelle markdown per i dati strutturati sono l'unica eccezione.
 ${NO_EVN_RULE}
 
 ${DOCUMENT_ANALYSIS_FORMULATIONS}
@@ -452,18 +452,19 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+
 FORMATO CITAZIONE per OGNI documento:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
 
 Regole:
-- OGNI evento fornito DEVE comparire
-- Diari clinici: solo giorni con variazioni significative
-- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
-- Verbali operatori: riprodurre INTEGRALMENTE
-- Referti radiologici: riprodurre INTEGRALMENTE
-- Scrivi in PROSA DISCORSIVA
-- Se disponibili immagini diagnostiche, inserirle INLINE
+- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
+- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
+- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
+- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
+- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
+- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
+- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
 ${NO_EVN_RULE}`,
   },
   {
@@ -577,18 +578,19 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+
 FORMATO CITAZIONE per OGNI documento:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
 
 Regole:
-- OGNI evento fornito DEVE comparire
-- Diari clinici: solo giorni con variazioni significative
-- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
-- Verbali operatori: riprodurre INTEGRALMENTE
-- Referti radiologici: riprodurre INTEGRALMENTE
-- Scrivi in PROSA DISCORSIVA
-- Se disponibili immagini diagnostiche, inserirle INLINE
+- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
+- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
+- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
+- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
+- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
+- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
+- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
 ${NO_EVN_RULE}`,
   },
   {
@@ -674,18 +676,19 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Genera la riproduzione della documentazione sanitaria in ordine cronologico.
+    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+
 FORMATO CITAZIONE per OGNI documento:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
 
 Regole:
-- OGNI evento fornito DEVE comparire
-- Diari clinici: solo giorni con variazioni significative
-- Esami lab: TUTTI i valori in tabella, alterati in grassetto. Nel dubbio, INCLUDERE
-- Verbali operatori: riprodurre INTEGRALMENTE
-- Referti radiologici: riprodurre INTEGRALMENTE
-- Scrivi in PROSA DISCORSIVA
-- Se disponibili immagini diagnostiche, inserirle INLINE
+- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
+- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
+- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
+- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
+- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
+- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
+- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
 ${NO_EVN_RULE}`,
   },
   {
