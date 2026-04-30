@@ -74,6 +74,14 @@ export interface GeneratedSection {
   wordCount: number;
   /** Token usage from LLM call */
   usage?: TokenUsage;
+  /** True when Chain-of-Verification post-processing was applied to this section. */
+  coveApplied?: boolean;
+  /** Number of verification questions generated, if CoVe was applied. */
+  coveQuestionCount?: number;
+  /** Number of facts the verifier flagged as unsupported by sources. */
+  coveUnsupportedCount?: number;
+  /** True when CoVe revisor actually changed the draft text. */
+  coveRevised?: boolean;
 }
 
 /**

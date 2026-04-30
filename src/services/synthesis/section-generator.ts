@@ -19,6 +19,7 @@ import {
   formatDocumentsOcrForPrompt,
   formatDocumentSummariesForPrompt,
 } from './synthesis-prompts';
+import { runCoVe, isCoVeEnabled, COVE_ELIGIBLE_SECTION_IDS } from './cove-verifier';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
@@ -272,25 +273,59 @@ export async function generateSingleSection(params: {
     throw new Error(msg);
   }
 
-  const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+  // Optional Chain-of-Verification post-processing for high-stakes sections.
+  // Off by default; opt-in via LEGMED_COVE_ENABLED=true. See cove-verifier.ts.
+  let finalContent = content;
+  let coveMeta: Pick<GeneratedSection, 'coveApplied' | 'coveQuestionCount' | 'coveUnsupportedCount' | 'coveRevised'> = {};
+
+  if (isCoVeEnabled() && COVE_ELIGIBLE_SECTION_IDS.has(spec.id)) {
+    try {
+      const eventsContext = formatEventsForPrompt(synthesisParams.events);
+      const ocrContext = documentsOcrText && documentsOcrText.length > 0
+        ? formatDocumentsOcrForPrompt(documentsOcrText)
+        : undefined;
+
+      const cove = await runCoVe({
+        draftContent: content,
+        sectionTitle: spec.title,
+        eventsContext,
+        ocrContext,
+      });
+
+      finalContent = cove.revisedContent;
+      coveMeta = {
+        coveApplied: true,
+        coveQuestionCount: cove.questions.length,
+        coveUnsupportedCount: cove.unsupportedFactsFound,
+        coveRevised: cove.wasRevised,
+      };
+    } catch (err) {
+      // Non-blocking: if CoVe fails, fall back to the original draft.
+      logger.warn('section-generator', `CoVe failed for ${spec.id}, using draft: ${err instanceof Error ? err.message : String(err)}`);
+      coveMeta = { coveApplied: false };
+    }
+  }
+
+  const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
 
   // Generate context summary for subsequent sections
   const contextSummary = spec.contextMaxChars > 0
-    ? summarizeForContext(content, spec.contextMaxChars)
+    ? summarizeForContext(finalContent, spec.contextMaxChars)
     : '';
 
   const elapsed = Date.now() - startMs;
   logger.info('section-generator',
-    `Section "${spec.id}" done: ${wordCount} words, ${content.length} chars, ${elapsed}ms`,
+    `Section "${spec.id}" done: ${wordCount} words, ${finalContent.length} chars, ${elapsed}ms${coveMeta.coveApplied ? ` (CoVe: ${coveMeta.coveUnsupportedCount}/${coveMeta.coveQuestionCount} unsupported, revised=${coveMeta.coveRevised})` : ''}`,
   );
 
   return {
     id: spec.id,
     title: spec.title,
-    content: content.trim(),
+    content: finalContent.trim(),
     contextSummary,
     wordCount,
     usage,
+    ...coveMeta,
   };
 }
 
