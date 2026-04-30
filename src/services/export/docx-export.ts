@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { getAiActDisclosureDocxParagraphs } from './ai-act-disclosure';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
   ctu: 'CTU - Consulente Tecnico d\'Ufficio (prospettiva neutrale)',
@@ -462,7 +463,10 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Signature block
   children.push(...buildSignatureBlock(periziaMetadata, caseRole));
 
-  // Footer
+  // AI Act / L. 132/2025 transparency disclosure
+  children.push(...getAiActDisclosureDocxParagraphs());
+
+  // Footer timestamp
   children.push(
     new Paragraph({ text: '' }),
     new Paragraph({
@@ -1009,6 +1013,9 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
 
   // Signature block
   children.push(...buildSignatureBlock(periziaMetadata as PeriziaMetadataExport, caseRole));
+
+  // AI Act / L. 132/2025 transparency disclosure
+  children.push(...getAiActDisclosureDocxParagraphs());
 
   // Footer timestamp
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });

@@ -4,6 +4,7 @@ import type { MedicoLegalCalculation } from '@/services/calculations/medico-lega
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { markdownToHtml } from './markdown-to-html';
+import { getAiActDisclosureHtml } from './ai-act-disclosure';
 
 interface ExportEvent {
   order_number: number;
@@ -339,7 +340,9 @@ ${missingDocs.length === 0 ? '<p>Nessuna documentazione mancante rilevata.</p>' 
   ${d.related_event ? `<p style="font-size:12px;color:#64748b">Evento correlato: ${escapeHtml(d.related_event)}</p>` : ''}
 </div>`).join('\n')}
 
-<footer style="margin-top:40px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#94a3b8;text-align:center">
+${getAiActDisclosureHtml()}
+
+<footer style="margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#94a3b8;text-align:center">
   Report generato da LegMed il ${now}
 </footer>
 </div>
@@ -1122,6 +1125,9 @@ ${signatureImageBase64 ? `
     ${pm.ctuName ? `<p style="margin: 4px 0 0; font-size: 12px; color: #555;">${escapeHtmlPro(pm.ctuName)}</p>` : ''}
   </div>
 </div>` : ''}
+
+<!-- ═══ AI Act / L. 132/2025 transparency disclosure ═══ -->
+${getAiActDisclosureHtml()}
 
 <!-- ═══ Screen footer ═══ -->
 <footer class="screen-footer">
