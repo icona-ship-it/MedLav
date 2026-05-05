@@ -205,8 +205,12 @@ export async function generateSingleSection(params: {
   const { spec, synthesisParams, previousContext, documentsOcrText } = params;
   const startMs = Date.now();
 
-  // Bibliography: fall back to placeholder when no PubMed references available
-  if (spec.dataSources.includes('pubmed-references') &&
+  // Bibliography: fall back to placeholder when no PubMed references available.
+  // Restricted to the bibliografia section: other sections (e.g. epicrisi) list
+  // pubmed-references as an OPTIONAL enrichment data source — they should still
+  // run the LLM even when no PubMed refs are available, otherwise the output
+  // would be an empty section title with no body.
+  if (spec.id === 'bibliografia' &&
       (!synthesisParams.pubmedReferences || synthesisParams.pubmedReferences.length === 0)) {
     return {
       id: spec.id,

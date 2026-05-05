@@ -6,7 +6,6 @@ import {
   DOCUMENTAZIONE_SANITARIA_EXAMPLE,
   EPICRISI_FORMULATIONS,
   EPICRISI_EXAMPLE,
-  CONCLUSIONS_FORMULATIONS,
 } from './peritale-formulations';
 
 // ── Token budget tiers (per-section, calibrated to natural output length) ──
@@ -32,11 +31,8 @@ const TOKENS_SMALL = 4_000;
 /** Standard analytical sections: epicrisi, quadro_clinico, prognosi, oggetto_parere. ~3700 words. */
 const TOKENS_MEDIUM = 6_000;
 
-/** Long sections requiring multi-document synthesis: premesse, documentazione_atti, pareri_tecnici, analisi_condotta, bibliografia. ~6500 words. */
+/** Long sections requiring multi-document synthesis: pareri_tecnici, analisi_condotta. ~6500 words. */
 const TOKENS_LARGE = 10_000;
-
-/** Multi-quesito frameworks: conclusioni_quesiti (CTU only — one block per quesito). ~9000 words. */
-const TOKENS_XLARGE = 14_000;
 
 /**
  * Documentazione sanitaria (the largest section). Reproduction of medical documents
@@ -115,24 +111,9 @@ Se un quesito contiene sotto-punti, riportali tutti fedelmente.
 ${NO_EVN_RULE}`,
   },
   {
-    id: 'profilo_metodologico',
-    title: 'Profilo Metodologico',
-    maxTokens: TOKENS_TINY,
-    dataSources: ['perizia-metadata'],
-    contextMaxChars: 200,
-    needsOcr: false,
-    promptDirective: `Genera una breve nota metodologica (1-2 paragrafi).
-Includi:
-- Metodo di lavoro adottato (esame della documentazione in atti, visita del periziando, criteri valutativi)
-- Riferimento alle linee guida e buone pratiche cliniche applicabili
-- Indicazione che le operazioni peritali si sono svolte in contraddittorio con i CTP (se nominati)
-Stile conciso e formale.
-${NO_EVN_RULE}`,
-  },
-  {
     id: 'documentazione_atti',
     title: 'Dati della Documentazione in Atti',
-    maxTokens: TOKENS_LARGE,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
@@ -146,7 +127,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'premesse',
     title: 'Premesse',
-    maxTokens: TOKENS_LARGE,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
@@ -186,7 +167,7 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche Esibite',
-    maxTokens: TOKENS_SMALL,
+    maxTokens: TOKENS_TINY,
     dataSources: ['events-expenses'],
     contextMaxChars: 300,
     needsOcr: true,
@@ -211,31 +192,22 @@ Se sono disponibili immagini diagnostiche citate nei pareri, inseriscile INLINE 
 ${NO_EVN_RULE}`,
   },
   {
-    id: 'verbale_operazioni_peritali',
-    title: 'Verbale delle Operazioni Peritali',
+    id: 'operazioni_peritali',
+    title: 'I Dati dell\'Incontro con le Parti',
     maxTokens: TOKENS_NONE,
     dataSources: [],
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui il verbale delle operazioni peritali, includendo:*
+    placeholderText: `*[Inserire qui:*
+
+*VERBALE OPERAZIONI PERITALI*
 *- Data, ora e luogo delle operazioni*
 *- Presenze: CTU, CTP delle parti, legali, periziando*
 *- Attivita svolte: esame documentazione, discussione, visita medico-legale*
 *- Eventuali richieste dei CTP*
-*- Termine assegnato per il deposito delle osservazioni alla bozza]*`,
-    promptDirective: '',
-  },
-  {
-    id: 'visita_periziando',
-    title: 'Visita del Periziando',
-    maxTokens: TOKENS_NONE,
-    dataSources: [],
-    contextMaxChars: 0,
-    needsOcr: false,
-    isPlaceholder: true,
-    placeholderText: `*[Inserire qui i risultati della visita medico-legale:*
 
+*VISITA DEL PERIZIANDO*
 *SOGGETTIVAMENTE — Il/La periziando/a riferisce:*
 *- Sintomatologia attuale*
 *- Limitazioni funzionali riferite*
@@ -248,32 +220,6 @@ ${NO_EVN_RULE}`,
     promptDirective: '',
   },
   {
-    id: 'epicrisi',
-    title: 'Epicrisi',
-    maxTokens: TOKENS_MEDIUM,
-    dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
-    contextMaxChars: 800,
-    needsOcr: false,
-    promptDirective: `Genera l'epicrisi come sintesi fattuale della vicenda clinica documentata.
-
-L'epicrisi deve contenere:
-1. **Sintesi della vicenda clinica**: ricostruzione sintetica ma completa dei fatti principali, in ordine cronologico (2-4 paragrafi)
-2. **Dati per la valutazione del danno temporaneo**: periodi ITT e ITP con date esatte se calcolati
-3. **Dati per la valutazione del danno permanente**: esiti clinici documentati
-
-NON esprimere giudizi sul nesso causale o percentuali di invalidita — il perito li formulera.
-NON ripetere in dettaglio fatti gia esposti nella documentazione — sintetizzare.
-Scrivi in prosa discorsiva formale.
-${NO_EVN_RULE}
-Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno].
-
-${EPICRISI_FORMULATIONS}
-
-${EPICRISI_EXAMPLE}
-
-*[Il perito completera questa sezione con le proprie valutazioni professionali su: nesso di causalita, danno biologico permanente (tabelle SIMLA), danno morale e esistenziale]*`,
-  },
-  {
     id: 'considerazioni_ml',
     title: 'Considerazioni Medico-Legali',
     maxTokens: TOKENS_NONE,
@@ -281,49 +227,27 @@ ${EPICRISI_EXAMPLE}
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui le considerazioni medico-legali, includendo:*
-*- Valutazione del nesso di causalita materiale (criterio controfattuale) e giuridico (causalita adeguata, criterio del "piu probabile che non")*
-*- Analisi della condotta sanitaria alla luce delle linee guida e buone pratiche cliniche applicabili*
+    placeholderText: `*[Inserire qui le considerazioni medico-legali. Questa sezione contiene la sintesi conclusiva del CTU e le risposte ai quesiti del Giudice.*
+
+*1. SINTESI DELLA VICENDA CLINICA*
+*Ricostruzione cronologica essenziale dei fatti principali (i dati di dettaglio sono nelle sezioni precedenti).*
+
+*2. ANALISI MEDICO-LEGALE*
+*- Valutazione del nesso di causalita materiale (criterio controfattuale) e giuridico ("piu probabile che non")*
+*- Analisi della condotta sanitaria alla luce delle linee guida e buone pratiche cliniche applicabili al momento dei fatti*
+*- Valutazione del danno biologico temporaneo (ITT/ITP) con date e periodi*
 *- Valutazione del danno biologico permanente con riferimento alle tabelle SIMLA*
-*- Eventuale danno morale e danno esistenziale*
-*- Personalizzazione del danno se applicabile]*`,
+*- Eventuale danno morale ed esistenziale*
+*- Personalizzazione del danno se applicabile*
+
+*3. RISPOSTE AI QUESITI DEL GIUDICE*
+*Per ciascun quesito formulato dal Giudice (vedi sezione "Quesiti"), articolare risposta motivata richiamando i fatti documentali e l'analisi sopra esposta.]*`,
     promptDirective: '',
-  },
-  {
-    id: 'conclusioni_quesiti',
-    title: 'Conclusioni — Risposte ai Quesiti',
-    maxTokens: TOKENS_XLARGE,
-    dataSources: ['context-summaries', 'calculations', 'perizia-metadata', 'pubmed-references'],
-    contextMaxChars: 0,
-    needsOcr: false,
-    condition: 'has-quesiti',
-    promptDirective: `Per CIASCUN quesito del Giudice (riportati nei dati perizia), genera un framework fattuale di risposta.
-
-Per ogni quesito usa questa STRUTTURA:
-
-### Quesito n. [N]: [testo del quesito fedelmente riportato]
-
-Dalla documentazione in atti risultano i seguenti elementi pertinenti:
-- [fatto documentato con fonte e data]
-- [fatto documentato con fonte e data]
-
-**Elementi a supporto:** [fatti documentali che concorrono alla risposta]
-**Elementi contrari o lacune:** [fatti contrari o mancanze documentali]
-**Documentazione integrativa necessaria:** [documenti che servirebbero per completare la risposta]
-
-*[Il perito inserira qui la propria risposta al quesito]*
-
-NON rispondere ai quesiti — presenta SOLO gli elementi documentali organizzati. Il perito formulera le risposte.
-${NO_EVN_RULE}
-
-${CONCLUSIONS_FORMULATIONS}
-
-Se disponibili evidenze scientifiche (PubMed), citale a supporto degli elementi fattuali.`,
   },
   {
     id: 'bibliografia',
     title: 'Bibliografia',
-    maxTokens: TOKENS_LARGE,
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
@@ -415,42 +339,26 @@ Stile sintetico (1-3 paragrafi). Riporta SOLO fatti documentati.
 ${NO_EVN_RULE}`,
   },
   {
-    id: 'il_fatto',
-    title: 'Il Fatto',
-    maxTokens: TOKENS_SMALL,
+    id: 'il_fatto_e_storia_clinica',
+    title: 'Il Fatto e la Storia Clinica',
+    maxTokens: TOKENS_MEDIUM,
     dataSources: ['events-medical', 'perizia-metadata'],
-    contextMaxChars: 400,
-    needsOcr: false,
-    promptDirective: `Narrazione FOCALIZZATA dell'evento indice (sinistro, trauma, intervento, evento avverso). 1-2 paragrafi compatti, NON di più.
-Riporta:
-- Data e circostanze dell'evento (luogo, dinamica, modalità)
-- Prime cure prestate (pronto soccorso, primo accesso medico)
-- Diagnosi iniziale all'esito delle prime cure
-Stile narrativo in terza persona, ricostruzione fedele basata sulla documentazione.
-
-LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
-- NON includere l'iter diagnostico-terapeutico successivo all'evento — è oggetto della sezione "Iter Diagnostico-Terapeutico"
-- NON riprodurre integralmente i documenti citati — è oggetto della sezione "La Documentazione Medica Prodotta"
-- NON anticipare l'evoluzione clinica o la sintesi finale — è oggetto dell'Epicrisi
-${NO_EVN_RULE}`,
-  },
-  {
-    id: 'fatto_storia_clinica',
-    title: 'Iter Diagnostico-Terapeutico',
-    maxTokens: TOKENS_SMALL,
-    dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 600,
     needsOcr: false,
-    promptDirective: `Sintesi NARRATIVA COMPATTA dell'iter diagnostico-terapeutico SUCCESSIVO all'evento indice. 2-4 paragrafi, una frase per fase clinica principale (non un paragrafo per ogni visita).
-Riporta in ordine cronologico:
-- Visite e controlli successivi (data + specialista, raggruppando se ravvicinate)
-- Interventi e terapie effettuati (data + tipo)
+    promptDirective: `Narrazione UNICA e COMPATTA dell'evento indice e dell'iter diagnostico-terapeutico successivo. 2-4 paragrafi totali (NON una sezione per fase). Allineato al benchmark "IL FATTO E LA STORIA CLINICA" delle perizie reali.
+
+Includi in ordine cronologico:
+- Data e circostanze dell'evento indice (luogo, dinamica, modalità)
+- Prime cure prestate (pronto soccorso, primo accesso medico) e diagnosi iniziale
+- Visite e controlli successivi (data + specialista, raggruppati se ravvicinati)
+- Interventi e terapie principali (data + tipo)
 - Evoluzione clinica fino alla stabilizzazione
 
-LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
-- NON ripetere l'evento indice o le prime cure — sono oggetto di "Il Fatto"
-- NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta". Qui è solo SINTESI narrativa
-- NON anticipare le conclusioni — sono oggetto di Epicrisi e Conclusioni
+Stile narrativo in terza persona, ricostruzione fedele.
+
+LIMITI (anti-ridondanza):
+- NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta"
+- NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
 ${NO_EVN_RULE}`,
   },
   {
@@ -478,7 +386,7 @@ ${NO_EVN_RULE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche',
-    maxTokens: TOKENS_SMALL,
+    maxTokens: TOKENS_TINY,
     dataSources: ['events-expenses'],
     contextMaxChars: 200,
     needsOcr: true,
@@ -513,18 +421,19 @@ ${NO_EVN_RULE}`,
     dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
-    promptDirective: `Epicrisi come SINTESI FATTUALE CONCISA della vicenda clinica documentata. Massimo 1-2 paragrafi narrativi + dati ITT/ITP.
+    promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
+
 Includi:
-1. Sintesi cronologica dei fatti principali (1-2 paragrafi compatti)
+1. Sintesi cronologica essenziale dei fatti principali (1-2 paragrafi compatti)
 2. Dati per il danno biologico: periodi ITT/ITP calcolati, esiti documentati
+3. Eventuali spese mediche giudicate congrue (1 riga)
 
-NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà.
+NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà nello spazio dedicato in fondo.
 
-LIMITI DELLA SEZIONE (anti-ridondanza con altre sezioni):
-- NON ri-narrare l'evento indice in dettaglio — è oggetto di "Il Fatto"
-- NON ripetere l'iter diagnostico-terapeutico paragrafo per paragrafo — è oggetto di "Iter Diagnostico-Terapeutico"
+LIMITI DELLA SEZIONE (anti-ridondanza):
+- NON ri-narrare l'evento indice in dettaglio — è oggetto di "Il Fatto e la Storia Clinica"
 - NON riprodurre i documenti — è oggetto della "Documentazione Medica Prodotta"
-Qui SOLO sintesi essenziale e dati medico-legali calcolati.
+Qui SOLO sintesi essenziale + dati medico-legali calcolati.
 
 Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}
@@ -534,20 +443,7 @@ ${EPICRISI_FORMULATIONS}
 
 ${EPICRISI_EXAMPLE}
 
-*[Il perito completerà questa sezione con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA), danno morale]*`,
-  },
-  {
-    id: 'conclusioni',
-    title: 'Conclusioni',
-    maxTokens: TOKENS_TINY,
-    dataSources: ['context-summaries', 'calculations'],
-    contextMaxChars: 0,
-    needsOcr: false,
-    promptDirective: `Genera una breve sintesi conclusiva (1-2 paragrafi).
-Riepiloga i fatti principali e i dati quantitativi emersi (periodi ITT/ITP, esiti documentati).
-NON esprimere giudizi, opinioni o conclusioni su responsabilita o merito.
-Stile fattuale e conciso. La sintesi deve contenere SOLO fatti gia trattati nel report.
-${NO_EVN_RULE}`,
+*[Il perito completerà l'epicrisi con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA per resp. civile / ANIA-INAIL per polizza infortuni), danno morale, livello di sofferenza, congruità complessiva spese]*`,
   },
 ];
 

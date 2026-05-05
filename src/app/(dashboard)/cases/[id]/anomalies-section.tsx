@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Upload, Loader2, Eye, EyeOff, ShieldCheck, ShieldAlert, Archive, ThumbsUp, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, FileWarning, Upload, Loader2, Eye, EyeOff, ShieldCheck, Archive, ThumbsUp, ChevronDown, ChevronRight, Pencil, Undo2, CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 // Textarea removed — anomaly descriptions are read-only
 import { anomalyTypeLabels } from '@/lib/constants';
 import { dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
+import { revertAnomalyDecision } from '../../actions/anomaly-actions';
 import { createClient } from '@/lib/supabase/client';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
@@ -212,59 +213,14 @@ function resolveEventReferences(
   });
 }
 
-// --- Status helpers ---
-
-function isResolved(status: string | null): boolean {
-  return status === 'llm_resolved' || status === 'user_dismissed' || status === 'user_confirmed';
-}
-
-function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return null;
-
-  if (status === 'detected') {
-    return (
-      <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30">
-        <AlertTriangle className="mr-1 h-3 w-3" />Da revisionare
-      </Badge>
-    );
-  }
-
-  if (status === 'llm_resolved') {
-    return (
-      <Badge variant="outline" className="text-xs border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
-        <ShieldCheck className="mr-1 h-3 w-3" />Risolta
-      </Badge>
-    );
-  }
-
-  if (status === 'llm_confirmed') {
-    return (
-      <Badge variant="outline" className="text-xs border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30">
-        <ShieldAlert className="mr-1 h-3 w-3" />Confermata — da revisionare
-      </Badge>
-    );
-  }
-
-  if (status === 'user_confirmed') {
-    return (
-      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
-        <ThumbsUp className="mr-1 h-3 w-3" />Confermata — nel report
-      </Badge>
-    );
-  }
-
-  if (status === 'user_dismissed') {
-    return (
-      <Badge variant="outline" className="text-xs border-gray-400 text-gray-500">
-        <Archive className="mr-1 h-3 w-3" />Ignorata — esclusa dal report
-      </Badge>
-    );
-  }
-
-  return null;
-}
-
 // --- Anomaly Card ---
+//
+// Three distinct layouts based on status:
+//   - actionable (detected | llm_confirmed): full layout with description,
+//     references, "Cosa devi decidere" (always visible), note textarea, action buttons
+//   - confirmed (user_confirmed): compact summary with note + Modifica/Annulla
+//   - dismissed (user_dismissed): compact summary with Annulla esclusione
+//   - resolved (llm_resolved): minimal — title + badge, in collapsed parent section
 
 function AnomalyCard({
   anomaly,
@@ -279,152 +235,368 @@ function AnomalyCard({
   caseId: string;
   onChanged?: (dismissedId?: string) => void;
 }) {
-  const needsAction = anomaly.status === 'detected' || anomaly.status === 'llm_confirmed';
-  const [showGuide, setShowGuide] = useState(needsAction);
-  const [expertNote, setExpertNote] = useState(anomaly.resolution_note ?? '');
+  const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
+  const references = resolveEventReferences(involvedEvents, events, documents);
+  const guidance = anomalyGuidance[anomaly.anomaly_type];
+  const typeLabel = anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type;
+
+  const status = anomaly.status;
+
+  if (status === 'user_confirmed') {
+    return (
+      <ConfirmedAnomalyCard
+        anomaly={anomaly}
+        typeLabel={typeLabel}
+        caseId={caseId}
+        onChanged={onChanged}
+      />
+    );
+  }
+
+  if (status === 'user_dismissed') {
+    return (
+      <DismissedAnomalyCard
+        anomaly={anomaly}
+        typeLabel={typeLabel}
+        caseId={caseId}
+        onChanged={onChanged}
+      />
+    );
+  }
+
+  if (status === 'llm_resolved') {
+    return (
+      <ResolvedAnomalyCard anomaly={anomaly} typeLabel={typeLabel} />
+    );
+  }
+
+  // Actionable: detected | llm_confirmed
+  return (
+    <ActionableAnomalyCard
+      anomaly={anomaly}
+      typeLabel={typeLabel}
+      references={references}
+      guidance={guidance}
+      caseId={caseId}
+      onChanged={onChanged}
+    />
+  );
+}
+
+// --- Layout: actionable anomaly (detected | llm_confirmed) ---
+
+function ActionableAnomalyCard({
+  anomaly,
+  typeLabel,
+  references,
+  guidance,
+  caseId,
+  onChanged,
+}: {
+  anomaly: AnomalyRow;
+  typeLabel: string;
+  references: string[];
+  guidance: AnomalyGuidanceEntry | undefined;
+  caseId: string;
+  onChanged?: (dismissedId?: string) => void;
+}) {
+  // Textarea ALWAYS starts empty — the perito writes from scratch.
+  const [expertNote, setExpertNote] = useState('');
   const [isDismissing, startDismiss] = useTransition();
   const [isConfirming, startConfirm] = useTransition();
 
-  const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
-  const references = resolveEventReferences(involvedEvents, events, documents);
-  const resolved = isResolved(anomaly.status);
-  const guidance = anomalyGuidance[anomaly.anomaly_type];
-
   const handleDismiss = useCallback(() => {
     startDismiss(async () => {
-      const result = await dismissAnomaly({ anomalyId: anomaly.id, caseId, resolutionNote: expertNote.trim() || null });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Anomalia ignorata');
+      const result = await dismissAnomaly({
+        anomalyId: anomaly.id, caseId,
+        resolutionNote: expertNote.trim() || null,
+      });
+      if (result.error) { toast.error(result.error); return; }
+      toast.success('Anomalia esclusa dal report');
       onChanged?.(anomaly.id);
     });
   }, [anomaly.id, caseId, expertNote, onChanged]);
 
   const handleConfirm = useCallback(() => {
     startConfirm(async () => {
-      const result = await confirmAnomaly({ anomalyId: anomaly.id, caseId, resolutionNote: expertNote.trim() || null });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Anomalia confermata — sarà segnalata nel report');
+      const result = await confirmAnomaly({
+        anomalyId: anomaly.id, caseId,
+        resolutionNote: expertNote.trim() || null,
+      });
+      if (result.error) { toast.error(result.error); return; }
+      toast.success('Anomalia segnalata nel report');
       onChanged?.();
     });
   }, [anomaly.id, caseId, expertNote, onChanged]);
 
   return (
-    <div className={`rounded-md border p-3 ${resolved ? 'opacity-60' : ''}`}>
-      {/* Header: severity + type + status */}
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
-          <StatusBadge status={anomaly.status} />
-          <span className="text-sm font-medium">{anomalyTypeLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type}</span>
-        </div>
+    <div className="rounded-md border border-orange-200 dark:border-orange-900/50 bg-orange-50/50 dark:bg-orange-950/10 p-3">
+      {/* Header */}
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
+        <Badge variant="outline" className="text-xs border-orange-500 text-orange-700 dark:text-orange-400 bg-white dark:bg-orange-950/30">
+          Da revisionare
+        </Badge>
+        <span className="text-sm font-semibold">{typeLabel}</span>
       </div>
 
-      {/* Body: description + suggestion (read-only) */}
+      {/* Description */}
       <p className="text-sm">{anomaly.description}</p>
-      {anomaly.suggestion && (
-        <p className="mt-2 text-sm text-muted-foreground italic">
-          {anomaly.suggestion}
-        </p>
-      )}
-      {anomaly.resolution_note && (
-        <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
-          {anomaly.resolution_note}
-        </p>
-      )}
 
-      {/* Event/document references */}
+      {/* References */}
       {references.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {references.map((ref) => (
-            <p key={ref} className="text-xs text-muted-foreground">
+            <p key={ref} className="text-xs text-muted-foreground flex items-start gap-1">
+              <FileText className="h-3 w-3 mt-0.5 shrink-0" />
               {ref}
             </p>
           ))}
         </div>
       )}
 
-      {/* Guidance: "Come risolvere?" — collapsible, only for unresolved */}
-      {!resolved && guidance && (
-        <div className="mt-3">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-            onClick={() => setShowGuide(!showGuide)}
-          >
-            {showGuide ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <HelpCircle className="h-3 w-3" />
-            Come risolvere questa anomalia?
-          </button>
-          {showGuide && (
-            <div className="mt-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
-              <div>
-                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">Cosa significa</p>
-                <p className="text-xs text-blue-700 dark:text-blue-400">{guidance.meaning}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">Cosa fare</p>
-                <p className="text-xs text-blue-700 dark:text-blue-400">{guidance.howToResolve}</p>
-              </div>
-            </div>
-          )}
+      {/* "Cosa devi decidere" — always visible, no toggle */}
+      {guidance && (
+        <div className="mt-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300">❓ Cosa devi decidere</p>
+          <div>
+            <p className="text-xs font-medium text-blue-900 dark:text-blue-300">Cosa significa</p>
+            <p className="text-xs text-blue-800 dark:text-blue-400">{guidance.meaning}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-blue-900 dark:text-blue-300">Cosa fare</p>
+            <p className="text-xs text-blue-800 dark:text-blue-400">{guidance.howToResolve}</p>
+          </div>
         </div>
       )}
 
-      {/* Expert note + actions — only for unresolved anomalies */}
-      {!resolved && (
-        <div className="mt-3 pt-2 border-t border-dashed space-y-3">
-          {/* Expert note textarea */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              Nota del perito (opzionale — sarà inclusa nel report)
-            </label>
-            <textarea
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
-              placeholder="Es: Il ritardo diagnostico non ha avuto impatto sull'esito clinico perche'..."
-              value={expertNote}
-              onChange={(e) => setExpertNote(e.target.value)}
-            />
-          </div>
+      {/* Note + actions */}
+      <div className="mt-3 pt-3 border-t border-dashed border-orange-200 dark:border-orange-900/50 space-y-2.5">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground flex items-center gap-1">
+            <Pencil className="h-3 w-3" />
+            La tua nota nel report (opzionale)
+          </label>
+          <textarea
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
+            placeholder='Es: "Il trattamento risulta documentato in relazione successiva non inclusa nel fascicolo"'
+            value={expertNote}
+            onChange={(e) => setExpertNote(e.target.value)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Quello che scrivi qui sarà integrato nel report finale.
+          </p>
+        </div>
 
-          {/* Clear action buttons — always the same 2 options */}
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={handleConfirm}
+            disabled={isConfirming || isDismissing}
+          >
+            {isConfirming ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <ThumbsUp className="mr-1 h-3 w-3" />
+            )}
+            Segnala nel report
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={handleDismiss}
+            disabled={isConfirming || isDismissing}
+          >
+            {isDismissing ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Archive className="mr-1 h-3 w-3" />
+            )}
+            Escludi
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Layout: confirmed by perito (user_confirmed) ---
+
+function ConfirmedAnomalyCard({
+  anomaly,
+  typeLabel,
+  caseId,
+  onChanged,
+}: {
+  anomaly: AnomalyRow;
+  typeLabel: string;
+  caseId: string;
+  onChanged?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftNote, setDraftNote] = useState(anomaly.resolution_note ?? '');
+  const [isSaving, startSave] = useTransition();
+  const [isReverting, startRevert] = useTransition();
+
+  const handleSaveNote = useCallback(() => {
+    startSave(async () => {
+      // Re-confirm with new note. Action requires actionable status, so we
+      // revert first, then re-confirm. This keeps the audit trail clean.
+      const revertRes = await revertAnomalyDecision({ anomalyId: anomaly.id, caseId });
+      if (revertRes.error) { toast.error(revertRes.error); return; }
+      const confirmRes = await confirmAnomaly({
+        anomalyId: anomaly.id, caseId,
+        resolutionNote: draftNote.trim() || null,
+      });
+      if (confirmRes.error) { toast.error(confirmRes.error); return; }
+      toast.success('Nota aggiornata');
+      setEditing(false);
+      onChanged?.();
+    });
+  }, [anomaly.id, caseId, draftNote, onChanged]);
+
+  const handleRevert = useCallback(() => {
+    startRevert(async () => {
+      const result = await revertAnomalyDecision({ anomalyId: anomaly.id, caseId });
+      if (result.error) { toast.error(result.error); return; }
+      toast.success('Anomalia riportata in revisione');
+      onChanged?.();
+    });
+  }, [anomaly.id, caseId, onChanged]);
+
+  return (
+    <div className="rounded-md border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/10 p-3">
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <span className="text-sm font-semibold">{typeLabel}</span>
+        <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-emerald-950/30">
+          Sarà inclusa nel report
+        </Badge>
+      </div>
+
+      {!editing ? (
+        <>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Tua nota:</span>{' '}
+            {anomaly.resolution_note
+              ? <>&ldquo;{anomaly.resolution_note}&rdquo;</>
+              : <span className="italic">nessuna nota aggiunta</span>}
+          </p>
+          <div className="mt-2.5 flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-              onClick={handleConfirm}
-              disabled={isConfirming}
+              className="h-7 text-xs"
+              onClick={() => { setDraftNote(anomaly.resolution_note ?? ''); setEditing(true); }}
+              disabled={isReverting}
             >
-              {isConfirming ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <ThumbsUp className="mr-1 h-3 w-3" />
-              )}
-              Segnala nel report
+              <Pencil className="mr-1 h-3 w-3" />
+              Modifica nota
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs text-muted-foreground hover:text-foreground"
-              onClick={handleDismiss}
-              disabled={isDismissing}
+              className="h-7 text-xs text-muted-foreground"
+              onClick={handleRevert}
+              disabled={isReverting}
             >
-              {isDismissing ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <Archive className="mr-1 h-3 w-3" />
-              )}
-              Escludi
+              {isReverting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Undo2 className="mr-1 h-3 w-3" />}
+              Annulla conferma
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <textarea
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
+            placeholder='Es: "Il trattamento risulta documentato in relazione successiva..."'
+            value={draftNote}
+            onChange={(e) => setDraftNote(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <Button size="sm" className="h-7 text-xs" onClick={handleSaveNote} disabled={isSaving}>
+              {isSaving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+              Salva
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)} disabled={isSaving}>
+              Annulla
             </Button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Layout: dismissed by perito (user_dismissed) ---
+
+function DismissedAnomalyCard({
+  anomaly,
+  typeLabel,
+  caseId,
+  onChanged,
+}: {
+  anomaly: AnomalyRow;
+  typeLabel: string;
+  caseId: string;
+  onChanged?: () => void;
+}) {
+  const [isReverting, startRevert] = useTransition();
+
+  const handleRevert = useCallback(() => {
+    startRevert(async () => {
+      const result = await revertAnomalyDecision({ anomalyId: anomaly.id, caseId });
+      if (result.error) { toast.error(result.error); return; }
+      toast.success('Anomalia riportata in revisione');
+      onChanged?.();
+    });
+  }, [anomaly.id, caseId, onChanged]);
+
+  return (
+    <div className="rounded-md border border-muted-foreground/20 bg-muted/30 p-3 opacity-75">
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <XCircle className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold">{typeLabel}</span>
+        <Badge variant="outline" className="text-xs border-gray-400 text-gray-600 dark:text-gray-400">
+          Esclusa dal report
+        </Badge>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs text-muted-foreground"
+        onClick={handleRevert}
+        disabled={isReverting}
+      >
+        {isReverting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Undo2 className="mr-1 h-3 w-3" />}
+        Annulla esclusione
+      </Button>
+    </div>
+  );
+}
+
+// --- Layout: auto-resolved by AI (llm_resolved) ---
+
+function ResolvedAnomalyCard({
+  anomaly,
+  typeLabel,
+}: {
+  anomaly: AnomalyRow;
+  typeLabel: string;
+}) {
+  return (
+    <div className="rounded-md border border-green-200 dark:border-green-900/50 bg-green-50/40 dark:bg-green-950/10 p-3 opacity-80">
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
+        <span className="text-sm font-semibold">{typeLabel}</span>
+        <Badge variant="outline" className="text-xs border-green-500 text-green-700 dark:text-green-400 bg-white dark:bg-green-950/30">
+          Risolta automaticamente
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">{anomaly.description}</p>
     </div>
   );
 }

@@ -229,3 +229,63 @@ export async function dismissAnomaly(params: {
 
   return { success: true };
 }
+
+/**
+ * Revert a perito decision (user_confirmed or user_dismissed) back to actionable.
+ * Used when the perito wants to change their mind or edit their note.
+ * Resets resolution_note so the perito starts blank again on the next attempt.
+ */
+export async function revertAnomalyDecision(params: {
+  anomalyId: string;
+  caseId: string;
+}) {
+  const parsed = anomalyIdSchema.safeParse(params);
+  if (!parsed.success) return { error: 'Parametri non validi' };
+
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data: anomalyRow } = await supabase
+    .from('anomalies')
+    .select('status')
+    .eq('id', parsed.data.anomalyId)
+    .eq('case_id', parsed.data.caseId)
+    .single();
+  if (!anomalyRow) return { error: 'Anomalia non trovata' };
+
+  const revertableStatuses = ['user_confirmed', 'user_dismissed'];
+  if (!revertableStatuses.includes(anomalyRow.status)) {
+    return { error: 'Questa anomalia non può essere riportata in revisione' };
+  }
+
+  const { error } = await supabase
+    .from('anomalies')
+    .update({
+      status: 'llm_confirmed',
+      resolution_note: null,
+      resolved_at: null,
+    })
+    .eq('id', parsed.data.anomalyId)
+    .eq('case_id', parsed.data.caseId);
+  if (error) return { error: 'Errore aggiornamento anomalia' };
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'anomaly.reverted',
+    entity_type: 'anomaly',
+    entity_id: parsed.data.anomalyId,
+    metadata: { caseId: parsed.data.caseId, fromStatus: anomalyRow.status },
+  });
+
+  return { success: true };
+}

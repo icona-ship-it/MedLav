@@ -7,9 +7,11 @@ import {
   formatDocumentsOcrForPrompt,
   formatDocumentSummariesForPrompt,
   buildChronologyUserPrompt,
+  formatAnomaliesForPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DocumentSummary } from './document-summarizer';
+import type { DetectedAnomaly } from '../validation/anomaly-detector';
 
 function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   return {
@@ -599,6 +601,62 @@ describe('synthesis-prompts', () => {
 
       expect(result).toContain('TESTO OCR');
       expect(result).not.toContain('RIASSUNTI AI');
+    });
+  });
+
+  describe('formatAnomaliesForPrompt', () => {
+    function makeAnomaly(overrides?: Partial<DetectedAnomaly>): DetectedAnomaly {
+      return {
+        anomalyType: 'complicanza_non_gestita',
+        severity: 'alta',
+        description: 'Complicanza senza trattamento documentato',
+        involvedEvents: [{ eventId: 'e1', orderNumber: 1, date: '2025-06-05', title: 'Difficoltà motorie' }],
+        suggestion: 'Verificare se la complicanza è stata trattata',
+        ...overrides,
+      };
+    }
+
+    it('should return placeholder when no anomalies', () => {
+      expect(formatAnomaliesForPrompt([])).toBe('Nessuna anomalia rilevata.');
+    });
+
+    it('should format anomaly without resolutionNote (no NOTA DEL PERITO line)', () => {
+      const result = formatAnomaliesForPrompt([makeAnomaly()]);
+      expect(result).toContain('[ALTA] complicanza_non_gestita');
+      expect(result).toContain('Complicanza senza trattamento documentato');
+      expect(result).not.toContain('NOTA DEL PERITO');
+    });
+
+    it('should include perito note when resolutionNote is present (bug A fix)', () => {
+      const result = formatAnomaliesForPrompt([
+        makeAnomaly({ resolutionNote: 'Il trattamento risulta documentato in relazione successiva' }),
+      ]);
+      expect(result).toContain('NOTA DEL PERITO (vincolante — integra nel testo del report)');
+      expect(result).toContain('"Il trattamento risulta documentato in relazione successiva"');
+    });
+
+    it('should skip empty resolutionNote', () => {
+      const r1 = formatAnomaliesForPrompt([makeAnomaly({ resolutionNote: '' })]);
+      const r2 = formatAnomaliesForPrompt([makeAnomaly({ resolutionNote: '   ' })]);
+      const r3 = formatAnomaliesForPrompt([makeAnomaly({ resolutionNote: null })]);
+      expect(r1).not.toContain('NOTA DEL PERITO');
+      expect(r2).not.toContain('NOTA DEL PERITO');
+      expect(r3).not.toContain('NOTA DEL PERITO');
+    });
+
+    it('should preserve order and include perito notes for multiple anomalies', () => {
+      const result = formatAnomaliesForPrompt([
+        makeAnomaly({ description: 'First', resolutionNote: 'note A' }),
+        makeAnomaly({ description: 'Second' }),
+        makeAnomaly({ description: 'Third', resolutionNote: 'note C' }),
+      ]);
+      expect(result.indexOf('First')).toBeLessThan(result.indexOf('Second'));
+      expect(result.indexOf('Second')).toBeLessThan(result.indexOf('Third'));
+      expect(result).toContain('"note A"');
+      expect(result).toContain('"note C"');
+      // Second has no note, so only 2 NOTA DEL PERITO occurrences total
+      const noteCount = (result.match(/NOTA DEL PERITO/g) ?? []).length;
+      expect(noteCount).toBe(2);
     });
   });
 });

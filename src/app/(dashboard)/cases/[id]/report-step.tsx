@@ -209,7 +209,7 @@ export function ReportStep({
         <div className="flex flex-col">
           {/* Warning banner for pipeline issues */}
           {pipelineWarnings.length > 0 && (
-            <PipelineWarningsBanner warnings={pipelineWarnings} />
+            <PipelineWarningsBanner warnings={pipelineWarnings} documents={documents} events={events} />
           )}
 
           {/* Export toolbar for timeline data */}
@@ -304,7 +304,7 @@ export function ReportStep({
     <div className="flex flex-col">
       {/* Warning banner for pipeline issues */}
       {pipelineWarnings.length > 0 && (
-        <PipelineWarningsBanner warnings={pipelineWarnings} />
+        <PipelineWarningsBanner warnings={pipelineWarnings} documents={documents} events={events} />
       )}
 
       {/* Action bar - toolbar at top for immediate visibility */}
@@ -462,7 +462,17 @@ export function ReportStep({
 
 // --- Pipeline Warnings Banner ---
 
-function PipelineWarningsBanner({ warnings }: { warnings: PipelineWarningItem[] }) {
+function PipelineWarningsBanner({
+  warnings,
+  documents,
+  events,
+}: {
+  warnings: PipelineWarningItem[];
+  documents: Document[];
+  events: EventRow[];
+}) {
+  const [detailWarning, setDetailWarning] = useState<PipelineWarningItem | null>(null);
+
   const hasCritical = warnings.some((w) => w.severity === 'critical');
   const borderColor = hasCritical
     ? 'border-red-300 dark:border-red-800'
@@ -478,33 +488,173 @@ function PipelineWarningsBanner({ warnings }: { warnings: PipelineWarningItem[] 
     : 'text-orange-800 dark:text-orange-300';
 
   return (
-    <div className={`mb-4 rounded-lg border ${borderColor} ${bgColor} px-4 py-3`}>
-      <div className="flex gap-3">
-        <AlertTriangle className={`h-5 w-5 ${iconColor} shrink-0 mt-0.5`} />
-        <div className="space-y-2">
-          <p className={`text-sm font-medium ${titleColor}`}>
-            {warnings.length === 1 ? 'Problema durante l\'elaborazione' : `${warnings.length} problemi durante l'elaborazione`}
-          </p>
-          <ul className="space-y-1">
-            {warnings.map((w, i) => (
-              <li key={i} className="text-xs text-muted-foreground">
-                <span className={w.severity === 'critical' ? 'font-medium text-red-700 dark:text-red-400' : ''}>
-                  {w.message}
-                </span>
-                {w.failedItems && w.failedItems.length > 0 && (
-                  <span className="text-muted-foreground/70">
-                    {' '}({w.failedItems.slice(0, 3).join(', ')}
-                    {w.failedItems.length > 3 && ` +${w.failedItems.length - 3}`})
+    <>
+      <div className={`mb-4 rounded-lg border ${borderColor} ${bgColor} px-4 py-3`}>
+        <div className="flex gap-3">
+          <AlertTriangle className={`h-5 w-5 ${iconColor} shrink-0 mt-0.5`} />
+          <div className="space-y-2 min-w-0 flex-1">
+            <p className={`text-sm font-medium ${titleColor}`}>
+              {warnings.length === 1 ? 'Problema durante l\'elaborazione' : `${warnings.length} problemi durante l'elaborazione`}
+            </p>
+            <ul className="space-y-1.5">
+              {warnings.map((w, i) => (
+                <li key={i} className="text-xs text-muted-foreground">
+                  <span className={w.severity === 'critical' ? 'font-medium text-red-700 dark:text-red-400' : ''}>
+                    {w.message}
                   </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            Il risultato potrebbe essere incompleto. Prova a rielaborare il caso.
-          </p>
+                  {w.failedItems && w.failedItems.length > 0 && (
+                    <>
+                      <span className="text-muted-foreground/70">
+                        {' '}({w.failedItems.slice(0, 3).join(', ')}
+                        {w.failedItems.length > 3 && ` +${w.failedItems.length - 3}`})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDetailWarning(w)}
+                        className="ml-2 underline underline-offset-2 hover:text-foreground transition-colors"
+                      >
+                        Vedi dettagli
+                      </button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              Il risultato potrebbe essere incompleto. Prova a rielaborare il caso.
+            </p>
+          </div>
         </div>
       </div>
+
+      <PipelineWarningDetailDialog
+        warning={detailWarning}
+        documents={documents}
+        events={events}
+        onClose={() => setDetailWarning(null)}
+      />
+    </>
+  );
+}
+
+// --- Failed Documents Detail Dialog ---
+
+function PipelineWarningDetailDialog({
+  warning,
+  documents,
+  events,
+  onClose,
+}: {
+  warning: PipelineWarningItem | null;
+  documents: Document[];
+  events: EventRow[];
+  onClose: () => void;
+}) {
+  if (!warning?.failedItems || warning.failedItems.length === 0) return null;
+
+  // Match each failed item (filename) to its Document record and count events.
+  const failedDocs = warning.failedItems.map((fileName) => {
+    const doc = documents.find((d) => d.file_name === fileName);
+    const eventCount = doc ? events.filter((e) => e.document_id === doc.id).length : 0;
+    return { fileName, doc, eventCount };
+  });
+
+  return (
+    <Dialog open={warning !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Dettaglio documenti</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-2">
+          <p className="text-sm text-muted-foreground">
+            {warning.message}. Per ciascun documento qui sotto, trovi i dettagli e una possibile spiegazione del motivo per cui non sono stati individuati eventi clinici cronologici.
+          </p>
+          <div className="space-y-2">
+            {failedDocs.map(({ fileName, doc, eventCount }, idx) => (
+              <FailedDocumentRow
+                key={idx}
+                fileName={fileName}
+                doc={doc}
+                eventCount={eventCount}
+              />
+            ))}
+          </div>
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 mt-4">
+            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">Cosa fare</p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              Se uno di questi documenti contiene informazioni cliniche cronologiche importanti (date, esami, visite, terapie), prova a rielaborare il caso. Se il documento è uno scan di bassa qualità o contiene solo dati amministrativi, è normale che non produca eventi.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FailedDocumentRow({
+  fileName,
+  doc,
+  eventCount,
+}: {
+  fileName: string;
+  doc: Document | undefined;
+  eventCount: number;
+}) {
+  const sizeLabel = doc?.file_size ? formatFileSize(doc.file_size) : null;
+  const typeLabel = doc?.document_type
+    ? (PIPELINE_DOC_TYPE_LABELS[doc.document_type] ?? doc.document_type)
+    : 'Tipo non classificato';
+
+  // Build a non-technical explanation
+  let reason: string;
+  if (doc?.processing_error) {
+    reason = `Errore di elaborazione: ${doc.processing_error}`;
+  } else if (doc?.processing_status === 'failed') {
+    reason = 'L\'elaborazione del documento non è andata a buon fine.';
+  } else if (doc?.document_type === 'memoria_difensiva' || doc?.document_type === 'documento_amministrativo' || doc?.document_type === 'spese_mediche') {
+    reason = 'Documento non clinico (es. memoria, atto amministrativo, spese): non sono attesi eventi cronologici.';
+  } else if (doc?.document_type === 'altro' || !doc?.document_type) {
+    reason = 'Documento non riconosciuto come clinico, oppure di natura non chiaramente cronologica.';
+  } else {
+    reason = 'Nessun evento cronologico è stato individuato. Possibili cause: scansione di bassa qualità, documento prevalentemente di immagini, o contenuto già coperto da altri documenti.';
+  }
+
+  return (
+    <div className="rounded-md border bg-card p-3 space-y-1.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium break-all">{fileName}</p>
+        {eventCount > 0 && (
+          <span className="text-xs text-muted-foreground shrink-0">{eventCount} eventi</span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>Tipo: <span className="text-foreground">{typeLabel}</span></span>
+        {sizeLabel && <span>Dimensione: <span className="text-foreground">{sizeLabel}</span></span>}
+      </div>
+      <p className="text-xs text-muted-foreground italic">{reason}</p>
     </div>
   );
 }
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const PIPELINE_DOC_TYPE_LABELS: Record<string, string> = {
+  cartella_clinica: 'Cartella clinica',
+  referto_specialistico: 'Referto specialistico',
+  esame_strumentale: 'Esame strumentale',
+  esame_laboratorio: 'Esame di laboratorio',
+  lettera_dimissione: 'Lettera di dimissione',
+  certificato: 'Certificato medico',
+  spese_mediche: 'Spese mediche',
+  perizia_precedente: 'Perizia precedente',
+  perizia_ctp: 'Perizia CTP',
+  perizia_ctu: 'Perizia CTU',
+  memoria_difensiva: 'Memoria difensiva',
+  documento_amministrativo: 'Documento amministrativo',
+  altro: 'Altro / non classificato',
+  misto: 'Documento misto',
+};

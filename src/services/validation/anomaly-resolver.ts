@@ -202,14 +202,14 @@ function parseResolutionResponse(response: string, anomalyIndex: number): Anomal
 
 // ── Prompts ──
 
-const RESOLUTION_SYSTEM_PROMPT = `Sei un assistente medico-legale. Il tuo compito è verificare se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo il testo OCR originale delle pagine sorgente.
+const RESOLUTION_SYSTEM_PROMPT = `Sei un assistente medico-legale. Il tuo compito è verificare se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo la documentazione fornita.
 
 REGOLE FONDAMENTALI:
 1. Rispondi SOLO in formato JSON con questa struttura: {"resolved": boolean, "confidence": number, "evidence": string, "reasoning": string}
-2. "resolved" = true SOLO se trovi evidenza ESPLICITA e LETTERALE nel testo OCR che dimostra che l'anomalia NON sussiste
+2. "resolved" = true SOLO se trovi evidenza ESPLICITA e LETTERALE nella documentazione che dimostra che l'anomalia NON sussiste
 3. "confidence" = numero tra 0 e 1 che indica quanto sei sicuro della tua conclusione
-4. "evidence" = citazione LETTERALE dal testo OCR (copia-incolla esatto) che supporta la tua conclusione
-5. "reasoning" = breve spiegazione del tuo ragionamento
+4. "evidence" = citazione LETTERALE dal testo dei documenti (copia-incolla esatto) che supporta la tua conclusione
+5. "reasoning" = breve spiegazione in linguaggio medico-legale (NON menzionare "OCR", "AI", "modelli linguistici" o termini tecnici di processing — usa "documentazione fornita" o "testo dei documenti")
 6. In caso di dubbio, rispondi con "resolved": false — è meglio segnalare un falso positivo che ignorare un problema reale
 7. NON inventare evidenze. Se non trovi nulla di esplicito, l'anomalia resta confermata
 8. NON fare inferenze o deduzioni. Solo evidenza LETTERALE e DIRETTA conta`;
@@ -228,13 +228,13 @@ function buildResolutionPrompt(anomaly: DetectedAnomaly, ocrContext: string): st
 **Eventi coinvolti**:
 ${eventsDesc}
 
-## TESTO OCR DELLE PAGINE SORGENTE
+## TESTO INTEGRALE DELLE PAGINE SORGENTE DEI DOCUMENTI
 
 ${ocrContext}
 
 ## ISTRUZIONI
 
-Cerca nel testo OCR sopra evidenza ESPLICITA e LETTERALE che dimostri che questa anomalia NON sussiste.
+Cerca nei documenti sopra evidenza ESPLICITA e LETTERALE che dimostri che questa anomalia NON sussiste.
 Ad esempio:
 - Per un "ritardo diagnostico": cerca se c'è menzione di una diagnosi precedente non catturata dagli eventi
 - Per un "gap post-chirurgico": cerca se c'è menzione di un follow-up non estratto come evento

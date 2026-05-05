@@ -15,6 +15,9 @@ export interface DetectedAnomaly {
     title: string;
   }>;
   suggestion: string;
+  /** Optional perito-authored note. When present, the synthesis prompt embeds it
+   * verbatim and instructs the LLM to integrate it as factual context in the report. */
+  resolutionNote?: string | null;
 }
 
 // Conservative thresholds to avoid false positives

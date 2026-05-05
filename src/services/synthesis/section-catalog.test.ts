@@ -168,23 +168,24 @@ describe('section-catalog', () => {
   // ── Role-specific section arrays ──────────────────────────────────
 
   describe('role-specific section arrays', () => {
-    it('should have 15 CTU sections', () => {
-      expect(CTU_SECTIONS).toHaveLength(15);
+    it('should have 11 CTU sections (allineato benchmark Resch/Mao)', () => {
+      expect(CTU_SECTIONS).toHaveLength(11);
     });
 
-    it('should have 14 CTP sections (CTU without osservazioni_bozza)', () => {
-      expect(CTP_SECTIONS).toHaveLength(14);
+    it('should have 10 CTP sections (CTU without osservazioni_bozza)', () => {
+      expect(CTP_SECTIONS).toHaveLength(10);
       expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('osservazioni_bozza');
     });
 
-    it('should have 9 stragiudiziale sections (incl. Il Fatto separato)', () => {
-      expect(STRAGIUDIZIALE_SECTIONS).toHaveLength(9);
-      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('il_fatto');
+    it('should have 7 stragiudiziale sections (allineato benchmark Antoniazzi)', () => {
+      expect(STRAGIUDIZIALE_SECTIONS).toHaveLength(7);
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('il_fatto_e_storia_clinica');
     });
 
     it('should have placeholder sections with isPlaceholder=true and maxTokens=0', () => {
       const placeholders = CTU_SECTIONS.filter((s) => s.isPlaceholder);
-      expect(placeholders.length).toBeGreaterThanOrEqual(4);
+      // After benchmark alignment: operazioni_peritali, considerazioni_ml, osservazioni_bozza
+      expect(placeholders.length).toBeGreaterThanOrEqual(3);
       for (const p of placeholders) {
         expect(p.maxTokens).toBe(0);
         expect(p.placeholderText).toBeTruthy();
@@ -222,10 +223,21 @@ describe('section-catalog', () => {
       expect(allIds).not.toContain('riassunto');
     });
 
-    it('should contain epicrisi in all role arrays', () => {
-      expect(CTU_SECTIONS.map((s) => s.id)).toContain('epicrisi');
-      expect(CTP_SECTIONS.map((s) => s.id)).toContain('epicrisi');
+    it('should contain epicrisi only in stragiudiziale (CTU/CTP merge it into considerazioni_ml placeholder)', () => {
+      expect(CTU_SECTIONS.map((s) => s.id)).not.toContain('epicrisi');
+      expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('epicrisi');
       expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('epicrisi');
+    });
+
+    it('should not contain removed sections after benchmark alignment', () => {
+      const allCtuCtp = [...CTU_SECTIONS.map((s) => s.id), ...CTP_SECTIONS.map((s) => s.id)];
+      expect(allCtuCtp).not.toContain('profilo_metodologico');
+      expect(allCtuCtp).not.toContain('verbale_operazioni_peritali');
+      expect(allCtuCtp).not.toContain('visita_periziando');
+      expect(allCtuCtp).not.toContain('conclusioni_quesiti');
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).not.toContain('il_fatto');
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).not.toContain('fatto_storia_clinica');
+      expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).not.toContain('conclusioni');
     });
 
     it('should not have [Ev.N] references in any promptDirective', () => {
@@ -244,8 +256,8 @@ describe('section-catalog', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('documentazione_sanitaria');
-      expect(ids).toContain('epicrisi');
-      expect(ids).toContain('profilo_metodologico');
+      expect(ids).toContain('considerazioni_ml');
+      expect(ids).toContain('operazioni_peritali');
     });
 
     it('should return stragiudiziale sections for stragiudiziale role', () => {
@@ -253,21 +265,21 @@ describe('section-catalog', () => {
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('intestazione_stragiudiziale');
       expect(ids).toContain('anamnesi');
-      expect(ids).toContain('fatto_storia_clinica');
+      expect(ids).toContain('il_fatto_e_storia_clinica');
       expect(ids).toContain('documentazione_sanitaria');
       expect(ids).toContain('epicrisi');
-      expect(ids).toContain('conclusioni');
-      // Should NOT have CTU-specific sections
+      // Should NOT have CTU-specific sections nor removed sections
       expect(ids).not.toContain('profilo_metodologico');
       expect(ids).not.toContain('quesiti');
       expect(ids).not.toContain('conclusioni_quesiti');
+      expect(ids).not.toContain('conclusioni');
     });
 
     it('should return CTP sections for ctp role', () => {
       const plan = resolveSectionPlan(CTP_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('documentazione_sanitaria');
-      expect(ids).toContain('epicrisi');
+      expect(ids).toContain('considerazioni_ml');
       expect(ids).not.toContain('osservazioni_bozza');
     });
 
@@ -293,14 +305,12 @@ describe('section-catalog', () => {
       });
       const ids = plan.map((s) => s.id);
       expect(ids).toContain('quesiti');
-      expect(ids).toContain('conclusioni_quesiti');
     });
 
     it('should not include quesiti section without quesiti (CTU)', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
       expect(ids).not.toContain('quesiti');
-      expect(ids).not.toContain('conclusioni_quesiti');
     });
 
     it('should include spese_mediche when expense events exist', () => {
@@ -339,7 +349,6 @@ describe('section-catalog', () => {
       expect(ids).toContain('premesse');
       expect(ids).toContain('spese_mediche');
       expect(ids).toContain('pareri_tecnici');
-      expect(ids).toContain('conclusioni_quesiti');
     });
 
     it('should have needsOcr=true for documentazione_sanitaria', () => {
@@ -348,8 +357,8 @@ describe('section-catalog', () => {
       expect(docSan?.needsOcr).toBe(true);
     });
 
-    it('should have needsOcr=false for epicrisi', () => {
-      const plan = resolveSectionPlan(CTU_PARAMS);
+    it('should have needsOcr=false for epicrisi (stragiudiziale)', () => {
+      const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
       const epicrisi = plan.find((s) => s.id === 'epicrisi');
       expect(epicrisi?.needsOcr).toBe(false);
     });
@@ -372,24 +381,23 @@ describe('section-catalog', () => {
           });
           expect(plan.length).toBeGreaterThanOrEqual(3);
           expect(plan.map((s) => s.id)).toContain('documentazione_sanitaria');
-          expect(plan.map((s) => s.id)).toContain('epicrisi');
         }
       }
     });
 
-    it('should place documentazione_sanitaria before epicrisi (CTU)', () => {
+    it('should place documentazione_sanitaria before considerazioni_ml (CTU)', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const ids = plan.map((s) => s.id);
-      expect(ids.indexOf('documentazione_sanitaria')).toBeLessThan(ids.indexOf('epicrisi'));
+      expect(ids.indexOf('documentazione_sanitaria')).toBeLessThan(ids.indexOf('considerazioni_ml'));
     });
 
     it('should include placeholder sections in CTU plan', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const placeholders = plan.filter((s) => s.isPlaceholder);
       expect(placeholders.length).toBeGreaterThanOrEqual(3);
-      expect(placeholders.map((s) => s.id)).toContain('verbale_operazioni_peritali');
-      expect(placeholders.map((s) => s.id)).toContain('visita_periziando');
+      expect(placeholders.map((s) => s.id)).toContain('operazioni_peritali');
       expect(placeholders.map((s) => s.id)).toContain('considerazioni_ml');
+      expect(placeholders.map((s) => s.id)).toContain('osservazioni_bozza');
     });
 
     it('should include bibliografia section in CTU plan', () => {
@@ -413,8 +421,8 @@ describe('section-catalog', () => {
     it('should return CTU section IDs for ctu role', () => {
       const ids = getAllSectionIds('ctu');
       expect(ids).toContain('documentazione_sanitaria');
-      expect(ids).toContain('epicrisi');
-      expect(ids).toContain('conclusioni_quesiti');
+      expect(ids).toContain('considerazioni_ml');
+      expect(ids).toContain('operazioni_peritali');
       expect(ids).toContain('osservazioni_bozza');
     });
 
@@ -422,9 +430,11 @@ describe('section-catalog', () => {
       const ids = getAllSectionIds('stragiudiziale');
       expect(ids).toContain('intestazione_stragiudiziale');
       expect(ids).toContain('anamnesi');
-      expect(ids).toContain('fatto_storia_clinica');
+      expect(ids).toContain('il_fatto_e_storia_clinica');
+      expect(ids).toContain('epicrisi');
       expect(ids).not.toContain('quesiti');
       expect(ids).not.toContain('conclusioni_quesiti');
+      expect(ids).not.toContain('conclusioni');
     });
 
     it('should not return CTP osservazioni_bozza', () => {

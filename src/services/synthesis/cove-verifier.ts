@@ -11,13 +11,14 @@
  *      "non supportato dalle fonti"
  *
  * Measured 50-70% hallucination reduction in research benchmarks. Applied
- * selectively to LegMed's two highest-stakes sections (epicrisi,
- * conclusioni_quesiti). Gated behind LEGMED_COVE_ENABLED env flag (off by
- * default) so the rollout can be staged.
+ * selectively to the highest-stakes generative section (epicrisi, present
+ * in stragiudiziale only — CTU/CTP send synthesis through the placeholder
+ * considerazioni_ml which is not LLM-generated). Gated behind
+ * LEGMED_COVE_ENABLED env flag (off by default) so the rollout can be staged.
  *
- * Cost overhead: ~3 LLM calls per CoVe-enabled section × 2 sections = 6 extra
- * calls per case, ~18K extra output tokens ≈ $0.10 per case at Mistral Large 3
- * pricing. Compatible with the user's "quality > cost" preference.
+ * Cost overhead: ~3 extra LLM calls per CoVe-enabled section ≈ $0.05 per
+ * stragiudiziale case at Mistral Large 3 pricing. Compatible with the user's
+ * "quality > cost" preference.
  */
 
 import {
@@ -73,12 +74,15 @@ export function isCoVeEnabled(): boolean {
 
 /**
  * Section IDs that get CoVe verification when enabled. Limited to the
- * two sections with the highest medico-legal stakes (and where unfounded
- * claims would be most consequential).
+ * sections with the highest medico-legal stakes that are LLM-generated.
+ *
+ * Note: CTU/CTP no longer have an LLM-generated "epicrisi" or
+ * "conclusioni_quesiti" — both are merged into the placeholder
+ * "considerazioni_ml" filled by the perito. So CoVe effectively applies
+ * only to stragiudiziale's epicrisi.
  */
 export const COVE_ELIGIBLE_SECTION_IDS: ReadonlySet<string> = new Set([
   'epicrisi',
-  'conclusioni_quesiti',
 ]);
 
 export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {

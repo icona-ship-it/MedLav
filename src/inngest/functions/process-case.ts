@@ -768,10 +768,20 @@ export const processCase = inngest.createFunction(
     }
 
     // ── Build synthesis params ────────────────────────────────────
+    // Re-fetch anomalies from DB right before synthesis so we get the canonical
+    // status filter (excludes llm_resolved, user_dismissed) and the perito's
+    // resolution_note when present. On first run this is just the llm_confirmed
+    // set with empty notes; on regenerate it picks up perito reviews.
+    const synthesisAnomalies = await step.run('fetch-anomalies-for-synthesis', async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const { fetchAnomaliesForSynthesis } = await import('@/services/validation/anomaly-fetcher');
+      return fetchAnomaliesForSynthesis(createAdminClient(), caseId);
+    });
+
     const synthesisParams = buildSynthesisParams(
       updatedMetadata,
       allEvents,
-      anomalies,
+      synthesisAnomalies,
       missingDocs,
       calculations,
       imageAnalysisResults,

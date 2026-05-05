@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
-import { resolveAnomalies, filterUnresolvedAnomalies } from '@/services/validation/anomaly-resolver';
+import { resolveAnomalies } from '@/services/validation/anomaly-resolver';
 import type { OcrPageFetcher } from '@/services/validation/anomaly-resolver';
 import { generateSynthesis } from '@/services/synthesis/synthesis-service';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
@@ -111,17 +111,35 @@ export async function POST(request: NextRequest) {
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
     }));
 
-    // Delete old anomalies and missing docs
-    const { error: delAnom } = await admin.from('anomalies').delete().eq('case_id', caseId);
-    if (delAnom) logger.warn('regenerate', `Failed to delete old anomalies: ${delAnom.message}`);
+    // Preserve perito reviews: keep user_confirmed and user_dismissed entries.
+    // Drop only AI-only statuses (detected, llm_confirmed, llm_resolved) so
+    // re-detection can refresh them. The perito's notes are never lost.
+    const { error: delAnom } = await admin
+      .from('anomalies')
+      .delete()
+      .eq('case_id', caseId)
+      .in('status', ['detected', 'llm_confirmed', 'llm_resolved']);
+    if (delAnom) logger.warn('regenerate', `Failed to delete AI-only anomalies: ${delAnom.message}`);
     const { error: delMissing } = await admin.from('missing_documents').delete().eq('case_id', caseId);
     if (delMissing) logger.warn('regenerate', `Failed to delete old missing docs: ${delMissing.message}`);
 
-    // Re-detect anomalies
+    // Read remaining (perito-reviewed) anomalies so we don't insert duplicates.
+    const { data: existingRows } = await admin
+      .from('anomalies')
+      .select('anomaly_type, description')
+      .eq('case_id', caseId);
+    const existingKeys = new Set(
+      (existingRows ?? []).map((r) => `${r.anomaly_type}::${r.description}`),
+    );
+
+    // Re-detect anomalies (insert only new ones).
     const rawAnomalies = detectAnomalies(events);
-    if (rawAnomalies.length > 0) {
+    const newAnomalies = rawAnomalies.filter(
+      (a) => !existingKeys.has(`${a.anomalyType}::${a.description}`),
+    );
+    if (newAnomalies.length > 0) {
       const { error: insertAnom } = await admin.from('anomalies').insert(
-        rawAnomalies.map((a) => ({
+        newAnomalies.map((a) => ({
           case_id: caseId,
           anomaly_type: a.anomalyType,
           severity: a.severity,
@@ -151,7 +169,8 @@ export async function POST(request: NextRequest) {
       return result;
     };
 
-    const resolvedAnomalies = await resolveAnomalies(rawAnomalies, events, fetchOcrPages);
+    // Resolve only the newly-inserted anomalies via LLM (skip perito-reviewed ones).
+    const resolvedAnomalies = await resolveAnomalies(newAnomalies, events, fetchOcrPages);
 
     // Update anomaly rows with resolution status
     for (const r of resolvedAnomalies) {
@@ -166,17 +185,19 @@ export async function POST(request: NextRequest) {
       const anomalyRow = rows?.[0];
       if (!anomalyRow) continue;
       const status = r.resolution.resolved ? 'llm_resolved' : 'llm_confirmed';
-      const resolutionNote = r.resolution.resolved
-        ? `Risolta dopo verifica documentale. Evidenza: ${r.resolution.evidence}`
-        : `Confermata dopo verifica documentale. ${r.resolution.reasoning}`;
+      // Resolution note left blank: the perito writes their own from scratch.
       await admin.from('anomalies').update({
         status,
-        resolution_note: resolutionNote,
+        resolution_note: null,
         resolved_at: r.resolution.resolved ? new Date().toISOString() : null,
       }).eq('id', anomalyRow.id);
     }
 
-    const anomalies = filterUnresolvedAnomalies(resolvedAnomalies);
+    // Re-fetch ALL eligible anomalies from DB (user_confirmed + llm_confirmed + detected),
+    // attaching the perito's resolution_note where present. Excludes user_dismissed
+    // (perito explicitly rejected) and llm_resolved (AI false positive).
+    const { fetchAnomaliesForSynthesis } = await import('@/services/validation/anomaly-fetcher');
+    const anomalies = await fetchAnomaliesForSynthesis(admin, caseId);
 
     // Build caseTypes: use case_types if available, fallback to [case_type]
     const rawCaseTypes = caseRow.case_types as string[] | null;

@@ -65,15 +65,13 @@ export async function resolveAnomaliesStep(
     if (!anomalyRow) continue;
 
     const status = r.resolution.resolved ? 'llm_resolved' : 'llm_confirmed';
-    const resolutionNote = r.resolution.resolved
-      ? `Risolta dopo verifica documentale. Evidenza: ${r.resolution.evidence}`
-      : `Confermata dopo verifica documentale. ${r.resolution.reasoning}`;
-
+    // Resolution note left blank: the perito writes their own from scratch.
+    // The status badge alone communicates "auto-resolved" or "needs review".
     const { error: updateError } = await supabase
       .from('anomalies')
       .update({
         status,
-        resolution_note: resolutionNote,
+        resolution_note: null,
         resolved_at: r.resolution.resolved ? new Date().toISOString() : null,
       })
       .eq('id', anomalyRow.id);

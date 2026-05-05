@@ -74,22 +74,24 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 8. **detect-anomalies** → 7 tipi anomalie (algoritmico, no LLM)
 9. **detect-missing-documents** → documenti mancanti attesi per tipo caso
 10. **calculate-periods** → calcoli medico-legali (ITT, ITP, giorni ricovero)
-11. **generate-report** → report sezionale per ruolo (CTU 15 sez, CTP 14, Stragiudiziale 8) con placeholder per sezioni del perito. Epicrisi al posto di Riassunto. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).
+11. **generate-report** → report sezionale per ruolo (CTU 11 sez, CTP 10, Stragiudiziale 7) allineato ai benchmark perizie reali. Placeholder per sezioni che il perito compila. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).
 12. **finalize** → marca completato, audit log
 13. **send-notification** → email notifica completamento (Resend)
 
-### Struttura report per ruolo (section-catalog.ts)
+### Struttura report per ruolo (section-catalog.ts) — allineata benchmark 2026-05-04
 
 | Ruolo | Sezioni | LLM | Placeholder | Note |
 |-------|---------|-----|-------------|------|
-| CTU | 15 | 7-10 (condizionali) | 5 (Verbale, Visita, Considerazioni ML, Bibliografia, Osservazioni Bozza) | Include Quesiti + Risposte ai Quesiti |
-| CTP | 14 | 6-9 | 4 (come CTU senza Osservazioni Bozza) | Enfasi profili critici |
-| Stragiudiziale | 8 | 6 | 1 (Visita Clinica) | Piu' breve: Anamnesi, Fatto, Doc Sanitaria, Epicrisi, Conclusioni |
+| CTU | 11 | 8 (condizionali) | 3 (Operazioni Peritali, Considerazioni ML, Osservazioni Bozza) | Include Quesiti. Risposte ai Quesiti integrate dentro Considerazioni ML. |
+| CTP | 10 | 8 | 2 (come CTU senza Osservazioni Bozza) | Stesso schema CTU senza valutazione osservazioni. |
+| Stragiudiziale | 7 | 6 | 1 (Visita Clinica) | Schema Antoniazzi: Intestazione, Anamnesi, Fatto+Storia, Doc Sanitaria, Spese, Visita Clinica, Epicrisi (finale). |
 
-**Epicrisi** = sintesi fatti + dati ITT/ITP (NO giudizi — perito li aggiunge). Sostituisce "Riassunto".
-**Placeholder sections** = testo statico con istruzioni, perito compila nell'editor. NO chiamata LLM.
+**Epicrisi** = solo in stragiudiziale, sintesi fatti + ITT/ITP (perito aggiunge giudizi). Nei CTU/CTP la sintesi entra in Considerazioni ML (placeholder).
+**Considerazioni Medico-Legali (CTU/CTP)** = placeholder unico che contiene: sintesi clinica, analisi nesso/condotta, valutazione danno, risposte ai quesiti del giudice.
+**Operazioni Peritali (CTU/CTP)** = placeholder unico che contiene: verbale operazioni + visita del periziando (allineato benchmark "I Dati dell'Incontro con le Parti").
 **NO [Ev.N]** = citazioni per tipo documento, autore e data.
-**Token budget**: 16K critico (doc sanitaria), 8K large, 4K medium, 2K small.
+**Token budget**: 20K HUGE (doc sanitaria, target ~50% report), 10K LARGE (pareri tecnici), 6K MEDIUM (premesse, doc atti, bibliografia, epicrisi, fatto+storia), 4K SMALL (anamnesi, quesiti), 2K TINY (intestazione, spese tabella).
+**Citazioni testuali**: `formatEventsForPrompt` include il `sourceText` 200-char estratto, così il LLM ha l'anchor per riprodurre virgolettate fedelmente le citazioni richieste in `documentazione_sanitaria`.
 
 ### Data integrity safeguards (extraction + consolidation)
 

@@ -372,6 +372,8 @@ ${eventsText}
 
 ${anomaliesText}
 
+REGOLA SULLE ANOMALIE: per ogni anomalia con "NOTA DEL PERITO", integra il contenuto della nota nella narrazione del report come fatto contestuale (es. "Come precisato dal perito, ..."). La nota del perito è VINCOLANTE e prevale sull'analisi documentale automatica.
+
 ## DOCUMENTAZIONE MANCANTE
 
 ${missingDocsText}
@@ -673,9 +675,12 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     const discrepancy = e.discrepancyNote && e.discrepancyNote.includes('⚠')
       ? `\n   ${e.discrepancyNote}`
       : '';
+    const verbatim = e.sourceText && e.sourceText.trim().length > 0
+      ? `\n   CITAZIONE TESTUALE (riproduci virgolettata, NON parafrasare): "${e.sourceText.trim()}"`
+      : '';
     return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}${confidenceQualifier}
    TITOLO: ${e.title}
-   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}${discrepancy}`;
+   DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}${verbatim}${discrepancy}`;
   }).join('\n\n');
 }
 
@@ -697,7 +702,13 @@ export function formatAnomaliesForPrompt(anomalies: DetectedAnomaly[]): string {
   if (anomalies.length === 0) return 'Nessuna anomalia rilevata.';
   return anomalies.map((a) => {
     const involvedDates = a.involvedEvents.map((e) => `${formatDate(e.date)} - ${e.title}`).join(', ');
-    return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})\n  ANALISI DOCUMENTALE: indica la conseguenza clinica DOCUMENTATA e la quantificazione del danno basata su criteri tabellari e evidenze in atti.`;
+    // Include perito's confirmation note when present — promised by UI label "sarà inclusa nel report".
+    // The note carries clinical/legal context the perito wants integrated (e.g. "il trattamento risulta
+    // documentato in relazione successiva", "la complicanza era preesistente"). The LLM must respect it.
+    const peritoLine = a.resolutionNote && a.resolutionNote.trim().length > 0
+      ? `\n  NOTA DEL PERITO (vincolante — integra nel testo del report): "${a.resolutionNote.trim()}"`
+      : '';
+    return `- [${a.severity.toUpperCase()}] ${a.anomalyType}: ${a.description} (Eventi: ${involvedDates})${peritoLine}\n  ANALISI DOCUMENTALE: indica la conseguenza clinica DOCUMENTATA e la quantificazione del danno basata su criteri tabellari e evidenze in atti.`;
   }).join('\n');
 }
 
