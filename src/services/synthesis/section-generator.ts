@@ -27,6 +27,12 @@ import {
   NEGATIVE_FEW_SHOT_INTESTAZIONE,
 } from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
+import {
+  HEADER_JSON_SCHEMA_DESCRIPTION,
+  parseHeaderData,
+  type HeaderData,
+} from './header-schema';
+import { renderHeaderMarkdown, variantForSectionId } from './header-template';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -241,6 +247,12 @@ export async function generateSingleSection(params: {
       contextSummary: '',
       wordCount: 0,
     };
+  }
+
+  // Header sections use a structured JSON-mode generation pipeline to make
+  // fabrication structurally impossible (Wave 2.1, fix Regnoto-style hallucination).
+  if (spec.id.startsWith('intestazione')) {
+    return generateHeaderSection({ spec, synthesisParams });
   }
 
   const hasOcrText = !!(documentsOcrText && documentsOcrText.length > 0);
@@ -502,4 +514,162 @@ function formatPubMedReferencesForPrompt(results: PubMedSearchResult[]): string 
   }
 
   return parts.join('\n');
+}
+
+// ── Structured header generation (Wave 2.1) ──────────────────────────
+//
+// The intestazione is the highest-stakes section for fabrication: when the
+// perizia metadata is empty, the LLM previously invented entire patient
+// identities (Regnoto incident → "Mario Bianchi"). To make fabrication
+// structurally impossible, we generate the header in two stages:
+//   1. LLM produces a JSON object that conforms to HeaderDataSchema. Missing
+//      fields MUST be `null` (the prompt and schema both enforce this).
+//   2. A pure-function template renders the JSON to markdown, mapping null
+//      values to "[da compilare dal perito]" (or omitting them entirely).
+// The model literally cannot write a name into a `null`-valued field that
+// then gets rendered, because the rendering step is deterministic code.
+
+async function generateHeaderSection(params: {
+  spec: SectionSpec;
+  synthesisParams: SynthesisParams;
+}): Promise<GeneratedSection> {
+  const { spec, synthesisParams } = params;
+  const startMs = Date.now();
+
+  const variant = variantForSectionId(spec.id, synthesisParams.caseRole) ?? 'stragiudiziale';
+
+  // Build a JSON-only system prompt. The constitutional preamble + anti-
+  // fabrication rule + JSON schema description are sufficient — no role
+  // directive needed (the role only affects narrative tone, not data
+  // extraction). The LLM's job is purely: read events + metadata, fill
+  // a fixed schema with what's there, leave the rest null.
+  const systemPrompt = `${CONSTITUTIONAL_PREAMBLE}
+
+---
+
+Sei un assistente medico-legale incaricato di estrarre i dati anagrafici e di incarico per l'intestazione di un report. Il tuo unico compito è produrre un OGGETTO JSON conforme allo schema sottostante.
+
+${ANTI_FABRICATION_RULE}
+
+REGOLA REFUSAL JSON: per OGNI campo del JSON: se il dato non è esplicitamente presente nei metadati o nei documenti/eventi forniti dall'utente, scrivi \`null\`. NON DEDURRE, NON INFERIRE, NON COMPLETARE con valori plausibili.
+
+${HEADER_JSON_SCHEMA_DESCRIPTION}
+
+${NEGATIVE_FEW_SHOT_INTESTAZIONE}
+
+OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backticks, niente commenti.`;
+
+  // User prompt: feed the perizia metadata + medical events (light projection)
+  // so the LLM has everything it needs to extract real values.
+  const userPrompt = buildHeaderUserPrompt(synthesisParams);
+
+  // Call Mistral with JSON-object response format. This nudges the model to
+  // produce strict JSON; combined with our Zod parse, it's a hard contract.
+  const { content, usage } = await streamMistralChat({
+    model: MISTRAL_MODELS.MISTRAL_LARGE,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    temperature: 0,
+    maxTokens: spec.maxTokens,
+    responseFormat: { type: 'json_object' },
+    timeoutMs: SECTION_TIMEOUT_MS,
+    randomSeed: DETERMINISTIC_SEED,
+    label: `header:${spec.id}`,
+  });
+
+  // Parse + validate. If invalid, render with all-null data so we get a
+  // safe "[da compilare dal perito]" output rather than fabricated values.
+  const parsed = parseHeaderData(content);
+  let headerData: HeaderData;
+  if (parsed.error !== null) {
+    logger.warn('section-generator', `Header JSON parse/validation failed for ${spec.id}: ${parsed.error}. Falling back to empty header.`);
+    headerData = emptyHeaderData();
+  } else {
+    headerData = parsed.data;
+  }
+
+  const markdown = renderHeaderMarkdown(headerData, { variant });
+  const wordCount = markdown.split(/\s+/).filter((w) => w.length > 0).length;
+
+  const elapsed = Date.now() - startMs;
+  logger.info(
+    'section-generator',
+    `Header section "${spec.id}" generated via JSON mode: ${wordCount} words, ${markdown.length} chars, ${elapsed}ms${parsed.error ? ' [PARSE_FAILED—rendered empty]' : ''}`,
+  );
+
+  return {
+    id: spec.id,
+    title: spec.title,
+    content: markdown,
+    contextSummary: '',
+    wordCount,
+    usage,
+  };
+}
+
+function buildHeaderUserPrompt(params: SynthesisParams): string {
+  const parts: string[] = [];
+
+  // Perizia metadata (when present)
+  const metaText = params.periziaMetadata
+    ? formatPeriziaMetadataForPrompt(params.periziaMetadata)
+    : '';
+  if (metaText) {
+    parts.push('## METADATI PERIZIA');
+    parts.push(metaText);
+    parts.push('');
+  } else {
+    parts.push('## METADATI PERIZIA');
+    parts.push('(nessun metadato perizia fornito)');
+    parts.push('');
+  }
+
+  // Medical events — these are the primary source for patient name, lesion,
+  // event date, structure when metadata is empty. Truncate to keep the prompt
+  // focused; the header only needs the first ~30 events to extract identity.
+  const eventsToInclude = params.events.slice(0, 30);
+  if (eventsToInclude.length > 0) {
+    parts.push('## EVENTI CLINICI (primi 30 per estrazione dati identificativi e dell\'evento indice)');
+    parts.push(formatEventsForPrompt(eventsToInclude));
+    parts.push('');
+    parts.push(
+      'NOTA IMPORTANTE: il nome del paziente, la data di nascita, la struttura sanitaria, e l\'evento indice (es. "frattura collo femore sx", "caduta accidentale") sono spesso scritti nelle intestazioni delle cartelle cliniche e dei referti — leggili dal contenuto degli eventi sopra. Non inventare.',
+    );
+    parts.push('');
+  } else {
+    parts.push('## EVENTI CLINICI');
+    parts.push('(nessun evento estratto dai documenti)');
+    parts.push('');
+  }
+
+  parts.push('---');
+  parts.push('Restituisci ESCLUSIVAMENTE l\'oggetto JSON conforme allo schema. Tutti i campi non documentati = `null`.');
+
+  return parts.join('\n');
+}
+
+function emptyHeaderData(): HeaderData {
+  return {
+    perito: null,
+    paziente: {
+      nome: null,
+      dataNascita: null,
+      luogoNascita: null,
+      residenza: null,
+      codiceFiscale: null,
+      telefono: null,
+    },
+    oggetto: {
+      eventoIndice: null,
+      dataEvento: null,
+      lesione: null,
+      struttura: null,
+      ambito: null,
+    },
+    dataVisitaMedicoLegale: null,
+    soggettoRichiedente: null,
+    giudiziale: null,
+  };
 }

@@ -17,7 +17,9 @@ export interface ReportIssue {
     | 'invalid_event_ref'
     | 'duplicate_content'
     | 'unverified_citation'
-    | 'truncated_response';
+    | 'truncated_response'
+    | 'header_mismatch'
+    | 'header_fabrication_signature';
   severity: 'error' | 'warning';
   message: string;
 }
@@ -34,6 +36,17 @@ export interface ReportValidationContext {
   calculations?: Array<{ label: string; value: string; days: number | null }>;
   /** OCR text for citation verification (Phase 5 safeguard). */
   ocrText?: Array<{ documentId: string; pages: Array<{ ocrText: string }> }>;
+  /** Perizia metadata for header coherence checks (Wave 2.2). When provided,
+   * the validator compares fields like tribunale / RG / giudice against the
+   * intestazione section text and flags mismatches as errors. */
+  periziaMetadata?: {
+    tribunale?: string | null;
+    sezione?: string | null;
+    numeroRG?: string | null;
+    giudice?: string | null;
+    ricorrente?: string | null;
+    resistente?: string | null;
+  };
 }
 
 const REQUIRED_SECTIONS = [
@@ -185,7 +198,9 @@ export function validateReport(
     issues.push(...checkPhantomDates(synthesis, context));
     issues.push(...checkNumericalMismatch(synthesis, context));
     issues.push(...checkUnverifiedCitations(synthesis, context));
+    issues.push(...checkHeaderCoherence(synthesis, context));
   }
+  issues.push(...checkHeaderFabricationSignature(synthesis));
   issues.push(...checkDuplicateContent(synthesis));
 
   const hasErrors = issues.some((i) => i.severity === 'error');
@@ -359,6 +374,7 @@ function checkUnverifiedCitations(
 
   const issues: ReportIssue[] = [];
   let unverifiedCount = 0;
+  let totalQuoted = 0;
   const maxReported = 3; // Limit noise
 
   let match: RegExpExecArray | null;
@@ -369,6 +385,7 @@ function checkUnverifiedCitations(
     // Extract first 8 words for fuzzy matching
     const words = quotedText.split(/\s+/).slice(0, 8);
     if (words.length < 4) continue; // Skip very short quotes
+    totalQuoted++;
 
     const searchPhrase = words.join(' ').toLowerCase();
 
@@ -379,7 +396,7 @@ function checkUnverifiedCitations(
         const preview = quotedText.slice(0, 60);
         issues.push({
           type: 'unverified_citation',
-          severity: 'warning',
+          severity: 'warning', // tentative; promoted to error below if ratio is high
           message: `Quoted text not found in OCR: "${preview}..."`,
         });
       }
@@ -392,6 +409,27 @@ function checkUnverifiedCitations(
       severity: 'warning',
       message: `${unverifiedCount - maxReported} additional unverified citations not shown`,
     });
+  }
+
+  // Wave 2.3: dynamic severity. If MORE THAN HALF of the long quotes can't be
+  // verified against OCR, the report is structurally untrustworthy — promote
+  // ALL unverified-citation issues to 'error' so the save is blocked. Below
+  // 50% they remain warnings (OCR fuzzy-match has known false negatives on
+  // ligatures, accents and column wrapping).
+  if (totalQuoted >= 4) {
+    const unverifiedRatio = unverifiedCount / totalQuoted;
+    if (unverifiedRatio > 0.5) {
+      for (const issue of issues) {
+        if (issue.type === 'unverified_citation') {
+          issue.severity = 'error';
+        }
+      }
+      issues.push({
+        type: 'unverified_citation',
+        severity: 'error',
+        message: `Più del 50% delle citazioni virgolettate (${unverifiedCount}/${totalQuoted}) non è verificabile sul testo OCR. Possibile fabbricazione delle citazioni — report bloccato.`,
+      });
+    }
   }
 
   return issues;
@@ -431,4 +469,105 @@ function checkDuplicateContent(synthesis: string): ReportIssue[] {
   }
 
   return issues;
+}
+
+// ── Wave 2.2: Header coherence ────────────────────────────────────────
+//
+// Compares fields in the rendered intestazione against the perizia metadata
+// the perito filled in. Mismatches (e.g. metadata says "Tribunale Brescia"
+// but the rendered intestazione says "Tribunale Milano") are flagged as
+// errors so the report is blocked from being saved with wrong header data.
+//
+// Soft-match (case-insensitive substring): tolerates trailing punctuation
+// and minor whitespace differences without false-positiving on typo-level
+// variants.
+
+const INTESTAZIONE_HEADING_RE = /(?:^|\n)#{1,3}\s*(?:VALUTAZIONE\s+MEDICO-LEGALE\s+STRAGIUDIZIALE|PARERE\s+(?:PRO\s+VERITATE|A\s+SCOPO\s+RISERVA)|Intestazione)\b/i;
+
+/** Extract the intestazione section text — from its heading to the next ## heading. */
+function extractIntestazioneSection(synthesis: string): string | null {
+  const match = INTESTAZIONE_HEADING_RE.exec(synthesis);
+  if (!match) return null;
+  const start = match.index;
+  // Find next "## " heading after the intestazione's start
+  const nextHeading = synthesis.slice(start + match[0].length).search(/\n#{1,3}\s+\S/);
+  const end = nextHeading === -1 ? synthesis.length : start + match[0].length + nextHeading;
+  return synthesis.slice(start, end);
+}
+
+/** Soft equality: case-insensitive substring containment with whitespace normalization. */
+function softContains(haystack: string, needle: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:]/g, '').trim();
+  return norm(haystack).includes(norm(needle));
+}
+
+function checkHeaderCoherence(
+  synthesis: string,
+  context: ReportValidationContext,
+): ReportIssue[] {
+  const issues: ReportIssue[] = [];
+  const meta = context.periziaMetadata;
+  if (!meta) return issues;
+
+  const headerText = extractIntestazioneSection(synthesis);
+  if (!headerText) return issues; // No intestazione section to validate
+
+  const fieldsToCheck: Array<{ key: keyof typeof meta; label: string }> = [
+    { key: 'tribunale', label: 'Tribunale' },
+    { key: 'numeroRG', label: 'Numero R.G.' },
+    { key: 'giudice', label: 'Giudice' },
+    { key: 'ricorrente', label: 'Ricorrente' },
+    { key: 'resistente', label: 'Resistente' },
+  ];
+
+  for (const { key, label } of fieldsToCheck) {
+    const expected = meta[key];
+    if (!expected || expected.trim().length === 0) continue;
+    if (!softContains(headerText, expected)) {
+      issues.push({
+        type: 'header_mismatch',
+        severity: 'error',
+        message: `Intestazione non coerente con i metadati perizia: ${label} atteso "${expected}" ma non trovato nell'intestazione generata.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+// ── Wave 2.2: Anti-fabrication signature ─────────────────────────────
+//
+// Detects the specific fabrication signature from the Regnoto incident.
+// We blocked-list multiple distinct invented strings (full name + CF + address
+// + fake hospital + fake INAIL certs) and flag if 2+ appear together — a
+// single match would false-positive on real cases (e.g. a real "Mario Bianchi"
+// patient), but the joint presence is overwhelming evidence of regression
+// to the negative few-shot example. Severity: error.
+
+const FABRICATION_SIGNATURE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bMario\s+Bianchi\b/i, label: 'Mario Bianchi' },
+  { pattern: /\bDott\.?\s+Marco\s+Rossi\b/i, label: 'Dott. Marco Rossi' },
+  { pattern: /\bBNCMRA78C15F205Z\b/i, label: 'CF fittizio BNCMRA78C15F205Z' },
+  { pattern: /\bVia\s+Roma\s+10[,\s]*20121\s+Milano\b/i, label: 'indirizzo fittizio Via Roma 10 Milano' },
+  // Two separate patterns instead of "/.../is" (dotall) for ES2017 compatibility.
+  // We rely on the joint-match logic at >=2 to catch the combination.
+  { pattern: /\bOspedale\s+Niguarda\b/i, label: 'Niguarda (struttura fittizia)' },
+  { pattern: /\b5\s+maggio\s+2023\b/i, label: '5 maggio 2023 (data fittizia)' },
+  { pattern: /\b333\s*1234567\b/, label: 'telefono fittizio 333 1234567' },
+];
+
+function checkHeaderFabricationSignature(synthesis: string): ReportIssue[] {
+  const matched = FABRICATION_SIGNATURE_PATTERNS
+    .filter(({ pattern }) => pattern.test(synthesis))
+    .map(({ label }) => label);
+
+  if (matched.length >= 2) {
+    return [{
+      type: 'header_fabrication_signature',
+      severity: 'error',
+      message: `Rilevata signature di fabbricazione (Regnoto regression): ${matched.join(', ')}. Il modello sta riproducendo i dati del negative-few-shot anziché estrarre quelli reali. Report bloccato.`,
+    }];
+  }
+
+  return [];
 }
