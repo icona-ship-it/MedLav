@@ -64,16 +64,29 @@ export async function GET(
 
       const shouldAnonymizeTimeline = _request.nextUrl.searchParams.get('anonymize') === 'true';
 
-      const timelineEvents = data.events.map((e: Record<string, unknown>) => ({
-        order_number: (e.order_number as number) ?? 0,
-        event_date: (e.event_date as string) ?? '',
-        event_type: (e.event_type as string) ?? 'altro',
-        title: (e.title as string) ?? '',
-        description: (e.description as string) ?? '',
-        source_type: (e.source_type as string) ?? 'altro',
-        doctor: (e.doctor as string | null) ?? null,
-        facility: (e.facility as string | null) ?? null,
-      }));
+      // Cronistoria DOCUMENTALE: solo eventi CLINICI. Ticket SSN, avvisi di
+      // pagamento, certificati amministrativi, costi procedure — tutti
+      // bureaucratico/finanziari — NON appartengono alla cronistoria medica
+      // (feedback perito Lavini, caso Passaniti CASO-2026-154).
+      // Le voci di spesa effettivamente sostenute dal paziente vanno gestite
+      // nella sezione dedicata "Spese Mediche" via expenses_only pipeline.
+      const NON_CLINICAL_EVENT_TYPES = new Set([
+        'documento_amministrativo',
+        'spesa_medica',
+        'certificato',
+      ]);
+      const timelineEvents = data.events
+        .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
+        .map((e: Record<string, unknown>) => ({
+          order_number: (e.order_number as number) ?? 0,
+          event_date: (e.event_date as string) ?? '',
+          event_type: (e.event_type as string) ?? 'altro',
+          title: (e.title as string) ?? '',
+          description: (e.description as string) ?? '',
+          source_type: (e.source_type as string) ?? 'altro',
+          doctor: (e.doctor as string | null) ?? null,
+          facility: (e.facility as string | null) ?? null,
+        }));
 
       // For expenses_only, use dedicated expense export if analysis data is available
       if (pipelineMode === 'expenses_only') {

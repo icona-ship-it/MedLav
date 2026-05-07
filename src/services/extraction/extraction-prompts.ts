@@ -212,11 +212,32 @@ Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laborat
 - Data in intestazione → eredita per eventi della sezione
 - Data relativa → calcola se possibile ("3 giorni dopo l'intervento")
 - NESSUN indizio → NULL, datePrecision="sconosciuta"
+- **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese", MA solo se è l'unica menzione di quell'evento (vedi regola RIFERIMENTI sotto).
+
+### EVENTI vs RIFERIMENTI RETROSPETTIVI (regola anti-duplicazione)
+Un documento clinico spesso menziona eventi PASSATI come contesto (anamnesi, "esiti di intervento del...", "frattura avvenuta a metà ottobre 2025", "trauma di 6 mesi fa"). Questi sono RIFERIMENTI RETROSPETTIVI, NON nuovi eventi.
+
+REGOLA: crea un evento nuovo SOLO per cosa accade NEL documento corrente (visita, esame, terapia, intervento del giorno del documento). NON creare eventi nuovi per cosa è già successo PRIMA.
+
+Esempio anti-pattern:
+- Documento: visita controllo del 10/02/2026 che dice "Paziente con esiti di osteosintesi del polso destro per frattura avvenuta a metà ottobre 2025."
+- ❌ ERRATO: creare evento "Osteosintesi" eventDate=2025-10-15 + evento "Visita controllo" eventDate=2026-02-10. (Crea fake date e duplica l'osteosintesi se è già documentata altrove.)
+- ✓ CORRETTO: creare SOLO l'evento "Visita controllo" eventDate=2026-02-10. La menzione dell'osteosintesi e della frattura va nella descrizione della visita, NON come evento separato.
+
+Eccezione: se il documento è la FONTE PRIMARIA di un evento (es. lettera dimissione che riporta l'intervento del giorno precedente, e nessun altro documento attesta quell'intervento), crea l'evento con la sua data reale.
 
 ### ANTI-HALLUCINATION (3 regole)
 1. NON inventare MAI dati assenti dal testo: nomi, date, diagnosi, valori, farmaci. Se manca, usa NULL.
 2. NON completare informazioni parziali con conoscenza medica esterna. Riporta SOLO cio' che il testo dice.
 3. Ogni evento DEVE avere sourceText verificabile nel testo OCR. Se non lo trovi, non estrarre l'evento.
+
+### REGOLE PRONTO SOCCORSO
+Quando il documento è verbale o cartella di Pronto Soccorso (PS), includi SEMPRE nella description dell'evento "ricovero" o "visita" PS:
+- **N. Episodio** (etichette possibili: "N. Episodio", "Episodio N.", "Cartella PS n.", "Episodio:") — es. "Episodio n. 2025066445"
+- **Unità operativa + Ente erogante** — es. "MDA Pronto Soccorso Pediatrico BT, AOUI Verona"
+- **Data e ora di accettazione** se distinte dalla data evento
+
+Questi dati sono critici per identificare univocamente il documento e devono comparire nella description (non solo nel facility).
 
 ### REGOLE AGGIUNTIVE
 - **Descrizione COMPLETA**: riporta fedelmente tutto il contenuto clinico. Includi valori numerici, dosaggi, parametri. NON sintetizzare.
