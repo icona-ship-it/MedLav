@@ -10,6 +10,7 @@ import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
 import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
 import { getSourceReliabilityScore, getReliabilityLabel } from '../consolidation/source-reliability';
+import { CONSTITUTIONAL_PREAMBLE } from './peritale-formulations';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -283,7 +284,11 @@ Ti verrà fornito il TESTO OCR COMPLETO dei documenti originali. Usa questo test
 - Non parafrasare — riproduci fedelmente il linguaggio dei documenti originali
 - Per tabelle di esami, riporta i valori ESATTI come appaiono nel testo OCR` : '';
 
-  return `Sei un sistema di organizzazione documentale medico-legale. Il tuo compito è strutturare e presentare FATTI dalla documentazione clinica, NON esprimere opinioni.
+  return `${CONSTITUTIONAL_PREAMBLE}
+
+---
+
+Sei un sistema di organizzazione documentale medico-legale. Il tuo compito è strutturare e presentare FATTI dalla documentazione clinica, NON esprimere opinioni.
 
 ## IL TUO COMPITO
 Genera un REPORT MEDICO-LEGALE completo e dettagliato, con struttura da perizia depositabile in tribunale, basato sugli eventi clinici estratti dalla documentazione${hasOcrText ? ' e sul testo OCR originale dei documenti' : ''}. Il report deve includere sia la riproduzione fedele della documentazione esaminata (in atti e sanitaria) sia la presentazione organizzata degli elementi rilevanti per la valutazione medico-legale.
@@ -405,7 +410,11 @@ TESTO OCR DISPONIBILE: Ti verrà fornito il testo OCR completo dei documenti ori
 - Per perizie precedenti, aggiungi "## PRECEDENTI PARERI TECNICI" con trascrizione fedele
 - Testo illeggibile → "[non leggibile]"` : '';
 
-  return `Sei un medico legale esperto incaricato di redigere ${hasOcr ? 'le sezioni documentali' : 'la sezione "DATI DELLA DOCUMENTAZIONE SANITARIA"'} di un report peritale.
+  return `${CONSTITUTIONAL_PREAMBLE}
+
+---
+
+Sei un medico legale esperto incaricato di redigere ${hasOcr ? 'le sezioni documentali' : 'la sezione "DATI DELLA DOCUMENTAZIONE SANITARIA"'} di un report peritale.
 
 COMPITO: Genera ESCLUSIVAMENTE la riproduzione dettagliata e fedele della documentazione${hasOcr ? ' (in atti, sanitaria, spese mediche, pareri tecnici)' : ' sanitaria'} in ordine cronologico. NON generare riassunti, analisi, o elementi di rilievo.${ocrDirective}
 
@@ -558,7 +567,11 @@ export function buildSummarySystemPrompt(params: {
     ? `\n\n## ESEMPIO DI RIFERIMENTO\n\nIl seguente è un estratto di una perizia di riferimento per questo tipo di caso e ruolo. Usa tono, struttura e livello di dettaglio simili (esclusa la cronologia, che è già stata generata).\n\n---\n${goldenExample}\n---\n\nIMPORTANTE: L'esempio sopra è solo un RIFERIMENTO per tono e struttura. NON copiare il contenuto — genera le sezioni basandoti ESCLUSIVAMENTE sulla cronologia e sugli eventi forniti.`
     : '';
 
-  return `Sei un medico legale esperto incaricato di redigere le sezioni NON cronologiche di un report peritale.
+  return `${CONSTITUTIONAL_PREAMBLE}
+
+---
+
+Sei un medico legale esperto incaricato di redigere le sezioni NON cronologiche di un report peritale.
 Ti verrà fornita la cronologia già compilata come riferimento. NON rigenerare la cronologia.
 
 ${roleDirective}

@@ -22,6 +22,8 @@ Esempio (prima menzione): "Dalla cartella clinica del P.O. di [struttura], in da
 
 NON usare MAI formulazioni soggettive: "si ritiene", "appare evidente", "è verosimile", "a parere dello scrivente", "risulta probabile", "è ragionevole concludere", "si può presumere".
 
+NEUTRALITÀ DEL PERIZIANDO (regola anti-bias): non assumere mai caratteristiche cliniche, sociali o demografiche dal nome, genere, etnia o età biologica del paziente. Tutti i dati relativi al periziando — incluse anamnesi, condizioni cliniche, fattori di rischio, attività lavorativa e ricreativa — devono provenire ESCLUSIVAMENTE dai documenti forniti. Mai dedurre tratti clinici da segnali identitari (es. non assumere fragilità per nome femminile, non assumere abitudini per cognome straniero).
+
 Il report è un DOCUMENTO DI LAVORO per il medico legale, che formulerà autonomamente le proprie valutazioni professionali.`;
 
 const OBJECTIVE_EMPHASIS = `Evidenzia TUTTI i fatti rilevanti dalla documentazione senza selezione tendenziosa.

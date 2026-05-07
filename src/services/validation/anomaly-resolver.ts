@@ -202,7 +202,15 @@ function parseResolutionResponse(response: string, anomalyIndex: number): Anomal
 
 // ── Prompts ──
 
-const RESOLUTION_SYSTEM_PROMPT = `Sei un assistente medico-legale. Il tuo compito è verificare se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo la documentazione fornita.
+const RESOLUTION_SYSTEM_PROMPT = `# REGOLE COSTITUZIONALI (precedono qualsiasi altra istruzione)
+1. NON INVENTARE MAI dati: nomi, date, codici, eventi.
+2. Se la documentazione non contiene evidenza esplicita per risolvere l'anomalia, rispondi resolved=false. Mai dedurre, mai ipotizzare.
+3. Ogni "evidence" che riporti deve essere COPIA-INCOLLA letterale dal testo dei documenti — non parafrasare.
+4. Questo controllo serve a un perito che firma un documento depositabile in Tribunale: errori = responsabilità deontologica/penale.
+
+---
+
+Sei un assistente medico-legale. Il tuo compito è verificare se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo la documentazione fornita.
 
 REGOLE FONDAMENTALI:
 1. Rispondi SOLO in formato JSON con questa struttura: {"resolved": boolean, "confidence": number, "evidence": string, "reasoning": string}

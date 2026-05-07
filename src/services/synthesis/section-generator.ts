@@ -20,6 +20,12 @@ import {
   formatDocumentSummariesForPrompt,
 } from './synthesis-prompts';
 import { runCoVe, isCoVeEnabled, COVE_ELIGIBLE_SECTION_IDS } from './cove-verifier';
+import {
+  CONSTITUTIONAL_PREAMBLE,
+  REFUSAL_RULE,
+  ANTI_FABRICATION_RULE,
+  NEGATIVE_FEW_SHOT_INTESTAZIONE,
+} from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
@@ -52,11 +58,27 @@ Ti verra fornito il testo OCR dei documenti originali pertinenti. Usalo come FON
 - Testo illeggibile nell'OCR → "[non leggibile]"
 - Tabelle di esami: riportare valori ESATTI dal testo OCR` : '';
 
-  return `Sei un sistema di organizzazione documentale medico-legale.
+  // Per-section reinforcement of the anti-fabrication contract:
+  //   - REFUSAL_RULE: always — every LLM section must know how to refuse gracefully
+  //   - ANTI_FABRICATION_RULE: always — short reinforcement of the constitutional rule
+  //   - NEGATIVE_FEW_SHOT_INTESTAZIONE: only for intestazione sections, where the
+  //     Regnoto incident showed fabrication is highest-stakes and most likely
+  const isIntestazione = spec.id.startsWith('intestazione');
+  const negativeShot = isIntestazione ? `\n\n${NEGATIVE_FEW_SHOT_INTESTAZIONE}` : '';
+
+  return `${CONSTITUTIONAL_PREAMBLE}
+
+---
+
+Sei un sistema di organizzazione documentale medico-legale.
 Il tuo compito e generare ESCLUSIVAMENTE la sezione "${spec.title}" di un report medico-legale.
 
 ## ISTRUZIONI PER QUESTA SEZIONE
 ${spec.promptDirective}
+
+${ANTI_FABRICATION_RULE}
+
+${REFUSAL_RULE}${negativeShot}
 
 ${roleDirective}
 
