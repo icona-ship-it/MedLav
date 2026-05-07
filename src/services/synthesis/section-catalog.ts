@@ -81,18 +81,29 @@ const CTU_SECTIONS: SectionSpec[] = [
     id: 'intestazione',
     title: 'Intestazione',
     maxTokens: TOKENS_TINY,
-    dataSources: ['perizia-metadata'],
+    dataSources: ['perizia-metadata', 'events-medical', 'events-non-medical'],
     contextMaxChars: 300,
     needsOcr: false,
     condition: 'has-perizia-metadata',
     promptDirective: `Genera l'intestazione formale della perizia medico-legale.
-Includi:
+
+REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
+Questa perizia verrà depositata in Tribunale e firmata dal CTU. Inventare dati anche solo per "completezza" è un errore gravissimo. Per ogni campo applica questa procedura:
+
+1) Cerca il dato nei METADATI PERIZIA forniti nel prompt utente.
+2) Se assente, cerca negli ATTI/EVENTI forniti (memorie difensive, ricorsi, intestazioni di cartelle cliniche).
+3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` per quel campo, oppure ometti la voce dall'intestazione.
+
+VIETATO TASSATIVAMENTE: numeri di Ruolo Generale fittizi, nomi di Giudici inventati, parti inventate, CTP non nominati, dati identificativi delle parti (CF, indirizzi, date di nascita) che non risultino dagli atti, date di conferimento o termini procedurali non documentati.
+
+Campi da includere quando hanno fonte verificabile:
 - Tribunale, Sezione, numero di Ruolo Generale
 - Giudice delegato/istruttore
-- Parti coinvolte: ricorrente (con dati identificativi), resistente, eventuali chiamati in causa
+- Parti coinvolte: ricorrente (con dati identificativi DOCUMENTATI), resistente, eventuali chiamati in causa
 - Consulenti Tecnici di Parte nominati da ciascuna parte
 - Data di conferimento dell'incarico, data di giuramento se disponibile
 - Termini per l'invio della bozza, per le osservazioni dei CTP e per il deposito definitivo
+
 Stile formale da perizia depositabile in tribunale, passato remoto.
 ${NO_EVN_RULE}`,
   },
@@ -158,6 +169,13 @@ Regole di riproduzione fedele ma sintetica (mai a scapito dei fatti clinici):
 - **Esami di laboratorio**: SEMPRE in tabella markdown pipe, una tabella separata per ogni data/prelievo. Valori alterati rispetto al range di riferimento in grassetto. Includi tutti i valori del documento, anche quelli nella norma (il perito necessita del quadro completo).
 - **Immagini diagnostiche disponibili nella lista**: inserisci INLINE subito dopo la citazione pertinente con la sintassi ![Fig. N — descrizione formale](ocr-image:percorso-esatto).
 - **Stile narrativo**: prosa discorsiva tra le citazioni (mai elenchi puntati per la narrazione clinica). Le tabelle markdown per i dati strutturati sono l'unica eccezione.
+
+REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
+- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
+- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
+- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
+- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "ELEMENTO" (in senso valutativo), "appare", "si ritiene".
+- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
 ${NO_EVN_RULE}
 
 ${DOCUMENT_ANALYSIS_FORMULATIONS}
@@ -309,17 +327,27 @@ const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
     id: 'intestazione_stragiudiziale',
     title: 'Intestazione',
     maxTokens: TOKENS_TINY,
-    dataSources: ['perizia-metadata'],
+    dataSources: ['perizia-metadata', 'events-medical', 'events-non-medical'],
     contextMaxChars: 200,
     needsOcr: false,
     promptDirective: `Genera l'intestazione della valutazione stragiudiziale.
-Includi:
-- Dati del professionista incaricato (nome, qualifica, specializzazione)
-- Dati del paziente/periziando: nome completo, data di nascita, luogo di nascita, residenza, codice fiscale, telefono (se disponibili nei metadati perizia)
-- Data della visita medico-legale (se disponibile)
-- Oggetto dell'incarico (in relazione alle lesioni, tipo di danno)
-Se i dati completi del paziente non sono disponibili, usa le iniziali.
-Stile formale e conciso.
+
+REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
+Questo è un documento medico-legale che il perito firmerà e potrà depositare. Inventare dati anche solo a titolo di "riempimento" è un errore gravissimo. Per ogni campo, applica questa procedura:
+
+1) Cerca il dato nei METADATI PERIZIA forniti nel prompt utente (sezione "DATI PERIZIA").
+2) Se assente, cerca nei DOCUMENTI/EVENTI forniti — il nome del paziente, la data di nascita e la struttura sanitaria sono spesso citati nelle intestazioni di cartelle cliniche e referti (es. "REGNOTO VALERIA nato/a il 11/08/1962").
+3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` per quel campo.
+
+VIETATO TASSATIVAMENTE: nomi di persona inventati (perito, paziente, medici), codici fiscali fittizi, indirizzi, numeri di telefono, date di nascita, dati anagrafici, nomi di studi/strutture sanitarie. Se non li hai, NON LI HAI — non riempire con valori plausibili.
+
+Campi da includere quando hanno fonte verificabile:
+- Dati del professionista incaricato (nome, qualifica, specializzazione, iscrizione albo): SOLO se nei metadati perizia
+- Dati del paziente/periziando (nome completo, data di nascita, luogo di nascita, residenza, codice fiscale, telefono): cerca prima in metadati perizia, poi nelle intestazioni dei documenti sanitari forniti
+- Data della visita medico-legale: SOLO se nei metadati perizia
+- Oggetto dell'incarico: descrivi le lesioni e l'evento indice ESCLUSIVAMENTE basandoti sugli eventi clinici forniti (es. se gli eventi parlano di "frattura collo femore sx 13/12/2025 da caduta", scrivi quello — NON inventare lesioni o circostanze diverse)
+
+Stile formale e conciso. Una sola pagina al massimo.
 ${NO_EVN_RULE}`,
   },
   {
@@ -381,6 +409,13 @@ Regole:
 - **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
 - **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
 - **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
+
+REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
+- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
+- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
+- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
+- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
+- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
 ${NO_EVN_RULE}`,
   },
   {
@@ -454,16 +489,26 @@ const PARERE_PRO_VERITATE_SECTIONS: SectionSpec[] = [
     id: 'intestazione_parere',
     title: 'Intestazione',
     maxTokens: TOKENS_TINY,
-    dataSources: ['perizia-metadata'],
+    dataSources: ['perizia-metadata', 'events-medical'],
     contextMaxChars: 200,
     needsOcr: false,
     promptDirective: `Genera l'intestazione formale del parere pro veritate.
-Includi:
-- Nome, qualifica e specializzazione del professionista incaricato
-- Data del parere
+
+REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
+Questo è un parere medico-legale che verrà firmato e potrà essere prodotto in giudizio. Inventare dati è un errore gravissimo. Per ogni campo applica:
+1) Cerca nei METADATI PERIZIA del prompt utente.
+2) Se assente, cerca nelle intestazioni dei DOCUMENTI/EVENTI sanitari forniti (il nome del paziente è quasi sempre nelle cartelle cliniche).
+3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` o ometti il campo.
+
+VIETATO TASSATIVAMENTE: nomi di professionisti inventati, qualifiche/iscrizioni albo non documentate, soggetti richiedenti fittizi, codici fiscali e indirizzi non presenti nei dati forniti.
+
+Campi:
+- Nome, qualifica e specializzazione del professionista incaricato (SOLO se nei metadati perizia)
+- Data del parere (oggi se non specificata)
 - Dicitura "Parere pro veritate"
-- Dati identificativi del paziente (iniziali, data di nascita se disponibile)
-- Soggetto richiedente (studio legale, paziente, etc.)
+- Dati identificativi del paziente (cerca nei metadati e nelle intestazioni dei documenti forniti — usa il nome reale se trovato)
+- Soggetto richiedente (SOLO se nei metadati perizia)
+
 Stile formale.
 ${NO_EVN_RULE}`,
   },
@@ -503,6 +548,13 @@ Regole:
 - **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
 - **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
 - **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
+
+REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
+- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
+- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
+- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
+- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
+- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
 ${NO_EVN_RULE}`,
   },
   {
@@ -567,16 +619,26 @@ const PARERE_SCOPO_RISERVA_SECTIONS: SectionSpec[] = [
     id: 'intestazione_parere',
     title: 'Intestazione',
     maxTokens: TOKENS_TINY,
-    dataSources: ['perizia-metadata'],
+    dataSources: ['perizia-metadata', 'events-medical'],
     contextMaxChars: 200,
     needsOcr: false,
     promptDirective: `Genera l'intestazione formale del parere scopo riserva.
-Includi:
-- Nome, qualifica e specializzazione del professionista incaricato
-- Data del parere
+
+REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
+Questo parere serve alla compagnia per la riserva tecnica. Dati anagrafici inventati possono causare errori contabili e responsabilità professionale. Per ogni campo:
+1) Cerca nei METADATI PERIZIA del prompt utente.
+2) Se assente, cerca nelle intestazioni dei DOCUMENTI/EVENTI sanitari forniti.
+3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` o ometti il campo.
+
+VIETATO TASSATIVAMENTE: nomi di professionisti, periziandi, compagnie assicurative inventati. Codici fiscali, indirizzi, date di nascita fittizi.
+
+Campi:
+- Nome, qualifica e specializzazione del professionista incaricato (SOLO se nei metadati perizia)
+- Data del parere (oggi se non specificata)
 - Dicitura "Parere a scopo riserva"
-- Dati identificativi del periziando (iniziali, data di nascita se disponibile)
-- Soggetto richiedente (compagnia assicurativa, studio legale, etc.)
+- Dati identificativi del periziando (cerca nei metadati e nelle intestazioni dei documenti forniti)
+- Soggetto richiedente (SOLO se nei metadati perizia)
+
 Stile formale.
 ${NO_EVN_RULE}`,
   },
@@ -601,6 +663,13 @@ Regole:
 - **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
 - **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
 - **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
+
+REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
+- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
+- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
+- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
+- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
+- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
 ${NO_EVN_RULE}`,
   },
   {

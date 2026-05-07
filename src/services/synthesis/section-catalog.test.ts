@@ -247,6 +247,41 @@ describe('section-catalog', () => {
         expect(s.promptDirective).not.toMatch(/\[Ev\.\d+\]/);
       }
     });
+
+    it('intestazione sections must have anti-fabrication rule and access to events', () => {
+      // Regression: case Regnoto → report invented "Mario Bianchi", "Dott. Marco Rossi",
+      // wrong fracture, wrong hospital, fake CF. Root cause: the prompt did not forbid
+      // fabrication and the section had no access to events to read the real patient name.
+      const intestazioneCtu = CTU_SECTIONS.find((s) => s.id === 'intestazione');
+      const intestazioneStr = STRAGIUDIZIALE_SECTIONS.find((s) => s.id === 'intestazione_stragiudiziale');
+
+      for (const spec of [intestazioneCtu, intestazioneStr]) {
+        expect(spec).toBeDefined();
+        if (!spec) continue;
+
+        // Must include explicit anti-fabrication rule
+        expect(spec.promptDirective).toMatch(/VIETATO INVENTARE/i);
+        expect(spec.promptDirective).toContain('[da compilare dal perito]');
+
+        // Must have access to events so it can read the real patient name from documents
+        expect(spec.dataSources).toContain('events-medical');
+      }
+    });
+
+    it('documentazione_sanitaria must forbid the FATTO/STANDARD/ELEMENTI A SUPPORTO/CONTRARI pattern', () => {
+      // Regression: this interpretive pattern leaked into the chronology and produced
+      // a biased narrative. It must be confined to dedicated anomaly/considerazioni sections.
+      const docSan = [
+        ...CTU_SECTIONS,
+        ...STRAGIUDIZIALE_SECTIONS,
+      ].filter((s) => s.id === 'documentazione_sanitaria');
+
+      expect(docSan.length).toBeGreaterThan(0);
+      for (const spec of docSan) {
+        expect(spec.promptDirective).toMatch(/VIETATO il pattern/i);
+        expect(spec.promptDirective).toMatch(/FATTO DOCUMENTATO.*STANDARD DI RIFERIMENTO/i);
+      }
+    });
   });
 
   // ── resolveSectionPlan ────────────────────────────────────────────

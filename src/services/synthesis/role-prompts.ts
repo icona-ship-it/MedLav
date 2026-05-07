@@ -29,13 +29,15 @@ Segnala sia le criticità nella gestione clinica sia gli elementi di corretta co
 Per ogni anomalia, presenta anche eventuali elementi documentali che ne attenuano la rilevanza.
 NON selezionare o enfatizzare i fatti a favore di una parte — riporta l'intero quadro documentale oggettivamente.`;
 
-const OBJECTIVE_ANOMALY_FRAMING = `Per ogni profilo critico riscontrato dalla documentazione, struttura come:
+const OBJECTIVE_ANOMALY_FRAMING = `Quando — e SOLO quando — devi presentare un profilo critico richiesto dalla sezione "Considerazioni Medico-Legali" o "Anomalie", struttura come:
 **FATTO DOCUMENTATO**: descrizione oggettiva del rilievo con riferimento puntuale [documento, data]
 **STANDARD DI RIFERIMENTO**: quale linea guida o buona pratica clinica è applicabile [Fonte, Anno]
 **ELEMENTI A SUPPORTO**: fatti documentati [documento, data] che confermano la deviazione dallo standard
 **ELEMENTI CONTRARI**: fatti documentati [documento, data] che attenuano o contraddicono la deviazione
 **CONSEGUENZE DOCUMENTATE**: impatto clinico risultante dalla documentazione [documento, data]
-Presentare ENTRAMBI i lati senza esprimere un giudizio conclusivo — il medico legale formulerà le proprie valutazioni.`;
+Presentare ENTRAMBI i lati senza esprimere un giudizio conclusivo — il medico legale formulerà le proprie valutazioni.
+
+VINCOLO DI POSIZIONAMENTO: questo pattern è AMMESSO ESCLUSIVAMENTE nelle sezioni dedicate alle anomalie / considerazioni medico-legali. È VIETATO usarlo nella sezione "Documentazione Sanitaria" o nell'Intestazione, che devono restare puramente fattuali.`;
 
 const OBJECTIVE_CONCLUSION_GUIDANCE = `La sezione conclusiva deve essere una SINTESI FATTUALE, NON un'opinione.
 Riepiloga: i fatti principali emersi dalla documentazione, i profili critici identificati con relativa evidenza documentale,
@@ -74,20 +76,16 @@ Il CTP formulerà autonomamente le proprie valutazioni professionali sulla base 
   stragiudiziale: {
     role: 'stragiudiziale',
     toneDirective: `${OBJECTIVE_TONE}
-Il report è una valutazione stragiudiziale. Fornisci un'analisi COMPLETA e OGGETTIVA di tutti i fatti documentati.`,
+Il report è una valutazione stragiudiziale. La cronologia documentale deve essere puramente fattuale. Le valutazioni e i giudizi spettano al perito nelle sezioni dedicate (Epicrisi e considerazioni).`,
     emphasisDirective: `${OBJECTIVE_EMPHASIS}
-Per ogni aspetto, analizza dalla documentazione:
-1. ELEMENTI FAVOREVOLI DOCUMENTATI [documento, data]: fatti che supportano la pretesa
-2. ELEMENTI SFAVOREVOLI O LACUNE [documento, data]: fatti che indeboliscono la pretesa o lacune documentali
-3. DOCUMENTAZIONE INTEGRATIVA: quale documentazione aggiuntiva sarebbe necessaria
-4. COMPLETEZZA DOCUMENTALE: valutazione oggettiva della completezza della documentazione in atti`,
+La presentazione di elementi favorevoli/sfavorevoli o lacune documentali è LIMITATA alla sezione "Anomalie Rilevate" e alle sezioni di considerazioni dedicate. NON disseminare valutazioni "favorevole/sfavorevole" o "lacuna" nella documentazione sanitaria — quella deve essere riproduzione documentale fedele e neutra.`,
     anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,
-    extraSections: `Aggiungi una sezione "QUADRO DOCUMENTALE COMPLESSIVO" finale con:
-- Sintesi degli elementi favorevoli e sfavorevoli risultanti dalla documentazione
-- Valutazione della completezza della documentazione disponibile
-- Documentazione integrativa da acquisire per completare l'analisi`,
+    // No extra sections: the dedicated "Anomalie" output section already handles
+    // critical-profile listing. Adding a "QUADRO DOCUMENTALE COMPLESSIVO"
+    // duplicated content into the chronology and biased the narrative.
+    extraSections: '',
     conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
-Chiudi con una valutazione della completezza documentale e indicazione della documentazione integrativa necessaria.`,
+La valutazione di completezza documentale e l'eventuale richiesta di documentazione integrativa devono comparire SOLO nelle sezioni dedicate (Epicrisi finale o sezione "Documentazione Mancante"), MAI nella cronologia clinica.`,
   },
 };
 

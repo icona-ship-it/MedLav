@@ -12,6 +12,12 @@ interface SequenceRule {
   name: string;
   before: string[];
   after: string[];
+  /** Optional keyword filter for the "after" event title or description.
+   * When set, only events whose title/description contains at least one of
+   * these keywords (case-insensitive) are considered for this rule.
+   * Used e.g. to restrict the "Trauma → imaging" rule to actual imaging
+   * exams (RX/TC/RM) and avoid false positives on lab tests, swabs, etc. */
+  afterKeywords?: string[];
   maxDaysGap?: number;
   applicableCaseTypes: CaseType[] | 'all';
   severity: 'critica' | 'alta' | 'media' | 'bassa';
@@ -65,6 +71,21 @@ const SEQUENCE_RULES: SequenceRule[] = [
     name: 'Trauma → imaging entro 24 ore',
     before: ['visita', 'ricovero'],
     after: ['esame'],
+    // Restrict to actual imaging modalities. Without this filter, the rule
+    // false-positives on lab tests and microbiology swabs (it was flagging
+    // a tampone MDR done 5 days post-trauma as a "delayed imaging").
+    afterKeywords: [
+      'rx ',
+      'radiograf',
+      'tc ',
+      'tac ',
+      'tomograf',
+      'rm ',
+      'risonanz',
+      'ecograf',
+      'mri',
+      'imaging',
+    ],
     maxDaysGap: 1,
     applicableCaseTypes: ['rc_auto'],
     severity: 'media',
@@ -112,18 +133,70 @@ function checkRule(
 ): DetectedAnomaly[] {
   const anomalies: DetectedAnomaly[] = [];
 
-  // Find the first "after" event
-  const afterEvents = events.filter((e) => rule.after.includes(e.eventType));
+  // Find candidate "after" events, optionally filtered by keyword on title/description.
+  const afterEvents = events.filter((e) => {
+    if (!rule.after.includes(e.eventType)) return false;
+    if (!rule.afterKeywords || rule.afterKeywords.length === 0) return true;
+    const haystack = `${e.title} ${e.description}`.toLowerCase();
+    return rule.afterKeywords.some((kw) => haystack.includes(kw.toLowerCase()));
+  });
 
+  // ── Branch A: rules with maxDaysGap ──
+  // Semantic: "for each BEFORE event (trigger), at least one matching AFTER must
+  // occur within maxDaysGap days". If the first matching AFTER after a given
+  // BEFORE is within the gap → OK. If not (or none exist) → flag the BEFORE.
+  // This avoids false positives on follow-up imaging months later for a
+  // ricovero that already had imaging same-day.
+  if (rule.maxDaysGap !== undefined) {
+    const beforeEvents = events.filter((e) => rule.before.includes(e.eventType));
+    for (const beforeEvent of beforeEvents) {
+      // Find matching after-events that occur on or after this before.
+      const subsequent = afterEvents.filter((a) => a.eventDate >= beforeEvent.eventDate);
+      if (subsequent.length === 0) continue; // No follow-up — handled by missing-doc detectors, not this rule
+      // Closest after-event in time
+      const closestAfter = subsequent.reduce((acc, cur) => {
+        const accGap = daysDiff(beforeEvent.eventDate, acc.eventDate);
+        const curGap = daysDiff(beforeEvent.eventDate, cur.eventDate);
+        return curGap < accGap ? cur : acc;
+      });
+      const daysBetween = daysDiff(beforeEvent.eventDate, closestAfter.eventDate);
+      if (daysBetween > rule.maxDaysGap) {
+        anomalies.push({
+          anomalyType: 'sequenza_temporale_violata',
+          severity: rule.severity,
+          description: `${rule.name}: ${rule.description}. Rilevato un intervallo di ${daysBetween} giorni tra "${beforeEvent.title}" (${formatDate(beforeEvent.eventDate)}) e il primo evento successivo pertinente "${closestAfter.title}" (${formatDate(closestAfter.eventDate)}), superiore al limite di ${rule.maxDaysGap} giorni.`,
+          involvedEvents: [
+            {
+              eventId: null,
+              orderNumber: beforeEvent.orderNumber,
+              date: beforeEvent.eventDate,
+              title: beforeEvent.title,
+            },
+            {
+              eventId: null,
+              orderNumber: closestAfter.orderNumber,
+              date: closestAfter.eventDate,
+              title: closestAfter.title,
+            },
+          ],
+          suggestion: `Valutare se il ritardo di ${daysBetween} giorni abbia avuto conseguenze sulla prognosi del paziente.`,
+        });
+      }
+    }
+    return anomalies;
+  }
+
+  // ── Branch B: rules without maxDaysGap (sequence-only rules) ──
+  // Semantic: "every AFTER event must be preceded somewhere in the timeline by
+  // at least one BEFORE event of the required type." If no BEFORE exists at
+  // all before this AFTER, flag the AFTER.
   for (const afterEvent of afterEvents) {
-    // Check if there's a matching "before" event that precedes it
     const beforeEvent = events.find(
       (e) => rule.before.includes(e.eventType) && e.eventDate <= afterEvent.eventDate,
     );
 
     if (!beforeEvent) {
-      // Violation: "after" event exists but no "before" event found before it
-      // Only flag if there are at least 3 events (avoid noise with minimal data)
+      // Only flag if there are at least 3 events (avoid noise with minimal data).
       if (events.length >= 3) {
         anomalies.push({
           anomalyType: 'sequenza_temporale_violata',
@@ -136,34 +209,6 @@ function checkRule(
             title: afterEvent.title,
           }],
           suggestion: `Verificare se l'evento di tipo ${rule.before.join('/')} è stato eseguito ma non documentato, oppure se rappresenta un'effettiva omissione.`,
-        });
-      }
-      continue;
-    }
-
-    // Check maxDaysGap if defined
-    if (rule.maxDaysGap !== undefined) {
-      const daysBetween = daysDiff(beforeEvent.eventDate, afterEvent.eventDate);
-      if (daysBetween > rule.maxDaysGap) {
-        anomalies.push({
-          anomalyType: 'sequenza_temporale_violata',
-          severity: rule.severity,
-          description: `${rule.name}: ${rule.description}. Rilevato un intervallo di ${daysBetween} giorni tra "${beforeEvent.title}" (${formatDate(beforeEvent.eventDate)}) e "${afterEvent.title}" (${formatDate(afterEvent.eventDate)}), superiore al limite di ${rule.maxDaysGap} giorni.`,
-          involvedEvents: [
-            {
-              eventId: null,
-              orderNumber: beforeEvent.orderNumber,
-              date: beforeEvent.eventDate,
-              title: beforeEvent.title,
-            },
-            {
-              eventId: null,
-              orderNumber: afterEvent.orderNumber,
-              date: afterEvent.eventDate,
-              title: afterEvent.title,
-            },
-          ],
-          suggestion: `Valutare se il ritardo di ${daysBetween} giorni abbia avuto conseguenze sulla prognosi del paziente.`,
         });
       }
     }

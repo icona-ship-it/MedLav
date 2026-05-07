@@ -108,5 +108,64 @@ describe('sequence-validator', () => {
       });
       expect(anomalies).toHaveLength(0);
     });
+
+    it('should NOT flag trauma→imaging when imaging done same day (regression — Regnoto case)', () => {
+      // The Regnoto case false-positive: ricovero 13/12 + RX same day + tampone MDR 18/12.
+      // Pre-fix the detector flagged the tampone as "delayed imaging".
+      // After fix, keyword filter excludes the tampone and same-day RX satisfies the rule.
+      const events = [
+        makeEvent({ orderNumber: 1, eventType: 'ricovero', title: 'Ricovero urgente per frattura femore', eventDate: '2025-12-13' }),
+        makeEvent({ orderNumber: 2, eventType: 'esame', title: 'RX anca sinistra preoperatoria', description: 'RX torace, RX anca sx, RX femore sx, RX bacino', eventDate: '2025-12-13' }),
+        makeEvent({ orderNumber: 3, eventType: 'esame', title: 'Tampone MDR positivo per Escherichia coli ESBL', description: 'tampone microbiologico di routine', eventDate: '2025-12-18' }),
+        makeEvent({ orderNumber: 4, eventType: 'esame', title: 'Densitometria ossea DEXA di controllo', description: 'DEXA colonna lombare', eventDate: '2026-01-05' }),
+      ];
+
+      const anomalies = validateEventSequences({
+        events,
+        caseType: 'rc_auto',
+      });
+
+      const traumaImagingViolation = anomalies.find(
+        (a) => a.description.includes('Trauma → imaging'),
+      );
+      expect(traumaImagingViolation).toBeUndefined();
+    });
+
+    it('should flag trauma→imaging when imaging is genuinely delayed (>24h)', () => {
+      const events = [
+        makeEvent({ orderNumber: 1, eventType: 'ricovero', title: 'Ricovero per trauma cranico', eventDate: '2024-01-01' }),
+        makeEvent({ orderNumber: 2, eventType: 'visita', title: 'Visita neurologica', eventDate: '2024-01-02' }),
+        makeEvent({ orderNumber: 3, eventType: 'esame', title: 'TC encefalo', description: 'TAC cerebrale', eventDate: '2024-01-05' }),
+      ];
+
+      const anomalies = validateEventSequences({
+        events,
+        caseType: 'rc_auto',
+      });
+
+      const violation = anomalies.find(
+        (a) => a.description.includes('Trauma → imaging'),
+      );
+      expect(violation).toBeDefined();
+    });
+
+    it('should NOT flag trauma→imaging when only non-imaging exams follow (lab tests, swabs)', () => {
+      // No imaging at all — the rule should not flag (handled by missing-doc detector).
+      const events = [
+        makeEvent({ orderNumber: 1, eventType: 'ricovero', title: 'Ricovero', eventDate: '2024-01-01' }),
+        makeEvent({ orderNumber: 2, eventType: 'esame', title: 'Emocromo', description: 'esame ematochimico', eventDate: '2024-01-02' }),
+        makeEvent({ orderNumber: 3, eventType: 'esame', title: 'Tampone faringeo', description: 'colturale', eventDate: '2024-01-03' }),
+      ];
+
+      const anomalies = validateEventSequences({
+        events,
+        caseType: 'rc_auto',
+      });
+
+      const violation = anomalies.find(
+        (a) => a.description.includes('Trauma → imaging'),
+      );
+      expect(violation).toBeUndefined();
+    });
   });
 });
