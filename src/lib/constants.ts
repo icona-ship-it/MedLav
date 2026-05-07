@@ -102,6 +102,32 @@ export const EVENT_TYPES = [
   { value: 'altro', label: 'Altro' },
 ] as const;
 
+/**
+ * Event types that are bureaucratic/financial and must be EXCLUDED from
+ * the clinical chronology. Used by exports, calculations, and anomaly
+ * detectors so we don't mix patient ticket payments with medical events.
+ *
+ * Trigger: Passaniti regression (CASO-2026-154) — perito Lavini found that
+ * SSN cost notices, ticket payments, and admin documents (avviso pagamento)
+ * were appearing in the cronistoria medica. They don't belong there: any
+ * patient-paid expense goes in the dedicated "Spese Mediche" section via
+ * expenses_only pipeline; SSN-paid procedures go nowhere (they're internal
+ * billing, not perito-relevant data).
+ *
+ * The set is small and stable. Single source of truth — every consumer
+ * imports this rather than redefining locally.
+ */
+export const NON_CLINICAL_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'documento_amministrativo',
+  'spesa_medica',
+  'certificato',
+]);
+
+/** Inverse helper: true when the event represents a clinical fact. */
+export function isClinicalEvent(eventType: string): boolean {
+  return !NON_CLINICAL_EVENT_TYPES.has(eventType);
+}
+
 // --- Source Types ---
 
 export const SOURCE_TYPES = [

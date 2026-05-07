@@ -1,6 +1,7 @@
 import type { AnomalyType, AnomalySeverity, CaseType } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { formatDate } from '@/lib/format';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { detectCriticalClinicalValues } from './clinical-values-detector';
 import { validateEventSequences } from './sequence-validator';
 
@@ -45,6 +46,14 @@ export function detectAnomalies(
   events: ConsolidatedEvent[],
   options?: { caseType?: CaseType; caseTypes?: CaseType[] },
 ): DetectedAnomaly[] {
+  if (events.length < 2) return [];
+
+  // Filter out non-clinical events for anomaly detection. SSN cost notices,
+  // ticket payments, and admin documents have administrative dates that are
+  // unrelated to the clinical timeline and would create phantom gaps and
+  // false positives. Trigger: Passaniti regression — a SSN bill 60 days
+  // after the last clinical event would be flagged as a "gap_documentale".
+  events = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.eventType));
   if (events.length < 2) return [];
 
   const anomalies: DetectedAnomaly[] = [];

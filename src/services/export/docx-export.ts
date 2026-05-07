@@ -4,7 +4,7 @@ import {
   Header, Footer, PageNumber, Table, TableRow, TableCell, WidthType, BorderStyle,
   ImageRun,
 } from 'docx';
-import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
+import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
@@ -321,7 +321,12 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     new Paragraph({ text: '' }),
   );
 
-  for (const event of events) {
+  // Filter non-clinical events from the chronology (Passaniti regression):
+  // SSN cost notices, ticket payments, and admin docs don't belong in the
+  // medical timeline.
+  const clinicalEvents = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+
+  for (const event of clinicalEvents) {
     const datePrecNote = event.date_precision !== 'giorno' ? ` [${event.date_precision}]` : '';
     const source = sourceLabels[event.source_type] ?? event.source_type;
 

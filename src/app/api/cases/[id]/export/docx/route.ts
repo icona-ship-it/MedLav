@@ -6,6 +6,7 @@ import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
 import { generateTimelineDocx } from '@/services/export/timeline-export';
 import { generateExpenseDocx } from '@/services/export/expense-export';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
 import { getModule } from '@/types/modules';
@@ -70,11 +71,6 @@ export async function GET(
       // (feedback perito Lavini, caso Passaniti CASO-2026-154).
       // Le voci di spesa effettivamente sostenute dal paziente vanno gestite
       // nella sezione dedicata "Spese Mediche" via expenses_only pipeline.
-      const NON_CLINICAL_EVENT_TYPES = new Set([
-        'documento_amministrativo',
-        'spesa_medica',
-        'certificato',
-      ]);
       const timelineEvents = data.events
         .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
         .map((e: Record<string, unknown>) => ({

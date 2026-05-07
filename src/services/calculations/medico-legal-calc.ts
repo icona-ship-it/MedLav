@@ -1,5 +1,6 @@
 import { formatDate } from '@/lib/format';
 import type { CaseType } from '@/types';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { estimateBiologicalDamage } from './damage-estimator';
 
 interface CalcEvent {
@@ -27,6 +28,14 @@ export function calculateMedicoLegalPeriods(
   events: CalcEvent[],
   caseType?: CaseType,
 ): MedicoLegalCalculation[] {
+  if (events.length === 0) return [];
+
+  // Filter out non-clinical events (ticket SSN, avvisi pagamento, certificati
+  // amministrativi). They distort the illness period and gap calculations
+  // because their dates are administrative, not clinical. Trigger: Passaniti
+  // regression — perito Lavini found ITT/ITP being skewed by SSN cost notices
+  // dated weeks after the actual last clinical event.
+  events = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
   if (events.length === 0) return [];
 
   const calculations: MedicoLegalCalculation[] = [];

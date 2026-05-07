@@ -1,6 +1,6 @@
 import type { DocumentWithPages } from './load-case-data';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
-import { anomalyTypeLabels } from '@/lib/constants';
+import { anomalyTypeLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 
 export interface PeriziaMetadataExport {
@@ -247,6 +247,11 @@ export function assembleFullReport(params: {
  * D - ESAMI EMATOCHIMICI
  */
 function buildEvidenzeCliniche(events: ExportEvent[]): string {
+  // Filter out non-clinical events (SSN cost notices, ticket payments,
+  // admin documents). Trigger: Passaniti regression — these distort the
+  // "Evidenze cliniche" section by appearing alongside actual medical events.
+  events = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+
   const SOURCE_CATEGORY_ORDER = [
     'cartella_clinica',
     'referto_controllo',

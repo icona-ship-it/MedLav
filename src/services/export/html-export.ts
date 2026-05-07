@@ -1,4 +1,4 @@
-import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels } from '@/lib/constants';
+import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
@@ -296,7 +296,7 @@ ${reportStatus === 'bozza' ? '<div class="draft-banner">âš  DOCUMENTO IN BOZZA â
 ${synthesis ? `<div class="synthesis">${markdownToHtml(synthesis)}</div>` : '<p>Sintesi non ancora generata.</p>'}
 
 <h2 id="timeline">2. Cronologia Eventi Clinici</h2>
-${events.map((e) => `<div class="event">
+${events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type)).map((e) => `<div class="event">
   <div class="event-header">
     <span class="event-number">#${e.order_number}</span>
     <span class="event-date">${formatDate(e.event_date)}${e.date_precision !== 'giorno' ? ` [${e.date_precision}]` : ''}</span>

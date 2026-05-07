@@ -1,18 +1,11 @@
 /**
- * Test for the cronistoria-export filter applied in
- * src/app/api/cases/[id]/export/docx/route.ts
- *
- * The filter is reproduced here for testability — the API route applies
- * the same logic. If you change the route, mirror the change here.
+ * Test for the cronistoria-export filter applied across LegMed.
+ * The filter is centralized in src/lib/constants.ts — every export and
+ * detector imports the same NON_CLINICAL_EVENT_TYPES set.
  */
 
 import { describe, it, expect } from 'vitest';
-
-const NON_CLINICAL_EVENT_TYPES = new Set([
-  'documento_amministrativo',
-  'spesa_medica',
-  'certificato',
-]);
+import { NON_CLINICAL_EVENT_TYPES, isClinicalEvent } from '@/lib/constants';
 
 interface RawEvent {
   order_number: number;
@@ -96,5 +89,13 @@ describe('cronistoria timeline-export filter (Passaniti regression)', () => {
     const clinical = filterClinical(passanitiEvents);
     expect(clinical).toHaveLength(2); // Only ricovero + intervento survive
     expect(clinical.every((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))).toBe(true);
+  });
+
+  it('isClinicalEvent helper inverts the set correctly', () => {
+    expect(isClinicalEvent('visita')).toBe(true);
+    expect(isClinicalEvent('intervento')).toBe(true);
+    expect(isClinicalEvent('spesa_medica')).toBe(false);
+    expect(isClinicalEvent('documento_amministrativo')).toBe(false);
+    expect(isClinicalEvent('certificato')).toBe(false);
   });
 });
