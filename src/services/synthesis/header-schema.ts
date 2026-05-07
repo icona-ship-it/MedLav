@@ -10,6 +10,8 @@
  */
 
 import { z } from 'zod';
+import { isValidCodiceFiscale } from '@/lib/validators/codice-fiscale';
+import { isValidItalianDate } from '@/lib/validators/date-format';
 
 /**
  * Schema dei dati dell'intestazione. Tutti i campi sono nullable o opzionali
@@ -141,6 +143,10 @@ Restituisci ESCLUSIVAMENTE l'oggetto JSON, senza testo prima o dopo.`;
 /**
  * Safely parse and validate raw JSON text from the LLM.
  * Returns null + error message if parse/validation fails.
+ *
+ * Wave 3.2: post-parse sanitization step — strip CF and date values that
+ * don't pass deterministic format validation. The LLM is forbidden from
+ * inventing them in the prompt, but if it does anyway, we catch them here.
  */
 export function parseHeaderData(
   rawJson: string,
@@ -157,5 +163,46 @@ export function parseHeaderData(
   if (!result.success) {
     return { data: null, error: `Schema validation failed: ${result.error.message}` };
   }
-  return { data: result.data, error: null };
+
+  // Post-parse sanitization: zero-out fields that don't pass deterministic checks.
+  return { data: sanitizeHeaderData(result.data), error: null };
+}
+
+/**
+ * Strip fields that don't pass deterministic format validation. Belt-and-
+ * suspenders against LLM hallucinations on CF / dates. Pure function.
+ */
+export function sanitizeHeaderData(data: HeaderData): HeaderData {
+  return {
+    ...data,
+    paziente: {
+      ...data.paziente,
+      codiceFiscale: isValidCodiceFiscale(data.paziente.codiceFiscale)
+        ? data.paziente.codiceFiscale
+        : null,
+      dataNascita: isValidItalianDate(data.paziente.dataNascita)
+        ? data.paziente.dataNascita
+        : null,
+    },
+    oggetto: {
+      ...data.oggetto,
+      dataEvento: isValidItalianDate(data.oggetto.dataEvento)
+        ? data.oggetto.dataEvento
+        : null,
+    },
+    dataVisitaMedicoLegale: isValidItalianDate(data.dataVisitaMedicoLegale)
+      ? data.dataVisitaMedicoLegale
+      : null,
+    giudiziale: data.giudiziale
+      ? {
+          ...data.giudiziale,
+          dataConferimento: isValidItalianDate(data.giudiziale.dataConferimento)
+            ? data.giudiziale.dataConferimento
+            : null,
+          dataGiuramento: isValidItalianDate(data.giudiziale.dataGiuramento)
+            ? data.giudiziale.dataGiuramento
+            : null,
+        }
+      : null,
+  };
 }

@@ -65,24 +65,29 @@ export interface RunCoVeParams {
 const MAX_OCR_CHARS_FOR_COVE = 60_000;
 
 /**
- * Whether CoVe is enabled for this runtime. Off by default. Set
- * LEGMED_COVE_ENABLED=true in env to activate.
+ * Whether CoVe is enabled for this runtime.
+ *
+ * Wave 3.1 change: now ENABLED BY DEFAULT for medico-legal documents.
+ * Set LEGMED_COVE_ENABLED=false to opt-out (kill switch). Cost is ~$0.10/case
+ * which is negligible for documents that get filed in court.
  */
 export function isCoVeEnabled(): boolean {
-  return process.env.LEGMED_COVE_ENABLED === 'true';
+  return process.env.LEGMED_COVE_ENABLED !== 'false';
 }
 
 /**
- * Section IDs that get CoVe verification when enabled. Limited to the
- * sections with the highest medico-legal stakes that are LLM-generated.
+ * Section IDs that get CoVe verification when enabled. Wave 3.1 extends to
+ * include documentazione_sanitaria — the section most prone to citation
+ * fabrication when the model loses anchor on the source documents.
  *
  * Note: CTU/CTP no longer have an LLM-generated "epicrisi" or
  * "conclusioni_quesiti" — both are merged into the placeholder
- * "considerazioni_ml" filled by the perito. So CoVe effectively applies
- * only to stragiudiziale's epicrisi.
+ * "considerazioni_ml" filled by the perito. So CoVe effectively applies to
+ * stragiudiziale's epicrisi and to every role's documentazione_sanitaria.
  */
 export const COVE_ELIGIBLE_SECTION_IDS: ReadonlySet<string> = new Set([
   'epicrisi',
+  'documentazione_sanitaria',
 ]);
 
 export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
@@ -134,18 +139,24 @@ export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
 
 // ── Step 1: generate verification questions ────────────────────────────
 
-const QUESTION_GENERATION_SYSTEM_PROMPT = `Sei un verificatore di fatti per perizie medico-legali.
+const QUESTION_GENERATION_SYSTEM_PROMPT = `Sei un verificatore di fatti per perizie medico-legali. Il tuo lavoro è prevenire fabbricazioni in un documento che il perito firmerà e depositerà in Tribunale.
 
-Riceverai il DRAFT di una sezione di un report. Il tuo compito: generare 5-8 domande di verifica fattuale puntuali, ciascuna mirata a controllare se il draft contiene affermazioni non supportate dalle fonti.
+Riceverai il DRAFT di una sezione di un report. Il tuo compito: generare 6-10 domande di verifica fattuale puntuali, ciascuna mirata a controllare se il draft contiene affermazioni non supportate dalle fonti.
 
-Concentrati su:
+PRIORITÀ DI VERIFICA (in ordine decrescente — copri OBBLIGATORIAMENTE le prime 3):
+
+1. **IDENTITÀ DEL PERIZIANDO** — verifica che ogni nome, cognome, data di nascita, codice fiscale, indirizzo citato nel draft sia presente nelle fonti. Se nel draft compare "Mario Bianchi" o un CF, chiedi: "Il nome 'Mario Bianchi' / il CF 'XXX' è effettivamente presente nei documenti sorgente?".
+2. **STRUTTURE SANITARIE E PROFESSIONISTI** — verifica che ogni ospedale/clinica/professionista citato (es. "Ospedale Niguarda", "Dott. Marco Rossi") provenga dalle fonti. Strutture inventate sono il segno-spia più frequente di fabbricazione.
+3. **EVENTO INDICE E LESIONE** — verifica che l'evento (sinistro stradale, caduta, intervento) e la lesione descritta (frattura tibia, frattura femore) coincidano con gli eventi clinici forniti, sia per tipo che per data.
+
+Aggiuntivamente:
 - DATE specifiche citate (sono fra gli eventi documentati?)
 - DIAGNOSI e PATOLOGIE menzionate (sono effettivamente nei documenti?)
 - VALORI NUMERICI (giorni ITT/ITP, dosaggi, parametri vitali, valori lab)
-- NOMI di medici, strutture sanitarie, autori
 - AFFERMAZIONI sul decorso clinico (complicanze, esiti, terapie)
+- CITAZIONI VIRGOLETTATE — il testo tra "..." è copia-incolla letterale dai documenti?
 
-Le domande devono essere chiuse e verificabili (es. "Il documento del 03.05.2024 conferma il dosaggio di enoxaparina 4000 UI?", non "il decorso e stato regolare?").
+Le domande devono essere chiuse e verificabili (es. "Il documento del 03.05.2024 conferma il dosaggio di enoxaparina 4000 UI?", non "il decorso è stato regolare?").
 
 OUTPUT: oggetto JSON con campo "questions": array di { "question": string, "category": "date" | "diagnosis" | "numeric" | "author" | "fact" }.`;
 

@@ -463,6 +463,15 @@ export async function assembleSectionsAndSaveReport(
     },
   );
 
+  // Wave 3.3 — Source attribution appendix: append a "## Riferimenti
+  // Documentali" section listing each unique document cited in the report.
+  // This gives the perito a quick index of the source events without changing
+  // the body of the report. Uses date-based matching against synthesisParams.events.
+  const appendix = buildDocumentReferencesAppendix(fullReport, synthesisParams.events);
+  if (appendix) {
+    fullReport = `${fullReport}\n\n${appendix}`;
+  }
+
   const totalWordCount = sections.reduce((sum, s) => sum + s.wordCount, 0);
 
   // Compute prompt version from section system prompts
@@ -542,4 +551,68 @@ export async function assembleSectionsAndSaveReport(
 
   const result = await insertReportWithMetadata(caseId, fullReport, totalWordCount, generationMetadata);
   return { ...result, promptVersion, usage: totalUsage };
+}
+
+// ── Wave 3.3 helpers — source-attribution appendix ────────────────────
+
+/**
+ * Build a "## Riferimenti Documentali" appendix listing each unique
+ * (date, event title) pair cited in the report. Matches the same date
+ * patterns used elsewhere (DD/MM/YYYY, DD.MM.YYYY) and dedupes results.
+ *
+ * Returns empty string if no events or no date citations are found.
+ */
+function buildDocumentReferencesAppendix(
+  report: string,
+  events: ConsolidatedEvent[],
+): string {
+  if (events.length === 0) return '';
+
+  // Index events by ISO and DD/MM/YYYY date
+  const eventsByDate = new Map<string, ConsolidatedEvent[]>();
+  for (const e of events) {
+    if (!e.eventDate || e.eventDate === '1900-01-01') continue;
+    const iso = e.eventDate;
+    const parts = iso.split('-');
+    if (parts.length !== 3) continue;
+    const dmy = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    const dmyDot = `${parts[2]}.${parts[1]}.${parts[0]}`;
+    for (const key of [iso, dmy, dmyDot]) {
+      if (!eventsByDate.has(key)) eventsByDate.set(key, []);
+      eventsByDate.get(key)!.push(e);
+    }
+  }
+
+  // Find date references in the report
+  const dateRegex = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
+  const referencedOrderNumbers = new Set<number>();
+  let match: RegExpExecArray | null;
+  while ((match = dateRegex.exec(report)) !== null) {
+    const slash = `${match[1]}/${match[2]}/${match[3]}`;
+    const dot = `${match[1]}.${match[2]}.${match[3]}`;
+    const matched = eventsByDate.get(slash) ?? eventsByDate.get(dot);
+    if (matched) {
+      for (const e of matched) referencedOrderNumbers.add(e.orderNumber);
+    }
+  }
+
+  if (referencedOrderNumbers.size === 0) return '';
+
+  // Render appendix
+  const cited = events
+    .filter((e) => referencedOrderNumbers.has(e.orderNumber))
+    .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+
+  const lines: string[] = ['## Riferimenti Documentali', ''];
+  lines.push(
+    '_Indice degli eventi documentali citati nel report. Ogni riga riporta data, tipo di evento e titolo come risulta dal documento sorgente. Numero progressivo e ID interno tra parentesi per la tracciabilità._',
+  );
+  lines.push('');
+  for (const e of cited) {
+    const isoDate = e.eventDate;
+    const parts = isoDate.split('-');
+    const display = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : isoDate;
+    lines.push(`- **${display}** — ${e.eventType}: ${e.title} _(ev. #${e.orderNumber})_`);
+  }
+  return lines.join('\n');
 }
