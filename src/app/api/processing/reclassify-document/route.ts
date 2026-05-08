@@ -103,17 +103,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch OCR text from pages (admin client to bypass RLS)
+    // Fetch OCR text from pages (admin client to bypass RLS).
+    // Wave C.3: cap at 20 pages with '\n\n' separator so the input matches
+    // exactly what classify-batch/classify-document send — guarantees same
+    // doc → same classification regardless of entry point.
     const admin = createAdminClient();
     const { data: pagesData } = await admin
       .from('pages')
       .select('page_number, ocr_text')
       .eq('document_id', documentId)
-      .order('page_number', { ascending: true });
+      .order('page_number', { ascending: true })
+      .limit(20);
 
     const ocrText = (pagesData ?? [])
       .map((p) => p.ocr_text ?? '')
-      .join('\n')
+      .filter(Boolean)
+      .join('\n\n')
       .trim();
 
     if (!ocrText) {

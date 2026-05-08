@@ -86,19 +86,22 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Check if we already have OCR text for this document
+    // Wave C.3: read enough pages so the 8K classification window is filled.
+    // Was 3 pages → on-demand and pipeline produced different inputs for the
+    // same doc, leading to unstable classification. We now fetch the first 20
+    // pages (more than enough to fill MAX_CLASSIFICATION_CHARS=8000) so both
+    // call sites send identical text to the classifier.
     const admin = createAdminClient();
     const { data: existingPages } = await admin
       .from('pages')
       .select('ocr_text')
       .eq('document_id', documentId)
       .order('page_number', { ascending: true })
-      .limit(3);
+      .limit(20);
 
     let ocrText: string;
 
     if (existingPages && existingPages.length > 0) {
-      // Use existing OCR text (first 3 pages)
       ocrText = existingPages
         .map((p) => p.ocr_text as string)
         .filter(Boolean)

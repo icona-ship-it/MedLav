@@ -115,7 +115,7 @@ export function replaceSectionContent(
 function slugifyHeading(heading: string): string {
   return heading
     .toLowerCase()
-    .replace(/[^a-zà-ú0-9\s]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, '_')
     .slice(0, 40);
 }

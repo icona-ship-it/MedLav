@@ -460,8 +460,10 @@ export function buildExtractionUserPrompt(params: {
   totalChunks?: number;
   documentName?: string;
   pageRange?: string;
+  /** Wave C.4: ISO-639-1 hint when the OCR is not Italian. */
+  languageHint?: 'de' | 'en' | 'mixed';
 }): string {
-  const { documentText, fileName, documentType, chunkIndex, totalChunks, documentName, pageRange } = params;
+  const { documentText, fileName, documentType, chunkIndex, totalChunks, documentName, pageRange, languageHint } = params;
 
   let chunkContext = '';
   if (chunkIndex !== undefined && totalChunks !== undefined && totalChunks > 1) {
@@ -479,7 +481,22 @@ export function buildExtractionUserPrompt(params: {
   const typeHint = getDocumentTypeHint(documentType);
   const typeHintBlock = typeHint ? `\n${typeHint}\n` : '';
 
-  return `${chunkContext}${typeHintBlock ? `${typeHintBlock}\n` : ''}DOCUMENTO: ${fileName}
+  // Wave C.4: when the document is not Italian (e.g. cartelle cliniche di
+  // Bolzano/Alto Adige in tedesco), instruct the model explicitly so it does
+  // not skip events whose surrounding prose is in another language.
+  let languageBlock = '';
+  if (languageHint === 'de') {
+    languageBlock = `\n[LINGUA] Il documento è in TEDESCO. Estrai comunque tutti gli eventi clinici. Per ogni evento:
+- title/description: traduci in italiano i concetti medici (es. "Aufnahme" → "Ricovero", "Diagnose" → "Diagnosi"), mantenendo i nomi propri (paziente, medico, struttura) nella forma originale.
+- sourceText: mantieni la citazione testuale ESATTA in tedesco (NON tradurre).
+- diagnosis/doctor/facility: nomi propri in originale; codici ICD/diagnosi in originale + traduzione se evidente.\n\n`;
+  } else if (languageHint === 'en') {
+    languageBlock = `\n[LINGUA] Il documento è in INGLESE. Stesse regole della clausola tedesca: traduci i concetti, mantieni le citazioni e i nomi propri in originale.\n\n`;
+  } else if (languageHint === 'mixed') {
+    languageBlock = `\n[LINGUA] Il documento contiene testo in italiano e in un'altra lingua. Estrai eventi da entrambe le sezioni linguistiche. Per le sezioni non italiane: traduci i concetti medici, mantieni citazioni testuali e nomi propri.\n\n`;
+  }
+
+  return `${chunkContext}${typeHintBlock ? `${typeHintBlock}\n` : ''}${languageBlock}DOCUMENTO: ${fileName}
 TIPO DOCUMENTO: ${documentType}
 
 NOTA: Il testo contiene marker [PAGE_START:N] e [PAGE_END:N] che delimitano le pagine del documento.

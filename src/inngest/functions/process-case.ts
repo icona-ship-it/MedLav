@@ -7,7 +7,7 @@ import { ocrSingleDocument } from '../steps/ocr-document';
 import { chunkArray } from '@/lib/array-utils';
 // Classification removed from pipeline — handled by Document Organizer (Pro) or user manual selection
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
-import type { ChunkJob } from '../steps/extract-events';
+import type { ChunkJob, ExtractionLanguageWarning } from '../steps/extract-events';
 import { consolidateEventsStep, fetchAllEventsForCase } from '../steps/consolidate-events';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
 import { detectAnomaliesStep, detectMissingDocumentsStep } from '../steps/detect-issues';
@@ -458,6 +458,28 @@ export const processCase = inngest.createFunction(
               severity: 'warning',
               message: `Testo OCR troncato in estrazione: documento "${w.fileName}" pp ${w.pageRange} (${w.originalChars} → ${w.truncatedChars} caratteri). Possibile perdita di eventi clinici in queste pagine.`,
               failedItems: [w.fileName],
+            });
+          }
+        }
+        // Wave C.4: surface language detection so the perito knows the
+        // pipeline saw German/English content. Aggregated per file so we
+        // don't spam one warning per chunk.
+        if (result.value.languageWarnings && result.value.languageWarnings.length > 0) {
+          const byFile = new Map<string, ExtractionLanguageWarning>();
+          for (const lw of result.value.languageWarnings) {
+            if (!byFile.has(lw.fileName)) byFile.set(lw.fileName, lw);
+          }
+          const langLabels: Record<'de' | 'en' | 'mixed', string> = {
+            de: 'tedesco',
+            en: 'inglese',
+            mixed: 'misto (italiano + altra lingua)',
+          };
+          for (const lw of byFile.values()) {
+            pipelineWarnings.push({
+              step: 'extraction',
+              severity: 'warning',
+              message: `Documento "${lw.fileName}" rilevato in ${langLabels[lw.language]}. I concetti medici sono stati tradotti in italiano nei titoli; le citazioni testuali (sourceText) restano in lingua originale.`,
+              failedItems: [lw.fileName],
             });
           }
         }

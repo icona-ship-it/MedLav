@@ -135,10 +135,12 @@ export async function extractEventsFromChunk(params: {
   totalChunks?: number;
   documentName?: string;
   pageRange?: string;
+  /** Wave C.4: language hint when chunk OCR is detected as not-Italian. */
+  languageHint?: 'de' | 'en' | 'mixed';
 }): Promise<ExtractionResponse & { usage?: TokenUsage }> {
   const {
     chunkText, chunkLabel, documentType, caseType,
-    temperature = 0, chunkIndex, totalChunks, documentName, pageRange,
+    temperature = 0, chunkIndex, totalChunks, documentName, pageRange, languageHint,
   } = params;
 
   const startMs = Date.now();
@@ -161,6 +163,7 @@ export async function extractEventsFromChunk(params: {
           totalChunks,
           documentName,
           pageRange,
+          languageHint,
         }),
       },
     ],
@@ -791,12 +794,19 @@ function isSentinelValue(value: string): boolean {
 // ── Intra-document deduplication ──
 
 function jaccardSimilarity(a: string, b: string): number {
-  const wordsA = new Set(
-    a.toLowerCase().replace(/[^\w\sàèéìòù]/g, '').split(/\s+/).filter((w) => w.length > 3),
-  );
-  const wordsB = new Set(
-    b.toLowerCase().replace(/[^\w\sàèéìòù]/g, '').split(/\s+/).filter((w) => w.length > 3),
-  );
+  // Wave C.1 (post-Schönweger): preserve umlauts (ä ö ü ß), Spanish ñ, accented
+  // French/Italian letters via Unicode property class. Previous regex stripped
+  // them, so dedup on German/foreign names like "Schönweger" failed.
+  const tokenize = (text: string) =>
+    new Set(
+      text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+  const wordsA = tokenize(a);
+  const wordsB = tokenize(b);
 
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;

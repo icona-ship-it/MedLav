@@ -3,6 +3,7 @@ import { extractEventsFromChunk } from '@/services/extraction/extraction-service
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
+import { detectLanguage } from '@/lib/language-detect';
 
 export const PAGES_PER_CHUNK = 10;
 /** Overlap pages between consecutive chunks to prevent mid-document splits. */
@@ -151,17 +152,26 @@ export interface ExtractionTruncationWarning {
   truncatedChars: number;
 }
 
+export interface ExtractionLanguageWarning {
+  documentId: string;
+  fileName: string;
+  pageRange: string;
+  language: 'de' | 'en' | 'mixed';
+}
+
 export async function extractChunkBatch(
   jobs: ChunkJob[],
 ): Promise<{
   totalCount: number;
   perDoc: Record<string, number>;
   truncationWarnings: ExtractionTruncationWarning[];
+  languageWarnings: ExtractionLanguageWarning[];
 }> {
   let totalCount = 0;
   let failedCount = 0;
   const perDoc: Record<string, number> = {};
   const truncationWarnings: ExtractionTruncationWarning[] = [];
+  const languageWarnings: ExtractionLanguageWarning[] = [];
 
   for (const job of jobs) {
     try {
@@ -179,6 +189,9 @@ export async function extractChunkBatch(
       if (result.truncationWarning) {
         truncationWarnings.push(result.truncationWarning);
       }
+      if (result.languageWarning) {
+        languageWarnings.push(result.languageWarning);
+      }
     } catch (error) {
       failedCount++;
       const message = error instanceof Error ? error.message : 'unknown';
@@ -191,7 +204,7 @@ export async function extractChunkBatch(
     throw new Error(`All ${jobs.length} extraction chunk jobs in batch failed`);
   }
 
-  return { totalCount, perDoc, truncationWarnings };
+  return { totalCount, perDoc, truncationWarnings, languageWarnings };
 }
 
 interface ExtractChunkParams {
@@ -211,6 +224,7 @@ interface ExtractChunkParams {
 export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
   count: number;
   truncationWarning?: ExtractionTruncationWarning;
+  languageWarning?: ExtractionLanguageWarning;
 }> {
   const { caseId, ocrResult, range, chunkIndex, totalChunks, caseType, caseTypes } = params;
   const supabase = createAdminClient();
@@ -277,6 +291,29 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     // With PAGES_PER_CHUNK=10, typical chunks are 15-25K chars (well under cap).
     // Cap at 100K to handle even extremely dense documents without truncation.
     // Each chunk is a separate Inngest step, so long LLM responses don't cause timeout.
+    // Wave C.4: detect non-Italian content so we can give the LLM a
+    // language hint. We sample the first ~4K chars; for German/English
+    // documents (typical Alto Adige / English referrals) this lets the
+    // extractor translate concepts while keeping source citations intact.
+    const detection = detectLanguage(chunkText);
+    const languageHint: 'de' | 'en' | 'mixed' | undefined =
+      detection.language === 'de' || detection.language === 'en' || detection.language === 'mixed'
+        ? detection.language
+        : undefined;
+    let languageWarning: ExtractionLanguageWarning | undefined;
+    if (languageHint) {
+      logger.info(
+        'pipeline',
+        ` Chunk ${chunkIndex + 1} (doc ${ocrResult.documentId} pp ${range.start}-${range.end}): detected language=${detection.language} (it=${detection.hits.it} de=${detection.hits.de} en=${detection.hits.en})`,
+      );
+      languageWarning = {
+        documentId: ocrResult.documentId,
+        fileName: ocrResult.fileName,
+        pageRange: `${range.start}-${range.end}`,
+        language: languageHint,
+      };
+    }
+
     const MAX_CHUNK_CHARS = 100_000;
     if (chunkText.length > MAX_CHUNK_CHARS) {
       const originalChars = chunkText.length;
@@ -305,6 +342,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       totalChunks,
       documentName: ocrResult.fileName,
       pageRange: `pag ${range.start}-${range.end}`,
+      languageHint,
     });
 
     // If Mistral returned 0 events, retry ONLY when the chunk has substantial clinical content.
@@ -368,16 +406,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
-          return { count: 0, truncationWarning };
+          return { count: 0, truncationWarning, languageWarning };
         }
-        return { count: retryRows.length, truncationWarning };
+        return { count: retryRows.length, truncationWarning, languageWarning };
       }
       logger.warn('pipeline', ` Retry also returned 0 events for doc ${ocrResult.documentId}`);
-      return { count: 0, truncationWarning };
+      return { count: 0, truncationWarning, languageWarning };
     }
 
     if (result.events.length === 0) {
-      return { count: 0, truncationWarning };
+      return { count: 0, truncationWarning, languageWarning };
     }
 
     // Idempotency: delete any existing events for this chunk before inserting
@@ -419,7 +457,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       throw new Error(`Event insert failed: ${insertError.message}`);
     }
     logger.info('pipeline', ` Chunk ${chunkIndex + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
-    return { count: eventRows.length, truncationWarning };
+    return { count: eventRows.length, truncationWarning, languageWarning };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);

@@ -58,10 +58,11 @@ export function identifySectionId(headingText: string): string {
       return mapping.id;
     }
   }
-  // Fallback: slugify the heading
+  // Fallback: slugify the heading. Wave C.1: preserve all Unicode letters
+  // (umlauts, accented vowels, etc.) so German/foreign headings dedup correctly.
   return headingText
     .toLowerCase()
-    .replace(/[^a-zà-ú0-9\s]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, '_')
     .slice(0, 40);
 }

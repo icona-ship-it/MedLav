@@ -76,12 +76,15 @@ export const classifyBatchJob = inngest.createFunction(
           if (!doc) return { success: false, docId };
 
           try {
+            // Wave C.3: read 20 pages so the 8K classification window fills
+            // identically to the freshly-OCR'd path. Prevents same-doc-
+            // different-classification when called via different entry points.
             const { data: existingPages } = await supabase
               .from('pages')
               .select('ocr_text')
               .eq('document_id', docId)
               .order('page_number', { ascending: true })
-              .limit(3);
+              .limit(20);
 
             let ocrText: string;
             if (existingPages && existingPages.length > 0) {
