@@ -26,6 +26,7 @@ import {
   MISTRAL_MODELS,
   DETERMINISTIC_SEED,
   TIMEOUT_DEFAULT,
+  assertNotTruncated,
 } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
@@ -51,6 +52,15 @@ export interface CoVeResult {
   unsupportedFactsFound: number;
   /** True if the revisor actually changed the text. */
   wasRevised: boolean;
+  /**
+   * LLM call status for the 3 CoVe phases. 'success' = all phases ran ok.
+   * 'failed' = at least one phase failed (network/parse/truncation) and the
+   * caller should treat coveApplied as false. 'skipped' = no questions
+   * generated (legitimate no-op).
+   */
+  llmStatus: 'success' | 'failed' | 'skipped';
+  /** Human-readable failure reason when llmStatus='failed'. */
+  failureReason?: string;
 }
 
 export interface RunCoVeParams {
@@ -95,7 +105,20 @@ export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
   const startMs = Date.now();
 
   // Step 1: generate verification questions
-  const questions = await generateVerificationQuestions(draftContent, sectionTitle);
+  const qResult = await generateVerificationQuestions(draftContent, sectionTitle);
+  if (qResult.failed) {
+    logger.error('cove', `${sectionTitle}: question generation FAILED — CoVe bypassed: ${qResult.error}`);
+    return {
+      revisedContent: draftContent,
+      questions: [],
+      answers: [],
+      unsupportedFactsFound: 0,
+      wasRevised: false,
+      llmStatus: 'failed',
+      failureReason: `question-generation: ${qResult.error}`,
+    };
+  }
+  const questions = qResult.questions;
 
   if (questions.length === 0) {
     logger.warn('cove', `${sectionTitle}: no verification questions generated, skipping CoVe`);
@@ -105,22 +128,43 @@ export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
       answers: [],
       unsupportedFactsFound: 0,
       wasRevised: false,
+      llmStatus: 'skipped',
     };
   }
 
-  // Step 2: answer all questions in one batched call (independent reasoning
-  // per the prompt; batching is a cost optimization vs the canonical
-  // per-question call).
-  const answers = await answerVerificationQuestions(questions, eventsContext, ocrContext);
+  // Step 2: answer all questions in one batched call.
+  const aResult = await answerVerificationQuestions(questions, eventsContext, ocrContext);
+  if (aResult.failed) {
+    logger.error('cove', `${sectionTitle}: answer phase FAILED — CoVe bypassed: ${aResult.error}`);
+    return {
+      revisedContent: draftContent,
+      questions,
+      answers: [],
+      unsupportedFactsFound: 0,
+      wasRevised: false,
+      llmStatus: 'failed',
+      failureReason: `answer-phase: ${aResult.error}`,
+    };
+  }
+  const answers = aResult.answers;
 
   const unsupported = answers.filter((a) => !a.supported);
 
   // Step 3: revise only if needed
   let revisedContent = draftContent;
   let wasRevised = false;
+  let revisionFailureReason: string | undefined;
   if (unsupported.length > 0) {
-    revisedContent = await reviseDraft(draftContent, unsupported, sectionTitle);
-    wasRevised = revisedContent.trim() !== draftContent.trim();
+    const rResult = await reviseDraft(draftContent, unsupported, sectionTitle);
+    if (rResult.failed) {
+      // Revision failure is less critical: caller still has questions/answers,
+      // but the draft is unchanged — surface as failed so HRS can penalize.
+      revisionFailureReason = `revision: ${rResult.error}`;
+      logger.error('cove', `${sectionTitle}: revision FAILED — draft unchanged: ${rResult.error}`);
+    } else {
+      revisedContent = rResult.content;
+      wasRevised = revisedContent.trim() !== draftContent.trim();
+    }
   }
 
   logger.info(
@@ -134,6 +178,8 @@ export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
     answers,
     unsupportedFactsFound: unsupported.length,
     wasRevised,
+    llmStatus: revisionFailureReason ? 'failed' : 'success',
+    failureReason: revisionFailureReason,
   };
 }
 
@@ -160,12 +206,16 @@ Le domande devono essere chiuse e verificabili (es. "Il documento del 03.05.2024
 
 OUTPUT: oggetto JSON con campo "questions": array di { "question": string, "category": "date" | "diagnosis" | "numeric" | "author" | "fact" }.`;
 
+type QuestionResult =
+  | { failed: false; questions: VerificationQuestion[] }
+  | { failed: true; error: string };
+
 async function generateVerificationQuestions(
   draft: string,
   sectionTitle: string,
-): Promise<VerificationQuestion[]> {
+): Promise<QuestionResult> {
   try {
-    const { content } = await streamMistralChat({
+    const result = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         { role: 'system', content: QUESTION_GENERATION_SYSTEM_PROMPT },
@@ -181,16 +231,21 @@ async function generateVerificationQuestions(
       timeoutMs: TIMEOUT_DEFAULT,
       label: `cove:questions:${sectionTitle}`,
     });
+    assertNotTruncated(result, `cove:questions:${sectionTitle}`);
 
-    const parsed = JSON.parse(content) as { questions?: VerificationQuestion[] };
-    if (!Array.isArray(parsed.questions)) return [];
+    const parsed = JSON.parse(result.content) as { questions?: VerificationQuestion[] };
+    if (!Array.isArray(parsed.questions)) {
+      return { failed: false, questions: [] };
+    }
 
-    return parsed.questions
-      .filter((q) => typeof q.question === 'string' && q.question.length > 5)
-      .slice(0, 8);
+    return {
+      failed: false,
+      questions: parsed.questions
+        .filter((q) => typeof q.question === 'string' && q.question.length > 5)
+        .slice(0, 8),
+    };
   } catch (err) {
-    logger.warn('cove', `Question generation failed for ${sectionTitle}: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    return { failed: true, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -207,19 +262,23 @@ Per ciascuna domanda:
 
 OUTPUT: oggetto JSON con campo "answers": array di { "question": string, "category": string, "answer": string, "supported": boolean } — uno per ogni domanda ricevuta, in stesso ordine.`;
 
+type AnswerResult =
+  | { failed: false; answers: VerificationAnswer[] }
+  | { failed: true; error: string };
+
 async function answerVerificationQuestions(
   questions: VerificationQuestion[],
   eventsContext: string,
   ocrContext?: string,
-): Promise<VerificationAnswer[]> {
-  if (questions.length === 0) return [];
+): Promise<AnswerResult> {
+  if (questions.length === 0) return { failed: false, answers: [] };
 
   const cappedOcr = ocrContext && ocrContext.length > MAX_OCR_CHARS_FOR_COVE
     ? `${ocrContext.slice(0, MAX_OCR_CHARS_FOR_COVE)}\n[... OCR troncato per CoVe]`
     : ocrContext ?? '';
 
   try {
-    const { content } = await streamMistralChat({
+    const result = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         { role: 'system', content: ANSWER_SYSTEM_PROMPT },
@@ -235,16 +294,19 @@ async function answerVerificationQuestions(
       timeoutMs: TIMEOUT_DEFAULT,
       label: 'cove:answers',
     });
+    assertNotTruncated(result, 'cove:answers');
 
-    const parsed = JSON.parse(content) as { answers?: VerificationAnswer[] };
-    if (!Array.isArray(parsed.answers)) return [];
+    const parsed = JSON.parse(result.content) as { answers?: VerificationAnswer[] };
+    if (!Array.isArray(parsed.answers)) return { failed: false, answers: [] };
 
-    return parsed.answers.filter(
-      (a) => typeof a.question === 'string' && typeof a.answer === 'string' && typeof a.supported === 'boolean',
-    );
+    return {
+      failed: false,
+      answers: parsed.answers.filter(
+        (a) => typeof a.question === 'string' && typeof a.answer === 'string' && typeof a.supported === 'boolean',
+      ),
+    };
   } catch (err) {
-    logger.warn('cove', `Answer phase failed: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    return { failed: true, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -263,19 +325,23 @@ Regole:
 
 OUTPUT: il testo revisionato in markdown plaintext, senza preamboli o JSON.`;
 
+type ReviseResult =
+  | { failed: false; content: string }
+  | { failed: true; error: string };
+
 async function reviseDraft(
   draft: string,
   unsupported: VerificationAnswer[],
   sectionTitle: string,
-): Promise<string> {
-  if (unsupported.length === 0) return draft;
+): Promise<ReviseResult> {
+  if (unsupported.length === 0) return { failed: false, content: draft };
 
   const unsupportedListed = unsupported
     .map((u, i) => `${i + 1}. [${u.category}] ${u.question}\n   Risposta verifica: ${u.answer}`)
     .join('\n');
 
   try {
-    const { content } = await streamMistralChat({
+    const result = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         { role: 'system', content: REVISION_SYSTEM_PROMPT },
@@ -290,10 +356,10 @@ async function reviseDraft(
       timeoutMs: TIMEOUT_DEFAULT,
       label: `cove:revise:${sectionTitle}`,
     });
+    assertNotTruncated(result, `cove:revise:${sectionTitle}`);
 
-    return content.trim();
+    return { failed: false, content: result.content.trim() };
   } catch (err) {
-    logger.warn('cove', `Revision failed for ${sectionTitle}, returning original draft: ${err instanceof Error ? err.message : String(err)}`);
-    return draft;
+    return { failed: true, error: err instanceof Error ? err.message : String(err) };
   }
 }

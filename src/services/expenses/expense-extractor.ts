@@ -12,6 +12,7 @@ import {
   streamMistralChat,
   TIMEOUT_EXTRACTION,
   DETERMINISTIC_SEED,
+  assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { ExpenseCategory } from './expense-analyzer';
 import { logger } from '@/lib/logger';
@@ -149,7 +150,7 @@ export async function extractExpensesFromOcr(
     .replace('{ocrText}', trimmedOcr)
     .replace('{diagnosisContext}', diagnosisContext);
 
-  const { content } = await streamMistralChat({
+  const result = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: EXPENSE_EXTRACTION_SYSTEM_PROMPT },
@@ -162,8 +163,9 @@ export async function extractExpensesFromOcr(
     randomSeed: DETERMINISTIC_SEED,
     label: 'expense-extraction',
   });
+  assertNotTruncated(result, 'expense-extraction');
 
-  return parseExpenseResponse(content);
+  return parseExpenseResponse(result.content);
 }
 
 // ── Response parsing ──────────────────────────────────────────────────

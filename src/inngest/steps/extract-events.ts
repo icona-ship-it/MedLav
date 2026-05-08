@@ -143,12 +143,25 @@ export interface ChunkJob {
  * re-inserting events from already-successful jobs. By catching per-job errors,
  * we ensure partial success is preserved and only rethrow if ALL jobs fail.
  */
+export interface ExtractionTruncationWarning {
+  documentId: string;
+  fileName: string;
+  pageRange: string;
+  originalChars: number;
+  truncatedChars: number;
+}
+
 export async function extractChunkBatch(
   jobs: ChunkJob[],
-): Promise<{ totalCount: number; perDoc: Record<string, number> }> {
+): Promise<{
+  totalCount: number;
+  perDoc: Record<string, number>;
+  truncationWarnings: ExtractionTruncationWarning[];
+}> {
   let totalCount = 0;
   let failedCount = 0;
   const perDoc: Record<string, number> = {};
+  const truncationWarnings: ExtractionTruncationWarning[] = [];
 
   for (const job of jobs) {
     try {
@@ -163,6 +176,9 @@ export async function extractChunkBatch(
       });
       totalCount += result.count;
       perDoc[job.ocrResult.documentId] = (perDoc[job.ocrResult.documentId] ?? 0) + result.count;
+      if (result.truncationWarning) {
+        truncationWarnings.push(result.truncationWarning);
+      }
     } catch (error) {
       failedCount++;
       const message = error instanceof Error ? error.message : 'unknown';
@@ -175,7 +191,7 @@ export async function extractChunkBatch(
     throw new Error(`All ${jobs.length} extraction chunk jobs in batch failed`);
   }
 
-  return { totalCount, perDoc };
+  return { totalCount, perDoc, truncationWarnings };
 }
 
 interface ExtractChunkParams {
@@ -192,7 +208,10 @@ interface ExtractChunkParams {
  * Step 3b: Extract events from a single chunk of pages.
  * Reads pages from DB, calls Mistral extraction, saves events to DB.
  */
-export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ count: number }> {
+export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
+  count: number;
+  truncationWarning?: ExtractionTruncationWarning;
+}> {
   const { caseId, ocrResult, range, chunkIndex, totalChunks, caseType, caseTypes } = params;
   const supabase = createAdminClient();
 
@@ -241,9 +260,10 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
 
     // Bug #10: Filter out pages with empty/null OCR text before sending to Mistral
     const nonEmptyPages = pages.filter((p) => p.ocr_text && p.ocr_text.trim().length > 0);
+    let truncationWarning: ExtractionTruncationWarning | undefined;
     if (nonEmptyPages.length === 0) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: all ${pages.length} pages have empty OCR text for doc ${ocrResult.documentId}`);
-      return { count: 0 };
+      return { count: 0, truncationWarning };
     }
     if (nonEmptyPages.length < pages.length) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: ${pages.length - nonEmptyPages.length} pages with empty OCR text filtered out`);
@@ -259,8 +279,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
     // Each chunk is a separate Inngest step, so long LLM responses don't cause timeout.
     const MAX_CHUNK_CHARS = 100_000;
     if (chunkText.length > MAX_CHUNK_CHARS) {
-      logger.error('pipeline', `CRITICAL: Chunk ${chunkIndex + 1} text truncated from ${chunkText.length} to ${MAX_CHUNK_CHARS} chars for doc ${ocrResult.documentId} pages ${range.start}-${range.end}. Some page content may be LOST in extraction.`);
+      const originalChars = chunkText.length;
+      logger.error('pipeline', `CRITICAL: Chunk ${chunkIndex + 1} text truncated from ${originalChars} to ${MAX_CHUNK_CHARS} chars for doc ${ocrResult.documentId} pages ${range.start}-${range.end}. Some page content may be LOST in extraction.`);
       chunkText = chunkText.slice(0, MAX_CHUNK_CHARS) + '\n\n[... ATTENZIONE: testo OCR troncato per limiti di contesto. Alcune pagine di questo segmento potrebbero non essere state analizzate completamente.]';
+      truncationWarning = {
+        documentId: ocrResult.documentId,
+        fileName: ocrResult.fileName,
+        pageRange: `${range.start}-${range.end}`,
+        originalChars,
+        truncatedChars: MAX_CHUNK_CHARS,
+      };
     }
 
     const chunkLabel = totalChunks > 1
@@ -340,16 +368,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
-          return { count: 0 };
+          return { count: 0, truncationWarning };
         }
-        return { count: retryRows.length };
+        return { count: retryRows.length, truncationWarning };
       }
       logger.warn('pipeline', ` Retry also returned 0 events for doc ${ocrResult.documentId}`);
-      return { count: 0 };
+      return { count: 0, truncationWarning };
     }
 
     if (result.events.length === 0) {
-      return { count: 0 };
+      return { count: 0, truncationWarning };
     }
 
     // Idempotency: delete any existing events for this chunk before inserting
@@ -391,7 +419,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       throw new Error(`Event insert failed: ${insertError.message}`);
     }
     logger.info('pipeline', ` Chunk ${chunkIndex + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
-    return { count: eventRows.length };
+    return { count: eventRows.length, truncationWarning };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);
@@ -404,7 +432,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{ 
       throw error;
     }
 
-    return { count: 0 };
+    return { count: 0, truncationWarning: undefined };
   }
 }
 

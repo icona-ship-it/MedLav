@@ -2,6 +2,7 @@ import {
   MISTRAL_MODELS,
   streamMistralChat,
   DETERMINISTIC_SEED,
+  assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
 import type { SynthesisParams } from './synthesis-service';
@@ -314,7 +315,11 @@ export async function generateSingleSection(params: {
   // Optional Chain-of-Verification post-processing for high-stakes sections.
   // Off by default; opt-in via LEGMED_COVE_ENABLED=true. See cove-verifier.ts.
   let finalContent = content;
-  let coveMeta: Pick<GeneratedSection, 'coveApplied' | 'coveQuestionCount' | 'coveUnsupportedCount' | 'coveRevised'> = {};
+  let coveMeta: Pick<
+    GeneratedSection,
+    'coveApplied' | 'coveQuestionCount' | 'coveUnsupportedCount' | 'coveRevised' |
+    'coveBypassedDueToLlmFailure' | 'coveFailureReason'
+  > = {};
 
   if (isCoVeEnabled() && COVE_ELIGIBLE_SECTION_IDS.has(spec.id)) {
     try {
@@ -331,16 +336,39 @@ export async function generateSingleSection(params: {
       });
 
       finalContent = cove.revisedContent;
-      coveMeta = {
-        coveApplied: true,
-        coveQuestionCount: cove.questions.length,
-        coveUnsupportedCount: cove.unsupportedFactsFound,
-        coveRevised: cove.wasRevised,
-      };
+      if (cove.llmStatus === 'failed') {
+        // CoVe ran but at least one of the 3 phases failed silently. Surface
+        // it: HRS scorer will penalize, and the section is *not* considered
+        // verified for audit purposes.
+        coveMeta = {
+          coveApplied: false,
+          coveBypassedDueToLlmFailure: true,
+          coveFailureReason: cove.failureReason,
+        };
+        logger.error(
+          'section-generator',
+          `CoVe BYPASSED for ${spec.id} due to LLM failure: ${cove.failureReason}. Section saved without verification.`,
+        );
+      } else if (cove.llmStatus === 'skipped') {
+        coveMeta = { coveApplied: false };
+      } else {
+        coveMeta = {
+          coveApplied: true,
+          coveQuestionCount: cove.questions.length,
+          coveUnsupportedCount: cove.unsupportedFactsFound,
+          coveRevised: cove.wasRevised,
+        };
+      }
     } catch (err) {
-      // Non-blocking: if CoVe fails, fall back to the original draft.
-      logger.warn('section-generator', `CoVe failed for ${spec.id}, using draft: ${err instanceof Error ? err.message : String(err)}`);
-      coveMeta = { coveApplied: false };
+      // Defensive fallback (runCoVe is supposed to never throw post-refactor):
+      // surface as bypass + reason so downstream still knows it's unverified.
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.error('section-generator', `CoVe threw for ${spec.id}: ${reason}`);
+      coveMeta = {
+        coveApplied: false,
+        coveBypassedDueToLlmFailure: true,
+        coveFailureReason: `unexpected throw: ${reason}`,
+      };
     }
   }
 
@@ -565,7 +593,7 @@ OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backti
 
   // Call Mistral with JSON-object response format. This nudges the model to
   // produce strict JSON; combined with our Zod parse, it's a hard contract.
-  const { content, usage } = await streamMistralChat({
+  const headerResult = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -578,6 +606,8 @@ OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backti
     randomSeed: DETERMINISTIC_SEED,
     label: `header:${spec.id}`,
   });
+  assertNotTruncated(headerResult, `header:${spec.id}`);
+  const { content, usage } = headerResult;
 
   // Parse + validate. If invalid, render with all-null data so we get a
   // safe "[da compilare dal perito]" output rather than fabricated values.

@@ -1,4 +1,4 @@
-import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
@@ -109,7 +109,7 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
   }
 
   const hasOcr = params.documentsOcrText && params.documentsOcrText.length > 0;
-  const { content: newContent } = await streamMistralChat({
+  const result = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -121,6 +121,7 @@ ${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
     randomSeed: DETERMINISTIC_SEED,
     label: `regen-section:${sectionId}`,
   });
+  assertNotTruncated(result, `regen-section:${sectionId}`);
 
-  return replaceSectionContent(currentSynthesis, sectionId, newContent);
+  return replaceSectionContent(currentSynthesis, sectionId, result.content);
 }

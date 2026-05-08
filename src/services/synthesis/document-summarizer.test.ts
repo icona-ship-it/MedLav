@@ -6,6 +6,7 @@ vi.mock('@/lib/mistral/client', () => ({
   MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
   streamMistralChat: vi.fn(),
   DETERMINISTIC_SEED: 42,
+  assertNotTruncated: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({

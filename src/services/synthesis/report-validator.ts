@@ -18,6 +18,7 @@ export interface ReportIssue {
     | 'duplicate_content'
     | 'unverified_citation'
     | 'truncated_response'
+    | 'broken_ocr_marker'
     | 'header_mismatch'
     | 'header_fabrication_signature';
   severity: 'error' | 'warning';
@@ -147,6 +148,26 @@ export function validateReport(
         type: 'sentinel_date_leak',
         severity: 'error',
         message: `Sentinel date found in report: ${pattern.source}`,
+      });
+    }
+  }
+
+  // 4a-bis. Broken OCR / serialization markers — Wave A.1 (post-Schönweger).
+  // The Mistral OCR 3 table coercion bug surfaced "[object Object]" tokens in
+  // event titles; if any leaked through into synthesis prose, the report is
+  // unsignable. Equally, a literal "null" word in a sentence is a strong sign
+  // the model dumped a serialized object as text.
+  const BROKEN_MARKERS: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\[object Object\]/i, label: '[object Object]' },
+    { pattern: /\bundefined\b/i, label: 'undefined (token testuale)' },
+    { pattern: /:\s*null\s*[,\}]/, label: 'null serializzato (es. ": null,")' },
+  ];
+  for (const { pattern, label } of BROKEN_MARKERS) {
+    if (pattern.test(synthesis)) {
+      issues.push({
+        type: 'broken_ocr_marker',
+        severity: 'error',
+        message: `Marker di errore nel report: ${label}. Il report non può essere salvato — l'output è corrotto.`,
       });
     }
   }

@@ -10,6 +10,7 @@ import {
   streamMistralChat,
   TIMEOUT_DEFAULT,
   DETERMINISTIC_SEED,
+  assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { DetectedAnomaly } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -159,7 +160,7 @@ async function resolveOneAnomaly(
 
   // 5. Call Mistral Large
   const prompt = buildResolutionPrompt(anomaly, ocrContext);
-  const { content: response } = await streamMistralChat({
+  const result = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: RESOLUTION_SYSTEM_PROMPT },
@@ -172,9 +173,10 @@ async function resolveOneAnomaly(
     randomSeed: DETERMINISTIC_SEED,
     label: `anomaly-resolve:${anomalyIndex}`,
   });
+  assertNotTruncated(result, `anomaly-resolve:${anomalyIndex}`);
 
   // 6. Parse response
-  return parseResolutionResponse(response, anomalyIndex);
+  return parseResolutionResponse(result.content, anomalyIndex);
 }
 
 function parseResolutionResponse(response: string, anomalyIndex: number): AnomalyResolution {

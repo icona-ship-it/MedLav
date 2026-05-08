@@ -25,6 +25,7 @@ const PENALTY_BY_TYPE: Record<ReportIssue['type'], number> = {
   // Critical errors — large penalty, typically already block save via validation.valid=false
   empty_report:        100,
   truncated_response:   80,
+  broken_ocr_marker:   100, // [object Object] / null / undefined leaked into report
   sentinel_date_leak:   60, // model leaked the 1900 sentinel — serious factual concern
   too_short:            40,
 

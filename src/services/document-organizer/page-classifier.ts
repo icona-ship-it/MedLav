@@ -1,4 +1,4 @@
-import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 export interface PageClassification {
@@ -49,7 +49,7 @@ export async function classifyPage(
   const truncated = pageText.slice(0, 2000);
 
   try {
-    const { content } = await streamMistralChat({
+    const result = await streamMistralChat({
       model: MISTRAL_MODELS.MISTRAL_LARGE,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -62,8 +62,9 @@ export async function classifyPage(
       randomSeed: DETERMINISTIC_SEED,
       label: `page-classify:p${pageNumber}`,
     });
+    assertNotTruncated(result, `page-classify:p${pageNumber}`);
 
-    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const parsed = JSON.parse(result.content) as Record<string, unknown>;
     const docType = String(parsed.documentType ?? 'altro');
 
     return {

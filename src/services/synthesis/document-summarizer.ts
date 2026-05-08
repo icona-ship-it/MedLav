@@ -7,6 +7,7 @@ import {
   MISTRAL_MODELS,
   streamMistralChat,
   DETERMINISTIC_SEED,
+  assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { logger } from '@/lib/logger';
@@ -42,7 +43,7 @@ export async function summarizeDocument(
     .join('\n\n')
     .slice(0, OCR_PER_DOC_SUMMARY_LIMIT);
 
-  const { content: summary } = await streamMistralChat({
+  const result = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       {
@@ -66,6 +67,8 @@ Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sani
     randomSeed: DETERMINISTIC_SEED,
     label: `summary:${doc.documentId}`,
   });
+  assertNotTruncated(result, `summary:${doc.documentId}`);
+  const summary = result.content;
 
   logger.info('synthesis', `Summary for ${doc.documentId}: ${summary.length} chars from ${doc.totalChars} OCR chars`);
 

@@ -448,6 +448,19 @@ export const processCase = inngest.createFunction(
         for (const [docId, count] of Object.entries(result.value.perDoc)) {
           docEventCounts[docId] = (docEventCounts[docId] ?? 0) + count;
         }
+        // Wave A.6: surface chunk-text truncation as a pipeline warning so the
+        // perito sees explicitly that some OCR content was dropped during
+        // extraction. Otherwise the silent truncation can hide missing events.
+        if (result.value.truncationWarnings && result.value.truncationWarnings.length > 0) {
+          for (const w of result.value.truncationWarnings) {
+            pipelineWarnings.push({
+              step: 'extraction',
+              severity: 'warning',
+              message: `Testo OCR troncato in estrazione: documento "${w.fileName}" pp ${w.pageRange} (${w.originalChars} → ${w.truncatedChars} caratteri). Possibile perdita di eventi clinici in queste pagine.`,
+              failedItems: [w.fileName],
+            });
+          }
+        }
       } else {
         logger.error('pipeline', `Extraction batch failed: ${result.reason instanceof Error ? result.reason.message : 'unknown'}`);
       }

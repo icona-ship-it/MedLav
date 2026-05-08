@@ -8,6 +8,7 @@ vi.mock('@/lib/mistral/client', () => ({
   streamMistralChat: (...args: unknown[]) => mockStreamMistralChat(...args),
   TIMEOUT_EXTRACTION: 180_000,
   DETERMINISTIC_SEED: 42,
+  assertNotTruncated: vi.fn(),
 }));
 
 // Import after mock

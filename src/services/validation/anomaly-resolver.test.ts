@@ -10,6 +10,7 @@ vi.mock('@/lib/mistral/client', () => ({
   TIMEOUT_DEFAULT: 120_000,
   DETERMINISTIC_SEED: 42,
   streamMistralChat: vi.fn(),
+  assertNotTruncated: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({

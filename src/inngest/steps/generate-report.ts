@@ -499,9 +499,12 @@ export async function assembleSectionsAndSaveReport(
       logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
     }
 
-    // Block saving for critical validation errors (empty report, too short, missing required sections)
+    // Block saving for critical validation errors. Wave A.1: also block on
+    // broken_ocr_marker — a report containing "[object Object]" or stray
+    // serialization tokens cannot be deposited and must trigger Inngest retry.
     const criticalErrors = errors.filter((e) =>
-      e.type === 'empty_report' || e.type === 'too_short' || e.type === 'missing_section',
+      e.type === 'empty_report' || e.type === 'too_short' || e.type === 'missing_section' ||
+      e.type === 'broken_ocr_marker',
     );
     if (criticalErrors.length > 0) {
       throw new Error(
@@ -523,6 +526,11 @@ export async function assembleSectionsAndSaveReport(
   const hrs = computeHrs(validation);
   const hrsLevel = getHrsLevel(hrs);
 
+  // Surface CoVe bypass failures so the perito can see "verifier did not run".
+  const coveBypassed = sections
+    .filter((s) => s.coveBypassedDueToLlmFailure === true)
+    .map((s) => ({ id: s.id, reason: s.coveFailureReason ?? 'unknown' }));
+
   // Build generation metadata
   const generationMetadata: Record<string, unknown> = {
     promptVersion,
@@ -542,7 +550,15 @@ export async function assembleSectionsAndSaveReport(
         }, new Map<string, number>()),
       ),
     ),
+    ...(coveBypassed.length > 0 ? { coveBypassed } : {}),
   };
+
+  if (coveBypassed.length > 0) {
+    logger.error(
+      'pipeline',
+      `CoVe bypassed for ${coveBypassed.length} section(s): ${coveBypassed.map((b) => `${b.id} (${b.reason})`).join(', ')}. Sections saved without verification.`,
+    );
+  }
 
   logger.info('pipeline',
     `Assembled report: ${sections.length} sections, ${totalWordCount} words, ` +

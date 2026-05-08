@@ -1,4 +1,4 @@
-import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import type { MistralResponseFormat } from '@/lib/mistral/client';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import type { ExtractedEvent, ExtractionResponse } from './extraction-schemas';
@@ -144,7 +144,7 @@ export async function extractEventsFromChunk(params: {
   const startMs = Date.now();
   logger.info('extraction', ` Starting Mistral Large for "${chunkLabel}" (${chunkText.length} chars)`);
 
-  const { content, usage } = await streamMistralChat({
+  const result_ = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       {
@@ -171,6 +171,8 @@ export async function extractEventsFromChunk(params: {
     randomSeed: DETERMINISTIC_SEED,
     label: `extraction:${chunkLabel.slice(0, 30)}`,
   });
+  assertNotTruncated(result_, `extraction:${chunkLabel.slice(0, 30)}`);
+  const { content, usage } = result_;
 
   const elapsedMs = Date.now() - startMs;
   logger.info('extraction', ` Mistral Large responded in ${elapsedMs}ms (${content.length} chars)`);
@@ -533,11 +535,18 @@ function safeJsonParse(raw: string, label: string): unknown {
     }
   }
 
-  // All levels failed
+  // All levels failed: do NOT swallow the error with an empty events array.
+  // Returning {events:[]} silently makes the perito believe a document carries
+  // no clinical events when in reality the LLM produced unparseable output.
+  // Inngest will retry; if every attempt fails the document lands in
+  // processing_status='failed' with a visible error in the UI.
+  const preview = raw.slice(0, 500).replace(/\s+/g, ' ');
   logger.error('extraction',
-    `[${label}] JSON irrecoverable (${raw.length} chars). First 500: ${raw.slice(0, 500)}`,
+    `[${label}] JSON irrecoverable (${raw.length} chars). First 500: ${preview}`,
   );
-  return { events: [] };
+  throw new Error(
+    `Estrazione fallita per "${label}": JSON LLM irrecuperabile dopo 3 livelli di fallback. Inngest ritenterà.`,
+  );
 }
 
 /**

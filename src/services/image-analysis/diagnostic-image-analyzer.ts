@@ -9,6 +9,13 @@ import { getMistralClient, withMistralRetry, MISTRAL_MODELS, DETERMINISTIC_SEED 
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
+import { z } from 'zod';
+
+const ImageAnalysisResponseSchema = z.object({
+  imageType: z.string().optional(),
+  description: z.string().min(1).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+});
 
 export interface ImageAnalysisResult {
   pageNumber: number;
@@ -132,29 +139,46 @@ Rispondi in formato JSON:
     }
     : createEmptyUsage();
 
+  // Parse + validate via Zod. If shape is invalid (Pixtral returned non-JSON or
+  // wrong types), produce a SAFE placeholder — never expose raw model output to
+  // the report, since it might contain hallucinated diagnoses or error text.
+  let parsedJson: unknown;
   try {
-    const parsed = JSON.parse(content) as {
-      imageType?: string;
-      description?: string;
-      confidence?: number;
-    };
-
-    return {
-      pageNumber,
-      imageType: normalizeImageType(parsed.imageType ?? 'altro'),
-      description: parsed.description ?? 'Nessuna descrizione disponibile',
-      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
-      usage,
-    };
+    parsedJson = JSON.parse(content);
   } catch {
+    logger.warn('image-analysis', `JSON parse failed for page ${pageNumber} — using safe placeholder`);
     return {
       pageNumber,
       imageType: 'altro',
-      description: content.slice(0, 500),
-      confidence: 0.3,
+      description: '[Analisi immagine non disponibile per errore tecnico]',
+      confidence: 0,
       usage,
     };
   }
+
+  const validated = ImageAnalysisResponseSchema.safeParse(parsedJson);
+  if (!validated.success) {
+    logger.warn(
+      'image-analysis',
+      `Zod validation failed for page ${pageNumber}: ${validated.error.issues.map((i) => i.path.join('.') + ':' + i.message).join('; ')}`,
+    );
+    return {
+      pageNumber,
+      imageType: 'altro',
+      description: '[Analisi immagine non disponibile per errore tecnico]',
+      confidence: 0,
+      usage,
+    };
+  }
+
+  const data = validated.data;
+  return {
+    pageNumber,
+    imageType: normalizeImageType(data.imageType ?? 'altro'),
+    description: data.description ?? 'Nessuna descrizione disponibile',
+    confidence: typeof data.confidence === 'number' ? data.confidence : 0.5,
+    usage,
+  };
 }
 
 /**

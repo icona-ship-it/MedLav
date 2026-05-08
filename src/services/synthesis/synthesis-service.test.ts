@@ -6,6 +6,7 @@ vi.mock('@/lib/mistral/client', () => ({
   MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
   TIMEOUT_SYNTHESIS: 600_000,
   DETERMINISTIC_SEED: 42,
+  assertNotTruncated: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({

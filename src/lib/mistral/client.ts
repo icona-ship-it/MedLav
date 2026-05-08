@@ -258,6 +258,28 @@ export interface MistralChatResult {
   finishReason: 'stop' | 'length' | 'error' | 'tool_calls' | null;
 }
 
+/**
+ * Throw if the LLM hit the maxTokens ceiling. Saving a truncated response
+ * silently is the worst failure mode for a medical-legal system: the report
+ * looks complete to the user but is missing the final paragraphs / sections.
+ *
+ * Every consumer of `streamMistralChat` MUST call this guard before using
+ * the content. Inngest will retry on throw, giving the model a chance to
+ * complete or escalating to manual review after retries are exhausted.
+ *
+ * Trigger: Schönweger audit found that synthesis-service.ts, extraction
+ * batches, and image-analyzer never checked finishReason — a 17 MB cartella
+ * could produce a truncated synthesis that was saved to DB as if complete.
+ */
+export function assertNotTruncated(result: MistralChatResult, label: string): void {
+  if (result.finishReason === 'length') {
+    throw new Error(
+      `LLM truncation detected (${label}): finishReason=length, ${result.content.length} chars. ` +
+      'Output is incomplete. The pipeline will retry; if persistent, increase maxTokens or reduce input size.',
+    );
+  }
+}
+
 export async function streamMistralChat(params: {
   model: string;
   messages: Array<{ role: string; content: string }>;

@@ -422,6 +422,16 @@ function finalizeReport(
       throw new Error(msg);
     }
 
+    // Wave A.1: hard-block reports containing "[object Object]" or null/undefined
+    // serialization markers. Mirror of the sectional path block in
+    // generate-report.ts.
+    const brokenMarkers = errors.filter((e) => e.type === 'broken_ocr_marker');
+    if (brokenMarkers.length > 0) {
+      const msg = `Report contiene marker di errore: ${brokenMarkers.map((e) => e.message).join('; ')}. Output corrotto — il sistema ritenterà.`;
+      logger.error('synthesis', msg);
+      throw new Error(msg);
+    }
+
     if (errors.length > 0) {
       logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}.`);
     }

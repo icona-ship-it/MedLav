@@ -1,4 +1,4 @@
-import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
@@ -69,7 +69,7 @@ export async function classifyDocument(
 
   const userMessage = `Nome file: ${safeFileName}\n\nTesto documento (prime ${truncatedText.length} caratteri):\n${truncatedText}`;
 
-  const { content: raw, usage } = await streamMistralChat({
+  const result_ = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: CLASSIFICATION_SYSTEM_PROMPT },
@@ -81,6 +81,8 @@ export async function classifyDocument(
     randomSeed: DETERMINISTIC_SEED,
     label: `classify-${safeFileName.slice(0, 30)}`,
   });
+  assertNotTruncated(result_, `classify-${safeFileName.slice(0, 30)}`);
+  const { content: raw, usage } = result_;
 
   const result = parseClassificationResponse(raw, fileName);
   return { ...result, usage };

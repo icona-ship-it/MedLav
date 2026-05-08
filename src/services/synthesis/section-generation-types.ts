@@ -82,6 +82,14 @@ export interface GeneratedSection {
   coveUnsupportedCount?: number;
   /** True when CoVe revisor actually changed the draft text. */
   coveRevised?: boolean;
+  /**
+   * True when CoVe was eligible for this section but its LLM phases failed
+   * (network/parse/truncation). The draft was kept as-is, but downstream
+   * scoring (HRS) should treat the section as unverified.
+   */
+  coveBypassedDueToLlmFailure?: boolean;
+  /** Failure reason when coveBypassedDueToLlmFailure=true. */
+  coveFailureReason?: string;
 }
 
 /**
