@@ -295,6 +295,35 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     new Paragraph({ text: '' }),
   );
 
+  // Wave B.4: quality summary header for the perito.
+  const lowConfidenceCount = events.filter((e) => e.confidence < 60).length;
+  const verifyCount = events.filter((e) => e.requires_verification).length;
+  if (lowConfidenceCount > 0 || verifyCount > 0) {
+    children.push(
+      new Paragraph({
+        children: [new TextRun({ text: 'Riepilogo qualità estrazione', bold: true, color: '9A3412' })],
+        spacing: { before: 100, after: 80 },
+      }),
+    );
+    if (lowConfidenceCount > 0) {
+      children.push(new Paragraph({
+        children: [new TextRun({
+          text: `• ${lowConfidenceCount} ${lowConfidenceCount === 1 ? 'evento ha' : 'eventi hanno'} confidenza inferiore al 60% — verificare contro la documentazione originale.`,
+          color: '7C2D12',
+        })],
+      }));
+    }
+    if (verifyCount > 0) {
+      children.push(new Paragraph({
+        children: [new TextRun({
+          text: `• ${verifyCount} ${verifyCount === 1 ? 'evento è marcato' : 'eventi sono marcati'} come "DA VERIFICARE".`,
+          color: '7C2D12',
+        })],
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
+  }
+
   // Section 1: Synthesis
   children.push(
     new Paragraph({
@@ -329,20 +358,29 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   for (const event of clinicalEvents) {
     const datePrecNote = event.date_precision !== 'giorno' ? ` [${event.date_precision}]` : '';
     const source = sourceLabels[event.source_type] ?? event.source_type;
+    // Wave B.1/B.2: surface confidence + verification flag in DOCX export.
+    // Threshold 60% mirrors the events-tab UI badge cutoff.
+    const isLowConfidence = typeof event.confidence === 'number' && event.confidence < 60;
+    const confidenceTag = isLowConfidence
+      ? new TextRun({ text: ` [confidenza ${Math.round(event.confidence)}%]`, color: 'B91C1C', italics: true })
+      : new TextRun({ text: '' });
 
     children.push(
       new Paragraph({
         children: [
           new TextRun({ text: `${formatDate(event.event_date)}${datePrecNote} `, bold: true }),
           new TextRun({ text: `[${source}]`, bold: true, color: '1E40AF' }),
-          event.requires_verification ? new TextRun({ text: ' [DA VERIFICARE]', color: 'DC2626', bold: true }) : new TextRun({ text: '' }),
+          event.requires_verification ? new TextRun({ text: ' ⚠ DA VERIFICARE', color: 'DC2626', bold: true }) : new TextRun({ text: '' }),
+          confidenceTag,
         ],
         spacing: { before: 200 },
       }),
       new Paragraph({
-        children: [new TextRun({ text: event.title, bold: true })],
+        children: [new TextRun({ text: event.title, bold: true, italics: isLowConfidence })],
       }),
-      new Paragraph({ text: event.description }),
+      new Paragraph({
+        children: [new TextRun({ text: event.description, italics: isLowConfidence })],
+      }),
     );
 
     if (event.diagnosis) {

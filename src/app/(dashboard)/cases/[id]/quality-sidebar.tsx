@@ -53,8 +53,23 @@ function confidenceLabel(confidence: number): string {
 interface DocCoverage {
   doc: Document;
   eventCount: number;
-  status: 'ok' | 'warning' | 'error' | 'processing';
+  status: 'ok' | 'warning' | 'error' | 'processing' | 'admin-ok';
 }
+
+/**
+ * Document types that are administrative by nature and legitimately have
+ * zero clinical events. The perito must NOT see these as warnings.
+ * Wave B.3: distinguish "OCR failed" / "no events extracted" from "this is
+ * an admin doc with no clinical content expected".
+ */
+const ADMIN_DOC_TYPES = new Set([
+  'spese_mediche',
+  'spesa_medica',
+  'certificato',
+  'memoria_difensiva',
+  'documento_amministrativo',
+  'documento_legale',
+]);
 
 function computeCoverage(documents: Document[], events: EventRow[]): DocCoverage[] {
   const eventsByDoc = new Map<string, number>();
@@ -73,7 +88,10 @@ function computeCoverage(documents: Document[], events: EventRow[]): DocCoverage
     } else if (PROCESSING_STATUSES.has(doc.processing_status) || doc.processing_status === 'caricato') {
       status = 'processing';
     } else if (doc.processing_status === 'completato' && eventCount === 0) {
-      status = 'warning';
+      // Wave B.3: an admin document with no clinical events is expected, not
+      // a warning. Only flag when a *clinical-typed* doc returned 0 events.
+      const docType = (doc.document_type ?? '').toLowerCase();
+      status = ADMIN_DOC_TYPES.has(docType) ? 'admin-ok' : 'warning';
     } else if (eventCount > 0) {
       status = 'ok';
     } else {
@@ -89,6 +107,7 @@ const STATUS_ICON = {
   warning: AlertTriangle,
   error: XCircle,
   processing: Loader2,
+  'admin-ok': CheckCircle2,
 } as const;
 
 const STATUS_COLOR = {
@@ -96,6 +115,7 @@ const STATUS_COLOR = {
   warning: 'text-yellow-600',
   error: 'text-red-600',
   processing: 'text-blue-500',
+  'admin-ok': 'text-muted-foreground',
 } as const;
 
 // --- Incomplete data check ---
@@ -103,7 +123,12 @@ const STATUS_COLOR = {
 function getDocsWithoutEvents(documents: Document[], events: EventRow[]): Document[] {
   const docIds = new Set(events.map((e) => e.document_id).filter(Boolean));
   return documents.filter(
-    (d) => d.processing_status === 'completato' && !docIds.has(d.id),
+    (d) =>
+      d.processing_status === 'completato' &&
+      !docIds.has(d.id) &&
+      // Wave B.3: admin docs (spese, certificati, memorie) legitimately have
+      // zero events. Don't report them as "missing data" — that's noise.
+      !ADMIN_DOC_TYPES.has((d.document_type ?? '').toLowerCase()),
   );
 }
 
@@ -267,12 +292,14 @@ export function QualitySidebar({
                     </div>
                     <span className="shrink-0 text-muted-foreground ml-2">
                       {c.status === 'error'
-                        ? 'Errore'
+                        ? 'OCR fallito'
                         : c.status === 'processing'
                           ? 'In elab.'
-                          : c.eventCount === 0
-                            ? '0 eventi'
-                            : `${c.eventCount} ev.`}
+                          : c.status === 'admin-ok'
+                            ? 'Documento amministrativo'
+                            : c.status === 'warning' && c.eventCount === 0
+                              ? '0 eventi — verifica'
+                              : `${c.eventCount} ev.`}
                     </span>
                   </div>
                 );

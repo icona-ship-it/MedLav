@@ -20,6 +20,9 @@ export interface TimelineEvent {
   source_type: string;
   doctor: string | null;
   facility: string | null;
+  /** Optional — preserved when present so the perito sees confidence + verification flags. */
+  confidence?: number;
+  requires_verification?: boolean;
 }
 
 interface TimelineDocxParams {
@@ -57,15 +60,22 @@ function sourceLabel(raw: string): string {
 /** Build a description cell combining title, description, doctor & facility. */
 function buildDescriptionParagraphs(ev: TimelineEvent): Paragraph[] {
   const paragraphs: Paragraph[] = [];
+  const isLowConfidence = typeof ev.confidence === 'number' && ev.confidence < 60;
 
+  // Wave B.1/B.2: prefix DA VERIFICARE flag + low-confidence italics
+  const titleChildren: TextRun[] = [];
+  if (ev.requires_verification) {
+    titleChildren.push(new TextRun({ text: '⚠ DA VERIFICARE — ', bold: true, color: 'DC2626', size: 20, font: 'Calibri' }));
+  }
+  titleChildren.push(new TextRun({ text: ev.title, bold: true, italics: isLowConfidence, size: 20, font: 'Calibri' }));
   paragraphs.push(new Paragraph({
-    children: [new TextRun({ text: ev.title, bold: true, size: 20, font: 'Calibri' })],
+    children: titleChildren,
     spacing: { after: 40 },
   }));
 
   if (ev.description) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: ev.description, size: 18, font: 'Calibri' })],
+      children: [new TextRun({ text: ev.description, italics: isLowConfidence, size: 18, font: 'Calibri' })],
       spacing: { after: 40 },
     }));
   }
@@ -73,9 +83,16 @@ function buildDescriptionParagraphs(ev: TimelineEvent): Paragraph[] {
   const meta: string[] = [];
   if (ev.doctor) meta.push(`Dr. ${ev.doctor}`);
   if (ev.facility) meta.push(ev.facility);
+  if (isLowConfidence) meta.push(`Confidenza ${Math.round(ev.confidence ?? 0)}%`);
   if (meta.length > 0) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: meta.join(' — '), size: 16, italics: true, color: '555555', font: 'Calibri' })],
+      children: [new TextRun({
+        text: meta.join(' — '),
+        size: 16,
+        italics: true,
+        color: isLowConfidence ? 'B91C1C' : '555555',
+        font: 'Calibri',
+      })],
     }));
   }
 

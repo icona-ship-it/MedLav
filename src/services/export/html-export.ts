@@ -212,6 +212,10 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   #toc a { color: #2563eb; text-decoration: none; display: block; padding: 3px 0; font-size: 14px; }
   #toc a:hover { text-decoration: underline; }
   .event { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 8px; page-break-inside: avoid; }
+  /* Wave B.1: visual cue for low-confidence events in exported HTML */
+  .event--low-confidence { background: #fff7ed; border-left: 4px solid #f97316; }
+  .event--low-confidence .event-title,
+  .event--low-confidence .event-description { font-style: italic; }
   .event-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
   .event-number { font-family: monospace; color: #64748b; font-size: 12px; }
   .event-date { font-weight: 600; }
@@ -222,8 +226,12 @@ export function generateHtmlReport(params: HtmlExportParams): string {
   .event-meta { font-size: 13px; color: #64748b; margin-top: 4px; }
   .confidence-high { color: #16a34a; }
   .confidence-medium { color: #ca8a04; }
-  .confidence-low { color: #dc2626; }
-  .verification { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+  .confidence-low { color: #dc2626; font-weight: 600; }
+  .verification { background: #dc2626; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .quality-summary { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
+  .quality-summary h3 { font-size: 14px; color: #9a3412; margin-bottom: 6px; }
+  .quality-summary ul { padding-left: 20px; }
+  .quality-summary li { margin-bottom: 4px; color: #7c2d12; }
   .anomaly { border-left: 4px solid #f59e0b; background: #fffbeb; padding: 12px; margin-bottom: 8px; border-radius: 0 8px 8px 0; }
   .anomaly.critica, .anomaly.alta { border-left-color: #dc2626; background: #fef2f2; }
   .anomaly-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -283,6 +291,21 @@ ${reportStatus === 'bozza' ? '<div class="draft-banner">⚠ DOCUMENTO IN BOZZA �
   <div class="stat"><div class="number">${missingDocs.length}</div><div class="label">Doc. Mancanti</div></div>
 </div>
 
+${(() => {
+  // Wave B.4: quality summary so the perito sees at-a-glance how trustworthy
+  // the auto-generated content is before reading the body of the report.
+  const lowConfidenceCount = events.filter((e) => e.confidence < 60).length;
+  const verifyCount = events.filter((e) => e.requires_verification).length;
+  if (lowConfidenceCount === 0 && verifyCount === 0) return '';
+  return `<div class="quality-summary">
+  <h3>Riepilogo qualità estrazione</h3>
+  <ul>
+    ${lowConfidenceCount > 0 ? `<li><strong>${lowConfidenceCount}</strong> ${lowConfidenceCount === 1 ? 'evento ha' : 'eventi hanno'} confidenza inferiore al 60% — verificare contro la documentazione originale.</li>` : ''}
+    ${verifyCount > 0 ? `<li><strong>${verifyCount}</strong> ${verifyCount === 1 ? 'evento è marcato' : 'eventi sono marcati'} come "DA VERIFICARE" — il sistema ha rilevato dati che richiedono conferma del perito.</li>` : ''}
+  </ul>
+</div>`;
+})()}
+
 <div id="toc">
   <h3>Indice</h3>
   <a href="#synthesis">1. Sintesi Medico-Legale</a>
@@ -296,14 +319,14 @@ ${reportStatus === 'bozza' ? '<div class="draft-banner">⚠ DOCUMENTO IN BOZZA �
 ${synthesis ? `<div class="synthesis">${markdownToHtml(synthesis)}</div>` : '<p>Sintesi non ancora generata.</p>'}
 
 <h2 id="timeline">2. Cronologia Eventi Clinici</h2>
-${events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type)).map((e) => `<div class="event">
+${events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type)).map((e) => `<div class="event${e.confidence < 60 ? ' event--low-confidence' : ''}">
   <div class="event-header">
     <span class="event-number">#${e.order_number}</span>
     <span class="event-date">${formatDate(e.event_date)}${e.date_precision !== 'giorno' ? ` [${e.date_precision}]` : ''}</span>
     <span class="event-type">${escapeHtml(e.event_type)}</span>
     <span class="event-source">${escapeHtml(sourceLabels[e.source_type] ?? e.source_type)}</span>
     <span class="${confidenceClass(e.confidence)}">${e.confidence}%</span>
-    ${e.requires_verification ? '<span class="verification">Da verificare</span>' : ''}
+    ${e.requires_verification ? '<span class="verification">⚠ DA VERIFICARE</span>' : ''}
   </div>
   <div class="event-title">${escapeHtml(e.title)}</div>
   <div class="event-description">${escapeHtml(e.description)}</div>

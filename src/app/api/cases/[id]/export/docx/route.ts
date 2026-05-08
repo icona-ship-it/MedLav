@@ -82,6 +82,8 @@ export async function GET(
           source_type: (e.source_type as string) ?? 'altro',
           doctor: (e.doctor as string | null) ?? null,
           facility: (e.facility as string | null) ?? null,
+          confidence: typeof e.confidence === 'number' ? e.confidence : undefined,
+          requires_verification: e.requires_verification === true,
         }));
 
       // For expenses_only, use dedicated expense export if analysis data is available

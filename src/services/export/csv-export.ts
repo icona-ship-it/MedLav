@@ -41,6 +41,7 @@ export function generateCsvExport(events: CsvEvent[]): string {
       Medico: e.doctor ?? '',
       Struttura: e.facility ?? '',
       Confidenza: e.confidence,
+      'Bassa Confidenza': e.confidence < 60 ? 'Si' : 'No',
       'Richiede Verifica': e.requires_verification ? 'Si' : 'No',
     }));
 
