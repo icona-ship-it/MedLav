@@ -62,9 +62,39 @@ export async function ocrDocument(params: {
 interface OcrRawPage {
   markdown?: string;
   images?: Array<{ id?: string; imageBase64?: string }>;
-  tables?: string[];
+  /**
+   * Mistral OCR 3 may return tables as either an array of HTML strings (older
+   * SDK shape) or an array of objects like `{html: string, csv?: string, ...}`
+   * (newer shape). We accept both at runtime — see `coerceTableToHtml()` below.
+   */
+  tables?: Array<string | Record<string, unknown>>;
   header?: string;
   footer?: string;
+}
+
+/**
+ * Convert a single table entry from the Mistral OCR API to an HTML string.
+ * Defensive against shape changes — accepts both `string` and `{html, ...}`
+ * variants. Returns empty string for unrecognized shapes (with a log warning
+ * so we notice if the API contract changes).
+ *
+ * Trigger: Schönweger case (CASO-2026-160) — patient lab values were lost
+ * because Mistral OCR returned table objects, the old code did `${table}`
+ * inside a template literal, producing the literal text `[object Object]`
+ * which then polluted the cronistoria with 50+ "Tabelle non interpretabili".
+ */
+function coerceTableToHtml(table: string | Record<string, unknown>, pageNumber: number): string {
+  if (typeof table === 'string') return table;
+  if (table && typeof table === 'object') {
+    // Common Mistral OCR 3 shapes — try in priority order
+    const candidates = ['html', 'content', 'markdown', 'text', 'value'] as const;
+    for (const key of candidates) {
+      const v = table[key];
+      if (typeof v === 'string' && v.trim().length > 0) return v;
+    }
+    logger.warn('ocr', `Unknown table shape on page ${pageNumber}: keys=${Object.keys(table).join(',')}`);
+  }
+  return '';
 }
 
 interface OcrRawResponse {
@@ -103,12 +133,19 @@ function mapOcrResponseToResult(params: {
 
   const pages: OcrPageResult[] = rawPages.map((page) => {
     let text = page.markdown ?? '';
-    const htmlTables = page.tables && page.tables.length > 0 ? [...page.tables] : undefined;
+
+    // Coerce tables to HTML strings (defensive against Mistral API shape changes).
+    // Filters out empty strings (pages with no tables, or unknown shapes).
+    const htmlTables: string[] | undefined = page.tables && page.tables.length > 0
+      ? page.tables
+          .map((t) => coerceTableToHtml(t, page.pageNumber))
+          .filter((s) => s.length > 0)
+      : undefined;
 
     // If there are HTML tables from OCR 3, insert them with markers
-    if (htmlTables) {
-      for (const table of htmlTables) {
-        text += `\n[TABLE_HTML_START]\n${table}\n[TABLE_HTML_END]\n`;
+    if (htmlTables && htmlTables.length > 0) {
+      for (const tableHtml of htmlTables) {
+        text += `\n[TABLE_HTML_START]\n${tableHtml}\n[TABLE_HTML_END]\n`;
       }
     }
 

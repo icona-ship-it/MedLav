@@ -486,3 +486,89 @@ describe('isDuplicateOfExisting', () => {
     expect(isDuplicateOfExisting(newEvent, existing)).toBe(true);
   });
 });
+
+// ── Schönweger regression: sentinel dates + broken OCR + intra-doc dedup ──
+
+describe('consolidateEvents — Schönweger regression (CASO-2026-160)', () => {
+  it('drops events with sentinel date 1900-01-01', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({ eventDate: '2024-04-13', title: 'Vera visita' }),
+          makeEvent({ eventDate: '1900-01-01', title: 'Tabelle non decodificabili' }),
+          makeEvent({ eventDate: '1900-01-01', title: 'Diagnosi senza data inferibile' }),
+          makeEvent({ eventDate: '2024-04-14', title: 'Altra visita' }),
+        ],
+      },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result.map((e) => e.eventDate)).toEqual(['2024-04-13', '2024-04-14']);
+  });
+
+  it('drops events whose description contains [object Object] (broken OCR)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({
+            title: 'Vero esame',
+            description: 'Emocromo e biochimica nella norma',
+          }),
+          makeEvent({
+            title: 'Esami ematochimici - Tabella 1',
+            description: 'Dettagli non leggibili a causa di OCR corrotto ([object Object])',
+          }),
+          makeEvent({
+            title: 'Tabelle non interpretabili (pagina 86)',
+            description: 'Presenza di tabelle ([object Object]) senza intestazioni',
+          }),
+        ],
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Vero esame');
+  });
+
+  it('dedupes near-identical events from the SAME document (intra-doc)', () => {
+    // Schönweger: "Spondilodesi D11-L3" extracted twice from the same doc
+    // with slightly different titles — should keep the higher-confidence one.
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({
+            eventDate: '2024-04-14',
+            eventType: 'intervento',
+            title: 'Spondilodesi D11-L3 e decompressione canale spinale L2',
+            confidence: 90,
+          }),
+          makeEvent({
+            eventDate: '2024-04-14',
+            eventType: 'intervento',
+            title: 'Spondilodesi D11-L3 e decompressione del canale spinale a livello L2',
+            confidence: 95,
+          }),
+        ],
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe(95); // higher-confidence twin survives
+  });
+
+  it('preserves cross-document duplicates (those go through markDiscrepancies, not dedup)', () => {
+    // Same event extracted from two different documents must NOT be merged —
+    // they're different sources and may have legitimate discrepancies.
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [makeEvent({ title: 'Visita ortopedica' })],
+      },
+      {
+        documentId: 'doc-B',
+        events: [makeEvent({ title: 'Visita ortopedica' })],
+      },
+    ]);
+    expect(result.length).toBe(2);
+  });
+});

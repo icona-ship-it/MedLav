@@ -17,7 +17,32 @@ export interface ConsolidationResult {
 }
 
 /**
+ * Sentinel date used by the extractor when no real date can be inferred.
+ * Events with this date are filtered out at consolidation: they pollute the
+ * cronistoria with placeholder rows and have no chronological position.
+ */
+const SENTINEL_DATE = '1900-01-01';
+
+/**
+ * Indicators that the event was generated from broken OCR output. Trigger:
+ * Schönweger case — the OCR returned table objects that the old code
+ * stringified into the literal text "[object Object]"; the extractor then
+ * dutifully created an event for each broken table, polluting the
+ * cronistoria with 50+ "Tabelle non interpretabili" rows that contained
+ * zero useful data. The OCR side is now fixed (coerceTableToHtml) but we
+ * keep this filter as a defense-in-depth so future shape mismatches don't
+ * silently re-create the bug.
+ */
+const BROKEN_OCR_MARKERS = ['[object Object]', '[object object]'];
+
+function isBrokenOcrEvent(event: ExtractedEvent): boolean {
+  const haystack = `${event.title ?? ''} ${event.description ?? ''}`;
+  return BROKEN_OCR_MARKERS.some((m) => haystack.includes(m));
+}
+
+/**
  * Consolidate events from multiple documents into a single chronological timeline.
+ * - Drops sentinel-date placeholders and broken-OCR events
  * - Orders events chronologically
  * - Detects and marks duplicate/overlapping events across documents
  * - Assigns sequential order numbers
@@ -27,11 +52,32 @@ export function consolidateEvents(
 ): ConsolidatedEvent[] {
   // Flatten all events with their document ID
   const allEvents: Array<ExtractedEvent & { documentId: string }> = [];
+  let droppedSentinel = 0;
+  let droppedBroken = 0;
 
   for (const doc of documentsEvents) {
     for (const event of doc.events) {
+      // Drop events with the sentinel date — they have no chronological position
+      // and are usually placeholders generated when the extractor couldn't infer
+      // a date. They distort the cronistoria with unanchored rows.
+      if (event.eventDate === SENTINEL_DATE) {
+        droppedSentinel++;
+        continue;
+      }
+      // Drop events whose content is literally "[object Object]" — broken OCR
+      // upstream (now fixed in coerceTableToHtml, but defensive filter stays).
+      if (isBrokenOcrEvent(event)) {
+        droppedBroken++;
+        continue;
+      }
       allEvents.push({ ...event, documentId: doc.documentId });
     }
+  }
+
+  if (droppedSentinel > 0 || droppedBroken > 0) {
+    console.info(
+      `[consolidator] dropped ${droppedSentinel} sentinel-date events + ${droppedBroken} broken-OCR events`,
+    );
   }
 
   // Sort chronologically, then by event type, then by title for deterministic ordering
@@ -43,14 +89,66 @@ export function consolidateEvents(
     return (a.title ?? '').localeCompare(b.title ?? '');
   });
 
-  // Detect duplicates/discrepancies across documents
-  const consolidated = markDiscrepancies(allEvents);
+  // Intra-document deduplication: when the same document yields multiple events
+  // with same date+type and similar title (likely same fact extracted twice by
+  // overlapping chunks or multi-pass extraction), keep only the highest-confidence
+  // one. Trigger: Schönweger case — "Spondilodesi D11-L3" appeared twice (events
+  // 13+14), "Glasgow Coma Scale 15/15" appeared twice (events 23+50), and 8
+  // copies of "Esami ematochimici - Tabella N" were extracted from the same doc.
+  const dedupedSameDoc = dedupWithinSameDocument(allEvents);
+
+  // Detect duplicates/discrepancies across documents (existing behavior)
+  const consolidated = markDiscrepancies(dedupedSameDoc);
 
   // Assign sequential order numbers
   return consolidated.map((event, index) => ({
     ...event,
     orderNumber: index + 1,
   }));
+}
+
+/**
+ * Drop near-duplicate events that come from the SAME document.
+ * Two events are considered duplicates if they share documentId + eventDate +
+ * eventType AND `isSimilarEvent` says their titles/descriptions match.
+ * Keeps the event with the highest confidence. Stable order: original order
+ * is preserved among non-duplicates.
+ */
+function dedupWithinSameDocument(
+  events: Array<ExtractedEvent & { documentId: string }>,
+): Array<ExtractedEvent & { documentId: string }> {
+  const kept: Array<ExtractedEvent & { documentId: string }> = [];
+  const droppedIndices = new Set<number>();
+
+  for (let i = 0; i < events.length; i++) {
+    if (droppedIndices.has(i)) continue;
+    const a = events[i];
+    if (!a.eventDate || !a.eventType) {
+      kept.push(a);
+      continue;
+    }
+
+    // Look ahead for same-document, same-date, same-type peers
+    for (let j = i + 1; j < events.length; j++) {
+      if (droppedIndices.has(j)) continue;
+      const b = events[j];
+      // Stop scanning once we leave the date-type group (events are sorted)
+      if (b.eventDate !== a.eventDate || b.eventType !== a.eventType) break;
+      if (b.documentId !== a.documentId) continue;
+      if (!isSimilarEvent(a, b)) continue;
+      // Drop the lower-confidence twin (or the second one if equal)
+      if ((b.confidence ?? 0) > (a.confidence ?? 0)) {
+        droppedIndices.add(i);
+        break; // a is dropped, move on
+      } else {
+        droppedIndices.add(j);
+      }
+    }
+
+    if (!droppedIndices.has(i)) kept.push(a);
+  }
+
+  return kept;
 }
 
 /**
