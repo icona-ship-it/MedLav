@@ -90,41 +90,46 @@ const CTU_SECTIONS: SectionSpec[] = [
     condition: 'has-perizia-metadata',
     promptDirective: `Genera l'intestazione formale della perizia CTU, replicando il FORMATO BENCHMARK Del Porto / Mao:
 
-STRUTTURA OBBLIGATORIA (in quest'ordine, ciascun blocco su righe separate):
+STRUTTURA OBBLIGATORIA (in quest'ordine, in Markdown):
 
-1) RIGA 1 — INTESTAZIONE TRIBUNALE (tutto MAIUSCOLO, in grassetto, centrato):
-   "**TRIBUNALE ORDINARIO DI [CITTA]**"
-   "**SEZIONE [CIVILE/PENALE/CENTRALE CIVILE]**"
+1) USA H1 MARKDOWN per intestazione tribunale (verra' renderizzato in font monospace con character spacing, come da benchmark):
+   \`\`\`
+   # TRIBUNALE ORDINARIO DI [CITTA]
+   # SEZIONE [CIVILE/PENALE/CENTRALE CIVILE | PROCEDIMENTI SPECIALI SOMMARI]
+   \`\`\`
 
-2) RIGA — NUMERO DI RUOLO (in grassetto):
-   "**n. R.G. NNNNN/YYYY**"
+2) NUMERO DI RUOLO (riga normale, grassetto):
+   "**Numero di Ruolo Generale n. NNNNN/YYYY**"
 
-3) RIGA — TIPO DI PROCEDIMENTO:
-   Es. "Accertamento tecnico preventivo" / "Consulenza Tecnica d'Ufficio"
+3) TIPO DI PROCEDIMENTO (riga normale):
+   Es. "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)" / "Consulenza Tecnica d'Ufficio"
 
-4) RIGA — OGGETTO DELLA PERIZIA (in grassetto):
+4) OGGETTO DELLA PERIZIA (riga in grassetto):
    "**relativo alla vicenda clinica del/della sig./sig.ra COGNOME NOME**"
 
-5) BLOCCO — DESTINATARIO (formale, allineato a sinistra):
-   "Ill.mo Sig."
-   "**Dott. NOME COGNOME**"
-   "Giudice Delegato/Istruttore"
-   "Tribunale di [CITTA]"
+5) SEPARATORE asterischi su riga propria, centrato:
+   "* * * * *"
 
-6) PARAGRAFO DI CONFERIMENTO (passato remoto, formale):
+6) DESTINATARIO (allineato in modo da apparire a destra; il rendering DOCX lo gestisce):
+   "Ill.mo Sig./Sig.ra"
+   "**Dott./Dott.ssa NOME COGNOME**"
+   "Giudice Delegato/Istruttore"
+   "c/o il Tribunale di [CITTA]"
+
+7) PARAGRAFO DI CONFERIMENTO (passato remoto, formale, in prosa giustificata):
    "Il giorno DD.MM.YYYY il Dott. [GIUDICE], Giudice Delegato presso il Tribunale Ordinario di [CITTA] – Sezione [X], conferiva al sottoscritto Dott. [CTU], medico legale presso [STRUTTURA], l'incarico di eseguire indagine medico-legale sulla vicenda clinica relativa a:"
 
-7) BLOCCO DATI PERIZIANDO (centrato o evidenziato, nome in grassetto):
+8) BLOCCO DATI PERIZIANDO (nome in grassetto):
    "**NOME COGNOME**"
    "nato/a a [LUOGO] il DD.MM.YYYY, residente a [LUOGO] in [INDIRIZZO]."
 
-8) RIGA — CONSULENTI TECNICI DI PARTE (se documentati):
+9) CONSULENTI TECNICI DI PARTE (se documentati, riga per parte):
    "La parte ricorrente nominava quali propri CC.TT.P. [NOMI]."
    "La parte resistente [NOME ASL/AZIENDA] nominava quali propri CC.TT.P. [NOMI]."
 
-9) RIGA — DATE OPERAZIONI E TERMINI (se documentate):
+10) DATE OPERAZIONI E TERMINI (se documentate):
    - Data inizio operazioni peritali
-   - Termine per bozza, osservazioni CC.TT.P., deposito definitivo
+   - Termini per bozza, osservazioni CC.TT.P., deposito definitivo
    - Fondo spese se documentato
 
 REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:

@@ -766,6 +766,38 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
     }
 
     // Headings
+    // H1 — used for "TRIBUNALE ORDINARIO DI..." benchmark Del Porto.
+    // Renders in monospace + character spacing for the giudiziale look.
+    const h1Match = line.match(/^#\s+(.+)$/);
+    if (h1Match) {
+      const text = h1Match[1];
+      const isTribunal = /tribunale|sezione|n\.\s*r\.?g\.?|procedimenti/i.test(text);
+      result.push(new Paragraph({
+        children: [new TextRun({
+          text,
+          bold: true,
+          size: 26,
+          ...(isTribunal ? { font: 'Courier New', characterSpacing: 30 } : {}),
+        })],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 200, after: 200 },
+      }));
+      i++;
+      continue;
+    }
+
+    // H2 — section title
+    const h2Match = line.match(/^##\s+(.+)$/);
+    if (h2Match) {
+      result.push(new Paragraph({
+        children: [new TextRun({ text: h2Match[1], bold: true, size: 24 })],
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 300, after: 150 },
+      }));
+      i++;
+      continue;
+    }
+
     const h3Match = line.match(/^###\s+(.+)$/);
     if (h3Match) {
       result.push(new Paragraph({
@@ -811,9 +843,12 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
       continue;
     }
 
-    // Regular paragraph
+    // Regular paragraph — JUSTIFIED by default to match benchmark
+    // (Del Porto, Antoniazzi). Word renders justified paragraphs with
+    // tracked word-spacing similar to legal/professional documents.
     result.push(new Paragraph({
       children: parseInlineFormatting(line),
+      alignment: AlignmentType.JUSTIFIED,
     }));
     i++;
   }
@@ -851,29 +886,49 @@ function buildDocxHeaderContent(
   const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
   const cellBorders = { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder };
 
+  // Lavini benchmark 2026-05-11: nome perito grande+bold (no italic),
+  // specializzazioni sotto in size minore, NO allCaps (benchmark usa
+  // capitalizzazione normale "Dott. Franco Lavini" + "Specialista in...").
   const leftCellChildren: Paragraph[] = [];
   if (pm.ctuName) {
     leftCellChildren.push(new Paragraph({
-      children: [new TextRun({ text: pm.ctuName, bold: true, italics: true, size: 19, allCaps: true })],
+      children: [new TextRun({ text: pm.ctuName, bold: true, size: 22 })],
+      spacing: { after: 60 },
     }));
   }
   if (pm.ctuTitle) {
-    leftCellChildren.push(new Paragraph({
-      children: [new TextRun({ text: pm.ctuTitle, size: 16, allCaps: true, color: '333333' })],
-    }));
+    // Title may contain multiple specializations separated by "; " or "|" or newline
+    const titleLines = pm.ctuTitle
+      .split(/\s*[;|\n]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const line of titleLines) {
+      leftCellChildren.push(new Paragraph({
+        children: [new TextRun({ text: line, size: 18, color: '333333' })],
+        spacing: { after: 40 },
+      }));
+    }
   }
 
   const rightCellChildren: Paragraph[] = [];
   if (hasCollaboratore && pm.collaboratoreName) {
     rightCellChildren.push(new Paragraph({
-      children: [new TextRun({ text: pm.collaboratoreName, bold: true, italics: true, size: 19, allCaps: true })],
+      children: [new TextRun({ text: pm.collaboratoreName, bold: true, size: 22 })],
       alignment: AlignmentType.RIGHT,
+      spacing: { after: 60 },
     }));
     if (pm.collaboratoreTitle) {
-      rightCellChildren.push(new Paragraph({
-        children: [new TextRun({ text: pm.collaboratoreTitle, size: 16, allCaps: true, color: '333333' })],
-        alignment: AlignmentType.RIGHT,
-      }));
+      const titleLines = pm.collaboratoreTitle
+        .split(/\s*[;|\n]\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const line of titleLines) {
+        rightCellChildren.push(new Paragraph({
+          children: [new TextRun({ text: line, size: 18, color: '333333' })],
+          alignment: AlignmentType.RIGHT,
+          spacing: { after: 40 },
+        }));
+      }
     }
   }
 
