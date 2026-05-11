@@ -80,31 +80,62 @@ const CTU_SECTIONS: SectionSpec[] = [
   {
     id: 'intestazione',
     title: 'Intestazione',
-    maxTokens: TOKENS_TINY,
+    // SMALL (4000 tok) not TINY (2000): CTU complessi con CC.TT.P. multipli +
+    // termini multi-fase + fondo spese produrrebbero 1500-2000 parole formali
+    // = ~2700 tok output. TINY=2000 saturava con rischio truncatura silente.
+    maxTokens: TOKENS_SMALL,
     dataSources: ['perizia-metadata', 'events-medical', 'events-non-medical'],
     contextMaxChars: 300,
     needsOcr: false,
     condition: 'has-perizia-metadata',
-    promptDirective: `Genera l'intestazione formale della perizia medico-legale.
+    promptDirective: `Genera l'intestazione formale della perizia CTU, replicando il FORMATO BENCHMARK Del Porto / Mao:
+
+STRUTTURA OBBLIGATORIA (in quest'ordine, ciascun blocco su righe separate):
+
+1) RIGA 1 — INTESTAZIONE TRIBUNALE (tutto MAIUSCOLO, in grassetto, centrato):
+   "**TRIBUNALE ORDINARIO DI [CITTA]**"
+   "**SEZIONE [CIVILE/PENALE/CENTRALE CIVILE]**"
+
+2) RIGA — NUMERO DI RUOLO (in grassetto):
+   "**n. R.G. NNNNN/YYYY**"
+
+3) RIGA — TIPO DI PROCEDIMENTO:
+   Es. "Accertamento tecnico preventivo" / "Consulenza Tecnica d'Ufficio"
+
+4) RIGA — OGGETTO DELLA PERIZIA (in grassetto):
+   "**relativo alla vicenda clinica del/della sig./sig.ra COGNOME NOME**"
+
+5) BLOCCO — DESTINATARIO (formale, allineato a sinistra):
+   "Ill.mo Sig."
+   "**Dott. NOME COGNOME**"
+   "Giudice Delegato/Istruttore"
+   "Tribunale di [CITTA]"
+
+6) PARAGRAFO DI CONFERIMENTO (passato remoto, formale):
+   "Il giorno DD.MM.YYYY il Dott. [GIUDICE], Giudice Delegato presso il Tribunale Ordinario di [CITTA] – Sezione [X], conferiva al sottoscritto Dott. [CTU], medico legale presso [STRUTTURA], l'incarico di eseguire indagine medico-legale sulla vicenda clinica relativa a:"
+
+7) BLOCCO DATI PERIZIANDO (centrato o evidenziato, nome in grassetto):
+   "**NOME COGNOME**"
+   "nato/a a [LUOGO] il DD.MM.YYYY, residente a [LUOGO] in [INDIRIZZO]."
+
+8) RIGA — CONSULENTI TECNICI DI PARTE (se documentati):
+   "La parte ricorrente nominava quali propri CC.TT.P. [NOMI]."
+   "La parte resistente [NOME ASL/AZIENDA] nominava quali propri CC.TT.P. [NOMI]."
+
+9) RIGA — DATE OPERAZIONI E TERMINI (se documentate):
+   - Data inizio operazioni peritali
+   - Termine per bozza, osservazioni CC.TT.P., deposito definitivo
+   - Fondo spese se documentato
 
 REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
-Questa perizia verrà depositata in Tribunale e firmata dal CTU. Inventare dati anche solo per "completezza" è un errore gravissimo. Per ogni campo applica questa procedura:
-
-1) Cerca il dato nei METADATI PERIZIA forniti nel prompt utente.
+Questa perizia sara' depositata in Tribunale e firmata dal CTU. Inventare dati anche solo per "completezza" e' un errore gravissimo. Per ogni campo:
+1) Cerca nei METADATI PERIZIA del prompt utente.
 2) Se assente, cerca negli ATTI/EVENTI forniti (memorie difensive, ricorsi, intestazioni di cartelle cliniche).
-3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` per quel campo, oppure ometti la voce dall'intestazione.
+3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` o ometti la voce.
 
-VIETATO TASSATIVAMENTE: numeri di Ruolo Generale fittizi, nomi di Giudici inventati, parti inventate, CTP non nominati, dati identificativi delle parti (CF, indirizzi, date di nascita) che non risultino dagli atti, date di conferimento o termini procedurali non documentati.
+VIETATO TASSATIVAMENTE: R.G. fittizi, Giudici inventati, parti inventate, CC.TT.P. non nominati, CF/indirizzi/date di nascita non documentati, termini procedurali non risultanti dagli atti.
 
-Campi da includere quando hanno fonte verificabile:
-- Tribunale, Sezione, numero di Ruolo Generale
-- Giudice delegato/istruttore
-- Parti coinvolte: ricorrente (con dati identificativi DOCUMENTATI), resistente, eventuali chiamati in causa
-- Consulenti Tecnici di Parte nominati da ciascuna parte
-- Data di conferimento dell'incarico, data di giuramento se disponibile
-- Termini per l'invio della bozza, per le osservazioni dei CTP e per il deposito definitivo
-
-Stile formale da perizia depositabile in tribunale, passato remoto.
+Stile formale da perizia depositabile in Tribunale, passato remoto.
 ${NO_EVN_RULE}`,
   },
   {
@@ -193,6 +224,11 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
     promptDirective: `Elenca le spese mediche documentate in tabella markdown con colonne: Data | Descrizione | Struttura | Importo.
 Per ogni voce valuta congruita e necessita rispetto al quadro clinico documentato.
 Includi un totale a fine tabella.
+
+NOTA DATA NON DOCUMENTATA (post-fix Lavini 2026-05-11):
+- Alcune voci (imposta di bollo, riepiloghi, contanti senza ricevuta) possono arrivare con "Data non documentata" o data "01.01.1900".
+- Per queste voci, riporta in tabella la dicitura "—" (trattino lungo) nella colonna Data invece della stringa letterale.
+- NON escludere mai una voce per assenza di data: l'importo e' il dato vincolante.
 ${NO_EVN_RULE}`,
   },
   {
@@ -330,24 +366,42 @@ const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
     dataSources: ['perizia-metadata', 'events-medical', 'events-non-medical'],
     contextMaxChars: 200,
     needsOcr: false,
-    promptDirective: `Genera l'intestazione della valutazione stragiudiziale.
+    promptDirective: `Genera l'intestazione della perizia medico-legale stragiudiziale, replicando il FORMATO BENCHMARK Antoniazzi:
 
-REGOLA ASSOLUTA — VIETATO INVENTARE QUALSIASI DATO:
-Questo è un documento medico-legale che il perito firmerà e potrà depositare. Inventare dati anche solo a titolo di "riempimento" è un errore gravissimo. Per ogni campo, applica questa procedura:
+STRUTTURA OBBLIGATORIA (in quest'ordine):
 
-1) Cerca il dato nei METADATI PERIZIA forniti nel prompt utente (sezione "DATI PERIZIA").
-2) Se assente, cerca nei DOCUMENTI/EVENTI forniti — il nome del paziente, la data di nascita e la struttura sanitaria sono spesso citati nelle intestazioni di cartelle cliniche e referti (es. "REGNOTO VALERIA nato/a il 11/08/1962").
-3) Se ancora assente, scrivi letteralmente \`[da compilare dal perito]\` per quel campo.
+1) RIGA 1 — NOME E TITOLO DEL PERITO (in alto, in grassetto, font grande):
+   Esempio: "**Lavini dott. Franco**"
 
-VIETATO TASSATIVAMENTE: nomi di persona inventati (perito, paziente, medici), codici fiscali fittizi, indirizzi, numeri di telefono, date di nascita, dati anagrafici, nomi di studi/strutture sanitarie. Se non li hai, NON LI HAI — non riempire con valori plausibili.
+2) RIGHE SUCCESSIVE — SPECIALIZZAZIONI (una per riga, in grassetto corsivo):
+   Esempi: "*Specialista in Ortopedia e Traumatologia*"
+           "*Specialista in Terapia Fisica e Riabilitazione*"
+           "*Specialista in Medicina Legale*"
 
-Campi da includere quando hanno fonte verificabile:
-- Dati del professionista incaricato (nome, qualifica, specializzazione, iscrizione albo): SOLO se nei metadati perizia
-- Dati del paziente/periziando (nome completo, data di nascita, luogo di nascita, residenza, codice fiscale, telefono): cerca prima in metadati perizia, poi nelle intestazioni dei documenti sanitari forniti
-- Data della visita medico-legale: SOLO se nei metadati perizia
-- Oggetto dell'incarico: descrivi le lesioni e l'evento indice ESCLUSIVAMENTE basandoti sugli eventi clinici forniti (es. se gli eventi parlano di "frattura collo femore sx 13/12/2025 da caduta", scrivi quello — NON inventare lesioni o circostanze diverse)
+3) RIGA INTRODUTTIVA — "In data DD MMMM YYYY ho sottoposto ad accertamenti clinici [in presenza di X, se documentato]"
 
-Stile formale e conciso. Una sola pagina al massimo.
+4) BLOCCO DATI PAZIENTE (paragrafo unico, allineato a sinistra):
+   - **Nome COGNOME** (in grassetto)
+   - "Nato/a a LUOGO il DD/MM/YYYY e residente a LUOGO in INDIRIZZO"
+   - "C.F. XXXXXXXXXXXXXXXX"
+   - "MAIL: ..." (se documentato)
+   - "TEL: ..." (se documentato)
+   - "Avvocato di parte: ..." (se documentato)
+
+5) RIGA SCOPO — "Al fine di valutare le lesioni patite in occasione di [EVENTO INDICE] occorso in data [DATA] in ambito di responsabilita civile."
+   Adatta l'ambito al tipo caso: responsabilita civile / responsabilita professionale medica / infortunio sul lavoro / infortunio domestico / etc.
+
+REGOLA ASSOLUTA — VIETATO INVENTARE DATI:
+- Cerca PRIMA nei METADATI PERIZIA, POI nelle intestazioni dei DOCUMENTI/EVENTI sanitari (cartelle cliniche, referti).
+- Se un dato non e' presente da nessuna parte, scrivi letteralmente \`[da compilare dal perito]\` o ometti la riga.
+- VIETATO TASSATIVAMENTE: nomi inventati, codici fiscali fittizi, indirizzi, telefoni, date di nascita.
+
+REGOLA ASSOLUTA — NESSUN RIFERIMENTO AL TRIBUNALE (segnalata dal perito 2026-05-11):
+- La perizia medico-legale stragiudiziale NON c'entra con il tribunale.
+- VIETATO menzionare: Giudice, Tribunale, Sezione, R.G. (Ruolo Generale), Quesiti del Giudice, ordinanza di conferimento, procedimento, udienza, parti processuali (ricorrente/resistente), CTU/CTP.
+- L'incarico e' di parte (assicurazione, avvocato, paziente, medico di base) — non giudiziale.
+
+Stile formale e conciso. Massimo 8-10 righe totali.
 ${NO_EVN_RULE}`,
   },
   {
@@ -373,20 +427,27 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-medical', 'perizia-metadata'],
     contextMaxChars: 600,
     needsOcr: false,
-    promptDirective: `Narrazione UNICA e COMPATTA dell'evento indice e dell'iter diagnostico-terapeutico successivo. 2-4 paragrafi totali (NON una sezione per fase). Allineato al benchmark "IL FATTO E LA STORIA CLINICA" delle perizie reali.
+    promptDirective: `Narrazione UNICA e COMPATTA dell'evento indice e dell'iter diagnostico-terapeutico successivo. 2-4 paragrafi totali (NON una sezione per fase). Allineato al benchmark Antoniazzi "IL FATTO E LA STORIA CLINICA" per perizia medico-legale RC.
+
+ESEMPIO DI STILE (benchmark Antoniazzi):
+"Mentre stava attraversando la strada sulla striscia pedonali di fronte alla Scuola Cangrande In Corso porta nuova 66, Verona, in data 12/09/2025 verso le ore 17.40 veniva investita da motociclo delle poste italiane. Cadeva a terra. Non ricorda svenimento. Ma ricorda il capannello di persone che si sono radunate attorno. Dopo essersi alzata una astante ha chiamato la mamma che e' intervenuta e sulle prime, un po' agitata, veniva portata a casa che dista pochi passi dal luogo dell'incidente. Successivamente, aumentando il dolore a livello del gomito destro, i genitori hanno contattato telefonicamente conoscente specialista ortopedico che consigliava di eseguire Rx dell'area dolente."
+
+⚠ ATTENZIONE — GUARDRAIL ANTI-COPIA (regola assoluta):
+L'esempio sopra serve SOLO a illustrare il REGISTRO LINGUISTICO (imperfetto/passato remoto, dettagli concreti, terza persona, prosa scorrevole). TUTTI i dati specifici (nomi di persona, date, luoghi, vie, numeri civici, scuole, mezzi coinvolti, parenti, ore precise) DEVONO derivare ESCLUSIVAMENTE dagli eventi clinici e dai metadati perizia forniti per IL CASO IN ELABORAZIONE. **VIETATO TASSATIVAMENTE** riportare nomi/date/luoghi dell'esempio (Antoniazzi, Scuola Cangrande, Corso Porta Nuova, 12/09/2025, motociclo Poste, "mamma", ecc.) nel report finale: sarebbe hallucination grave su perizia depositabile.
 
 Includi in ordine cronologico:
-- Data e circostanze dell'evento indice (luogo, dinamica, modalità)
+- Data e circostanze dell'evento indice (luogo, ora, dinamica, modalita)
 - Prime cure prestate (pronto soccorso, primo accesso medico) e diagnosi iniziale
 - Visite e controlli successivi (data + specialista, raggruppati se ravvicinati)
 - Interventi e terapie principali (data + tipo)
 - Evoluzione clinica fino alla stabilizzazione
 
-Stile narrativo in terza persona, ricostruzione fedele.
+Stile narrativo in terza persona ("la paziente / il paziente"), ricostruzione fedele, dettagli concreti (luoghi, ore, persone presenti se documentate). Imperfetto/passato remoto.
 
 LIMITI (anti-ridondanza):
-- NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta"
+- NON riprodurre integralmente i documenti — e' oggetto di "La Documentazione Medica Prodotta"
 - NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
+- NON includere la parte SOGGETTIVA (cio' che il paziente riferisce oggi in visita) — quella e' nel placeholder "Visita Clinica" che compilera' il perito.
 ${NO_EVN_RULE}`,
   },
   {
@@ -428,6 +489,11 @@ ${NO_EVN_RULE}`,
     condition: 'has-expense-events',
     promptDirective: `Elenca le spese mediche documentate in tabella markdown: Data | Descrizione | Struttura | Importo.
 Includi totale a fine tabella.
+
+NOTA DATA NON DOCUMENTATA (post-fix Lavini 2026-05-11):
+- Alcune voci (imposta di bollo, riepiloghi, contanti senza ricevuta) possono arrivare con "Data non documentata" o data "01.01.1900".
+- Per queste voci, riporta in tabella la dicitura "—" (trattino lungo) nella colonna Data invece della stringa letterale.
+- NON escludere mai una voce per assenza di data: l'importo e' il dato vincolante.
 ${NO_EVN_RULE}`,
   },
   {

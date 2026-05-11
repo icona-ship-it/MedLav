@@ -419,7 +419,21 @@ ERRORI COMUNI: Non distinguere tra certificato iniziale e di continuazione INAIL
 CAMPI CRITICI: Per OGNI voce di spesa crea un evento "spesa_medica" separato con: data prestazione/fattura, descrizione prestazione, importo ESATTO (€), struttura erogatrice, codice prestazione se presente.
 Se una fattura contiene più voci con importi separati, crea un evento per voce.
 Se più fatture hanno la stessa data, crea eventi separati per ciascuna.
-ERRORI COMUNI: Aggregare più voci perdendo dettaglio importi, inventare importi non leggibili.`,
+
+REGOLA CRITICA SULLA DATA (segnalata dal perito 2026-05-11):
+- NON SCARTARE MAI una voce di spesa per assenza di data. L'importo e' il dato vincolante, la data e' opzionale.
+- Se la data di pagamento NON e' leggibile, usa la data della fattura.
+- Se NEMMENO la data fattura e' leggibile, usa la data della prestazione clinica correlata.
+- Se NESSUNA data e' presente, lascia eventDate=null e datePrecision="sconosciuta" — la voce sara' COMUNQUE conservata in tabella spese.
+- Esempi di voci tipicamente senza data: imposta di bollo (2 EUR su fatture > 77,47 EUR), riepiloghi totali, righe di sintesi, contanti senza ricevuta.
+
+REGOLA CRITICA SU IMPOSTA DI BOLLO E ONERI ACCESSORI (segnalata dal perito 2026-05-11):
+- L'imposta di bollo (2 EUR sulle fatture > 77,47 EUR, ai sensi DPR 642/1972) NON va sommata all'importo della prestazione: e' un onere fiscale separato.
+- Crea un evento "spesa_medica" SEPARATO per il bollo, con: title="Imposta di bollo", importo=2.00, description="Bollo ex DPR 642/1972 su fattura n.X del...".
+- Stesso trattamento per: marca da bollo, oneri amministrativi, spese postali, contributi ENPAM/cassa previdenziale, IVA esposta separatamente.
+- Cosi il perito vede la composizione completa della fattura: prestazione + bollo + altri oneri = totale fatturato.
+
+ERRORI COMUNI: Aggregare piu voci perdendo dettaglio importi, inventare importi non leggibili, scartare voci senza data, sommare il bollo all'importo della prestazione.`,
 
   memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA:
 Questo è un ATTO LEGALE. Contiene sia argomentazioni giuridiche sia fatti clinici citati.

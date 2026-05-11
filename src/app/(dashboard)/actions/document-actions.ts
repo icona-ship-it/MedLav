@@ -21,6 +21,47 @@ export async function getCaseDocuments(caseId: string) {
 }
 
 /**
+ * Pre-upload duplicate check: returns whether a file with the same SHA-256
+ * content hash already exists in the same case.
+ *
+ * Called from the client BEFORE uploading the file, so we can avoid wasting
+ * bandwidth on a duplicate. The application-level check here is paired with
+ * a partial UNIQUE index on (case_id, content_hash) for race-condition
+ * safety (see migration 0024).
+ */
+export async function checkDuplicateDocument(params: {
+  caseId: string;
+  contentHash: string;
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  // Verify case ownership before disclosing any info about its documents
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data } = await supabase
+    .from('documents')
+    .select('id, file_name')
+    .eq('case_id', params.caseId)
+    .eq('content_hash', params.contentHash)
+    .limit(1)
+    .maybeSingle();
+
+  if (data) {
+    return { duplicate: true, existingFileName: data.file_name as string };
+  }
+  return { duplicate: false };
+}
+
+/**
  * Save document metadata after direct browser-to-Storage upload.
  * Only metadata is sent (no file data), so no size limit issues.
  */
@@ -31,6 +72,7 @@ export async function saveDocumentMetadata(params: {
   fileSize: number;
   storagePath: string;
   documentType?: string;
+  contentHash?: string;
 }) {
   const supabase = await createClient();
 
@@ -70,6 +112,26 @@ export async function saveDocumentMetadata(params: {
     return { error: 'Caso non trovato' };
   }
 
+  // Application-level dedup check (paired with DB partial UNIQUE index for
+  // race-condition safety). Skipped for legacy callers that don't supply a hash.
+  if (params.contentHash) {
+    const { data: existing } = await supabase
+      .from('documents')
+      .select('file_name')
+      .eq('case_id', params.caseId)
+      .eq('content_hash', params.contentHash)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      // Best-effort cleanup of the orphan file just uploaded to Storage
+      const admin = createAdminClient();
+      await admin.storage.from('documents').remove([params.storagePath]);
+      return {
+        error: `Documento già presente nel caso (caricato come "${existing.file_name as string}"). Non duplicato.`,
+      };
+    }
+  }
+
   const { error } = await supabase
     .from('documents')
     .insert({
@@ -80,9 +142,18 @@ export async function saveDocumentMetadata(params: {
       storage_path: params.storagePath,
       document_type: params.documentType ?? 'altro',
       processing_status: 'caricato',
+      content_hash: params.contentHash ?? null,
     });
 
   if (error) {
+    // Catch race-condition: two concurrent uploads of the same file slipped
+    // past the application check above. The partial UNIQUE index in 0024
+    // rejects the second one with a 23505 unique_violation.
+    if (error.code === '23505' && error.message?.includes('content_hash')) {
+      const admin = createAdminClient();
+      await admin.storage.from('documents').remove([params.storagePath]);
+      return { error: 'Documento già presente nel caso. Non duplicato.' };
+    }
     return { error: 'Errore salvataggio metadati' };
   }
 

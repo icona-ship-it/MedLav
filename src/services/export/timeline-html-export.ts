@@ -65,7 +65,14 @@ function sourceLabel(raw: string): string {
  * for extraction_only / expenses_only pipeline cases.
  */
 export function generateTimelineHtml(params: TimelineHtmlParams): string {
-  const { caseCode, patientInitials, events, moduleName } = params;
+  const { caseCode, patientInitials, events: allEvents, moduleName } = params;
+
+  // Fix audit 2026-05-11: spese senza data pagamento (eventDate='1900-01-01')
+  // sopravvivono ora al consolidator, ma nella timeline cronologica non hanno
+  // posto. Sono visibili nella tabella spese mediche dove l'importo e' il
+  // dato vincolante.
+  const SENTINEL_DATE = '1900-01-01';
+  const events = allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE);
 
   const now = new Date().toLocaleDateString('it-IT', {
     year: 'numeric',

@@ -198,7 +198,16 @@ function buildEventRow(ev: TimelineEvent, isEven: boolean): TableRow {
  * Returns a Buffer ready for download.
  */
 export async function generateTimelineDocx(params: TimelineDocxParams): Promise<Buffer> {
-  const { caseCode, patientInitials, events, moduleName } = params;
+  const { caseCode, patientInitials, events: allEvents, moduleName } = params;
+
+  // Fix audit 2026-05-11: dopo che il consolidator preserva spese senza data
+  // (eventDate='1900-01-01'), queste finirebbero in cima alla timeline DOCX
+  // ordinata cronologicamente con "Data non documentata" — confonde il perito.
+  // La cronistoria documentale e' una sequenza temporale: voci senza
+  // ancoraggio temporale non hanno posto qui. Sono comunque visibili nella
+  // tabella spese mediche, dove il dato vincolante e' l'importo.
+  const SENTINEL_DATE = '1900-01-01';
+  const events = allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE);
 
   const now = new Date().toLocaleDateString('it-IT', {
     year: 'numeric',

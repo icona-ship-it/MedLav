@@ -172,13 +172,15 @@ describe('expense-extractor', () => {
   it('should truncate very long OCR text', async () => {
     mockLlmResult([]);
 
-    const longText = 'A'.repeat(160_000);
+    // Cap raised to 400K (Lavini bug 2026-05-11): 7 PDF compositi saturavano
+    // il vecchio 150K perdendo voci. Sotto cap = no troncatura.
+    const longText = 'A'.repeat(420_000);
     await extractExpensesFromOcr(longText);
 
     const callArgs = mockStreamMistralChat.mock.calls[0][0];
     expect(callArgs.messages[1].content).toContain('[... testo troncato');
-    // Should be capped around 150K + prompt overhead
-    expect(callArgs.messages[1].content.length).toBeLessThan(155_000);
+    // Should be capped around 400K + prompt overhead
+    expect(callArgs.messages[1].content.length).toBeLessThan(405_000);
   });
 
   it('should handle negative amounts by setting to null', async () => {

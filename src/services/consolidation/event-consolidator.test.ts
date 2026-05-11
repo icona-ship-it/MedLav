@@ -506,6 +506,31 @@ describe('consolidateEvents — Schönweger regression (CASO-2026-160)', () => {
     expect(result.map((e) => e.eventDate)).toEqual(['2024-04-13', '2024-04-14']);
   });
 
+  // Lavini 2026-05-11: spese mediche senza data pagamento devono comparire
+  // comunque in tabella spese (l'importo e' il dato vincolante, non la data).
+  // Esempi: imposta di bollo, riepiloghi, contanti senza ricevuta.
+  it('keeps spesa_medica events with sentinel date (Lavini regression)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({ eventDate: '2024-04-13', title: 'Vera visita', eventType: 'visita' }),
+          makeEvent({ eventDate: '1900-01-01', title: 'Imposta di bollo', eventType: 'spesa_medica' }),
+          makeEvent({ eventDate: '1900-01-01', title: 'Visita ortopedica', eventType: 'spesa_medica' }),
+          makeEvent({ eventDate: '1900-01-01', title: 'Diagnosi senza data', eventType: 'diagnosi' }),
+        ],
+      },
+    ]);
+    // Visita (real date) + 2 spesa_medica (sentinel kept) = 3.
+    // Diagnosi with sentinel is dropped (not a spesa_medica).
+    expect(result).toHaveLength(3);
+    const expenseTitles = result
+      .filter((e) => e.eventType === 'spesa_medica')
+      .map((e) => e.title);
+    expect(expenseTitles).toContain('Imposta di bollo');
+    expect(expenseTitles).toContain('Visita ortopedica');
+  });
+
   it('drops events whose description contains [object Object] (broken OCR)', () => {
     const result = consolidateEvents([
       {

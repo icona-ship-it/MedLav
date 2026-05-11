@@ -43,6 +43,7 @@ export const documents = pgTable('documents', {
     reasoning: string;
   } | null>(),
   pageCount: integer('page_count'),
+  contentHash: text('content_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

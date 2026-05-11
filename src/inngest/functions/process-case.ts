@@ -578,7 +578,11 @@ export const processCase = inngest.createFunction(
           const { createAdminClient } = await import('@/lib/supabase/admin');
           const supabase = createAdminClient();
 
-          // Fetch OCR text from all documents (batched for PostgREST URL limit)
+          // Fetch OCR text from all documents + their file names so the LLM
+          // can attribute each expense to its source document.
+          // Lavini bug 2026-05-11: pagine cross-doc mescolate causavano
+          // troncatura a 150K chars con perdita silente di documenti interi
+          // (es. avviso pagopa in pagina 3 di "ritiro cartella clinica.pdf").
           const docIds = ocrResults.map((r) => r.documentId);
           const pages: Array<Record<string, unknown>> = [];
           for (let bi = 0; bi < docIds.length; bi += 200) {
@@ -586,6 +590,10 @@ export const processCase = inngest.createFunction(
               .from('pages')
               .select('document_id, page_number, ocr_text')
               .in('document_id', docIds.slice(bi, bi + 200))
+              // Order by (document_id, page_number) so each document's pages
+              // stay contiguous. Prevents the truncation cap from cutting a
+              // document mid-way and losing the parts that follow.
+              .order('document_id', { ascending: true })
               .order('page_number', { ascending: true });
             if (data) pages.push(...data);
           }
@@ -595,7 +603,39 @@ export const processCase = inngest.createFunction(
             return { items: [], totalAmount: null, currency: 'EUR' } as ExpenseExtractionResult;
           }
 
-          const ocrText = pages.map((p) => (p.ocr_text as string) ?? '').join('\n\n---\n\n');
+          // Fetch file names for separators so the LLM knows which document
+          // each chunk of OCR belongs to (helps avoid merging distinct expenses
+          // from different documents).
+          const docNames = new Map<string, string>();
+          for (let bi = 0; bi < docIds.length; bi += 200) {
+            const { data } = await supabase
+              .from('documents')
+              .select('id, file_name')
+              .in('id', docIds.slice(bi, bi + 200));
+            if (data) {
+              for (const d of data) docNames.set(d.id as string, (d.file_name as string) ?? 'documento');
+            }
+          }
+
+          // Group pages by document, emit explicit document boundaries so the
+          // LLM treats each PDF as a distinct unit of expenses.
+          const byDoc = new Map<string, Array<{ pageNumber: number; ocrText: string }>>();
+          for (const p of pages) {
+            const docId = p.document_id as string;
+            if (!byDoc.has(docId)) byDoc.set(docId, []);
+            byDoc.get(docId)!.push({
+              pageNumber: p.page_number as number,
+              ocrText: (p.ocr_text as string) ?? '',
+            });
+          }
+
+          const ocrText = Array.from(byDoc.entries())
+            .map(([docId, pgs]) => {
+              const name = docNames.get(docId) ?? 'documento';
+              const body = pgs.map((pg) => pg.ocrText).join('\n');
+              return `### DOCUMENTO: ${name} ###\n${body}\n### FINE DOCUMENTO ###`;
+            })
+            .join('\n\n');
 
           // Try to find a diagnosis from extracted events for context
           const diagnosisEvents = allEvents

@@ -60,7 +60,14 @@ export function consolidateEvents(
       // Drop events with the sentinel date — they have no chronological position
       // and are usually placeholders generated when the extractor couldn't infer
       // a date. They distort the cronistoria with unanchored rows.
-      if (event.eventDate === SENTINEL_DATE) {
+      // EXCEPTION: spesa_medica events. The perito (Lavini, 2026-05-11) reported
+      // that medical-expense items without an explicit payment date were being
+      // silently dropped from the expense table. For expenses, the *amount* is
+      // the load-bearing field, not the date. Bollo (stamp duty), summary lines,
+      // and faded receipt dates are common cases. The cronistoria UI already
+      // excludes spesa_medica via NON_CLINICAL_TYPES, so these unanchored rows
+      // don't pollute the clinical timeline.
+      if (event.eventDate === SENTINEL_DATE && event.eventType !== 'spesa_medica') {
         droppedSentinel++;
         continue;
       }

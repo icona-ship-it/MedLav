@@ -4,9 +4,10 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, Loader2, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
-import { saveDocumentMetadata, updateCaseDocumentCount } from '@/app/(dashboard)/actions';
+import { saveDocumentMetadata, updateCaseDocumentCount, checkDuplicateDocument } from '@/app/(dashboard)/actions';
 import { getFileIcon, formatFileSize } from '@/lib/format';
 import { toUserMessage } from '@/lib/user-error-messages';
+import { computeFileSha256 } from '@/lib/file-hash';
 
 interface FileUploadProps {
   caseId: string;
@@ -16,7 +17,7 @@ interface FileUploadProps {
 
 interface UploadProgress {
   fileName: string;
-  status: 'pending' | 'uploading' | 'saving' | 'done' | 'error';
+  status: 'pending' | 'hashing' | 'uploading' | 'saving' | 'done' | 'error';
   error?: string;
 }
 
@@ -73,6 +74,34 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
+      // Client-side guard: file vuoti vengono rifiutati dal server, evitiamo
+      // di calcolare hash + caricare in Storage solo per ricevere errore.
+      if (file.size === 0) {
+        newProgress[i] = { ...newProgress[i], status: 'error', error: 'File vuoto: impossibile caricare' };
+        setProgress([...newProgress]);
+        continue;
+      }
+
+      // Compute SHA-256 for dedup. If hashing fails (very rare, large files
+      // on quirky browsers), we proceed without dedup.
+      newProgress[i] = { ...newProgress[i], status: 'hashing' };
+      setProgress([...newProgress]);
+      const contentHash = await computeFileSha256(file);
+
+      // Pre-upload duplicate check — saves bandwidth on big files.
+      if (contentHash) {
+        const dupCheck = await checkDuplicateDocument({ caseId, contentHash });
+        if (dupCheck?.duplicate) {
+          newProgress[i] = {
+            ...newProgress[i],
+            status: 'error',
+            error: `Già caricato come "${dupCheck.existingFileName}"`,
+          };
+          setProgress([...newProgress]);
+          continue;
+        }
+      }
+
       newProgress[i] = { ...newProgress[i], status: 'uploading' };
       setProgress([...newProgress]);
 
@@ -103,6 +132,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         fileSize: file.size,
         storagePath,
         documentType: 'altro',
+        contentHash: contentHash ?? undefined,
       });
 
       if (result?.error) {
@@ -262,7 +292,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
               <div
                 key={p.fileName}
                 className={`flex items-center justify-between rounded-md px-3 py-1.5 border-l-4 ${
-                  p.status === 'uploading' || p.status === 'saving'
+                  p.status === 'uploading' || p.status === 'saving' || p.status === 'hashing'
                     ? 'border-l-primary bg-primary/5'
                     : p.status === 'done'
                       ? 'border-l-green-500 bg-green-50/50 dark:bg-green-950/10'
@@ -280,8 +310,11 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                   {p.status === 'pending' && (
                     <span className="text-xs text-muted-foreground">In attesa</span>
                   )}
-                  {(p.status === 'uploading' || p.status === 'saving') && (
+                  {(p.status === 'uploading' || p.status === 'saving' || p.status === 'hashing') && (
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  )}
+                  {p.status === 'hashing' && (
+                    <span className="text-xs text-muted-foreground">Verifica duplicati</span>
                   )}
                   {p.status === 'done' && (
                     <CheckCircle2 className="h-4 w-4 text-green-600" />

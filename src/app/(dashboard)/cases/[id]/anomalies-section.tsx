@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 // Textarea removed — anomaly descriptions are read-only
 import { anomalyTypeLabels } from '@/lib/constants';
-import { dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount } from '../../actions';
+import { dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumentCount, checkDuplicateDocument } from '../../actions';
 import { revertAnomalyDecision } from '../../actions/anomaly-actions';
 import { createClient } from '@/lib/supabase/client';
+import { computeFileSha256 } from '@/lib/file-hash';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
 // --- Types ---
@@ -739,6 +740,16 @@ function MissingDocUploadButton({
         return;
       }
 
+      // Pre-upload dedup check via SHA-256 (Wave D.2).
+      const contentHash = await computeFileSha256(file);
+      if (contentHash) {
+        const dupCheck = await checkDuplicateDocument({ caseId, contentHash });
+        if (dupCheck?.duplicate) {
+          toast.error(`Già caricato come "${dupCheck.existingFileName}". Non duplicato.`);
+          return;
+        }
+      }
+
       const ext = file.name.split('.').pop() ?? 'bin';
       const storagePath = `${user.id}/${caseId}/${crypto.randomUUID()}.${ext}`;
 
@@ -761,6 +772,7 @@ function MissingDocUploadButton({
         fileSize: file.size,
         storagePath,
         documentType: 'altro',
+        contentHash: contentHash ?? undefined,
       });
 
       if (result?.error) {

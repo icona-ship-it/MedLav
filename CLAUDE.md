@@ -17,6 +17,14 @@ Web app per medici legali: upload documentazione clinica → report medico-legal
 
 `pnpm dev` | `pnpm build` | `pnpm test` | `pnpm lint` | `pnpm typecheck` | `pnpm db:migrate` | `pnpm db:generate`
 
+## Database / Migration — IMPORTANTE
+
+**Drizzle journal disallineato (debt noto)**: il journal `drizzle/meta/_journal.json` e' fermo a `0017`. Le migration `0018`-`0023` sono state applicate **manualmente** via Supabase SQL editor e NON sono nella `__drizzle_migrations` table. Vedi `drizzle/MANUAL_MIGRATIONS.md` per stato completo, motivo, e procedura per nuove migration.
+
+- **NON lanciare** `pnpm db:migrate` finche' la table non e' allineata (oggi e' no-op innocuo perche' tutte le migration sono `IF [NOT] EXISTS`, ma non aggiorna il tracking)
+- **Per nuove migration**: scriverle a mano in `drizzle/00XX_*.sql` (idempotenti) + file `verify_00XX_*.sql` con check SQL + applicare via Supabase + aggiornare `MANUAL_MIGRATIONS.md`
+- **Verifica idempotente**: ogni migration manuale ha un file `verify_*.sql` da incollare nel SQL editor (es. `verify_0023_hybrid_rag_multilingua.sql`)
+
 ## Architettura
 
 ```

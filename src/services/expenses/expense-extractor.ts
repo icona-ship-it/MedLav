@@ -66,6 +66,49 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 - Il campo isJustified è SEMPRE null — la valutazione di congruità spetta al medico legale
 - Per ogni spesa, fornisci una breve "interpretation" che spieghi la correlazione con la diagnosi (se disponibile). Es: "Coerente con il trattamento conservativo della frattura radiale", "Terapia antidolorifica post-traumatica", "Esame di controllo post-operatorio"
 
+## REGOLA CRITICA SULLA DATA (segnalata dal perito 2026-05-11)
+- NON SCARTARE MAI una voce per assenza di data. L'importo e' il dato vincolante; la data e' opzionale.
+- Cascade per popolare il campo data: data pagamento → data fattura → data prestazione clinica correlata → stringa vuota.
+- Le voci con date vuota devono comparire COMUNQUE in tabella. Esempi tipici: imposta di bollo, riepiloghi totali, righe di sintesi, contanti senza ricevuta, scontrini con stampa termica sbiadita.
+
+## REGOLA CRITICA SU IMPOSTA DI BOLLO E ONERI ACCESSORI (segnalata dal perito 2026-05-11)
+- L'imposta di bollo (2 EUR sulle fatture > 77,47 EUR, ai sensi DPR 642/1972) NON va sommata all'importo della prestazione.
+- Crea SEMPRE una voce SEPARATA per il bollo. Esempio: description "Imposta di bollo", amount 2.00, category "altro", notes "Bollo ex DPR 642/1972 su fattura n.X del...".
+- Stesso trattamento per: marca da bollo, oneri amministrativi, spese postali, contributi ENPAM/cassa previdenziale, IVA esposta separatamente.
+- Cosi il perito vede la composizione completa: prestazione + bollo + altri oneri = totale fatturato.
+
+## STRUTTURA DEL TESTO IN INGRESSO
+Il testo OCR e' organizzato in blocchi documento separati da:
+\`\`\`
+### DOCUMENTO: nome-file.pdf ###
+... contenuto OCR del documento ...
+### FINE DOCUMENTO ###
+\`\`\`
+ESAMINA OGNI DOCUMENTO SEPARATAMENTE. Non confondere o fondere voci di documenti diversi.
+
+## REGOLA CRITICA SU DEDUPLICAZIONE PRESTAZIONE vs DOCUMENTO (Lavini 2026-05-11)
+Caso tipico: un singolo pagamento medico produce PIU' documenti:
+- Prenotazione/preventivo (riporta prestazione + prezzo + numero ricetta)
+- Avviso pagoPA (riporta Codice Avviso + Ep.AdmNo + importo)
+- Ricevuta pagoPA (riporta ID transazione + importo)
+Questi sono **3 documenti per 1 sola prestazione**.
+
+CRITERIO DI DEDUPLICA: due documenti riferiscono alla STESSA prestazione se condividono ALMENO UNO dei seguenti identificatori:
+- Codice Avviso pagoPA identico (es. \`3010 0000 0111 5409 10\`)
+- Ep.AdmNo identico (es. \`O0002233730\`)
+- Numero ricetta identico (es. \`050A10205378841\`)
+- Numero fattura identico (es. \`10/2026\`)
+- Numero ricevuta TC identico (es. \`TC3630661\`)
+- Stessa data + stesso importo + stessa struttura erogatrice
+In tal caso: PRODUCI UNA SOLA voce di spesa, fondendo le informazioni dai vari documenti. Nelle note cita tutti i documenti fonte.
+
+REGOLA OPPOSTA — VOCI DISTINTE OBBLIGATORIE: due documenti riferiscono a prestazioni DIVERSE se gli identificatori sopra sono DIVERSI, anche se importo e struttura sono identici. Esempio:
+- pagopa #1 con Ep.AdmNo O0002233730, codice 3010...5409 10, €35
+- pagopa #2 con Ep.AdmNo O0002236660, codice 3010...6924 37, €35
+Sono **2 prestazioni distinte** (es. "richiesta cartella clinica" + "ritiro cartella clinica"): crea **2 voci**.
+
+NON saltare MAI un documento solo perche' un'altra voce ha lo stesso importo: confronta SEMPRE gli identificatori sopra.
+
 ## CATEGORIE
 - farmaci: farmaci, parafarmaci, dispositivi medici da farmacia
 - visite_specialistiche: visite mediche, consulenze, consulti
@@ -136,11 +179,19 @@ export async function extractExpensesFromOcr(
     return { items: [], totalAmount: null, currency: 'EUR' };
   }
 
-  // Cap OCR text — Mistral Large 3 supports 262K tokens (~470K chars)
-  const MAX_OCR_CHARS = 150_000;
+  // Cap OCR text — Mistral Large 3 supports 262K tokens (~470K chars).
+  // Lavini bug 2026-05-11: 150K era troppo stretto, su 7 PDF compositi
+  // (referti+ricevute) il cap troncava silenziosamente le ultime pagine
+  // perdendo voci di spesa intere. 400K lascia abbondante headroom per
+  // system prompt + output (~50K) restando sotto il limite token.
+  const MAX_OCR_CHARS = 400_000;
   const trimmedOcr = ocrText.length > MAX_OCR_CHARS
     ? ocrText.slice(0, MAX_OCR_CHARS) + '\n\n[... testo troncato per limiti di contesto]'
     : ocrText;
+
+  if (ocrText.length > MAX_OCR_CHARS) {
+    logger.warn('expense-extractor', `OCR text truncated from ${ocrText.length} to ${MAX_OCR_CHARS} chars — possible expense items missed`);
+  }
 
   const diagnosisContext = finalDiagnosis
     ? `DIAGNOSI DI RIFERIMENTO: ${finalDiagnosis}\nUsa questa diagnosi per compilare il campo linkedDiagnosis dove pertinente.`
