@@ -44,6 +44,15 @@ export interface SectionSpec {
   isPlaceholder?: boolean;
   /** Static text to emit for placeholder sections (no LLM call) */
   placeholderText?: string;
+  /**
+   * Sprint 1 S1.1 (Lavini quality, 2026-05-17): hard cap on generated content
+   * length (in chars). If LLM output exceeds this, the section-generator
+   * intelligently truncates at the nearest paragraph boundary and flags
+   * `truncatedByCap: true` in metadata. Distinct from `maxTokens` which is
+   * an INPUT-side budget to Mistral. This is an OUTPUT-side safety net for
+   * sections that tend to ramble (documentazione_sanitaria).
+   */
+  maxChars?: number;
 }
 
 /**
@@ -90,6 +99,14 @@ export interface GeneratedSection {
   coveBypassedDueToLlmFailure?: boolean;
   /** Failure reason when coveBypassedDueToLlmFailure=true. */
   coveFailureReason?: string;
+  /**
+   * Sprint 1 S1.1: true when output exceeded `spec.maxChars` and was
+   * truncated at a paragraph boundary. The medico can see in metadata that
+   * the section was cut and may want to regenerate manually.
+   */
+  truncatedByCap?: boolean;
+  /** Original char length before truncation (only set if truncatedByCap). */
+  originalCharLength?: number;
 }
 
 /**

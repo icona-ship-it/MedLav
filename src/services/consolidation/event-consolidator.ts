@@ -104,8 +104,17 @@ export function consolidateEvents(
   // copies of "Esami ematochimici - Tabella N" were extracted from the same doc.
   const dedupedSameDoc = dedupWithinSameDocument(allEvents);
 
+  // Sprint 1 S1.4 (Lavini quality, 2026-05-17): aggregate 3+ similar lab/imaging
+  // exams on the same date into a single event. Reduces report verbosity:
+  // "Emocromo / Creatinina / Transaminasi / INR / Glicemia" on the same date
+  // become "Esami ematochimici routinari del DD.MM.YYYY (5 esami)".
+  // Conservative: only fires when title token-overlap (Jaccard) >= 0.5 AND
+  // eventType is a laboratory/imaging exam. Surgeries, diagnoses, etc. are
+  // never aggregated.
+  const aggregated = aggregateIdenticalEventsPerDay(dedupedSameDoc);
+
   // Detect duplicates/discrepancies across documents (existing behavior)
-  const consolidated = markDiscrepancies(dedupedSameDoc);
+  const consolidated = markDiscrepancies(aggregated);
 
   // Assign sequential order numbers
   return consolidated.map((event, index) => ({
@@ -156,6 +165,125 @@ function dedupWithinSameDocument(
   }
 
   return kept;
+}
+
+/**
+ * Sprint 1 S1.4 (Lavini quality, 2026-05-17): aggregate 3+ similar laboratory
+ * or imaging exams on the same date into a single rolled-up event. Reduces
+ * report verbosity ("5 emocromi nello stesso giorno" → 1 evento aggregato).
+ *
+ * CONSERVATIVE LOGIC — fires only when ALL conditions are met:
+ *  - Group size >= 3 events
+ *  - Same eventDate + eventType + sourceType
+ *  - eventType is in AGGREGABLE_EXAM_TYPES (lab tests, instrumental exams)
+ *  - Titles share >=50% token overlap (Jaccard on tokens >=4 chars,
+ *    case-insensitive). This prevents merging "RX gomito" + "RX ginocchio"
+ *    which are different exams on the same date.
+ *
+ * Aggregated event: title rolls up to "Esami ematochimici / Esami strumentali
+ * (N esami)", description concatenates all originals separated by " | ",
+ * sourcePages unions all page numbers, confidence is the min of the group,
+ * sourceText concatenates source snippets for downstream citation fidelity.
+ */
+const AGGREGABLE_EXAM_TYPES = new Set([
+  'esame',
+  'esame_strumentale',
+  'esame_ematochimico',
+]);
+
+function aggregateIdenticalEventsPerDay(
+  events: Array<ExtractedEvent & { documentId: string }>,
+): Array<ExtractedEvent & { documentId: string }> {
+  if (events.length < 3) return events;
+
+  // Group by (eventDate, eventType, sourceType, documentId)
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    if (!ev.eventDate || ev.eventDate === SENTINEL_DATE) continue;
+    if (!AGGREGABLE_EXAM_TYPES.has(ev.eventType)) continue;
+    const key = `${ev.eventDate}|${ev.eventType}|${ev.sourceType}|${ev.documentId}`;
+    const g = groups.get(key);
+    if (g) g.push(i);
+    else groups.set(key, [i]);
+  }
+
+  // Identify groups eligible for aggregation (size >=3).
+  // For esame_ematochimico (already a specific category), always aggregate.
+  // For esame/esame_strumentale (broader), require token overlap >=0.3 to
+  // avoid merging "RX gomito" + "RX ginocchio" + "Risonanza colonna".
+  const aggregatedIndices = new Set<number>();
+  const replacements: Array<{ insertAt: number; event: ExtractedEvent & { documentId: string } }> = [];
+
+  for (const [, indices] of groups) {
+    if (indices.length < 3) continue;
+    const sampleType = events[indices[0]].eventType;
+    const groupTitles = indices.map((i) => events[i].title ?? '');
+    if (sampleType !== 'esame_ematochimico') {
+      if (!titlesShareKeywords(groupTitles, 0.3)) continue;
+    }
+
+    // Build aggregated event
+    const sample = events[indices[0]];
+    const eventTypeLabel = sample.eventType === 'esame_ematochimico'
+      ? 'Esami ematochimici'
+      : sample.eventType === 'esame_strumentale'
+        ? 'Esami strumentali'
+        : 'Esami';
+    const aggregated: ExtractedEvent & { documentId: string } = {
+      ...sample,
+      title: `${eventTypeLabel} routinari (${indices.length} esami raggruppati)`,
+      description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}`,
+      sourcePages: dedupSortPages(indices.flatMap((i) => events[i].sourcePages ?? [])),
+      confidence: Math.min(...indices.map((i) => events[i].confidence ?? 0)),
+      sourceText: indices.map((i) => events[i].sourceText ?? '').filter(Boolean).join(' / ').slice(0, 200),
+    };
+    for (const i of indices) aggregatedIndices.add(i);
+    replacements.push({ insertAt: indices[0], event: aggregated });
+  }
+
+  if (aggregatedIndices.size === 0) return events;
+
+  // Build result: skip indices in aggregatedIndices, insert aggregated events
+  // at the position of their first member to keep chronological ordering stable.
+  const insertMap = new Map<number, ExtractedEvent & { documentId: string }>();
+  for (const r of replacements) insertMap.set(r.insertAt, r.event);
+
+  const result: Array<ExtractedEvent & { documentId: string }> = [];
+  for (let i = 0; i < events.length; i++) {
+    if (insertMap.has(i)) result.push(insertMap.get(i)!);
+    else if (!aggregatedIndices.has(i)) result.push(events[i]);
+  }
+  return result;
+}
+
+/** Token-based Jaccard similarity across multiple titles. Returns true if
+ * ALL pairwise comparisons share >= threshold overlap on tokens >= 4 chars. */
+function titlesShareKeywords(titles: string[], threshold: number): boolean {
+  const tokenSets = titles.map((t) =>
+    new Set(
+      t.toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length >= 4),
+    ),
+  );
+  for (let i = 0; i < tokenSets.length; i++) {
+    for (let j = i + 1; j < tokenSets.length; j++) {
+      const a = tokenSets[i];
+      const b = tokenSets[j];
+      if (a.size === 0 || b.size === 0) return false;
+      let intersect = 0;
+      for (const t of a) if (b.has(t)) intersect++;
+      const union = a.size + b.size - intersect;
+      const jaccard = union === 0 ? 0 : intersect / union;
+      if (jaccard < threshold) return false;
+    }
+  }
+  return true;
+}
+
+function dedupSortPages(pages: number[]): number[] {
+  return Array.from(new Set(pages)).sort((a, b) => a - b);
 }
 
 /**

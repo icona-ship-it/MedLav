@@ -531,6 +531,94 @@ describe('consolidateEvents — Schönweger regression (CASO-2026-160)', () => {
     expect(expenseTitles).toContain('Visita ortopedica');
   });
 
+  // Sprint 1 S1.4 (Lavini quality, 2026-05-17): aggregate similar exams.
+  it('aggregates 5+ similar lab exams on the same date into 1 event', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_ematochimico',
+            title: 'Emocromo completo prelievo mattutino',
+            sourcePages: [1],
+          }),
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_ematochimico',
+            title: 'Emocromo controllo serale',
+            sourcePages: [2],
+          }),
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_ematochimico',
+            title: 'Emocromo controllo notturno',
+            sourcePages: [3],
+          }),
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_ematochimico',
+            title: 'Emocromo emergenza',
+            sourcePages: [4],
+          }),
+          makeEvent({
+            eventDate: '2024-04-14',
+            eventType: 'visita',
+            title: 'Visita ortopedica controllo',
+          }),
+        ],
+      },
+    ]);
+    // 4 emocromi aggregati → 1 evento + visita = 2 totali
+    expect(result).toHaveLength(2);
+    const aggregated = result.find((e) => e.eventType === 'esame_ematochimico');
+    expect(aggregated).toBeDefined();
+    expect(aggregated!.title).toMatch(/Esami ematochimici routinari .* esami raggruppati/);
+    expect(aggregated!.sourcePages).toEqual([1, 2, 3, 4]);
+  });
+
+  it('does NOT aggregate dissimilar exams on same date (low token overlap)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_strumentale',
+            title: 'RX gomito destro proiezione AP',
+          }),
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_strumentale',
+            title: 'RX ginocchio sinistro carico',
+          }),
+          makeEvent({
+            eventDate: '2024-04-13',
+            eventType: 'esame_strumentale',
+            title: 'Risonanza magnetica colonna lombare',
+          }),
+        ],
+      },
+    ]);
+    // 3 esami diversi → NON aggregati (token overlap < 0.5)
+    expect(result).toHaveLength(3);
+  });
+
+  it('does NOT aggregate interventi/diagnosi (out of aggregable types)', () => {
+    const result = consolidateEvents([
+      {
+        documentId: 'doc-A',
+        events: [
+          makeEvent({ eventDate: '2024-04-13', eventType: 'intervento', title: 'Osteosintesi olecrano destro' }),
+          makeEvent({ eventDate: '2024-04-13', eventType: 'intervento', title: 'Osteosintesi olecrano controllo' }),
+          makeEvent({ eventDate: '2024-04-13', eventType: 'intervento', title: 'Osteosintesi olecrano revisione' }),
+        ],
+      },
+    ]);
+    // 3 interventi stessa data → MAI aggregati (interventi sono load-bearing)
+    expect(result).toHaveLength(3);
+  });
+
   it('drops events whose description contains [object Object] (broken OCR)', () => {
     const result = consolidateEvents([
       {

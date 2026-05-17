@@ -74,6 +74,19 @@ const NO_EVN_RULE = 'Cita i documenti per tipo, autore e data. NON usare riferim
 const CITATION_FORMAT = `FORMATO CITAZIONE per ogni documento:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."`;
 
+/**
+ * Sprint 1 S1.1 + S1.2 (Lavini quality, 2026-05-17): regole anti-verbosità +
+ * anti-ripetizione per le sezioni "documentazione_sanitaria" dove il LLM
+ * tende a ridondare e ripetere informazioni. Sono regole rinforzate rispetto
+ * al solo "stile sintetico" precedente.
+ */
+const ANTI_REPETITION_AND_LENGTH_RULES = `REGOLE ANTI-RIPETIZIONE E LUNGHEZZA (vincolanti — Lavini 2026-05-17):
+- **MAX 80 parole di prosa di commento** tra una citazione e la successiva. Le citazioni testuali del documento (tra virgolette) possono essere illimitate, MA la prosa NO.
+- **Se hai gia citato un fatto clinico** (stessa data + stesso tipo, es. "intervento del 15.03.2024") in un blocco precedente di questa stessa sezione, **NON ripeterlo**. Riferisciti con UNA SOLA RIGA: "Per i dettagli dell'intervento del 15.03.2024 vedi blocco precedente."
+- **Diari clinici pluri-giornalieri**: raggruppa SEMPRE i giorni con QUADRO INVARIATO in un blocco unico: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri vitali nella norma, terapia [X] proseguita." MAI ripetere giorno per giorno se il quadro non cambia.
+- **Esami di laboratorio identici nello stesso giorno**: 1 sola tabella per data, non duplicare.
+- **Limite sezione**: se la sezione supera 30.000 caratteri, il sistema la taglia automaticamente al boundary di paragrafo piu vicino. Quindi sii CONCISO: il perito preferisce 20 blocchi essenziali a 50 ridondanti.`;
+
 // ── CTU Giudiziale sections (15) ────────────────────────────────────
 
 const CTU_SECTIONS: SectionSpec[] = [
@@ -188,6 +201,7 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'Dati della Documentazione Sanitaria',
     maxTokens: TOKENS_HUGE,
+    maxChars: 30_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
@@ -212,6 +226,8 @@ REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTAL
 - VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
 - VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "ELEMENTO" (in senso valutativo), "appare", "si ritiene".
 - Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+
+${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}
 
 ${DOCUMENT_ANALYSIS_FORMULATIONS}
@@ -459,6 +475,7 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
+    maxChars: 30_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -482,6 +499,8 @@ REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTAL
 - VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
 - VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
 - Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+
+${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
   },
   {
@@ -603,6 +622,7 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
+    maxChars: 30_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -626,6 +646,8 @@ REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTAL
 - VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
 - VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
 - Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+
+${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
   },
   {
@@ -718,6 +740,7 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
+    maxChars: 30_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
@@ -741,6 +764,8 @@ REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTAL
 - VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
 - VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
 - Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+
+${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
   },
   {

@@ -372,6 +372,32 @@ export async function generateSingleSection(params: {
     }
   }
 
+  // Sprint 1 S1.1 (Lavini quality, 2026-05-17): output-side cap enforcement.
+  // The LLM ignores prompt-level "max N parole" instructions ~40% of the
+  // time, especially on documentazione_sanitaria. If spec.maxChars is set
+  // and exceeded, truncate at the LAST `\n\n## ` or `\n\n**` boundary
+  // before the cap (intelligent cut at paragraph/heading, never mid-word).
+  let truncatedByCap = false;
+  let originalCharLength: number | undefined;
+  if (spec.maxChars && finalContent.length > spec.maxChars) {
+    originalCharLength = finalContent.length;
+    const slice = finalContent.slice(0, spec.maxChars);
+    // Find safest boundary: prefer last "\n\n**" (citation block), then "\n\n## "
+    // (subsection), then "\n\n" (paragraph), then fall back to hard cut.
+    let cutAt = slice.lastIndexOf('\n\n**');
+    if (cutAt < spec.maxChars * 0.7) cutAt = slice.lastIndexOf('\n\n## ');
+    if (cutAt < spec.maxChars * 0.7) cutAt = slice.lastIndexOf('\n\n');
+    if (cutAt < spec.maxChars * 0.5) cutAt = spec.maxChars; // hard cut, no safe boundary nearby
+    finalContent = finalContent.slice(0, cutAt) +
+      '\n\n*[Sezione troncata automaticamente — ' +
+      `originale ${originalCharLength} caratteri, cap ${spec.maxChars}. ` +
+      'Il perito può rigenerare la sezione se serve più dettaglio.]*';
+    truncatedByCap = true;
+    logger.warn('section-generator',
+      `Section "${spec.id}" truncated: ${originalCharLength} → ${finalContent.length} chars (cap=${spec.maxChars})`,
+    );
+  }
+
   const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
 
   // Generate context summary for subsequent sections
@@ -392,6 +418,7 @@ export async function generateSingleSection(params: {
     wordCount,
     usage,
     ...coveMeta,
+    ...(truncatedByCap ? { truncatedByCap, originalCharLength } : {}),
   };
 }
 
