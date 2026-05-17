@@ -40,9 +40,14 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Scratchpad temp files
-scratchpad/*.tmp
-scratchpad/prompt-backups-*
+# Scratchpad — work-in-progress notes, audits, planning. Never committed.
+scratchpad/
+
+# Example files — benchmark docx, test PDFs (sensitive medical data). Local only.
+Example/
+
+# Claude Code internal lock files
+.claude/scheduled_tasks.lock
 
 # Supabase
 supabase/.temp/

@@ -25,7 +25,8 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0021_add_credits.sql` | apr 2026 | si (`CREATE TABLE IF NOT EXISTS`) | controllare table `user_credits` esiste |
 | `0022_hybrid_rag_bm25.sql` | 2026-05-05 | parzialmente (DROP FUNCTION + CREATE) | verificato via 5 query SQL |
 | `0023_hybrid_rag_multilingua.sql` | 2026-05-11 | parzialmente (DROP COLUMN + ADD) | usare `verify_0023_hybrid_rag_multilingua.sql` |
-| `0024_add_document_content_hash.sql` | **DA APPLICARE** | si (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`) | usare `verify_0024_add_document_content_hash.sql` |
+| `0024_add_document_content_hash.sql` | 2026-05-11 | si (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`) | usare `verify_0024_add_document_content_hash.sql` |
+| `0025_perizie_benchmark.sql` | **DA APPLICARE dopo Sprint 3 ingestion** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC `match_perizie_chunks_hybrid`) | usare `verify_0025_perizie_benchmark.sql` (7 check + sanity) |
 
 ## Procedura per future migration
 

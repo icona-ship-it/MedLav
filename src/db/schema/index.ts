@@ -7,6 +7,7 @@ export * from './anomalies';
 export * from './reports';
 export * from './audit';
 export * from './guidelines';
+export * from './perizie-benchmark';
 export * from './report-ratings';
 export * from './case-shares';
 export * from './credits';
