@@ -46,6 +46,9 @@ scratchpad/
 # Example files — benchmark docx, test PDFs (sensitive medical data). Local only.
 Example/
 
+# Benchmark files — golden examples Lavini anonymized (GDPR Art. 9 sensitive). Local only.
+benchmark/
+
 # Claude Code internal lock files
 .claude/scheduled_tasks.lock
 
