@@ -192,6 +192,7 @@ export function ReportDialog({
             onChange={setEditedSynthesis}
             caseId={caseId}
             className="h-full"
+            dictationContext="perizia medico-legale, considerazioni, anamnesi, visita clinica"
           />
         </div>
       </DialogContent>

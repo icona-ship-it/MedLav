@@ -19,6 +19,7 @@ import { getQuestiTemplates } from '@/lib/domain-knowledge';
 import { CASE_TYPES } from '@/lib/constants';
 import type { CaseType } from '@/types';
 import type { CaseData, PeriziaMetadataUI } from './types';
+import { DictationButton } from '@/components/dictation-button';
 
 // --- Section config ---
 
@@ -338,9 +339,22 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'esameObiettivo' && (
                   <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-muted-foreground flex-1">
+                        Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
+                      </p>
+                      <DictationButton
+                        size="sm"
+                        variant="icon-label"
+                        caseId={caseId}
+                        contextHint="esame obiettivo medico-legale, soggettivo, obiettivo, periziando"
+                        onTranscript={(text) => {
+                          const prev = form.esameObiettivo ?? '';
+                          const sep = prev.length > 0 && !prev.endsWith('\n') ? '\n' : '';
+                          setForm({ ...form, esameObiettivo: `${prev}${sep}${text}` });
+                        }}
+                      />
+                    </div>
                     <Textarea
                       value={form.esameObiettivo ?? ''}
                       onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
@@ -370,18 +384,33 @@ export function PeriziaMetadataForm({
                       </div>
                     ))}
                     <div className="space-y-2">
-                      <Textarea
-                        value={newQuesito}
-                        onChange={(e) => setNewQuesito(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && newQuesito.trim()) {
-                            e.preventDefault();
-                            addQuesito();
-                          }
-                        }}
-                        placeholder={`Quesito ${quesiti.length + 1}: inserisci il testo del quesito...`}
-                        className="min-h-[80px]"
-                      />
+                      <div className="relative">
+                        <Textarea
+                          value={newQuesito}
+                          onChange={(e) => setNewQuesito(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey && newQuesito.trim()) {
+                              e.preventDefault();
+                              addQuesito();
+                            }
+                          }}
+                          placeholder={`Quesito ${quesiti.length + 1}: inserisci il testo del quesito...`}
+                          className="min-h-[80px] pr-12"
+                        />
+                        <div className="absolute right-2 top-2">
+                          <DictationButton
+                            size="icon"
+                            variant="icon-only"
+                            caseId={caseId}
+                            contextHint="quesito del giudice, perizia, responsabilita medica"
+                            onTranscript={(text) => {
+                              const sep = newQuesito.length > 0 && !newQuesito.endsWith(' ') ? ' ' : '';
+                              setNewQuesito(`${newQuesito}${sep}${text}`);
+                            }}
+                            className="h-7 w-7"
+                          />
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"

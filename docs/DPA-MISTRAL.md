@@ -277,6 +277,7 @@ Firma: ___________________
 | Estrazione eventi | Testo OCR contenente dati sanitari strutturati e non strutturati | EU API `mistral-large-latest` | Zero (elaborazione in-memory) |
 | Sintesi report | Testo eventi estratti + contesto caso per generazione report | EU API `mistral-large-latest` | Zero (elaborazione in-memory) |
 | Embedding linee guida | Testo di linee guida cliniche (non contiene dati personali) | EU API `mistral-embed` | Zero (elaborazione in-memory) |
+| Dettatura vocale (Voxtral) | Clip audio (massimo 5 minuti) registrate dal perito sul browser, contenenti voce del perito con possibili riferimenti orali a dati clinici | EU API `voxtral-mini-latest` (`/v1/audio/transcriptions`) | Zero — l'audio NON viene salvato da LegMed (no Storage/DB) e per default non viene conservato da Mistral. L'audit log registra solo metadata (durata, lingua, costo, modello), MAI il testo trascritto. |
 
 ## Allegato B — Misure di pseudonimizzazione implementate da LegMed
 
@@ -286,3 +287,4 @@ LegMed implementa le seguenti misure prima della trasmissione dei dati a Mistral
 2. Il caso medico-legale e identificato da un codice interno (ID caso), non dal nome del paziente
 3. I log applicativi registrano solo ID e codici, mai dati clinici o anagrafici
 4. L'accesso ai dati e filtrato tramite Row Level Security (RLS) per utente autenticato
+5. Per la dettatura vocale: l'utente perito visualizza un disclaimer al primo utilizzo che lo invita a evitare di pronunciare nome, cognome, codice fiscale del paziente; l'audio non viene mai persistito; il testo trascritto vive solo nel campo testuale dell'utente fino al salvataggio

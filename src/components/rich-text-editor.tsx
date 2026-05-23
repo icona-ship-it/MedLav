@@ -16,6 +16,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Heading2, Heading3,
   List, ListOrdered, Undo, Redo,
 } from 'lucide-react';
+import { DictationButton } from '@/components/dictation-button';
 
 interface RichTextEditorProps {
   content: string;
@@ -24,6 +25,8 @@ interface RichTextEditorProps {
   className?: string;
   /** Heading levels to allow. Default: [2, 3]. Use [3] in section editors to prevent ## conflicts. */
   allowedHeadingLevels?: (1 | 2 | 3 | 4 | 5 | 6)[];
+  /** Domain hint passed to the dictation button (improves transcription accuracy). */
+  dictationContext?: string;
 }
 
 interface ToolbarButtonProps {
@@ -70,7 +73,7 @@ function unresolveOcrImageUrls(markdown: string, caseId?: string): string {
   );
 }
 
-export function RichTextEditor({ content, onChange, caseId, className, allowedHeadingLevels = [2, 3] }: RichTextEditorProps) {
+export function RichTextEditor({ content, onChange, caseId, className, allowedHeadingLevels = [2, 3], dictationContext }: RichTextEditorProps) {
   const isUpdatingRef = useRef(false);
 
   const editor = useEditor({
@@ -197,6 +200,19 @@ export function RichTextEditor({ content, onChange, caseId, className, allowedHe
         >
           <Redo className="h-4 w-4" />
         </ToolbarButton>
+
+        <div className="w-px h-5 bg-border mx-1" />
+
+        <DictationButton
+          size="sm"
+          variant="icon-only"
+          contextHint={dictationContext}
+          caseId={caseId}
+          onTranscript={(text) => {
+            editor.chain().focus().insertContent(text).run();
+          }}
+          className="h-7 px-2"
+        />
       </div>
 
       {/* Editor */}

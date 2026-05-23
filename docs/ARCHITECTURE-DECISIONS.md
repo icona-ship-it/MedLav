@@ -149,3 +149,23 @@
 - **Contesto**: La classificazione era sequenziale (for loop), ogni documento ~5s. Con 10 documenti: 50s di attesa.
 - **Decisione**: Classificazione parallelizzata con Promise.allSettled — uno step Inngest per documento.
 - **Conseguenze**: 10 documenti passano da ~50s a ~5s. Fault-tolerant: se un documento fallisce, gli altri procedono.
+
+---
+
+## ADR-015: Dettatura vocale via Mistral Voxtral (batch, multilingua auto-detect, no persistenza audio)
+- **Data**: 2026-05-22
+- **Contesto**: Il perito spende tempo significativo digitando contenuti discorsivi della perizia (SOGGETTIVO/OBIETTIVO della visita, quesiti del giudice, considerazioni medico-legali, note su eventi e anomalie). La digitazione e' un collo di bottiglia, tipicamente a fine giornata dopo le visite. Una soluzione di dettatura vocale ridurrebbe il tempo del 50-70% su questi campi.
+- **Alternative valutate**:
+  - **Web Speech API browser** (`webkitSpeechRecognition`) — gratuito ma su Chrome inoltra l'audio a Google. Inaccettabile per GDPR Art. 9.
+  - **Whisper WASM client-side** — privacy ottima ma scarica 150MB-1.5GB di modello, lento su mobile, UX scadente al primo uso.
+  - **OpenAI Whisper API** — qualita' ottima ma introdurrebbe un nuovo provider e DPA fuori EU.
+  - **Mistral Voxtral via API** — scelta adottata.
+- **Decisione**: Endpoint `POST /api/transcribe` che inoltra clip audio (multipart) a `client.audio.transcriptions.complete()` (modello `voxtral-mini-latest`) tramite l'SDK Mistral v1.14. UX: push-to-talk toggle con auto-stop a 5 minuti, ESC per annullare, contesto di dominio (`contextBias`) per migliorare accuratezza. Componente riusabile `<DictationButton>` con hook `useDictation` integrato in: RichTextEditor (toolbar), perizia-form (esame obiettivo + quesiti), event-card (descrizione + note), anomalies-section (nota perito).
+- **GDPR Art. 9**:
+  - Audio NON persistito ne' da LegMed (no Storage/DB) ne' da Mistral (per default le richieste API non vengono conservate, vedi DPA).
+  - Audit log registra solo metadata (durata, lingua, costo, modello) — MAI il testo trascritto.
+  - Disclaimer first-use mostrato al primo click del microfono, invita a evitare identificatori diretti del paziente.
+  - DPA Mistral copre il flusso (vedi `docs/DPA-MISTRAL.md` Allegato A aggiornato).
+- **Costo & rate limiting**: Voxtral Mini batch = $0.003/min. Flat 1 credito per dettatura (clip cappata a 5 min server-side → worst case $0.015 = ~1.5 crediti). Rate limit Upstash 30 trascrizioni/ora/utente per protezione cost runaway.
+- **Multilingua**: una sola implementazione, auto-detect lingua (IT/DE/EN coperti — Voxtral supporta 13 lingue). Override possibile dall'UI futura.
+- **Conseguenze**: Riduce tempo di compilazione campi testo lunghi. Aggiunge un nuovo flusso dati (audio) verso Mistral EU. Nessuna migration DB. Nessun nuovo env var.

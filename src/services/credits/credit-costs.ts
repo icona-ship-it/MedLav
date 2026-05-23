@@ -27,6 +27,12 @@ export const CREDIT_COSTS = {
   rigenerazione_report: 20,
   /** Split a mixed PDF (per resulting document) */
   split_pdf: 3,
+  /**
+   * Voice dictation (Voxtral) — flat per clip, regardless of duration.
+   * The clip is capped to 5 min server-side, so worst-case Mistral cost is
+   * ~$0.015 (= 1.5 credit-equivalent), well within the 1-credit price.
+   */
+  dettatura: 1,
 } as const;
 
 export type CreditOperation = keyof typeof CREDIT_COSTS;

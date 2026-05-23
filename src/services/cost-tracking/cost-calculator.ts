@@ -37,6 +37,11 @@ const PRICING: Record<string, { input: number; output: number }> = {
 // OCR pricing: ~$1 per 1000 pages
 const OCR_COST_PER_PAGE = 0.001;
 
+// Audio transcription pricing: per second (Voxtral Mini batch = $0.003/min = $0.00005/sec)
+const AUDIO_PRICING_PER_SEC: Record<string, number> = {
+  'voxtral-mini-latest': 0.003 / 60,
+};
+
 export function calculateTokenCost(model: string, usage: TokenUsage): number {
   const pricing = PRICING[model];
   if (!pricing) return 0;
@@ -47,6 +52,16 @@ export function calculateTokenCost(model: string, usage: TokenUsage): number {
 
 export function calculateOcrCost(pages: number): number {
   return pages * OCR_COST_PER_PAGE;
+}
+
+/**
+ * Calculate USD cost for an audio transcription (Voxtral).
+ * Returns 0 for unknown models so callers never crash if a new model is introduced.
+ */
+export function calculateAudioCost(model: string, durationSec: number): number {
+  const pricePerSec = AUDIO_PRICING_PER_SEC[model];
+  if (!pricePerSec || durationSec <= 0) return 0;
+  return Math.round(pricePerSec * durationSec * 10_000) / 10_000;
 }
 
 export function createEmptyUsage(): TokenUsage {

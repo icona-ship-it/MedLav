@@ -10,6 +10,7 @@ export const TIMEOUT_EXTRACTION = 180_000;  // 3 minuti — 1 chunk per step con
 export const TIMEOUT_SYNTHESIS  = 600_000;  // 10 minuti (casi grandi richiedono tempo per generare report completi)
 export const TIMEOUT_DEFAULT    = 120_000;  // 2 minuti (classificazione, embedding, altro)
 export const TIMEOUT_OCR        = 180_000;  // 3 minuti — 4 retry × 180s ≈ 720s + delays, sotto Vercel 800s
+export const TIMEOUT_TRANSCRIPTION = 60_000; // 1 minuto — dettatura: clip < 5 min, Voxtral batch tipico < 10s
 
 // ── Retry ──
 // With Vercel maxDuration=800s, worst case must stay under budget:
@@ -36,6 +37,8 @@ export const MISTRAL_MODELS = {
   MISTRAL_SMALL: 'mistral-small-latest',
   /** Dedicated OCR model for document text extraction */
   OCR: 'mistral-ocr-latest',
+  /** Voxtral Mini — batch audio transcription, 13 languages, ~4% WER on FLEURS, $0.003/min */
+  VOXTRAL_MINI: 'voxtral-mini-latest',
 } as const;
 
 /**
@@ -474,4 +477,103 @@ async function _completeMistralChatFallback(params: {
     `[mistral:${label}] Complete fallback done: ${content.length} chars in ${Date.now() - startMs}ms (finishReason: ${finishReason ?? 'unknown'})`,
   );
   return { content, usage, finishReason };
+}
+
+// ── Audio transcription (Voxtral) ────────────────────────────────────
+
+export interface TranscribeAudioParams {
+  /** Audio bytes (e.g. from a Web MediaRecorder Blob, Node Buffer, or Uint8Array). */
+  audio: Uint8Array | ArrayBuffer | Buffer;
+  /** Audio MIME type — must match the actual bytes (webm/opus, mp4, mpeg, wav, ogg). */
+  mimeType: string;
+  /** Filename hint (matters: Voxtral picks codec from extension). */
+  filename: string;
+  /** Audio language ISO code (e.g. 'it', 'de', 'en') or undefined for auto-detect. */
+  language?: string;
+  /** Optional context bias terms to improve domain accuracy (e.g. ['anamnesi', 'ortopedica']). */
+  contextBias?: string[];
+  /** Mistral model id. Defaults to Voxtral Mini. */
+  model?: string;
+  /** Override default 60s timeout if you expect a longer clip. */
+  timeoutMs?: number;
+  /** Label for logging/retry traces (e.g. 'dictation:perizia-form'). */
+  label: string;
+}
+
+export interface TranscribeAudioResult {
+  text: string;
+  /** ISO language code as detected/returned by Voxtral (e.g. 'it'). */
+  language: string | null;
+  /** Audio duration in seconds, from `usage.prompt_audio_seconds`. */
+  durationSec: number;
+  model: string;
+}
+
+/**
+ * Transcribe a short audio clip via Mistral Voxtral.
+ * Uses the SDK's audio.transcriptions endpoint with our retry + circuit breaker.
+ * Returns text + detected language + duration (for billing).
+ *
+ * GDPR: caller MUST NOT persist the audio or the transcript outside the user's session.
+ * Audit log should record only durationSec / language / cost, never the text itself.
+ */
+export async function transcribeAudio(params: TranscribeAudioParams): Promise<TranscribeAudioResult> {
+  const {
+    audio,
+    mimeType,
+    filename,
+    language,
+    contextBias,
+    model = MISTRAL_MODELS.VOXTRAL_MINI,
+    timeoutMs = TIMEOUT_TRANSCRIPTION,
+    label,
+  } = params;
+
+  await mistralSemaphore.acquire();
+  try {
+    return await withMistralRetry(async () => {
+      const client = getMistralClient(timeoutMs);
+      const startMs = Date.now();
+
+      // Normalize audio bytes to a Blob — the SDK accepts Blob | FileT.
+      // We pick Blob because it's the most ergonomic for both Node 22 and browser-sourced bytes.
+      const audioBytes: Uint8Array =
+        audio instanceof Uint8Array
+          ? audio
+          : new Uint8Array(audio as ArrayBuffer);
+      const audioPart = new Blob([audioBytes as BlobPart], { type: mimeType });
+
+      const response = await client.audio.transcriptions.complete(
+        {
+          model,
+          file: { fileName: filename, content: audioPart },
+          ...(language && { language }),
+          ...(contextBias && contextBias.length > 0 && { contextBias }),
+        },
+        { timeoutMs },
+      );
+
+      const text = response?.text ?? '';
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error(`[transcribe:${label}] Empty transcription returned by Voxtral`);
+      }
+
+      const durationSec =
+        (response as { usage?: { promptAudioSeconds?: number } })?.usage?.promptAudioSeconds ?? 0;
+
+      logger.info('mistral',
+        `[transcribe:${label}] Done in ${Date.now() - startMs}ms: ${text.length} chars, ` +
+        `audio ${durationSec}s, lang=${response?.language ?? 'unknown'}`,
+      );
+
+      return {
+        text,
+        language: response?.language ?? null,
+        durationSec,
+        model,
+      };
+    }, label);
+  } finally {
+    mistralSemaphore.release();
+  }
 }

@@ -24,6 +24,7 @@ import {
 } from '@/lib/format';
 import { sourceLabels } from '@/lib/constants';
 import type { EventRow } from './types';
+import { DictationButton } from '@/components/dictation-button';
 
 // --- Source Text Section (collapsible) ---
 
@@ -313,11 +314,37 @@ export function EventCard({
             </div>
           </div>
           <div>
-            <Label>Descrizione</Label>
+            <div className="flex items-center justify-between">
+              <Label>Descrizione</Label>
+              <DictationButton
+                size="icon"
+                variant="icon-only"
+                caseId={caseId}
+                contextHint={`evento clinico ${event.event_type ?? ''}, ${editForm.diagnosis ?? ''}`}
+                onTranscript={(text) => {
+                  const sep = editForm.description.length > 0 && !editForm.description.endsWith(' ') ? ' ' : '';
+                  setEditForm({ ...editForm, description: `${editForm.description}${sep}${text}` });
+                }}
+                className="h-7 w-7"
+              />
+            </div>
             <Textarea rows={4} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
           </div>
           <div>
-            <Label>Note perito</Label>
+            <div className="flex items-center justify-between">
+              <Label>Note perito</Label>
+              <DictationButton
+                size="icon"
+                variant="icon-only"
+                caseId={caseId}
+                contextHint="annotazione perito medico-legale"
+                onTranscript={(text) => {
+                  const sep = editForm.expertNotes.length > 0 && !editForm.expertNotes.endsWith(' ') ? ' ' : '';
+                  setEditForm({ ...editForm, expertNotes: `${editForm.expertNotes}${sep}${text}` });
+                }}
+                className="h-7 w-7"
+              />
+            </div>
             <Textarea rows={2} value={editForm.expertNotes} onChange={(e) => setEditForm({ ...editForm, expertNotes: e.target.value })} placeholder="Annotazioni del perito..." />
           </div>
           <div className="flex items-center justify-between">

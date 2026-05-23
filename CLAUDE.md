@@ -7,7 +7,7 @@ Web app per medici legali: upload documentazione clinica → report medico-legal
 - **Runtime**: Node.js 22 LTS, Next.js 15 (App Router), React 19, TypeScript 5.9 strict
 - **Database**: Supabase PostgreSQL EU (Frankfurt) + pgvector per RAG
 - **Auth**: Supabase Auth (email/password, email verification, password reset)
-- **AI**: Mistral API EU — Vision (`pixtral-large-latest`), OCR (`mistral-ocr-latest`), Estrazione/Classificazione/Sintesi (`mistral-large-latest`), Embedding (`mistral-embed`)
+- **AI**: Mistral API EU — Vision (`pixtral-large-latest`), OCR (`mistral-ocr-latest`), Estrazione/Classificazione/Sintesi (`mistral-large-latest`), Embedding (`mistral-embed`), Dettatura vocale (`voxtral-mini-latest`)
 - **Jobs**: Inngest (pipeline long-running su Vercel)
 - **Payments**: Stripe | **Email**: Resend | **Rate Limiting**: Upstash Redis | **Monitoring**: Sentry
 - **ORM**: Drizzle ORM | **UI**: shadcn/ui + Tailwind v4 | **Validazione**: Zod
@@ -46,6 +46,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `app/api/admin/guidelines/` | CRUD linee guida RAG | GET/POST/DELETE |
 | `app/api/stripe/` | Checkout, portal, webhook Stripe | Pagamenti e subscriptions |
 | `app/api/report-ratings/` | Rating qualità report | POST rating |
+| `app/api/transcribe/` | Dettatura vocale (Mistral Voxtral) — multipart audio in, testo trascritto out | `route.ts` |
 | `inngest/functions/` | **Pipeline principale** (13 step logici) | `process-case.ts` |
 | `services/ocr/` | OCR Mistral (PDF, immagini, DOCX) con estrazione immagini base64 | `ocr-service.ts`, `ocr-types.ts` |
 | `services/classification/` | Auto-classificazione tipo documento (Mistral Large) | `document-classifier.ts` |
@@ -60,6 +61,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `services/anonymization/` | Pseudonimizzazione GDPR dati nel report | `anonymizer.ts` |
 | `services/email/` | Notifiche email (Resend) | `email-service.ts` |
 | `services/demo/` | Generazione dati demo per testing | `demo-generator.ts` |
+| `services/transcription/` | Dettatura vocale via Mistral Voxtral (batch ASR, no persistenza audio, audit metadata-only) | `transcription-service.ts`, `transcription-types.ts`, `transcription-validators.ts` |
 | `lib/mistral/` | Client Mistral (retry, circuit breaker, streaming, semaforo) | `client.ts` |
 | `lib/domain-knowledge/` | Knowledge base statica (nesso causale, framework, case-type) | `index.ts`, `case-type/*.ts` |
 | `lib/supabase/` | Client Supabase (server, admin, middleware, storage) | |
