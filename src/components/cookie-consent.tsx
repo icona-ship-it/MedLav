@@ -45,7 +45,10 @@ export function CookieConsent() {
       <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Questo sito utilizza cookie tecnici necessari al funzionamento del servizio.
-          Non utilizziamo cookie di profilazione. I tuoi dati sanitari sono trattati in conformità al GDPR (Art. 9).
+          Non utilizziamo cookie di profilazione. I dati sanitari sono trattati in conformità al GDPR (Art. 9).
+          Documenti e dettatura vocale sono elaborati da Mistral AI (server EU) e non sono conservati dopo l&apos;elaborazione.
+          Dettagli su <a href="/privacy" className="underline hover:text-foreground">Privacy</a>{' '}
+          e <a href="/info-ai" className="underline hover:text-foreground">Trasparenza AI</a>.
         </p>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleReject}>

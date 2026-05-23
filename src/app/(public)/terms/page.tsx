@@ -27,7 +27,7 @@ export default function TermsPage() {
 
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="mb-8 text-3xl font-bold">Termini di Servizio</h1>
-        <p className="mb-6 text-sm text-muted-foreground">Ultimo aggiornamento: Marzo 2026</p>
+        <p className="mb-6 text-sm text-muted-foreground">Ultimo aggiornamento: Maggio 2026</p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
           <section>
@@ -89,6 +89,30 @@ export default function TermsPage() {
               modelli di intelligenza artificiale che possono contenere errori, omissioni o
               imprecisioni. L&apos;Utente è tenuto a verificare e validare ogni report prima
               dell&apos;utilizzo.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold">5.A Dettatura Vocale</h2>
+            <p>
+              Il Servizio offre una funzione di dettatura vocale che inoltra l&apos;audio della
+              registrazione a Mistral AI (server in Unione Europea) tramite il modello Voxtral
+              esclusivamente per la trascrizione automatica. L&apos;audio non viene conservato dal
+              Fornitore (nessun salvataggio su storage o database) né, contrattualmente, da
+              Mistral dopo l&apos;elaborazione.
+            </p>
+            <p className="mt-2">
+              L&apos;Utente è invitato a non pronunciare ad alta voce dati identificativi diretti
+              del paziente (nome, cognome, codice fiscale) e si assume la responsabilità del
+              contenuto dettato. La trascrizione automatica può contenere errori: l&apos;Utente è
+              tenuto a verificarla prima di salvarla nel report, come per qualunque altro testo
+              immesso manualmente.
+            </p>
+            <p className="mt-2">
+              Per ridurre il rischio di abuso o costi imprevisti, il Servizio applica un limite
+              tecnico massimo di 5 minuti per singola clip e un limite di 30 trascrizioni per
+              ora per Utente. Maggiori dettagli su{' '}
+              <Link href="/info-ai" className="text-primary underline">Trasparenza AI</Link>.
             </p>
           </section>
 

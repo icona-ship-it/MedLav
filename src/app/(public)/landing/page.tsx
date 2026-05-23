@@ -331,6 +331,7 @@ export default function LandingPage() {
             <Link href="/terms" className="hover:text-foreground transition-colors">Termini di Servizio</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             <Link href="/security" className="hover:text-foreground transition-colors">Sicurezza</Link>
+            <Link href="/info-ai" className="hover:text-foreground transition-colors">Trasparenza AI</Link>
             <Link href="/pricing" className="hover:text-foreground transition-colors">Prezzi</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Aiuto</Link>
           </div>

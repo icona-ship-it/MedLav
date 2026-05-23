@@ -5,7 +5,8 @@
 **Titolare del Trattamento:** LegMed S.r.l.
 **Responsabile della Protezione dei Dati (DPO):** privacy@legmed.it
 **Data prima redazione:** 11 marzo 2026
-**Versione:** 1.0
+**Versione:** 1.1
+**Ultimo aggiornamento:** 22 maggio 2026 (introduzione dettatura vocale Voxtral — Fase 9 pipeline, rischio R9, misure 5.7)
 **Stato:** Approvata
 **Prossima revisione programmata:** 11 marzo 2027
 
@@ -78,6 +79,7 @@ Il trattamento si articola in 8 fasi sequenziali, ciascuna eseguita come step at
 | 6. Rilevamento anomalie | Analisi automatica di 9 tipologie di criticita | Eventi, soglie temporali | Algoritmo deterministico (no LLM) |
 | 7. Generazione sintesi | Produzione del report medico-legale strutturato | Eventi, anomalie, linee guida RAG | Mistral Large (EU), RAG |
 | 8. Finalizzazione | Marcatura completamento, audit log | Metadati caso, log | Supabase (EU) |
+| 9. Dettatura vocale (on-demand, fuori pipeline) | Trascrizione automatica clip audio del perito (≤5 min) per facilitare la compilazione dei campi testuali | Blob audio in transito (no retention), testo trascritto restituito al campo dell'utente | Mistral Voxtral Mini (EU), API sincrona `/v1/audio/transcriptions` |
 
 **Nota rilevante**: il rilevamento anomalie (fase 6) e **puramente algoritmico** e basato su soglie temporali configurabili, senza utilizzo di modelli di intelligenza artificiale. Questo garantisce determinismo, verificabilita e trasparenza delle anomalie rilevate.
 
@@ -100,6 +102,7 @@ Il trattamento si articola in 8 fasi sequenziali, ciascuna eseguita come step at
 | Dati professionali medici | Art. 4(1) — Dati personali | Nomi dei medici curanti, specializzazioni, strutture sanitarie |
 | Dati utenti piattaforma | Art. 4(1) — Dati personali | Email, nome completo, nome dello studio, indirizzo IP |
 | Dati tecnici | Art. 4(1) — Dati personali | Log di accesso, azioni eseguite, timestamp, indirizzi IP |
+| Dati audio del perito (dettatura) | Art. 4(1) — Dati personali (voce del perito); potenziale Art. 9 se il perito pronuncia dati clinici | Clip audio temporanee (≤5 min) della voce del medico legale, inoltrate a Mistral Voxtral per trascrizione. Mai persistite da LegMed né da Mistral. |
 
 #### Volume stimato
 
@@ -133,6 +136,7 @@ I dati sanitari trattati sono per loro natura estremamente sensibili e il report
 | Audit e tracciabilita | Art. 6(1)(c) GDPR | Obbligo legale di garantire accountability e tracciabilita per dati sanitari |
 | Sicurezza del servizio | Art. 6(1)(f) GDPR | Legittimo interesse alla sicurezza informatica e all'integrita dei sistemi |
 | Fatturazione | Art. 6(1)(b) e Art. 6(1)(c) GDPR | Esecuzione contratto e obblighi fiscali |
+| Trascrizione dettatura vocale | Art. 6(1)(b) GDPR | Esecuzione del contratto di servizio: funzione di Speech-to-Text che facilita al perito la compilazione dei campi testuali della perizia |
 
 **Finalita espressamente escluse:**
 - Profilazione degli interessati (pazienti);
@@ -148,7 +152,7 @@ I dati sanitari trattati sono per loro natura estremamente sensibili e il report
 | Fornitore | Ruolo | Sede | Data center | DPA | Dati trattati |
 |-----------|-------|------|-------------|-----|---------------|
 | **Supabase Inc.** | Database, storage, autenticazione | USA (sede legale) | **Francoforte, Germania (EU)** | Si (richiesto) | Tutti i dati persistiti |
-| **Mistral AI SAS** | Elaborazione AI (OCR, estrazione, sintesi) | **Parigi, Francia (EU)** | **EU** | Si (richiesto) | Testo documenti, immagini pagine (in transito, no retention) |
+| **Mistral AI SAS** | Elaborazione AI (OCR, estrazione, sintesi, dettatura vocale Voxtral) | **Parigi, Francia (EU)** | **EU** | Si (richiesto) | Testo documenti, immagini pagine, clip audio dettatura (in transito, no retention) |
 | **Vercel Inc.** | Hosting applicazione web | USA (sede legale) | **Francoforte, Germania (EU) — regione fra1** | Si (richiesto) | Codice applicativo, richieste HTTP, log di accesso |
 | **Inngest Inc.** | Orchestrazione job asincroni | USA (sede legale) | Integrato con Vercel EU | Si (richiesto) | Metadati job (ID caso, stato elaborazione; NO dati clinici) |
 | **Stripe Inc.** | Gestione pagamenti | USA/Irlanda | **EU (certificato)** | Si (richiesto) | Dati di fatturazione (NO dati clinici) |
@@ -349,6 +353,20 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | **Probabilita (post misure)** | 1 — Trascurabile |
 | **Rischio residuo** | **2 — TRASCURABILE** |
 
+#### R9 — Trascrizione inesatta o cattura accidentale di dati identificativi nella dettatura vocale
+
+| Parametro | Valore |
+|-----------|--------|
+| **Descrizione** | (a) Il modello Voxtral produce una trascrizione errata che, se non corretta dal perito, potrebbe alterare il significato clinico inteso. (b) Il perito pronuncia accidentalmente ad alta voce dati identificativi diretti del paziente (nome, cognome, codice fiscale), che vengono comunque inoltrati a Mistral per la trascrizione (anche se non conservati). |
+| **Interessati coinvolti** | Medico legale (autore della dettatura); indirettamente paziente se pronunciato |
+| **Categoria dati** | Dati audio del perito (potenzialmente dati clinici Art. 9 se pronunciati) |
+| **Probabilita (ante misure)** | (a) 3 — Media (Voxtral ha ~4% WER su FLEURS); (b) 3 — Media (abitudine del perito a dettare per esteso) |
+| **Impatto** | (a) 2 — Limitato (perito revede e corregge prima del salvataggio); (b) 2 — Limitato (nessuna persistenza, breve esposizione in transito EU) |
+| **Rischio lordo** | **6 — MEDIO** |
+| **Misure di mitigazione** | Vd. Sezione 5.7: disclaimer at first-use, supervisione umana obbligatoria, zero retention contrattuale Mistral, cap tecnico 5 min/clip, audit log metadata-only (no testo), rate limit 30/h |
+| **Probabilita (post misure)** | (a) 2 — Bassa; (b) 2 — Bassa (perito informato a evitare identificatori diretti) |
+| **Rischio residuo** | **4 — BASSO** |
+
 ### 4.3 Matrice di sintesi dei rischi
 
 | Rischio | Descrizione | Rischio lordo | Rischio residuo |
@@ -361,6 +379,7 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | R6 | Data breach | MEDIO-ALTO (8) | BASSO (4) |
 | R7 | Addestramento AI non autorizzato | BASSO (4) | BASSO (4) |
 | R8 | Indisponibilita servizio | BASSO (4) | TRASCURABILE (2) |
+| R9 | Dettatura vocale (trascrizione errata / dati identificativi pronunciati) | MEDIO (6) | BASSO (4) |
 
 ---
 
@@ -453,7 +472,7 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 
 ### 5.7 Misure tecniche e organizzative — Qualita e affidabilita AI
 
-*Mitiga: R5*
+*Mitiga: R5, R9*
 
 | Misura | Descrizione | Stato |
 |--------|-------------|-------|
@@ -467,6 +486,10 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | Doppio passaggio di estrazione | L'estrazione eventi avviene con chunking intelligente e consolidamento successivo per minimizzare le omissioni | Implementata |
 | Prompt specializzati per ruolo | I prompt variano in base al ruolo del medico legale (CTU: neutrale; CTP: assertivo pro-paziente; stragiudiziale: pragmatico), garantendo output appropriato al contesto | Implementata |
 | Template per tipo di caso | Template specializzati per 7+ tipologie di caso (ortopedica, oncologica, ostetrica, ecc.) che guidano l'estrazione verso le informazioni piu rilevanti | Implementata |
+| Disclaimer dettatura vocale (first-use) | Dialog modale `DictationDisclaimer` mostrato al primo click sul microfono in ciascun browser. Avvisa il perito che l'audio viene trasmesso a Mistral EU senza retention e lo invita a evitare di pronunciare ad alta voce nome/cognome/CF del paziente. Accettazione persistita in localStorage. | Implementata |
+| Cap tecnico clip dettatura | Clip audio limitata a 5 min soft / 10 min hard lato server. Cap di dimensione 5 MB con whitelist MIME e verifica magic-byte. Rate limit Upstash 30 trascrizioni/ora/utente per prevenire abuso e cost runaway. | Implementata |
+| Zero retention audio | Il file audio NON viene salvato da LegMed (nessuna scrittura su Storage o database) e viene processato in memoria server. L'audit log registra solo metadata tecnici (durata, lingua, costo, modello) — MAI il testo trascritto. | Implementata |
+| Supervisione umana trascrizione | Il testo trascritto compare nel campo aperto dall'utente. Il perito deve confermare il salvataggio del campo: nessun testo viene salvato automaticamente. La verifica della trascrizione e in carico al perito. | Design del workflow |
 
 ### 5.8 Misure organizzative — Gestione data breach
 
