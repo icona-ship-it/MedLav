@@ -113,7 +113,7 @@ export function ReportActionBar({
           {/* Left: Status badge + last export */}
           <div className="flex items-center gap-2">
             {effectiveStatus === 'definitivo' ? (
-              <Badge variant="success" className="text-xs">Definitivo</Badge>
+              <Badge variant="success" className="text-xs">Pronto al deposito</Badge>
             ) : (
               <Badge variant="secondary" className="text-xs">Bozza</Badge>
             )}
@@ -152,14 +152,13 @@ export function ReportActionBar({
               <span className="hidden sm:inline">Modifica</span>
             </Button>
 
-            {/* Approve button — visible for drafts */}
+            {/* Approve button — visible for drafts (primary action of this screen) */}
             {effectiveStatus === 'bozza' && (
               <Button
-                variant="default"
+                variant="approve"
                 size="sm"
                 onClick={() => setQualityGateOpen(true)}
                 disabled={isPending}
-                className="bg-green-600 hover:bg-green-700 text-white"
               >
                 {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
                 <span className="hidden sm:inline">Approva</span>
@@ -203,11 +202,20 @@ export function ReportActionBar({
                     </div>
                   </a>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={`/api/cases/${caseId}/export/pdf`} download>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Esporta PDF</div>
+                      <p className="text-xs text-muted-foreground font-normal">File PDF formato A4 — pronto per il deposito</p>
+                    </div>
+                  </a>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handlePdfExport}>
                   <Printer className="mr-2 h-3.5 w-3.5" />
                   <div>
-                    <div>Stampa PDF</div>
-                    <p className="text-xs text-muted-foreground font-normal">Apre finestra di stampa del browser</p>
+                    <div>Stampa dal browser</div>
+                    <p className="text-xs text-muted-foreground font-normal">Apre l&apos;anteprima di stampa</p>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -243,20 +251,20 @@ export function ReportActionBar({
                       ) : (
                         <RefreshCw className="mr-2 h-3.5 w-3.5" />
                       )}
-                      {isRegenerating ? 'Rigenerazione...' : 'Rigenera report completo'}
+                      {isRegenerating ? 'Riscrittura in corso…' : 'Riscrivi tutto il report'}
                     </DropdownMenuItem>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Rigenera report completo</AlertDialogTitle>
+                      <AlertDialogTitle>Riscrivi tutto il report</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Sei sicuro? Il report verr&agrave; rigenerato da capo. Le modifiche manuali andranno perse.
+                        Sei sicuro? Il report verr&agrave; rigenerato da capo. <strong>Le modifiche manuali andranno perse.</strong>
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Annulla</AlertDialogCancel>
                       <AlertDialogAction onClick={onRegenerate}>
-                        Rigenera
+                        Riscrivi tutto
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -296,20 +304,14 @@ export function ReportActionBar({
                   </a>
                 </DropdownMenuItem>
 
-                <DropdownMenuSeparator />
-
-                {/* Approve / Revert */}
-                {effectiveStatus === 'bozza' && (
-                  <DropdownMenuItem onClick={() => setQualityGateOpen(true)} disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                    Approva e finalizza
-                  </DropdownMenuItem>
-                )}
                 {effectiveStatus === 'definitivo' && (
-                  <DropdownMenuItem onClick={() => handleStatusChange('bozza')} disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                    Torna a modifica
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleStatusChange('bozza')} disabled={isPending}>
+                      {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      Torna a modifica
+                    </DropdownMenuItem>
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

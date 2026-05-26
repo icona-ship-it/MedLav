@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useTransition, useRef, useMemo } from 'react';
-import { AlertTriangle, FileWarning, Upload, Loader2, Eye, EyeOff, ShieldCheck, Archive, ThumbsUp, ChevronDown, ChevronRight, Pencil, Undo2, CheckCircle2, XCircle, FileText } from 'lucide-react';
+import { AlertTriangle, FileWarning, Upload, Loader2, Eye, EyeOff, ShieldCheck, Archive, ThumbsUp, ChevronDown, ChevronRight, Pencil, Undo2, CheckCircle2, XCircle, FileText, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -337,7 +337,7 @@ function ActionableAnomalyCard({
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <Badge variant={severityVariant(anomaly.severity)}>{anomaly.severity.toUpperCase()}</Badge>
         <Badge variant="outline" className="text-xs border-orange-500 text-orange-700 dark:text-orange-400 bg-white dark:bg-orange-950/30">
-          Da revisionare
+          Da valutare
         </Badge>
         <span className="text-sm font-semibold">{typeLabel}</span>
       </div>
@@ -360,7 +360,10 @@ function ActionableAnomalyCard({
       {/* "Cosa devi decidere" — always visible, no toggle */}
       {guidance && (
         <div className="mt-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300">❓ Cosa devi decidere</p>
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+            <Lightbulb className="h-3.5 w-3.5" />
+            Cosa devi decidere
+          </p>
           <div>
             <p className="text-xs font-medium text-blue-900 dark:text-blue-300">Cosa significa</p>
             <p className="text-xs text-blue-800 dark:text-blue-400">{guidance.meaning}</p>
@@ -416,7 +419,7 @@ function ActionableAnomalyCard({
             ) : (
               <ThumbsUp className="mr-1 h-3 w-3" />
             )}
-            Segnala nel report
+            Includi nel report
           </Button>
           <Button
             variant="outline"
@@ -430,7 +433,7 @@ function ActionableAnomalyCard({
             ) : (
               <Archive className="mr-1 h-3 w-3" />
             )}
-            Escludi
+            Non includere
           </Button>
         </div>
       </div>

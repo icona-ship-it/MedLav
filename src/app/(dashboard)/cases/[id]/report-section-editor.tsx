@@ -87,7 +87,8 @@ export function ReportSectionEditor({
               <Button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 shadow-sm"
+                variant="approve"
+                className="px-6 shadow-sm"
               >
                 {isSaving ? (
                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

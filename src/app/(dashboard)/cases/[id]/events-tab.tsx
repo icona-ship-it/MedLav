@@ -220,9 +220,9 @@ export function EventsTab({
   // Split events into verification group
   const verificationEvents = events.filter((e) => isVerificationEvent(e));
 
-  // Summary stats
-  const surgeryCount = events.filter((e) => e.event_type === 'intervento').length;
-  const diagnosisCount = events.filter((e) => e.event_type === 'diagnosi').length;
+  // Summary stats — surgeryCount/diagnosisCount were used in the verbose summary
+  // box before the Ondata 1 compression. Kept removed to avoid noise; if a future
+  // tooltip needs them, re-derive inline.
   const datesWithEvents = events.filter((e) => e.event_date && e.event_date !== '').map((e) => e.event_date);
   const dateRange = datesWithEvents.length > 0
     ? { from: datesWithEvents[0], to: datesWithEvents[datesWithEvents.length - 1] }
@@ -279,18 +279,25 @@ export function EventsTab({
   return (
     <Card>
       <CardHeader>
-        {/* Summary box */}
+        {/* Summary line — compact, single row (UX refactor Ondata 1) */}
         {events.length > 0 && (
-          <div className="mb-3 rounded-lg bg-muted/50 px-4 py-3 text-sm">
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground">
-              <span><strong className="text-foreground">{events.length}</strong> eventi totali</span>
-              <span><strong className="text-foreground">{clinicalEvents.length}</strong> clinici</span>
-              {adminEvents.length > 0 && <span><strong className="text-foreground">{adminEvents.length}</strong> documenti/spese</span>}
-              {surgeryCount > 0 && <span><strong className="text-foreground">{surgeryCount}</strong> interventi</span>}
-              {diagnosisCount > 0 && <span><strong className="text-foreground">{diagnosisCount}</strong> diagnosi</span>}
-              {dateRange && <span>Periodo: <strong className="text-foreground">{formatDate(dateRange.from)} — {formatDate(dateRange.to)}</strong></span>}
-              {verificationEvents.length > 0 && <span className="text-yellow-600"><strong>{verificationEvents.length}</strong> da verificare</span>}
-            </div>
+          <div className="mb-3 text-sm text-muted-foreground">
+            <strong className="text-foreground">{events.length}</strong> eventi
+            {' '}({clinicalEvents.length} clinici
+            {adminEvents.length > 0 ? `, ${adminEvents.length} amministrativi` : ''}
+            {verificationEvents.length > 0 ? (
+              <>
+                ,{' '}
+                <span className="text-warning font-medium">
+                  {verificationEvents.length} da valutare
+                </span>
+              </>
+            ) : ''})
+            {dateRange && (
+              <span className="ml-1 hidden sm:inline">
+                · {formatDate(dateRange.from)}—{formatDate(dateRange.to)}
+              </span>
+            )}
           </div>
         )}
 

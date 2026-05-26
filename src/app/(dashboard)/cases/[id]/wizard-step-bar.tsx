@@ -1,4 +1,4 @@
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, ChevronRight } from 'lucide-react';
 
 // --- Types ---
 
@@ -25,6 +25,42 @@ export function WizardStepBar({
   onSetStep,
 }: WizardStepBarProps) {
   const currentStep = steps.find((s) => s.number === activeStep);
+  const lastStep = steps[steps.length - 1];
+  // UX refactor Ondata 1: on the last step the wizard collapses to a breadcrumb
+  // (~24px) to free vertical space for the report content. Previous steps remain
+  // navigable via the breadcrumb chevrons.
+  const isCompact = lastStep != null && activeStep === lastStep.number;
+
+  if (isCompact) {
+    return (
+      <nav aria-label="Passaggi caso" className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm py-1.5">
+        <ol className="flex items-center gap-1 text-xs text-muted-foreground">
+          {steps.map((step, index) => {
+            const isActive = activeStep === step.number;
+            return (
+              <li key={step.number} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onSetStep(step.number)}
+                  className={`rounded px-2 py-0.5 transition-colors ${
+                    isActive
+                      ? 'font-semibold text-foreground'
+                      : 'hover:text-foreground hover:bg-muted/60'
+                  }`}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  {step.label}
+                </button>
+                {index < steps.length - 1 && (
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+    );
+  }
 
   return (
     <nav aria-label="Passaggi caso" className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm py-2">

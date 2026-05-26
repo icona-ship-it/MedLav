@@ -60,12 +60,12 @@ export function BatchRetagDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          <Tags className="mr-1 h-3 w-3" />Ri-classifica eventi
+          <Tags className="mr-1 h-3 w-3" />Riassegna tipo
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Ri-classifica eventi &quot;Altro&quot;</DialogTitle>
+          <DialogTitle>Riassegna tipo di evento &quot;Altro&quot;</DialogTitle>
           <DialogDescription>
             {events.length} eventi sono classificati come &quot;Altro&quot;. Seleziona un nuovo tipo per ciascuno.
           </DialogDescription>
