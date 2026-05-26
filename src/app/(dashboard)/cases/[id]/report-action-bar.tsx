@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, Download, Pencil, Printer, GitCompare, ShieldCheck,
   FileCode, Eye, MoreHorizontal, RefreshCw, ShieldAlert, CheckCircle2,
+  FileText, BookOpen, FileSearch,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,14 @@ interface ReportActionBarProps {
   onVersionsToggle: (versions: ReportRow[]) => void;
   alertCount?: number;
   onOpenQualitySheet?: () => void;
+  // UX Ondata 3-IA: support panels open via drawer from the right.
+  // Optional callbacks — when omitted the toolbar button is hidden.
+  onOpenEventsDrawer?: () => void;
+  onOpenPubmedDrawer?: () => void;
+  onOpenOcrDrawer?: () => void;
+  /** Counters shown in toolbar buttons (events count / pubmed refs count) */
+  eventsCount?: number;
+  pubmedCount?: number;
 }
 
 // --- Component ---
@@ -64,6 +73,11 @@ export function ReportActionBar({
   onVersionsToggle,
   alertCount = 0,
   onOpenQualitySheet,
+  onOpenEventsDrawer,
+  onOpenPubmedDrawer,
+  onOpenOcrDrawer,
+  eventsCount,
+  pubmedCount,
 }: ReportActionBarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -128,6 +142,56 @@ export function ReportActionBar({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
+            {/* UX Ondata 3-IA: Support panel buttons (drawer da destra) — eventi/pubmed/ocr */}
+            {onOpenEventsDrawer && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenEventsDrawer}
+                title="Eventi clinici della cronistoria (apre pannello laterale)"
+              >
+                <FileText className="mr-1 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Eventi</span>
+                {typeof eventsCount === 'number' && eventsCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 leading-tight">
+                    {eventsCount}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            {onOpenPubmedDrawer && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenPubmedDrawer}
+                title="Riferimenti scientifici PubMed (apre pannello laterale)"
+              >
+                <BookOpen className="mr-1 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">PubMed</span>
+                {typeof pubmedCount === 'number' && pubmedCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 leading-tight">
+                    {pubmedCount}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            {onOpenOcrDrawer && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenOcrDrawer}
+                title="Testo OCR originale dei documenti (apre pannello laterale)"
+              >
+                <FileSearch className="mr-1 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">OCR</span>
+              </Button>
+            )}
+
+            {/* Separator before primary actions (only visible if any drawer button rendered) */}
+            {(onOpenEventsDrawer || onOpenPubmedDrawer || onOpenOcrDrawer) && (
+              <span className="hidden sm:inline-block w-px h-5 bg-border" aria-hidden />
+            )}
+
             {/* Mobile: Quality button with badge */}
             {onOpenQualitySheet && (
               <Button

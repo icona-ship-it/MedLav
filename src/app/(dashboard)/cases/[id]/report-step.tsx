@@ -7,7 +7,6 @@ import { Loader2, Download, AlertTriangle } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/inline-alert';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -98,14 +97,17 @@ export function ReportStep({
 }: ReportStepProps) {
   const router = useRouter();
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<string>('report');
-
   // Dialog / sheet state
   const [qualitySheetOpen, setQualitySheetOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [anomalyDialogOpen, setAnomalyDialogOpen] = useState(false);
+
+  // UX Ondata 3-IA Fase A: drawer additivi (eventi/pubmed/ocr).
+  // Per ora coesistono con i tab esistenti. La Fase B rimuovera' i tab.
+  const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
+  const [pubmedDrawerOpen, setPubmedDrawerOpen] = useState(false);
+  const [ocrDrawerOpen, setOcrDrawerOpen] = useState(false);
 
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
@@ -328,101 +330,81 @@ export function ReportStep({
         onVersionsToggle={handleVersionsToggle}
         alertCount={alertCount}
         onOpenQualitySheet={() => setQualitySheetOpen(true)}
+        onOpenEventsDrawer={() => setEventsDrawerOpen(true)}
+        onOpenPubmedDrawer={pubmedReferences.length > 0 ? () => setPubmedDrawerOpen(true) : undefined}
+        onOpenOcrDrawer={() => setOcrDrawerOpen(true)}
+        eventsCount={events.length}
+        pubmedCount={pubmedReferences.reduce((s, r) => s + r.articles.length, 0)}
       />
 
-      {/* Tabs: Report + Timeline */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="report">Report</TabsTrigger>
-          <TabsTrigger value="timeline">Cronistoria</TabsTrigger>
-          {pubmedReferences.length > 0 && pubmedReferences.some(r => r.articles.length > 0) && (
-            <TabsTrigger value="pubmed">
-              Evidenze PubMed ({pubmedReferences.reduce((s, r) => s + r.articles.length, 0)})
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {/* UX Ondata 3-IA Fase B: vista SOLA del Report.
+          Cronistoria / PubMed / OCR sono accessibili dai drawer in toolbar.
+          Eliminati i Tabs concorrenti — il Report e' l'unico output principale,
+          gli altri sono pannelli di supporto. */}
 
-        <TabsContent value="report">
-          {/* UX Ondata 2: anomalie e doc mancanti come banner above-fold,
-              non come widget nascosti nella sidebar. Il valore differenziante
-              di MedLav e' "ho trovato cose che ti sarebbero sfuggite" — va
-              dove l'occhio del perito guarda per primo. */}
-          {(actionableCount > 0 || missingDocsCount > 0) && (
-            <InlineAlert
-              variant={actionableCount > 0 ? 'warning' : 'info'}
-              title={
-                actionableCount > 0 && missingDocsCount > 0
-                  ? `${actionableCount} anomalie cliniche da valutare · ${missingDocsCount} documenti attesi mancanti`
-                  : actionableCount > 0
-                    ? `${actionableCount} anomalie cliniche da valutare prima del deposito`
-                    : `${missingDocsCount} documenti attesi non caricati`
-              }
-              action={{
-                label: 'Apri elenco',
-                onClick: () => setAnomalyDialogOpen(true),
-              }}
-              className="mb-4"
-            >
-              {actionableCount > 0
-                ? 'Conferma o escludi ciascuna anomalia prima di approvare il report.'
-                : 'Carica i documenti mancanti o segnala l\'indisponibilità nel report.'}
-            </InlineAlert>
-          )}
-          <div className="flex gap-6">
-            {/* Left: TOC sidebar (xl only) */}
-            <ReportTocSidebar sections={sections} />
+      {/* UX Ondata 2: banner above-fold per anomalie e doc mancanti. */}
+      {(actionableCount > 0 || missingDocsCount > 0) && (
+        <InlineAlert
+          variant={actionableCount > 0 ? 'warning' : 'info'}
+          title={
+            actionableCount > 0 && missingDocsCount > 0
+              ? `${actionableCount} anomalie cliniche da valutare · ${missingDocsCount} documenti attesi mancanti`
+              : actionableCount > 0
+                ? `${actionableCount} anomalie cliniche da valutare prima del deposito`
+                : `${missingDocsCount} documenti attesi non caricati`
+          }
+          action={{
+            label: 'Apri elenco',
+            onClick: () => setAnomalyDialogOpen(true),
+          }}
+          className="mb-4"
+        >
+          {actionableCount > 0
+            ? 'Conferma o escludi ciascuna anomalia prima di approvare il report.'
+            : 'Carica i documenti mancanti o segnala l\'indisponibilità nel report.'}
+        </InlineAlert>
+      )}
 
-            {/* Center: A4 viewer */}
-            <div className="flex-1 min-w-0">
-              <ReportA4Viewer
-                caseId={caseId}
-                report={report}
-                events={events}
-                onEventClick={(orderNumber) => {
-                  setHighlightedEventId(orderNumber);
-                  setActiveTab('timeline');
-                }}
-                regeneratingSection={regeneratingSection}
-                onSectionRegenerated={handleSectionRegenerated}
-                lastRegeneratedSection={lastRegeneratedSection}
-                showVersionCompare={showVersionCompare}
-                versions={versions}
-              />
-            </div>
+      <div className="flex gap-6">
+        {/* Left: TOC sidebar (xl only) — naviga le sezioni del report */}
+        <ReportTocSidebar sections={sections} />
 
-            {/* Right: Quality sidebar (lg+ only) */}
-            <div className="w-80 shrink-0 hidden lg:block">
-              <div className="sticky top-[140px]">
-                <QualitySidebar
-                  report={report}
-                  events={events}
-                  anomalies={anomalies}
-                  missingDocs={missingDocs}
-                  documents={documents}
-                  documentPages={documentPages}
-                  onSwitchToAnomalies={() => setAnomalyDialogOpen(true)}
-                  onOpenOcr={() => setOcrDialogOpen(true)}
-                />
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="timeline">
-          <EventsTab
+        {/* Center: A4 viewer */}
+        <div className="flex-1 min-w-0">
+          <ReportA4Viewer
             caseId={caseId}
+            report={report}
             events={events}
-            eventImages={eventImages}
-            highlightedEventOrderNumber={highlightedEventId}
+            onEventClick={(orderNumber) => {
+              // UX Ondata 3-IA: click su [Ev.N] -> apre il drawer eventi
+              // e highlighta l'evento, invece di switchare di tab.
+              setHighlightedEventId(orderNumber);
+              setEventsDrawerOpen(true);
+            }}
+            regeneratingSection={regeneratingSection}
+            onSectionRegenerated={handleSectionRegenerated}
+            lastRegeneratedSection={lastRegeneratedSection}
+            showVersionCompare={showVersionCompare}
+            versions={versions}
           />
-        </TabsContent>
+        </div>
 
-        {pubmedReferences.length > 0 && pubmedReferences.some(r => r.articles.length > 0) && (
-          <TabsContent value="pubmed">
-            <PubMedTab references={pubmedReferences.filter(r => r.articles.length > 0)} />
-          </TabsContent>
-        )}
-      </Tabs>
+        {/* Right: Quality sidebar (lg+ only) — metriche compatte */}
+        <div className="w-80 shrink-0 hidden lg:block">
+          <div className="sticky top-[140px]">
+            <QualitySidebar
+              report={report}
+              events={events}
+              anomalies={anomalies}
+              missingDocs={missingDocs}
+              documents={documents}
+              documentPages={documentPages}
+              onSwitchToAnomalies={() => setAnomalyDialogOpen(true)}
+              onOpenOcr={() => setOcrDrawerOpen(true)}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Mobile: Quality sidebar as Sheet */}
       <Sheet open={qualitySheetOpen} onOpenChange={setQualitySheetOpen}>
@@ -464,6 +446,50 @@ export function ReportStep({
           />
         </DialogContent>
       </Dialog>
+
+      {/* UX Ondata 3-IA Fase A: support panel drawers (additivi).
+          Wrappa i tab esistenti in Sheet a destra, attivati da bottoni in toolbar. */}
+      <Sheet open={eventsDrawerOpen} onOpenChange={setEventsDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader className="pb-3 border-b">
+            <SheetTitle>Eventi clinici</SheetTitle>
+          </SheetHeader>
+          <div className="py-4">
+            <EventsTab
+              caseId={caseId}
+              events={events}
+              eventImages={eventImages}
+              highlightedEventOrderNumber={highlightedEventId}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={pubmedDrawerOpen} onOpenChange={setPubmedDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader className="pb-3 border-b">
+            <SheetTitle>Riferimenti scientifici (PubMed)</SheetTitle>
+          </SheetHeader>
+          <div className="py-4">
+            <PubMedTab references={pubmedReferences} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={ocrDrawerOpen} onOpenChange={setOcrDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
+          <SheetHeader className="pb-3 border-b">
+            <SheetTitle>Testo OCR originale</SheetTitle>
+          </SheetHeader>
+          <div className="py-4">
+            <OcrPreviewTab
+              caseId={caseId}
+              documents={documents}
+              documentPages={documentPages}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Edit Dialog (fullscreen) */}
       <ReportDialog
