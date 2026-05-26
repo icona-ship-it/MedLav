@@ -252,7 +252,8 @@ export function ClassificationReview({ caseId, documents }: ClassificationReview
         <div className="sticky bottom-0 z-10 pt-2 pb-1 bg-gradient-to-t from-background via-background to-transparent">
           <Button
             size="lg"
-            className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+            variant="approve"
+            className="w-full text-base py-6"
             onClick={handleConfirm}
             disabled={isConfirming}
           >

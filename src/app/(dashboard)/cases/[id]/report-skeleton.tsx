@@ -71,3 +71,33 @@ export function DocumentsSkeleton() {
     </div>
   );
 }
+
+// Predictive skeleton for the AnomaliesSection (UX refactor Ondata 1).
+// Mirrors the layout of an actionable anomaly card so the user perceives
+// "qualcosa sta caricando" matching the final shape.
+export function AnomaliesSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="rounded-md border border-orange-200 dark:border-orange-900/50 bg-orange-50/50 dark:bg-orange-950/10 p-3 space-y-3">
+          {/* Header row: severity badge + status badge + type label */}
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          {/* Description */}
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          {/* References row */}
+          <Skeleton className="h-3 w-2/3" />
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            <Skeleton className="h-8 w-32 rounded" />
+            <Skeleton className="h-8 w-24 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

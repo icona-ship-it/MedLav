@@ -2,6 +2,10 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
+  // Externalize heavy server-only packages to keep route bundles small.
+  // Puppeteer + Chromium are used only by /api/cases/[id]/export/pdf and
+  // must not be bundled into every Lambda.
+  serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium'],
   // Security headers
   async headers() {
     return [

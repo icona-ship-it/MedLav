@@ -76,7 +76,7 @@ export function DocumentCoverageCard({ documents, events }: DocumentCoverageCard
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-4 w-4" />
-            Copertura Documenti
+            Documenti analizzati
           </CardTitle>
           <div className="flex items-center gap-2 text-xs">
             {okCount > 0 && (

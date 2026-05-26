@@ -271,7 +271,8 @@ export function ProcessingSection({
                   <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
                     <Button
                       size="lg"
-                      className="w-full text-base py-6 bg-green-600 hover:bg-green-700 text-white"
+                      variant="approve"
+                      className="w-full text-base py-6"
                       onClick={handleStartProcessing}
                       disabled={isStartingProcessing || !hasUploadedDocs}
                     >

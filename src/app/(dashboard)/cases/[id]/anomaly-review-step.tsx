@@ -141,7 +141,8 @@ export function AnomalyReviewStep({
               </div>
               <Button
                 size="lg"
-                className="mt-2 text-base py-6 px-8 bg-green-600 hover:bg-green-700 text-white shadow-md"
+                variant="approve"
+                className="mt-2 text-base py-6 px-8 shadow-md"
                 onClick={handleConfirmReview}
                 disabled={isConfirming}
               >
@@ -214,7 +215,7 @@ export function AnomalyReviewStep({
                 <span>L&apos;anomalia e reale e rilevante — verra <strong>inclusa nel report</strong> finale.</span>
               </li>
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-gray-400 text-gray-600 dark:text-gray-400">Escludi</Badge>
+                <Badge variant="outline" className="shrink-0 mt-0.5 text-[10px] border-gray-400 text-gray-600 dark:text-gray-400">Non includere</Badge>
                 <span>L&apos;anomalia non e rilevante — <strong>non apparira nel report</strong>.</span>
               </li>
             </ul>
@@ -305,7 +306,8 @@ export function AnomalyReviewStep({
           {/* Generate button */}
           <Button
             size="lg"
-            className="shrink-0 text-base py-5 px-8 bg-green-600 hover:bg-green-700 text-white shadow-md"
+            variant="approve"
+            className="shrink-0 text-base py-5 px-8 shadow-md"
             onClick={handleConfirmReview}
             disabled={isConfirming}
           >

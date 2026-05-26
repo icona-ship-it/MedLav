@@ -163,7 +163,7 @@ export function QualitySidebar({
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors">
           <span className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-orange-500" />
-            Verifiche consigliate
+            Anomalie e documenti mancanti
           </span>
           {alertCount > 0 ? (
             <Badge variant="destructive" className="text-xs">
@@ -271,10 +271,10 @@ export function QualitySidebar({
           <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors">
             <span className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              Copertura Documenti
+              Documenti analizzati
             </span>
             <span className="text-xs text-muted-foreground">
-              {okCount}/{documents.length}
+              {okCount} su {documents.length}
             </span>
           </CollapsibleTrigger>
           <CollapsibleContent className="px-4 pt-3">
@@ -326,10 +326,10 @@ export function QualitySidebar({
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5" /> Qualità lettura
+                  <Eye className="h-3.5 w-3.5" /> Lettura OCR
                 </span>
                 <span className={`font-medium ${confidenceColor(ocrConfidence)}`}>
-                  {ocrConfidence}% — {confidenceLabel(ocrConfidence)}
+                  {confidenceLabel(ocrConfidence).toLowerCase()} ({ocrConfidence}%)
                 </span>
               </div>
             </div>
