@@ -16,6 +16,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:update-snapshots": "playwright test --update-snapshots",
     "test:e2e:ondata-1": "playwright test ondata-1-refactor",
+    "benchmark:extract": "tsx scripts/extract-gold-standards.ts",
+    "benchmark:diff": "tsx scripts/diff-report-vs-gold.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -88,6 +90,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
@@ -95,7 +98,10 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "jsdom": "^28.1.0",
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^2.4.5",
     "tailwindcss": "^4",
+    "tsx": "^4.22.3",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }
