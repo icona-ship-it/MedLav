@@ -284,7 +284,7 @@ export function EventsTab({
           <div className="mb-3 text-sm text-muted-foreground">
             <strong className="text-foreground">{events.length}</strong> eventi
             {' '}({clinicalEvents.length} clinici
-            {adminEvents.length > 0 ? `, ${adminEvents.length} amministrativi` : ''}
+            {adminEvents.length > 0 ? `, ${adminEvents.length} documenti/spese` : ''}
             {verificationEvents.length > 0 ? (
               <>
                 ,{' '}
