@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2, AlertTriangle, FileText, LayoutList } from 'lucide-react';
+import { Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,6 @@ import { formatDate } from '@/lib/format';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
 import { EventEditSheet } from './event-edit-sheet';
-import { EventsDocumentView } from './events-document-view';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
 
@@ -178,21 +177,26 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 
 export function EventsTab({
   caseId, events, eventImages,
-  highlightedEventOrderNumber, patientInitials, caseCode, documents,
+  highlightedEventOrderNumber, documents,
+  onEventMutated,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
   highlightedEventOrderNumber?: number | null;
+  /** Deprecated, kept for backward compat with parent passing it. */
   patientInitials?: string | null;
+  /** Deprecated, kept for backward compat with parent passing it. */
   caseCode?: string;
   documents?: Array<{ id: string; file_name: string }>;
+  /** UX Ondata 3-IA Fase D: chiamato dopo save/delete evento dal drawer.
+      Permette al parent (report-step) di mostrare banner "rigenera sezione?". */
+  onEventMutated?: () => void;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'cards' | 'document'>('cards');
   const docNameMap = new Map((documents ?? []).map((d) => [d.id, d.file_name]));
   const [eventViewTab, setEventViewTab] = useState<EventViewTab>('clinical');
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
@@ -304,8 +308,8 @@ export function EventsTab({
 
         <div className="flex items-center justify-between">
           <div>
-            {/* Clinical / Admin / All tabs — hidden in document view */}
-            <div className={`flex items-center gap-1 mb-1 ${viewMode === 'document' ? 'hidden' : ''}`}>
+            {/* Clinical / Admin / All tabs (filtri preset rapidi) */}
+            <div className="flex items-center gap-1 mb-1">
               <button type="button" onClick={() => { setEventViewTab('clinical'); setEventTypeFilter(null); setShowOnlyVerification(false); }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${eventViewTab === 'clinical' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                 Cronistoria ({clinicalEvents.length})
@@ -321,7 +325,6 @@ export function EventsTab({
                 Tutti ({events.length})
               </button>
             </div>
-            {viewMode !== 'document' && (
               <CardDescription>
                 {filteredEvents.length < tabEvents.length
                   ? `${filteredEvents.length} di ${tabEvents.length} eventi`
@@ -330,22 +333,11 @@ export function EventsTab({
                   <span className="text-muted-foreground"> — mostrando {Math.min(visibleCount, displayNormal.length + displayVerification.length)}</span>
                 )}
               </CardDescription>
-            )}
           </div>
           <div className="flex items-center gap-2">
-            {/* View mode toggle — prominent button */}
-            <div className="flex items-center rounded-lg border p-0.5 gap-0.5">
-              <button type="button" onClick={() => setViewMode('cards')}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${viewMode === 'cards' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                <LayoutList className="h-3.5 w-3.5" />
-                Schede
-              </button>
-              <button type="button" onClick={() => setViewMode('document')}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${viewMode === 'document' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                <FileText className="h-3.5 w-3.5" />
-                Anteprima Perizia
-              </button>
-            </div>
+            {/* UX Ondata 3-IA Fase E: toggle Schede/Anteprima Perizia rimosso.
+                L'anteprima A4 ora e' il Report stesso (vista principale).
+                EventsTab e' solo vista "schede" per modifica eventi. */}
             {altroEvents.length > 0 && (
               <BatchRetagDialog
                 caseId={caseId}
@@ -363,10 +355,6 @@ export function EventsTab({
         </div>
       </CardHeader>
       <CardContent>
-        {/* Document view (A4 perizia format) */}
-        {viewMode === 'document' ? (
-          <EventsDocumentView events={events} patientInitials={patientInitials} caseCode={caseCode} />
-        ) : (
         <>
         {/* Filters */}
         {events.length > 0 && (
@@ -564,7 +552,6 @@ export function EventsTab({
           )}
         </div>
         </>
-        )}
       </CardContent>
 
       {/* UX Ondata 2: edit di un evento avviene in Sheet laterale,
@@ -575,8 +562,8 @@ export function EventsTab({
         caseId={caseId}
         open={editingEventId !== null}
         onOpenChange={(open) => { if (!open) setEditingEventId(null); }}
-        onSaved={() => { setEditingEventId(null); router.refresh(); }}
-        onDeleted={() => { setEditingEventId(null); router.refresh(); }}
+        onSaved={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
+        onDeleted={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
       />
     </Card>
   );

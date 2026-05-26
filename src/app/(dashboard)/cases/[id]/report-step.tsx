@@ -109,6 +109,12 @@ export function ReportStep({
   const [pubmedDrawerOpen, setPubmedDrawerOpen] = useState(false);
   const [ocrDrawerOpen, setOcrDrawerOpen] = useState(false);
 
+  // UX Ondata 3-IA Fase D: contatore mutazioni eventi dal drawer.
+  // Quando > 0, mostra banner "hai modificato N eventi, vuoi rigenerare?".
+  // Reset a 0 quando l'utente clicca "Aggiorna sezione".
+  const [eventMutationCount, setEventMutationCount] = useState(0);
+  const [isRegeneratingDocSanitaria, setIsRegeneratingDocSanitaria] = useState(false);
+
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
@@ -143,6 +149,29 @@ export function ReportStep({
     }
     router.refresh();
   }, [router]);
+
+  // UX Ondata 3-IA Fase D: rigenera SOLO la sezione "Documentazione Sanitaria"
+  // dopo che il perito ha modificato eventi dal drawer. Reset del counter.
+  const handleRegenerateDocSanitaria = useCallback(async () => {
+    setIsRegeneratingDocSanitaria(true);
+    try {
+      const response = await fetch('/api/processing/regenerate-section', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId, sectionId: 'documentazione_sanitaria' }),
+      });
+      const json = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
+      if (!response.ok || !json?.success) {
+        toast.error(json?.error ?? 'Errore durante la rigenerazione della sezione.');
+        return;
+      }
+      toast.success('Sezione "Documentazione Sanitaria" aggiornata.');
+      setEventMutationCount(0);
+      router.refresh();
+    } finally {
+      setIsRegeneratingDocSanitaria(false);
+    }
+  }, [caseId, router]);
 
   const handleRegenerate = useCallback(async () => {
     setIsRegenerating(true);
@@ -365,6 +394,25 @@ export function ReportStep({
         </InlineAlert>
       )}
 
+      {/* UX Ondata 3-IA Fase D: sync banner.
+          Quando il perito modifica/elimina eventi dal drawer Eventi, il report
+          non riflette automaticamente le modifiche. Banner informativo + CTA
+          per rigenerare SOLO la sezione "Documentazione Sanitaria". */}
+      {eventMutationCount > 0 && (
+        <InlineAlert
+          variant="info"
+          title={`Hai modificato ${eventMutationCount} ${eventMutationCount === 1 ? 'evento' : 'eventi'}. Il report non riflette ancora le modifiche.`}
+          action={{
+            label: isRegeneratingDocSanitaria ? 'Aggiornamento…' : 'Aggiorna sezione',
+            onClick: () => { if (!isRegeneratingDocSanitaria) void handleRegenerateDocSanitaria(); },
+          }}
+          onDismiss={() => setEventMutationCount(0)}
+          className="mb-4"
+        >
+          Aggiorna la sezione &quot;Documentazione Sanitaria&quot; per sincronizzare il report con le modifiche agli eventi.
+        </InlineAlert>
+      )}
+
       <div className="flex gap-6">
         {/* Left: TOC sidebar (xl only) — naviga le sezioni del report */}
         <ReportTocSidebar sections={sections} />
@@ -389,21 +437,14 @@ export function ReportStep({
           />
         </div>
 
-        {/* Right: Quality sidebar (lg+ only) — metriche compatte */}
-        <div className="w-80 shrink-0 hidden lg:block">
-          <div className="sticky top-[140px]">
-            <QualitySidebar
-              report={report}
-              events={events}
-              anomalies={anomalies}
-              missingDocs={missingDocs}
-              documents={documents}
-              documentPages={documentPages}
-              onSwitchToAnomalies={() => setAnomalyDialogOpen(true)}
-              onOpenOcr={() => setOcrDrawerOpen(true)}
-            />
-          </div>
-        </div>
+        {/* UX Ondata 3-IA Fase E: QualitySidebar destra rimossa.
+            Le sue funzioni sono distribuite:
+            - Anomalie e doc mancanti -> banner above-fold (gia' fatto)
+            - OCR -> drawer attivato da toolbar
+            - Eventi count -> badge sul bottone Eventi in toolbar
+            - Metriche residue (qualita' OCR, copertura) -> ancora disponibili
+              tramite il bottone "Qualita'" mobile (Sheet), per chi le cerca.
+        */}
       </div>
 
       {/* Mobile: Quality sidebar as Sheet */}
@@ -460,6 +501,7 @@ export function ReportStep({
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
+              onEventMutated={() => setEventMutationCount((c) => c + 1)}
             />
           </div>
         </SheetContent>
