@@ -21,6 +21,7 @@ import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
+import { EventEditSheet } from './event-edit-sheet';
 import { EventsDocumentView } from './events-document-view';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
@@ -176,13 +177,12 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 // --- Events Tab ---
 
 export function EventsTab({
-  caseId, events, eventImages, onImageClick,
+  caseId, events, eventImages,
   highlightedEventOrderNumber, patientInitials, caseCode, documents,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
-  onImageClick: (url: string) => void;
   highlightedEventOrderNumber?: number | null;
   patientInitials?: string | null;
   caseCode?: string;
@@ -263,18 +263,19 @@ export function EventsTab({
       event={event}
       caseId={caseId}
       isExpanded={expandedEvents.has(event.id)}
-      isEditing={editingEventId === event.id}
       onToggle={() => toggleEvent(event.id)}
-      onStartEdit={() => { setEditingEventId(event.id); setExpandedEvents((p) => new Set(p).add(event.id)); }}
-      onCancelEdit={() => setEditingEventId(null)}
-      onSaved={() => { setEditingEventId(null); router.refresh(); }}
+      onStartEdit={() => setEditingEventId(event.id)}
       onDeleted={() => router.refresh()}
       eventImages={eventImages}
-      onImageClick={onImageClick}
       isHighlighted={highlightedEventOrderNumber === event.order_number}
       documentName={event.document_id ? docNameMap.get(event.document_id) : undefined}
     />
   );
+
+  // UX Ondata 2: trova l'evento attualmente in editing per passarlo al Sheet.
+  const editingEvent = editingEventId
+    ? filteredEvents.find((e) => e.id === editingEventId) ?? null
+    : null;
 
   return (
     <Card>
@@ -565,6 +566,18 @@ export function EventsTab({
         </>
         )}
       </CardContent>
+
+      {/* UX Ondata 2: edit di un evento avviene in Sheet laterale,
+          non piu' inline dentro la card. Mantiene la lista leggibile. */}
+      <EventEditSheet
+        key={editingEventId ?? 'closed'}
+        event={editingEvent}
+        caseId={caseId}
+        open={editingEventId !== null}
+        onOpenChange={(open) => { if (!open) setEditingEventId(null); }}
+        onSaved={() => { setEditingEventId(null); router.refresh(); }}
+        onDeleted={() => { setEditingEventId(null); router.refresh(); }}
+      />
     </Card>
   );
 }

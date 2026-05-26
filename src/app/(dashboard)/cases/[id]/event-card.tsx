@@ -1,9 +1,19 @@
 'use client';
 
+/**
+ * Event card — modalita' SOLO LETTURA.
+ *
+ * UX refactor Ondata 2 — principio P3 (lettura e modifica disambigui).
+ * Il form di edit prima era inline dentro questa card e rompeva la scan
+ * visiva della lista. Ora la modifica avviene esternamente in
+ * <EventEditSheet> aperto dal parent. Questa card mostra solo dati
+ * read-only ed espone bottoni quick-action (modifica, elimina, verifica).
+ */
+
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
-  ChevronDown, ChevronUp, Pencil, Trash2, Save, X, Loader2, ZoomIn,
+  ChevronDown, ChevronUp, Pencil, Trash2, ZoomIn,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -11,12 +21,6 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { updateEvent, deleteEvent } from '../../actions';
 import { EVENT_TYPES } from '@/lib/constants';
 import {
@@ -24,7 +28,6 @@ import {
 } from '@/lib/format';
 import { sourceLabels } from '@/lib/constants';
 import type { EventRow } from './types';
-import { DictationButton } from '@/components/dictation-button';
 
 // --- Source Text Section (collapsible) ---
 
@@ -59,27 +62,26 @@ function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; so
   );
 }
 
-// --- Event Card Component ---
+// --- Event Card Component (READ-ONLY + actions) ---
 
-export function EventCard({
-  event, caseId, isExpanded, isEditing, onToggle, onStartEdit, onCancelEdit, onSaved, onDeleted,
-  eventImages,
-  isHighlighted, documentName,
-}: {
+interface EventCardProps {
   event: EventRow;
   caseId: string;
   isExpanded: boolean;
-  isEditing: boolean;
   onToggle: () => void;
+  /** Apre il Sheet di modifica per questo evento (gestito dal parent). */
   onStartEdit: () => void;
-  onCancelEdit: () => void;
-  onSaved: () => void;
+  /** Chiamato dopo eliminazione riuscita (parent fa router.refresh). */
   onDeleted: () => void;
   eventImages: Record<string, string[]>;
-  onImageClick: (url: string) => void;
   isHighlighted?: boolean;
   documentName?: string;
-}) {
+}
+
+export function EventCard({
+  event, caseId, isExpanded, onToggle, onStartEdit, onDeleted,
+  eventImages, isHighlighted, documentName,
+}: EventCardProps) {
   const [isPending, startTransition] = useTransition();
   const [isVerifying, setIsVerifying] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -101,42 +103,9 @@ export function EventCard({
     });
   };
 
-  const [editForm, setEditForm] = useState({
-    title: event.title,
-    description: event.description,
-    eventType: event.event_type,
-    eventDate: event.event_date,
-    diagnosis: event.diagnosis ?? '',
-    doctor: event.doctor ?? '',
-    facility: event.facility ?? '',
-    expertNotes: event.expert_notes ?? '',
-  });
-
-  const handleSave = () => {
-    startTransition(async () => {
-      const result = await updateEvent({
-        eventId: event.id,
-        caseId,
-        title: editForm.title,
-        description: editForm.description,
-        eventType: editForm.eventType,
-        eventDate: editForm.eventDate,
-        diagnosis: editForm.diagnosis || null,
-        doctor: editForm.doctor || null,
-        facility: editForm.facility || null,
-        expertNotes: editForm.expertNotes || null,
-      });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
-      }
-      onSaved();
-    });
-  };
-
   const handleDelete = () => {
     toast('Eliminare questo evento?', {
-      description: 'L\'evento potrà essere recuperato.',
+      description: "L'evento potrà essere recuperato.",
       action: {
         label: 'Elimina',
         onClick: () => {
@@ -157,7 +126,7 @@ export function EventCard({
   const rawPaths = eventImages[event.id] ?? [];
   // Build proxy URLs from raw storage paths (avoids server-side signed URL generation)
   const images = rawPaths.map((path) =>
-    `/api/cases/${caseId}/images?path=${encodeURIComponent(path)}`
+    `/api/cases/${caseId}/images?path=${encodeURIComponent(path)}`,
   );
 
   return (
@@ -165,7 +134,7 @@ export function EventCard({
       className={`rounded-md border p-3 transition-colors ${isHighlighted ? 'border-primary bg-primary/5 ring-1 ring-primary' : ''}`}
       id={`event-${event.order_number}`}
     >
-      {/* Header row - always visible */}
+      {/* Header row — always visible */}
       <div className="flex items-start justify-between">
         <button type="button" className="flex flex-1 items-start text-left" onClick={onToggle}>
           <div className="flex-1 min-w-0">
@@ -173,20 +142,22 @@ export function EventCard({
               <span className="text-sm font-medium">
                 {formatDate(event.event_date)}
               </span>
-              <Badge variant="outline" className="text-xs">{EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}</Badge>
+              <Badge variant="outline" className="text-xs">
+                {EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}
+              </Badge>
               {event.requires_verification && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQuickVerify();
-                    toast.success('Evento verificato');
                   }}
-                  className="inline-flex items-center gap-1 text-[11px] text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors"
+                  disabled={isVerifying}
+                  className="inline-flex items-center gap-1 text-[11px] text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors disabled:opacity-50"
                   title="Clicca per segnare come verificato"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
-                  {isVerifying ? '...' : 'da verificare'}
+                  {isVerifying ? '...' : 'da valutare'}
                 </button>
               )}
             </div>
@@ -194,24 +165,43 @@ export function EventCard({
           </div>
         </button>
         <div className="flex items-center gap-0.5 ml-2">
-          {!isEditing && (
-            <>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStartEdit} title="Modifica evento" aria-label="Modifica evento">
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(); }} title="Elimina evento" aria-label="Elimina evento">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle} aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'} aria-expanded={isExpanded}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+            disabled={isPending}
+            title="Modifica evento"
+            aria-label="Modifica evento"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            disabled={isPending}
+            title="Elimina evento"
+            aria-label="Elimina evento"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onToggle}
+            aria-label={isExpanded ? 'Chiudi dettagli' : 'Apri dettagli'}
+            aria-expanded={isExpanded}
+          >
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
-      {/* Expanded content */}
-      {isExpanded && !isEditing && (
+      {/* Expanded content — read-only details */}
+      {isExpanded && (
         <div className="mt-3 space-y-2 border-t pt-3">
           <p className="text-sm whitespace-pre-wrap">{event.description}</p>
           {event.diagnosis && <p className="text-sm"><span className="font-medium">Diagnosi:</span> {event.diagnosis}</p>}
@@ -276,91 +266,6 @@ export function EventCard({
               </Dialog>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Edit form */}
-      {isExpanded && isEditing && (
-        <div className="mt-3 space-y-3 border-t pt-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Titolo</Label>
-              <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
-            </div>
-            <div>
-              <Label>Data</Label>
-              <Input type="date" value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} />
-            </div>
-            <div>
-              <Label>Tipo evento</Label>
-              <Select value={editForm.eventType} onValueChange={(v) => setEditForm({ ...editForm, eventType: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Diagnosi</Label>
-              <Input value={editForm.diagnosis} onChange={(e) => setEditForm({ ...editForm, diagnosis: e.target.value })} />
-            </div>
-            <div>
-              <Label>Medico</Label>
-              <Input value={editForm.doctor} onChange={(e) => setEditForm({ ...editForm, doctor: e.target.value })} />
-            </div>
-            <div>
-              <Label>Struttura</Label>
-              <Input value={editForm.facility} onChange={(e) => setEditForm({ ...editForm, facility: e.target.value })} />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <Label>Descrizione</Label>
-              <DictationButton
-                size="icon"
-                variant="icon-only"
-                caseId={caseId}
-                contextHint={`evento clinico ${event.event_type ?? ''}, ${editForm.diagnosis ?? ''}`}
-                onTranscript={(text) => {
-                  const sep = editForm.description.length > 0 && !editForm.description.endsWith(' ') ? ' ' : '';
-                  setEditForm({ ...editForm, description: `${editForm.description}${sep}${text}` });
-                }}
-                className="h-7 w-7"
-              />
-            </div>
-            <Textarea rows={4} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <Label>Note perito</Label>
-              <DictationButton
-                size="icon"
-                variant="icon-only"
-                caseId={caseId}
-                contextHint="annotazione perito medico-legale"
-                onTranscript={(text) => {
-                  const sep = editForm.expertNotes.length > 0 && !editForm.expertNotes.endsWith(' ') ? ' ' : '';
-                  setEditForm({ ...editForm, expertNotes: `${editForm.expertNotes}${sep}${text}` });
-                }}
-                className="h-7 w-7"
-              />
-            </div>
-            <Textarea rows={2} value={editForm.expertNotes} onChange={(e) => setEditForm({ ...editForm, expertNotes: e.target.value })} placeholder="Annotazioni del perito..." />
-          </div>
-          <div className="flex items-center justify-between">
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}>
-              <Trash2 className="mr-1 h-3 w-3" />Elimina
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={onCancelEdit} disabled={isPending}>
-                <X className="mr-1 h-3 w-3" />Annulla
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={isPending}>
-                {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
-                Salva
-              </Button>
-            </div>
-          </div>
         </div>
       )}
     </div>

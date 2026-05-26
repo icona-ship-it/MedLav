@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2, Download, AlertTriangle } from 'lucide-react';
+import { InlineAlert } from '@/components/ui/inline-alert';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -120,6 +121,15 @@ export function ReportStep({
   const alertCount = report
     ? computeAlertCount(report, anomalies, missingDocs, documents, events)
     : 0;
+
+  // UX refactor Ondata 2: anomalie actionable promosse a banner above-fold.
+  // Conteggio separato perche' "actionable" = status detected|llm_confirmed (richiede decisione),
+  // mentre alertCount include anche missing docs e altri segnali aggregati.
+  const actionableAnomalies = anomalies.filter(
+    (a) => a.status === 'detected' || a.status === 'llm_confirmed' || a.status == null,
+  );
+  const actionableCount = actionableAnomalies.length;
+  const missingDocsCount = missingDocs.length;
 
   const sections = report?.synthesis ? parseSections(report.synthesis) : [];
 
@@ -263,7 +273,6 @@ export function ReportStep({
             caseId={caseId}
             events={events}
             eventImages={eventImages}
-            onImageClick={() => {}}
             highlightedEventOrderNumber={highlightedEventId}
           />
         </div>
@@ -312,7 +321,7 @@ export function ReportStep({
         caseId={caseId}
         report={report}
         anomalyCount={anomalies.length}
-        missingDocsCount={missingDocs.length}
+        missingDocsCount={missingDocsCount}
         isRegenerating={isRegenerating}
         onRegenerate={handleRegenerate}
         onEdit={() => setEditDialogOpen(true)}
@@ -334,6 +343,31 @@ export function ReportStep({
         </TabsList>
 
         <TabsContent value="report">
+          {/* UX Ondata 2: anomalie e doc mancanti come banner above-fold,
+              non come widget nascosti nella sidebar. Il valore differenziante
+              di MedLav e' "ho trovato cose che ti sarebbero sfuggite" — va
+              dove l'occhio del perito guarda per primo. */}
+          {(actionableCount > 0 || missingDocsCount > 0) && (
+            <InlineAlert
+              variant={actionableCount > 0 ? 'warning' : 'info'}
+              title={
+                actionableCount > 0 && missingDocsCount > 0
+                  ? `${actionableCount} anomalie cliniche da valutare · ${missingDocsCount} documenti attesi mancanti`
+                  : actionableCount > 0
+                    ? `${actionableCount} anomalie cliniche da valutare prima del deposito`
+                    : `${missingDocsCount} documenti attesi non caricati`
+              }
+              action={{
+                label: 'Apri elenco',
+                onClick: () => setAnomalyDialogOpen(true),
+              }}
+              className="mb-4"
+            >
+              {actionableCount > 0
+                ? 'Conferma o escludi ciascuna anomalia prima di approvare il report.'
+                : 'Carica i documenti mancanti o segnala l\'indisponibilità nel report.'}
+            </InlineAlert>
+          )}
           <div className="flex gap-6">
             {/* Left: TOC sidebar (xl only) */}
             <ReportTocSidebar sections={sections} />
@@ -379,7 +413,6 @@ export function ReportStep({
             caseId={caseId}
             events={events}
             eventImages={eventImages}
-            onImageClick={() => {}}
             highlightedEventOrderNumber={highlightedEventId}
           />
         </TabsContent>
