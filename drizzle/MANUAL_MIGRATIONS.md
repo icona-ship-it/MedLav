@@ -27,6 +27,8 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0023_hybrid_rag_multilingua.sql` | 2026-05-11 | parzialmente (DROP COLUMN + ADD) | usare `verify_0023_hybrid_rag_multilingua.sql` |
 | `0024_add_document_content_hash.sql` | 2026-05-11 | si (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`) | usare `verify_0024_add_document_content_hash.sql` |
 | `0025_perizie_benchmark.sql` | **DA APPLICARE dopo Sprint 3 ingestion** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC `match_perizie_chunks_hybrid`) | usare `verify_0025_perizie_benchmark.sql` (7 check + sanity) |
+| `0026_rls_user_owned.sql` | **DA APPLICARE — Sprint 1 Production-robust MVP** | si (`DROP POLICY IF EXISTS` + `CREATE POLICY`, ENABLE RLS idempotente) | usare `verify_0026.sql` (5 check su RLS abilitato + policies per tabella) — **TESTARE STAGING PRIMA DI PROD** |
+| `0027_audit_archive.sql` | **DA APPLICARE — Sprint 1 Production-robust MVP** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | usare `verify_0027.sql` (7 check su table + RLS + indices) |
 
 ## Procedura per future migration
 

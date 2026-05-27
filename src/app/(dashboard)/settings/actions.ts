@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
+import { logAccessArchived } from '@/lib/audit';
 
 const profileSchema = z.object({
   fullName: z.string().min(1, 'Il nome è obbligatorio'),
@@ -225,6 +226,13 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
     return { error: 'Non autenticato' };
   }
 
+  // GDPR Art. 20 audit — log forense (sopravvive a cancellazione utente)
+  logAccessArchived({
+    userId: user.id,
+    action: 'user.data_exported',
+    metadata: { exported_at: new Date().toISOString() },
+  });
+
   const admin = createAdminClient();
 
   // Get user's case IDs first
@@ -382,6 +390,14 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
   if (!user) {
     return { error: 'Non autenticato' };
   }
+
+  // GDPR Art. 17 audit forense PRIMA della cancellazione — sopravvive al delete
+  // by design (audit_archive non ha FK su profiles).
+  logAccessArchived({
+    userId: user.id,
+    action: 'user.deleted',
+    metadata: { requested_at: new Date().toISOString() },
+  });
 
   const admin = createAdminClient();
 

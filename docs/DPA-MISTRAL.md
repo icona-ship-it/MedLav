@@ -1,10 +1,59 @@
 # Data Processing Agreement — Mistral AI (Sub-Responsabile)
 
-> **BOZZA** — Questo documento deve essere rivisto da un legale e firmato bilateralmente con Mistral AI prima del lancio in produzione.
+> **BOZZA INTERNA — DA SOSTITUIRE CON DPA UFFICIALE MISTRAL FIRMATO**
+>
+> Questo documento e' la nostra **bozza preparatoria**. Per essere
+> contrattualmente valido va sostituito con il DPA ufficiale Mistral controfirmato.
 
-> **Nota**: Mistral AI pubblica il proprio DPA standard all'indirizzo
-> [https://mistral.ai/terms/#data-processing-agreement](https://mistral.ai/terms/#data-processing-agreement).
-> Il presente template deve essere confrontato e, se necessario, integrato con il DPA ufficiale Mistral per garantire coerenza e copertura completa.
+## Procedura di formalizzazione (Sprint 1 Production-robust MVP)
+
+**Stato (2026-05-27)**: in attesa di firma. Procedura:
+
+1. **Scaricare DPA ufficiale Mistral** dalla pagina termini:
+   - URL: [https://mistral.ai/terms/#data-processing-agreement](https://mistral.ai/terms/#data-processing-agreement)
+   - Versione attesa: la piu' recente in vigore al momento della firma
+   - Salvare PDF in `docs/DPA-MISTRAL-official-vYYYY-MM.pdf` (gitignored)
+
+2. **Confronto con la bozza interna** (questo documento):
+   - Verificare che le clausole Art. 28 GDPR siano coperte (sub-responsabili, sicurezza, trasferimenti extra-UE, audit, breach notification)
+   - Annotare differenze rilevanti (potrebbero esserci clausole aggiuntive Mistral su limit liability, fee structure)
+   - Coinvolgere consulente legale per review (~2-4 ore di consulenza)
+
+3. **Firma bilaterale**:
+   - Firma digitale qualificata (PAdES) sul DPA ufficiale Mistral
+   - Invio a Mistral Legal per controfirma (contact: `legal@mistral.ai`)
+   - Tempo atteso controfirma: 2-4 settimane (dipende da Mistral)
+
+4. **Archiviazione**:
+   - Salvare PDF controfirmato in `docs/DPA-MISTRAL-signed-YYYY-MM-DD.pdf` (gitignored, repository privato)
+   - Backup off-site su archivio legale dell'azienda
+   - Aggiornare `docs/DPIA.md` Allegato A con: data firma, versione DPA, hash SHA-256 del PDF
+   - Sostituire questo documento con un riferimento al PDF firmato (non re-incollare il contenuto del DPA Mistral ufficiale, che e' proprieta' loro)
+
+5. **Comunicazione interna**:
+   - Aggiornare DPO + Privacy Policy se Mistral indica clausole nuove rispetto a quanto gia' descritto in `src/app/(public)/privacy/page.tsx`
+   - Aggiungere riga al registro trattamenti GDPR (`docs/DPIA.md` Sezione 2.6)
+
+## Cosa rimane in attesa (rischio residuo)
+
+Finche' il DPA non e' firmato:
+- **Rischio legale**: trasmissione dati a Mistral basata su Termini di Servizio standard (non DPA dedicato). In caso di contestazione (es. Garante Privacy), non c'e' contratto Art. 28 dedicato a dimostrare due diligence.
+- **Mitigazione corrente**: questo template documenta la nostra posizione + i Termini di Servizio Mistral includono clausole standard GDPR di livello base. Sufficiente per MVP, da risolvere prima di scalare.
+
+## Riferimenti normativi
+
+- Art. 28 GDPR — Responsabile del trattamento (incarico scritto)
+- Art. 32 GDPR — Sicurezza del trattamento
+- Art. 33 GDPR — Notifica violazioni
+- Art. 44-49 GDPR — Trasferimenti extra-UE (Mistral in EU, no trasferimento)
+
+---
+
+## (Sotto) — Bozza interna originaria, da REVIEW vs DPA ufficiale Mistral
+
+Mistral AI pubblica il proprio DPA standard all'indirizzo
+[https://mistral.ai/terms/#data-processing-agreement](https://mistral.ai/terms/#data-processing-agreement).
+Il presente template deve essere confrontato e, se necessario, integrato con il DPA ufficiale Mistral per garantire coerenza e copertura completa.
 
 ---
 
