@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { revalidateCase } from '@/lib/cache';
+import { validateDocumentBytes } from '@/lib/file-validators';
+import { logger } from '@/lib/logger';
 
 export async function getCaseDocuments(caseId: string) {
   const supabase = await createClient();
@@ -98,6 +100,45 @@ export async function saveDocumentMetadata(params: {
   }
   if (!ALLOWED_MIME_TYPES.has(params.fileType)) {
     return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel.' };
+  }
+
+  // Magic-byte validation: scarica primi 256 bytes dal file appena uploadato
+  // e verifica che il contenuto reale corrisponda al MIME dichiarato.
+  // Difesa contro file rinominati (es. .exe -> .pdf): se i magic bytes non
+  // matchano, cancelliamo il file da Storage e rifiutiamo.
+  try {
+    const admin = createAdminClient();
+    const { data: blob, error: dlErr } = await admin.storage
+      .from('documents')
+      .download(params.storagePath);
+    if (dlErr || !blob) {
+      logger.warn('document-validation', 'Magic-byte check skipped — download failed', {
+        path: params.storagePath,
+        error: dlErr?.message ?? 'no blob',
+      });
+      // Don't block on download failure (Storage transient issue) — DB insert proceeds
+    } else {
+      // Read first 256 bytes for magic check (enough for all formats we support)
+      const head = new Uint8Array(await blob.slice(0, 256).arrayBuffer());
+      const validation = validateDocumentBytes(head, params.fileType);
+      if (!validation.ok) {
+        // Reject + cleanup the orphan file
+        await admin.storage.from('documents').remove([params.storagePath]);
+        logger.warn('document-validation', 'Rejected file failing magic-byte check', {
+          path: params.storagePath,
+          declaredType: params.fileType,
+          reason: validation.reason,
+        });
+        return { error: validation.reason ?? 'File non valido.' };
+      }
+    }
+  } catch (err) {
+    // Hard failure of validation infrastructure — log but don't block (we already
+    // validated MIME via ALLOWED_MIME_TYPES; magic byte is defense-in-depth).
+    logger.error('document-validation', 'Magic-byte check threw', {
+      path: params.storagePath,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
   }
 
   // Verify case ownership
