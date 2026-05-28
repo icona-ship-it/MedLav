@@ -104,9 +104,14 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 // budgets (section-catalog.ts) and prompt directives (synthesis-prompts.ts).
 const MIN_WORD_COUNT = 500;
 
-/** A3: minimum % of dated clinical events that must be cited in the report.
- * Below this the report has dropped most of the timeline and is blocked. */
+/** A3: expected minimum % of dated clinical events cited in the report. Below
+ * this we warn; below COVERAGE_HARD_BLOCK_PERCENT (with enough events) we block. */
 const MIN_EVENT_COVERAGE_PERCENT = 30;
+/** Coverage below this % is treated as a gross failure (report blocked), since
+ * even a date-format proxy artifact cannot plausibly push a sound report this low. */
+const COVERAGE_HARD_BLOCK_PERCENT = 10;
+/** Minimum dated events required before the hard block trusts the coverage signal. */
+const COVERAGE_MIN_EVENTS_FOR_BLOCK = 5;
 
 /** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
@@ -219,13 +224,22 @@ export function validateReport(
       }).length;
       eventCoverage = Math.round((coveredCount / eventsWithDate.length) * 100);
       if (eventCoverage < MIN_EVENT_COVERAGE_PERCENT) {
-        // A3: promoted warning → error. Below 30% coverage the report has lost
-        // the bulk of the clinical timeline — unsignable. Blocks saving so the
-        // pipeline retries (Inngest) or escalates to manual review.
+        // A3: coverage is a PROXY (it string-matches event dates in DD.MM.YYYY
+        // form). A report that legitimately writes some dates in extended prose
+        // ("15 marzo 2024") undercounts here. And since the block fires at
+        // assembly with a deterministic seed, an Inngest retry would reproduce
+        // the same report — a false positive permanently fails a good case.
+        // So we only HARD-BLOCK on gross failure (near-zero coverage with enough
+        // dated events to trust the signal); the 10-30% band stays a warning.
+        const grossFailure =
+          eventCoverage < COVERAGE_HARD_BLOCK_PERCENT &&
+          eventsWithDate.length >= COVERAGE_MIN_EVENTS_FOR_BLOCK;
         issues.push({
           type: 'low_event_coverage',
-          severity: 'error',
-          message: `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}, minimo ${MIN_EVENT_COVERAGE_PERCENT}%). Possibile perdita di dati — report bloccato.`,
+          severity: grossFailure ? 'error' : 'warning',
+          message: grossFailure
+            ? `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}). Perdita massiva di dati — report bloccato.`
+            : `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}, atteso ≥${MIN_EVENT_COVERAGE_PERCENT}%). Possibile perdita di dati — verificare.`,
         });
       }
     }

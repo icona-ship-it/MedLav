@@ -459,27 +459,67 @@ Breve. 01/01/1900.`;
 
   // ── A3: blocking validator ──────────────────────────────────────────
 
-  describe('A3 — low event coverage is now blocking', () => {
+  describe('A3 — low event coverage', () => {
     // buildFullReport contains dates 15.01–15.05.2024. Passing events with
     // dates that never appear in the report drives coverage to 0%.
-    const phantomEventContext: ReportValidationContext = {
+    const grossFailureContext: ReportValidationContext = {
       events: [
         { orderNumber: 1, eventDate: '2099-01-15' },
         { orderNumber: 2, eventDate: '2099-02-15' },
         { orderNumber: 3, eventDate: '2099-03-15' },
         { orderNumber: 4, eventDate: '2099-04-15' },
+        { orderNumber: 5, eventDate: '2099-05-15' },
+        { orderNumber: 6, eventDate: '2099-06-15' },
       ],
     };
 
-    it('should flag low_event_coverage as error and block the report', () => {
+    it('should HARD-BLOCK on gross failure (near-zero coverage with enough events)', () => {
       const report = buildFullReport();
-      const result = validateReport(report, 4, phantomEventContext);
+      const result = validateReport(report, 6, grossFailureContext);
 
       const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
       expect(coverageIssues).toHaveLength(1);
       expect(coverageIssues[0].severity).toBe('error');
-      expect(result.eventCoverage).toBeLessThan(30);
+      expect(result.eventCoverage).toBeLessThan(10);
       expect(result.valid).toBe(false);
+    });
+
+    it('should only WARN (not block) when too few dated events to trust the proxy', () => {
+      // 4 events at 0% coverage — below the 5-event floor → warning, not block.
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2099-01-15' },
+          { orderNumber: 2, eventDate: '2099-02-15' },
+          { orderNumber: 3, eventDate: '2099-03-15' },
+          { orderNumber: 4, eventDate: '2099-04-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 4, context);
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('warning');
+      // valid stays true (no blocking error from coverage)
+      expect(result.issues.filter((i) => i.severity === 'error' && i.type === 'low_event_coverage')).toHaveLength(0);
+    });
+
+    it('should WARN (not block) in the 10-30% soft band', () => {
+      // 5 events, ~20% covered: 1 of 5 dates present in the report.
+      // buildFullReport contains 15.01.2024; the rest (2099) are absent → 1/5 = 20%.
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2099-02-15' },
+          { orderNumber: 3, eventDate: '2099-03-15' },
+          { orderNumber: 4, eventDate: '2099-04-15' },
+          { orderNumber: 5, eventDate: '2099-05-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('warning');
+      expect(result.eventCoverage).toBeGreaterThanOrEqual(10);
+      expect(result.eventCoverage).toBeLessThan(30);
     });
 
     it('should not flag coverage when events are well represented', () => {
