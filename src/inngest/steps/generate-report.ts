@@ -353,7 +353,7 @@ export { insertReport as saveReportStep };
 import { resolveSectionPlan } from '@/services/synthesis/section-catalog';
 import { generateSingleSection } from '@/services/synthesis/section-generator';
 import { computeSectionalPromptVersion } from './prompt-version-sectional';
-import { validateReport } from '@/services/synthesis/report-validator';
+import { validateReport, getBlockingIssues } from '@/services/synthesis/report-validator';
 import type { ReportValidationContext } from '@/services/synthesis/report-validator';
 import { computeHrs, getHrsLevel } from '@/services/synthesis/hallucination-risk-scorer';
 import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
@@ -482,10 +482,12 @@ export async function assembleSectionsAndSaveReport(
     sectionIds: sections.map((s) => s.id),
   });
 
-  // Validate assembled report
+  // Validate assembled report. A3: pass the assembled section titles as
+  // role-mandatory sections so an empty/failed section blocks the save.
   const validationContext: ReportValidationContext = {
     events: synthesisParams.events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: synthesisParams.calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+    requiredSectionTitles: sections.map((s) => s.title),
   };
 
   const validation = validateReport(fullReport, synthesisParams.events.length, validationContext);
@@ -499,13 +501,10 @@ export async function assembleSectionsAndSaveReport(
       logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
     }
 
-    // Block saving for critical validation errors. Wave A.1: also block on
-    // broken_ocr_marker — a report containing "[object Object]" or stray
-    // serialization tokens cannot be deposited and must trigger Inngest retry.
-    const criticalErrors = errors.filter((e) =>
-      e.type === 'empty_report' || e.type === 'too_short' || e.type === 'missing_section' ||
-      e.type === 'broken_ocr_marker',
-    );
+    // A3: block saving for all blocking-policy errors (centralized in
+    // report-validator.ts). Includes required-section-missing, coverage floor,
+    // sentinel dates, broken OCR markers, header mismatch/fabrication.
+    const criticalErrors = getBlockingIssues(validation);
     if (criticalErrors.length > 0) {
       throw new Error(
         `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +

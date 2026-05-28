@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateReport } from './report-validator';
+import { validateReport, getBlockingIssues } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
@@ -454,6 +454,138 @@ Breve. 01/01/1900.`;
       const result = validateReport(report, 5, context);
 
       expect(result.valid).toBe(true);
+    });
+  });
+
+  // ── A3: blocking validator ──────────────────────────────────────────
+
+  describe('A3 — low event coverage is now blocking', () => {
+    // buildFullReport contains dates 15.01–15.05.2024. Passing events with
+    // dates that never appear in the report drives coverage to 0%.
+    const phantomEventContext: ReportValidationContext = {
+      events: [
+        { orderNumber: 1, eventDate: '2099-01-15' },
+        { orderNumber: 2, eventDate: '2099-02-15' },
+        { orderNumber: 3, eventDate: '2099-03-15' },
+        { orderNumber: 4, eventDate: '2099-04-15' },
+      ],
+    };
+
+    it('should flag low_event_coverage as error and block the report', () => {
+      const report = buildFullReport();
+      const result = validateReport(report, 4, phantomEventContext);
+
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('error');
+      expect(result.eventCoverage).toBeLessThan(30);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should not flag coverage when events are well represented', () => {
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-15' },
+          { orderNumber: 3, eventDate: '2024-03-15' },
+          { orderNumber: 4, eventDate: '2024-04-15' },
+          { orderNumber: 5, eventDate: '2024-05-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('A3 — role-mandatory sections', () => {
+    const baseEvents = [
+      { orderNumber: 1, eventDate: '2024-01-15' },
+      { orderNumber: 2, eventDate: '2024-02-15' },
+      { orderNumber: 3, eventDate: '2024-03-15' },
+      { orderNumber: 4, eventDate: '2024-04-15' },
+      { orderNumber: 5, eventDate: '2024-05-15' },
+    ];
+
+    it('should pass when all required sections are present with content', () => {
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Dati della Documentazione Sanitaria', 'Epicrisi', 'Conclusioni'],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should block when a role-mandatory section is absent', () => {
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Considerazioni Medico-Legali'],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      const missing = result.issues.filter((i) => i.type === 'missing_section');
+      expect(missing.length).toBeGreaterThanOrEqual(1);
+      expect(missing[0].severity).toBe('error');
+      expect(missing[0].message).toContain('Considerazioni Medico-Legali');
+      expect(result.valid).toBe(false);
+    });
+
+    it('should block when a required section heading exists but is empty', () => {
+      const padding = Array.from({ length: 120 }, (_, i) => `parola${i}`).join(' ');
+      const report = `## Dati della Documentazione Sanitaria
+In data 15.01.2024 il paziente veniva visitato. ${padding}
+
+## Visita Clinica
+
+## Epicrisi
+${padding}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Visita Clinica'],
+      };
+      const result = validateReport(report, 5, context);
+      const missing = result.issues.filter((i) => i.type === 'missing_section');
+      expect(missing.some((m) => m.message.includes('vuota') && m.message.includes('Visita Clinica'))).toBe(true);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should not run the required-section check when titles are not provided', () => {
+      const context: ReportValidationContext = { events: baseEvents };
+      const result = validateReport(buildFullReport(), 5, context);
+      // Only the generic REQUIRED_SECTIONS check runs (both present here)
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+    });
+  });
+
+  describe('A3 — getBlockingIssues policy', () => {
+    it('should return blocking errors for a report with a sentinel date', () => {
+      const report = buildFullReport().replace('In data 15.01.2024', 'In data 01/01/1900');
+      const validation = validateReport(report, 5);
+      const blocking = getBlockingIssues(validation);
+      expect(blocking.some((i) => i.type === 'sentinel_date_leak')).toBe(true);
+      expect(blocking.every((i) => i.severity === 'error')).toBe(true);
+    });
+
+    it('should return no blocking issues for a clean report', () => {
+      const validation = validateReport(buildFullReport(), 5);
+      expect(getBlockingIssues(validation)).toHaveLength(0);
+    });
+
+    it('should exclude non-blocking error types (duplicate_content) from blocking set', () => {
+      // Three identical 60-word blocks → duplicate_content error (3+ repeats),
+      // which is intentionally NOT in the blocking policy.
+      const block = Array.from({ length: 60 }, (_, i) => `termine${i % 7}clinico`).join(' ');
+      const report = `## Dati della Documentazione Sanitaria
+${block}
+${block}
+${block}
+
+## Epicrisi
+${block}`;
+      const validation = validateReport(report, 5);
+      const dup = validation.issues.filter((i) => i.type === 'duplicate_content');
+      expect(dup.length).toBeGreaterThanOrEqual(1);
+      expect(getBlockingIssues(validation).some((i) => i.type === 'duplicate_content')).toBe(false);
     });
   });
 });

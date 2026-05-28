@@ -25,7 +25,7 @@ import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-ana
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
-import { validateReport } from './report-validator';
+import { validateReport, getBlockingIssues } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 import { computeHrs, getHrsLevel } from './hallucination-risk-scorer';
 import { computePromptVersion } from './prompt-version';
@@ -422,21 +422,23 @@ function finalizeReport(
       throw new Error(msg);
     }
 
-    // Wave A.1: hard-block reports containing "[object Object]" or null/undefined
-    // serialization markers. Mirror of the sectional path block in
-    // generate-report.ts.
-    const brokenMarkers = errors.filter((e) => e.type === 'broken_ocr_marker');
-    if (brokenMarkers.length > 0) {
-      const msg = `Report contiene marker di errore: ${brokenMarkers.map((e) => e.message).join('; ')}. Output corrotto — il sistema ritenterà.`;
-      logger.error('synthesis', msg);
-      throw new Error(msg);
-    }
-
     if (errors.length > 0) {
       logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}.`);
     }
     if (warnings.length > 0) {
       logger.info('synthesis', ` Validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
+    }
+
+    // A3: hard-block on any blocking-policy error (centralized in
+    // report-validator.ts). Covers broken_ocr_marker (Wave A.1) plus
+    // required-section-missing, too_short, sentinel dates, coverage floor and
+    // header mismatch/fabrication — mirror of the sectional path block in
+    // generate-report.ts so both pipelines refuse unsignable reports.
+    const blocking = getBlockingIssues(validation);
+    if (blocking.length > 0) {
+      const msg = `Report non valido: ${blocking.map((e) => e.message).join('; ')}. Output non salvato — il sistema ritenterà.`;
+      logger.error('synthesis', msg);
+      throw new Error(msg);
     }
   }
 

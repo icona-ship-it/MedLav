@@ -1,7 +1,11 @@
 /**
  * Post-generation report quality validator.
  * Checks the LLM-generated synthesis for structural issues BEFORE saving.
- * Non-blocking: logs warnings but never prevents saving.
+ *
+ * Issues carry a severity: 'warning' (logged, report still saved) or 'error'
+ * (blocking — the caller must refuse to save and retry/escalate). The set of
+ * error types that actually block saving is centralized in BLOCKING_ERROR_TYPES
+ * / getBlockingIssues() so the sectional and monolithic pipelines agree.
  */
 
 export interface ReportIssue {
@@ -37,6 +41,12 @@ export interface ReportValidationContext {
   calculations?: Array<{ label: string; value: string; days: number | null }>;
   /** OCR text for citation verification (Phase 5 safeguard). */
   ocrText?: Array<{ documentId: string; pages: Array<{ ocrText: string }> }>;
+  /** Role-mandatory section titles for the resolved report plan (A3). When
+   * provided, the validator checks each title is present as a "## heading" with
+   * non-empty content and flags a blocking `missing_section` error otherwise.
+   * Titles come from the resolved section plan (section-catalog.ts), so the
+   * check is role/module-aware without the validator knowing the role itself. */
+  requiredSectionTitles?: string[];
   /** Perizia metadata for header coherence checks (Wave 2.2). When provided,
    * the validator compares fields like tribunale / RG / giudice against the
    * intestazione section text and flags mismatches as errors. */
@@ -93,6 +103,10 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 // stragiudiziale reports — actual length is shaped by per-section token
 // budgets (section-catalog.ts) and prompt directives (synthesis-prompts.ts).
 const MIN_WORD_COUNT = 500;
+
+/** A3: minimum % of dated clinical events that must be cited in the report.
+ * Below this the report has dropped most of the timeline and is blocked. */
+const MIN_EVENT_COVERAGE_PERCENT = 30;
 
 /** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
@@ -204,11 +218,14 @@ export function validateReport(
         return synthesisLower.includes(d) || synthesisLower.includes(ddmmyyyy) || synthesisLower.includes(ddmmyyyyDot);
       }).length;
       eventCoverage = Math.round((coveredCount / eventsWithDate.length) * 100);
-      if (eventCoverage < 30) {
+      if (eventCoverage < MIN_EVENT_COVERAGE_PERCENT) {
+        // A3: promoted warning → error. Below 30% coverage the report has lost
+        // the bulk of the clinical timeline — unsignable. Blocks saving so the
+        // pipeline retries (Inngest) or escalates to manual review.
         issues.push({
           type: 'low_event_coverage',
-          severity: 'warning',
-          message: `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}). Possibile perdita di dati.`,
+          severity: 'error',
+          message: `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}, minimo ${MIN_EVENT_COVERAGE_PERCENT}%). Possibile perdita di dati — report bloccato.`,
         });
       }
     }
@@ -216,6 +233,7 @@ export function validateReport(
 
   // 6-9. Context-dependent checks (backward-compatible: only run when context provided)
   if (context) {
+    issues.push(...checkRequiredSections(synthesis, context));
     issues.push(...checkPhantomDates(synthesis, context));
     issues.push(...checkNumericalMismatch(synthesis, context));
     issues.push(...checkUnverifiedCitations(synthesis, context));
@@ -229,6 +247,72 @@ export function validateReport(
 }
 
 // ── Existing helpers ──
+
+// ── A3: Role-mandatory section presence ──
+
+/** Minimum non-whitespace words a required section must contain after its
+ * heading. Placeholder sections always exceed this; an empty/failed LLM
+ * section falls below it. */
+const MIN_SECTION_CONTENT_WORDS = 5;
+
+/**
+ * For each role-mandatory section title, verify the report contains a matching
+ * "## heading" with non-empty content. A missing heading OR an empty section
+ * body is flagged as a blocking `missing_section` error (A3). Only runs when
+ * `context.requiredSectionTitles` is provided (resolved section plan).
+ */
+function checkRequiredSections(
+  synthesis: string,
+  context: ReportValidationContext,
+): ReportIssue[] {
+  const titles = context.requiredSectionTitles;
+  if (!titles || titles.length === 0) return [];
+
+  const issues: ReportIssue[] = [];
+  const seen = new Set<string>();
+
+  for (const title of titles) {
+    const normalizedTitle = title.trim();
+    if (normalizedTitle.length === 0 || seen.has(normalizedTitle.toLowerCase())) continue;
+    seen.add(normalizedTitle.toLowerCase());
+
+    // Match "## Title" (1-3 hashes) on its own line, case-insensitive.
+    // Use [ \t]* (not \s*) so the match stops at the heading's newline and
+    // doesn't swallow a following blank line — otherwise an empty section's
+    // body extraction would bleed into the next section.
+    const headingRe = new RegExp(`(?:^|\\n)#{1,3}[ \\t]*${escapeRegex(normalizedTitle)}[ \\t]*(?:\\n|$)`, 'i');
+    const match = headingRe.exec(synthesis);
+    if (!match) {
+      issues.push({
+        type: 'missing_section',
+        severity: 'error',
+        message: `Sezione obbligatoria mancante: "${normalizedTitle}". Il report non può essere salvato senza questa sezione.`,
+      });
+      continue;
+    }
+
+    // Extract content from end of heading to next "## " heading.
+    const contentStart = match.index + match[0].length;
+    const rest = synthesis.slice(contentStart);
+    const nextHeading = rest.search(/\n#{1,3}\s+\S/);
+    const body = (nextHeading === -1 ? rest : rest.slice(0, nextHeading)).trim();
+    const bodyWords = body.split(/\s+/).filter((w) => w.length > 0).length;
+    if (bodyWords < MIN_SECTION_CONTENT_WORDS) {
+      issues.push({
+        type: 'missing_section',
+        severity: 'error',
+        message: `Sezione obbligatoria vuota: "${normalizedTitle}" (${bodyWords} parole). Generazione incompleta — report bloccato.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/** Escape a string for safe use inside a RegExp. */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ── New check: Phantom Dates ──
 
@@ -591,4 +675,38 @@ function checkHeaderFabricationSignature(synthesis: string): ReportIssue[] {
   }
 
   return [];
+}
+
+// ── A3: Centralized blocking-issue policy ────────────────────────────
+//
+// Single source of truth for which error-severity issues must PREVENT a report
+// from being saved (caller throws → Inngest retries / regenerate fails loudly).
+// Both the sectional pipeline (generate-report.ts) and the monolithic path
+// (synthesis-service.ts) consume getBlockingIssues() so they agree.
+//
+// Excluded from blocking on purpose (error severity but caller-soft):
+//  - duplicate_content / unverified_citation: dynamic heuristics with known
+//    false positives (OCR ligatures, boilerplate prose). Surfaced via HRS, not
+//    a hard block, to avoid retry loops on legitimate reports.
+
+const BLOCKING_ERROR_TYPES: ReadonlySet<ReportIssue['type']> = new Set([
+  'empty_report',
+  'too_short',
+  'missing_section',
+  'broken_ocr_marker',
+  'sentinel_date_leak',
+  'low_event_coverage',
+  'truncated_response',
+  'header_mismatch',
+  'header_fabrication_signature',
+]);
+
+/**
+ * Filter a validation's issues down to the error-severity ones that must block
+ * saving. Returns [] when the report is safe to save (warnings only).
+ */
+export function getBlockingIssues(validation: ReportValidation): ReportIssue[] {
+  return validation.issues.filter(
+    (i) => i.severity === 'error' && BLOCKING_ERROR_TYPES.has(i.type),
+  );
 }
