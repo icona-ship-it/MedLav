@@ -10,7 +10,7 @@ Estrarre e riportare:
 - A.3 Anamnesi e Terapie: anamnesi patologica, tutte le terapie farmacologiche (farmaco, dosaggio, via, frequenza), modifiche terapeutiche, trasfusioni
 - A.4 Descrizione Operatoria: testo INTEGRALE della descrizione chirurgica, tipo intervento, operatori, tecnica, tempi operatori (durata, orario), reperti, complicanze, tipo anestesia
 - A.5 Cartella Anestesiologica: valutazione preop (ASA score), tipo anestesia, farmaci, parametri vitali intraop, complicanze
-- A.6 Diario Medico/Infermieristico: eventi avversi, complicanze, peggioramenti, interventi urgenza, allarmi, variazioni parametri vitali, modifiche terapeutiche, annotazioni cliniche significative. Includere anche andamento parametri vitali se documentato (utile per ricostruire la catena probatoria). Escludere solo annotazioni puramente logistiche (pasti, igiene personale, posizionamento)
+- A.6 Diario Medico/Infermieristico: riporta l'INTERO decorso clinico, non solo gli eventi avversi. RAGGRUPPA i periodi clinicamente stabili in UN unico evento "decorso" che indica l'arco di giorni e cosa resta invariato (es. "Decorso post-operatorio gg 2-5: paziente stabile, parametri vitali nella norma, terapia invariata, medicazioni regolari, apiretico"). Crea invece eventi SEPARATI per OGNI variazione rilevante: complicanze, peggioramenti o miglioramenti, comparsa di febbre, modifiche terapeutiche, prima mobilizzazione/deambulazione, consulenze, allarmi, variazioni dei parametri vitali. La routine clinica documentata serve a ricostruire la catena probatoria: NON scartarla. Escludere SOLO le annotazioni puramente logistiche (pasti, igiene personale, posizionamento)
 - A.7 Lettera di Dimissione: diagnosi dimissione completa, condizioni alla dimissione, terapia domiciliare, follow-up, prognosi
 
 ### FONTE B - REFERTI CONTROLLI MEDICI
@@ -376,7 +376,7 @@ CAMPI CRITICI DA ESTRARRE:
 - Dati di ingresso: diagnosi COMPLETA, parametri vitali (PA, FC, SpO2, T°), peso, altezza, allergie
 - Descrizione operatoria: testo INTEGRALE (tipo intervento, operatori, tecnica, durata, materiali/protesi, complicanze intraop)
 - Cartella anestesiologica: ASA score, tipo anestesia, farmaci, parametri intraop
-- Diario medico: SOLO complicanze, peggioramenti, eventi avversi, allarmi — NON la routine quotidiana ("paziente stabile, riposo a letto")
+- Diario medico: riporta TUTTO il decorso clinico, non solo le complicanze. RAGGRUPPA i giorni stabili in un unico evento "decorso" (es. "gg 2-6: stabile, parametri nella norma, terapia invariata") e crea eventi SEPARATI per ogni variazione rilevante (complicanze, peggioramenti, febbre, modifiche terapia, prima mobilizzazione, consulenze). NON limitarti agli eventi avversi: anche la routine clinica documenta la catena probatoria
 - Esami: TUTTI i valori con unità di misura e range di riferimento
 - Dimissione: diagnosi dimissione completa, terapia domiciliare (farmaco, dose, via, frequenza), follow-up, prognosi
 ERRORI COMUNI: Saltare valori di laboratorio in tabelle, ignorare annotazioni manoscritte a margine, perdere la cartella anestesiologica.
