@@ -6,7 +6,7 @@ import {
   shouldSplitSynthesis,
 } from '@/services/synthesis/synthesis-service';
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
-import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import { calculateMedicoLegalPeriods, calculationsToITTITPSegments, formatITTITPTable } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
@@ -394,18 +394,43 @@ export function planReportSections(
  * Generate a single section inside an Inngest step.
  * Fetches OCR text from DB if needed (avoids serialization between steps).
  */
+/** Section ids whose perito-filled placeholder should be pre-populated with the
+ * computed graduated ITT/ITP table. For CTU/CTP the danno biologico temporaneo
+ * lives in `considerazioni_ml` (a placeholder), so without this the A2 table
+ * would never reach the report body — only the events-tab UI. */
+const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
+
+/**
+ * A2: build placeholder content, appending the computed ITT/ITP table for
+ * sections where the perito assesses temporary disability. The table is labelled
+ * as a proposal to verify — it surfaces the arithmetic without making the
+ * medico-legal judgment (which stays the perito's).
+ */
+function buildPlaceholderContent(
+  spec: SectionSpec,
+  synthesisParams: SynthesisParams,
+): string {
+  const base = spec.placeholderText ?? '';
+  if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id) || !synthesisParams.calculations) {
+    return base;
+  }
+  const table = formatITTITPTable(calculationsToITTITPSegments(synthesisParams.calculations));
+  if (!table) return base;
+  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${table}`;
+}
+
 export async function generateSectionStep(
   caseId: string,
   spec: SectionSpec,
   synthesisParams: SynthesisParams,
   previousContext: SectionContext[],
 ): Promise<GeneratedSection> {
-  // Placeholder sections emit static text — no LLM call needed
+  // Placeholder sections emit static text — no LLM call needed.
   if (spec.isPlaceholder) {
     return {
       id: spec.id,
       title: spec.title,
-      content: spec.placeholderText ?? '',
+      content: buildPlaceholderContent(spec, synthesisParams),
       contextSummary: '',
       wordCount: 0,
     };
