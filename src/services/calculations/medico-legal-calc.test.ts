@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMedicoLegalPeriods } from './medico-legal-calc';
+import {
+  calculateMedicoLegalPeriods,
+  calculateITTITP,
+  calculationsToITTITPSegments,
+  formatITTITPTable,
+} from './medico-legal-calc';
 
 function makeEvent(eventDate: string, eventType: string, title: string, description = '') {
   return { event_date: eventDate, event_type: eventType, title, description };
@@ -75,5 +80,80 @@ describe('calculateMedicoLegalPeriods', () => {
 
     expect(itt).toBeDefined();
     expect(itt!.days).toBe(10);
+  });
+});
+
+describe('A2 — graduated ITT/ITP segments', () => {
+  it('returns no segments for empty events', () => {
+    expect(calculateITTITP([])).toEqual([]);
+  });
+
+  it('produces an ITT 100% segment for a hospital stay', () => {
+    const events = [
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero ospedaliero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione ospedaliera', 'Dimissione in buone condizioni'),
+    ];
+    const segments = calculateITTITP(events);
+    const itt = segments.find((s) => s.percentage === 100);
+    expect(itt).toBeDefined();
+    expect(itt!.days).toBe(10);
+    expect(itt!.startDate).toBe('2024-01-10');
+    expect(itt!.endDate).toBe('2024-01-20');
+  });
+
+  it('produces graduated ITP segments (75/50/25) with a documented rehab phase', () => {
+    const events = [
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione, applicato tutore'),
+      makeEvent('2024-02-10', 'terapia', 'Inizio fisioterapia', 'Ciclo di riabilitazione motoria'),
+      makeEvent('2024-03-10', 'terapia', 'Fine fisioterapia', 'Termine fisioterapia'),
+      makeEvent('2024-04-10', 'follow-up', 'Controllo finale', 'Stabilizzazione clinica'),
+    ];
+    const segments = calculateITTITP(events);
+    const percentages = segments.map((s) => s.percentage);
+    expect(percentages).toContain(100);
+    expect(percentages).toContain(75);
+    expect(percentages).toContain(50);
+    expect(percentages).toContain(25);
+    // All positive day counts
+    expect(segments.every((s) => s.days > 0)).toBe(true);
+  });
+
+  it('marks third-split ITP segments as estimated when no rehab phase is documented', () => {
+    const events = [
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+      makeEvent('2024-05-20', 'follow-up', 'Controllo', 'Visita di controllo'),
+    ];
+    const segments = calculateITTITP(events);
+    const itp = segments.filter((s) => s.percentage !== 100);
+    expect(itp.length).toBeGreaterThan(0);
+    expect(itp.every((s) => s.estimated)).toBe(true);
+  });
+
+  it('calculationsToITTITPSegments ignores non-ITT/ITP rows', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+    ]);
+    const segments = calculationsToITTITPSegments(calcs);
+    // Hospital-days / total-illness rows must not leak in as segments
+    expect(segments.every((s) => [100, 75, 50, 25].includes(s.percentage))).toBe(true);
+  });
+
+  it('formatITTITPTable renders a Markdown table with a totals row', () => {
+    const events = [
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+    ];
+    const table = formatITTITPTable(calculateITTITP(events));
+    expect(table).toContain('| Periodo | Dal | Al | Giorni | Invalidità |');
+    expect(table).toContain('|---|---|---|---|---|');
+    expect(table).toContain('100%');
+    expect(table).toContain('Totale giorni');
+  });
+
+  it('formatITTITPTable returns empty string for no segments', () => {
+    expect(formatITTITPTable([])).toBe('');
   });
 });

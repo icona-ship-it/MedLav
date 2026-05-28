@@ -22,6 +22,7 @@ import { formatDate } from '@/lib/format';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
 import { EventEditSheet } from './event-edit-sheet';
+import { IttItpSummary } from './itt-itp-summary';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
 
@@ -356,6 +357,8 @@ export function EventsTab({
       </CardHeader>
       <CardContent>
         <>
+        {/* A2: graduated ITT/ITP summary (clinical / all views only) */}
+        {eventViewTab !== 'admin' && <IttItpSummary events={events} />}
         {/* Filters */}
         {events.length > 0 && (
           <div className="mb-4 space-y-2">

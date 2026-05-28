@@ -21,6 +21,86 @@ export interface MedicoLegalCalculation {
 }
 
 /**
+ * A2 (Lavini): a single graduated temporary-disability segment.
+ * ITT = 100%, ITP = 75% / 50% / 25%. These are PROPOSALS — the perito sets the
+ * final values. `estimated` marks segments derived heuristically (recovery
+ * period split into thirds when no explicit rehab phase is documented).
+ */
+export interface ITPSegment {
+  label: string;
+  percentage: 100 | 75 | 50 | 25;
+  days: number;
+  startDate: string | null;
+  endDate: string | null;
+  estimated: boolean;
+}
+
+/** Map an ITT/ITP calculation row to a typed segment, or null if it isn't one
+ * (or is a "Non calcolabile" row with no days). */
+function calculationRowToSegment(c: MedicoLegalCalculation): ITPSegment | null {
+  if (c.days === null || c.days <= 0) return null;
+  const label = c.label.toLowerCase();
+  let percentage: ITPSegment['percentage'] | null = null;
+  if (label.includes('itt') || label.includes('100')) percentage = 100;
+  else if (label.includes('75')) percentage = 75;
+  else if (label.includes('50')) percentage = 50;
+  else if (label.includes('25')) percentage = 25;
+  if (percentage === null) return null;
+
+  const estimated = /\(stima\)/i.test(c.value) || /stima/i.test(c.notes);
+  return {
+    label: c.label,
+    percentage,
+    days: c.days,
+    startDate: c.startDate,
+    endDate: c.endDate,
+    estimated,
+  };
+}
+
+/** Extract the graduated ITT/ITP segments from a set of calculation rows. */
+export function calculationsToITTITPSegments(
+  calculations: MedicoLegalCalculation[],
+): ITPSegment[] {
+  return calculations
+    .map(calculationRowToSegment)
+    .filter((s): s is ITPSegment => s !== null);
+}
+
+/**
+ * A2: compute the graduated ITT/ITP segments directly from timeline events.
+ * Returns a typed, ordered array (ITT first, then ITP 75 → 50 → 25). Pure and
+ * client-safe — also used by the UI summary table in events-tab.
+ */
+export function calculateITTITP(events: CalcEvent[]): ITPSegment[] {
+  const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  if (clinical.length === 0) return [];
+  return calculationsToITTITPSegments(calculateGraduatedITTITP(clinical));
+}
+
+/**
+ * Render graduated ITT/ITP segments as a Markdown pipe table for the report.
+ * The export pipeline (HTML/DOCX) renders Markdown tables natively. Returns ''
+ * when there are no concrete segments.
+ */
+export function formatITTITPTable(segments: ITPSegment[]): string {
+  if (segments.length === 0) return '';
+  const rows = segments.map((s) => {
+    const dal = s.startDate ? formatDate(s.startDate) : '—';
+    const al = s.endDate ? formatDate(s.endDate) : '—';
+    const stima = s.estimated ? ' *(stima)*' : '';
+    return `| ${s.label} | ${dal} | ${al} | ${s.days} | ${s.percentage}%${stima} |`;
+  });
+  const totalDays = segments.reduce((sum, s) => sum + s.days, 0);
+  return [
+    '| Periodo | Dal | Al | Giorni | Invalidità |',
+    '|---|---|---|---|---|',
+    ...rows,
+    `| **Totale giorni** | | | **${totalDays}** | |`,
+  ].join('\n');
+}
+
+/**
  * Calculate medico-legal periods from timeline events.
  * These are proposed values — the expert can modify them.
  */
