@@ -418,6 +418,62 @@ describe('isSimilarEvent', () => {
 
     expect(isSimilarEvent(a, b)).toBe(false);
   });
+
+  // ── A5: same-day events at different times stay separate ──
+  describe('A5 — temporal separation', () => {
+    it('should NOT merge ECG mattina and ECG pomeriggio (same date)', () => {
+      const morning = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino' });
+      const afternoon = makeEvent({ eventType: 'esame_strumentale', title: 'ECG pomeriggio', description: 'Elettrocardiogramma eseguito nel pomeriggio' });
+      expect(isSimilarEvent(morning, afternoon)).toBe(false);
+    });
+
+    it('should NOT merge events with explicit clock times in different halves of the day', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma ore 8:00' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma ore 16:30' });
+      expect(isSimilarEvent(a, b)).toBe(false);
+    });
+
+    it('should still merge two ECG with the same time bucket (guard does not block)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino a riposo' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino a riposo' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('should behave normally when no time marker is present (identical ECG → similar)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma a riposo' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma a riposo' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('should keep both same-day ECG events through full consolidation', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-02-10', eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma al mattino, ritmo sinusale' }),
+            makeEvent({ eventDate: '2024-02-10', eventType: 'esame_strumentale', title: 'ECG pomeriggio', description: 'Elettrocardiogramma nel pomeriggio, ritmo sinusale' }),
+          ],
+        },
+      ]);
+      const ecgEvents = result.filter((e) => e.title.toLowerCase().includes('ecg'));
+      expect(ecgEvents).toHaveLength(2);
+    });
+  });
+
+  // ── A6: medical abbreviation whitelist (modality survives tokenization) ──
+  describe('A6 — medical abbreviations', () => {
+    it('should NOT merge "RX torace" and "TC torace" (different modalities, same body part)', () => {
+      const rx = makeEvent({ eventType: 'esame_strumentale', title: 'RX torace', description: 'Radiografia del torace in due proiezioni' });
+      const tc = makeEvent({ eventType: 'esame_strumentale', title: 'TC torace', description: 'Tomografia computerizzata del torace con mezzo di contrasto' });
+      expect(isSimilarEvent(rx, tc)).toBe(false);
+    });
+
+    it('should treat ECO and RMN as distinct modalities of the same district', () => {
+      const eco = makeEvent({ eventType: 'esame_strumentale', title: 'ECO addome', description: 'Ecografia addome completo' });
+      const rmn = makeEvent({ eventType: 'esame_strumentale', title: 'RMN addome', description: 'Risonanza magnetica nucleare addome' });
+      expect(isSimilarEvent(eco, rmn)).toBe(false);
+    });
+  });
 });
 
 describe('isDuplicateOfExisting', () => {

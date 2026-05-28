@@ -264,7 +264,9 @@ function titlesShareKeywords(titles: string[], threshold: number): boolean {
     new Set(
       t.toLowerCase()
         .split(/[^\p{L}\p{N}]+/u)
-        .filter((w) => w.length >= 4),
+        // A6: keep medical abbreviations (RX, TC, ECG…) even though <4 chars so
+        // the imaging modality survives and "RX torace" vs "TC torace" don't merge.
+        .filter((w) => w.length >= 4 || MEDICAL_ABBREVIATIONS.has(w)),
     ),
   );
   for (let i = 0; i < tokenSets.length; i++) {
@@ -400,10 +402,49 @@ function findDiscrepancyInGroup(
 }
 
 /**
+ * Coarse time-of-day bucket ('am' | 'pm') extracted from an event's title and
+ * description. A5 (Lavini): two same-date same-type events that carry DISTINCT
+ * time markers (e.g. "ECG mattina" vs "ECG pomeriggio", or "ore 8" vs "ore 16")
+ * are genuinely different clinical acts and must not be deduplicated into one.
+ *
+ * Returns null when no time marker is found (the common case — then the normal
+ * similarity logic applies unchanged).
+ */
+function getTimeBucket(event: ExtractedEvent): 'am' | 'pm' | null {
+  const text = `${event.title ?? ''} ${event.description ?? ''}`.toLowerCase();
+
+  // Explicit clock time wins: "ore 14:30", "h 8", "08:00", "alle 16".
+  const hourMatch =
+    text.match(/\b(?:ore|alle|h)\s*(\d{1,2})(?:[:.]\d{2})?\b/) ??
+    text.match(/\b(\d{1,2}):\d{2}\b/);
+  if (hourMatch) {
+    const hour = parseInt(hourMatch[1], 10);
+    if (hour >= 0 && hour <= 23) return hour < 12 ? 'am' : 'pm';
+  }
+
+  // Time-of-day words.
+  if (/\b(mattin[oae]|mattutin[oa]|antimeridian[oa])\b/.test(text)) return 'am';
+  if (/\b(pomerigg(?:io|i)|pomeridian[oa]|ser[ae]|seral[ei]|nott[ee]|notturn[oa]|mezzogiorno)\b/.test(text)) return 'pm';
+
+  return null;
+}
+
+/** A5: true when both events carry a time marker and the markers disagree. */
+function hasConflictingTimeMarker(a: ExtractedEvent, b: ExtractedEvent): boolean {
+  const ta = getTimeBucket(a);
+  const tb = getTimeBucket(b);
+  return ta !== null && tb !== null && ta !== tb;
+}
+
+/**
  * Heuristic check if two events refer to the same clinical event.
  * Uses title similarity and description overlap.
  */
 export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
+  // A5: same-day events at different times of day (mattina vs pomeriggio,
+  // ore 8 vs ore 16) are distinct clinical acts — never merge them.
+  if (hasConflictingTimeMarker(a, b)) return false;
+
   // Same type and date is already checked by caller
   const titleSimilarity = calculateSimilarity(
     a.title.toLowerCase(),
@@ -431,9 +472,15 @@ export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
 /**
  * Jaccard similarity on word sets, enhanced with medical synonym normalization.
  */
-// Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars
+// Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars.
+// A6 (Lavini): without these the imaging-modality token (RX, TC, ECO…) is dropped
+// for being <4 chars, so "RX torace" vs "TC torace" collapse to {torace} and merge
+// even though they are different exams. The modality MUST survive tokenization.
 const MEDICAL_ABBREVIATIONS = new Set([
-  'ecg', 'tac', 'rmn', 'pcr', 'inr', 'ptt', 'tsh', 'ft3', 'ft4', 'pet', 'eeg', 'emg',
+  // Imaging / functional modalities (A6: RX, ECO, CT, TC, NMR, RM added)
+  'ecg', 'tac', 'rmn', 'rm', 'rx', 'eco', 'ct', 'tc', 'nmr', 'pet', 'eeg', 'emg',
+  // Lab / clinical
+  'pcr', 'inr', 'ptt', 'tsh', 'ft3', 'ft4',
   'moc', 'hba', 'ves', 'hcv', 'hiv', 'hbv', 'ldl', 'hdl', 'bnp', 'cpk', 'got', 'gpt',
   'alt', 'ast', 'gfr', 'psa', 'cea', 'afp', 'ldh', 'crp', 'wbc', 'rbc', 'plt', 'hgb',
   'mcv', 'mch', 'rdw', 'mpv', 'fev', 'fvc', 'dlco', 'asa', 'bmi', 'nyha',
