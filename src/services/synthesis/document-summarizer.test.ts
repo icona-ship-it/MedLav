@@ -17,7 +17,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { summarizeDocument, summarizeDocumentBatch, OCR_PER_DOC_SUMMARY_LIMIT, DOC_SUMMARY_MAX_CHARS } from './document-summarizer';
+import { summarizeDocument, summarizeDocumentBatch, buildTailPrioritizedOcrInput, OCR_PER_DOC_SUMMARY_LIMIT, DOC_SUMMARY_MAX_CHARS } from './document-summarizer';
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamMistralChat = vi.mocked(streamMistralChat);
@@ -89,6 +89,46 @@ describe('document-summarizer', () => {
       const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
       // The OCR text in the prompt should be truncated
       expect(userMessage?.content.length).toBeLessThanOrEqual(OCR_PER_DOC_SUMMARY_LIMIT + 200); // +200 for prompt prefix
+    });
+  });
+
+  describe('buildTailPrioritizedOcrInput — A7 tail priority', () => {
+    it('returns text unchanged when within the limit', () => {
+      const text = 'Documento breve';
+      expect(buildTailPrioritizedOcrInput(text, 1000)).toBe(text);
+    });
+
+    it('never exceeds the limit', () => {
+      const text = 'Z'.repeat(5000);
+      expect(buildTailPrioritizedOcrInput(text, 1000).length).toBeLessThanOrEqual(1000);
+    });
+
+    it('preserves the END of the document (discharge / final therapy)', () => {
+      const head = 'INIZIO '.repeat(2000);
+      const tail = 'LETTERA DI DIMISSIONE: terapia domiciliare enoxaparina, follow-up a 30 giorni. FINE';
+      const full = head + 'X'.repeat(40_000) + tail;
+      const result = buildTailPrioritizedOcrInput(full, OCR_PER_DOC_SUMMARY_LIMIT);
+      expect(result).toContain('LETTERA DI DIMISSIONE');
+      expect(result).toContain('follow-up a 30 giorni');
+      expect(result.endsWith('FINE')).toBe(true);
+    });
+
+    it('gives the tail roughly double the head budget', () => {
+      const full = 'A'.repeat(90_000);
+      const result = buildTailPrioritizedOcrInput(full, 30_000);
+      const [headPart, tailPart] = result.split('[...PORZIONE CENTRALE OMESSA');
+      // tail part includes the marker remainder; compare order of magnitude
+      const tailLen = tailPart.length;
+      const headLen = headPart.length;
+      expect(tailLen).toBeGreaterThan(headLen * 1.5);
+    });
+
+    it('keeps both head and tail with an omission marker between', () => {
+      const full = 'HEAD' + 'm'.repeat(60_000) + 'TAILEND';
+      const result = buildTailPrioritizedOcrInput(full, 20_000);
+      expect(result.startsWith('HEAD')).toBe(true);
+      expect(result.endsWith('TAILEND')).toBe(true);
+      expect(result).toContain('PORZIONE CENTRALE OMESSA');
     });
   });
 

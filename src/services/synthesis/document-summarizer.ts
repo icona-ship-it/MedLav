@@ -32,16 +32,43 @@ export interface DocumentSummary {
 }
 
 /**
+ * A7 (Lavini): when a document's OCR exceeds the per-doc budget, naively slicing
+ * the FIRST N chars silently drops the END of the document — exactly where the
+ * discharge letter ("lettera di dimissione"), final therapy and follow-up live.
+ * In large cases this lost the clinically decisive closing pages.
+ *
+ * Tail-priority windowing: keep a head window AND a larger tail window (the tail
+ * gets ~2x the head budget) with an explicit omission marker between them, so
+ * the closing pages always reach the summarizer. For documents within budget
+ * the text is returned unchanged.
+ */
+const TAIL_OMISSION_MARKER =
+  '\n\n[...PORZIONE CENTRALE OMESSA PER LIMITE DI LUNGHEZZA — le pagine FINALI del documento (dimissione, terapia conclusiva, follow-up) sono riportate integralmente qui sotto...]\n\n';
+
+export function buildTailPrioritizedOcrInput(fullText: string, limit: number): string {
+  if (fullText.length <= limit) return fullText;
+  // Reserve the marker within the budget so the returned string never exceeds `limit`.
+  const contentBudget = Math.max(0, limit - TAIL_OMISSION_MARKER.length);
+  const headBudget = Math.floor(contentBudget / 3); // first third
+  const tailBudget = contentBudget - headBudget; // last two thirds — tail priority
+  const head = fullText.slice(0, headBudget);
+  const tail = fullText.slice(fullText.length - tailBudget);
+  return `${head}${TAIL_OMISSION_MARKER}${tail}`;
+}
+
+/**
  * Generate a structured summary of a single document's OCR text.
- * Truncates OCR input to OCR_PER_DOC_SUMMARY_LIMIT chars.
+ * Applies tail-priority windowing (A7) so the closing pages — discharge,
+ * final therapy, follow-up — are preserved even when the document exceeds
+ * OCR_PER_DOC_SUMMARY_LIMIT.
  */
 export async function summarizeDocument(
   doc: DocumentOcrContext,
 ): Promise<DocumentSummary> {
-  const ocrText = doc.pages
+  const fullText = doc.pages
     .map((p) => p.ocrText)
-    .join('\n\n')
-    .slice(0, OCR_PER_DOC_SUMMARY_LIMIT);
+    .join('\n\n');
+  const ocrText = buildTailPrioritizedOcrInput(fullText, OCR_PER_DOC_SUMMARY_LIMIT);
 
   const result = await streamMistralChat({
     model: MISTRAL_MODELS.MISTRAL_LARGE,
@@ -54,6 +81,7 @@ export async function summarizeDocument(
 - Nomi di medici e strutture
 - Esiti di esami (valori chiave)
 - Eventuali criticità o anomalie
+- PRIORITÀ ALLE PAGINE FINALI: diagnosi di dimissione, terapia domiciliare conclusiva e follow-up programmato vanno SEMPRE riportati se presenti (sono spesso nelle ultime pagine del documento).
 Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sanitario (memoria, ricorso, fattura), riassumi il contenuto pertinente.`,
       },
       {
