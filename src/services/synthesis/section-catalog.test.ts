@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSectionPlan, evaluateCondition, getAllSectionIds, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS } from './section-catalog';
+import { resolveSectionPlan, evaluateCondition, getAllSectionIds, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS, PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS } from './section-catalog';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { CaseType, PeriziaMetadata } from '@/types';
 
@@ -475,6 +475,43 @@ describe('section-catalog', () => {
     it('should not return CTP osservazioni_bozza', () => {
       const ids = getAllSectionIds('ctp');
       expect(ids).not.toContain('osservazioni_bozza');
+    });
+  });
+
+  // ── Post-audit invariants for A2/A3 ──
+
+  describe('A3 — placeholder sections are never empty', () => {
+    const ALL = [
+      ...CTU_SECTIONS,
+      ...CTP_SECTIONS,
+      ...STRAGIUDIZIALE_SECTIONS,
+      ...PARERE_PRO_VERITATE_SECTIONS,
+      ...PARERE_SCOPO_RISERVA_SECTIONS,
+    ];
+    it('every placeholder has >=5 words so the empty-section check never false-blocks', () => {
+      for (const s of ALL.filter((x) => x.isPlaceholder)) {
+        const words = (s.placeholderText ?? '').split(/\s+/).filter((w) => w.length > 0).length;
+        expect(words, `placeholder "${s.id}" too short`).toBeGreaterThanOrEqual(5);
+      }
+    });
+  });
+
+  describe('A2 — ITT/ITP table injected exactly once per role', () => {
+    const llmCalcSections = (sections: typeof CTU_SECTIONS): string[] =>
+      sections.filter((s) => !s.isPlaceholder && s.dataSources.includes('calculations')).map((s) => s.id);
+
+    it('CTU/CTP: no LLM section carries calculations (table comes from considerazioni_ml placeholder)', () => {
+      expect(llmCalcSections(CTU_SECTIONS)).toHaveLength(0);
+      expect(llmCalcSections(CTP_SECTIONS)).toHaveLength(0);
+      expect(CTU_SECTIONS.some((s) => s.id === 'considerazioni_ml' && s.isPlaceholder)).toBe(true);
+    });
+
+    it('parere_scopo_riserva: exactly one LLM section carries calculations (no double table)', () => {
+      expect(llmCalcSections(PARERE_SCOPO_RISERVA_SECTIONS)).toEqual(['conclusioni_parere']);
+    });
+
+    it('parere_pro_veritate: exactly one LLM section carries calculations', () => {
+      expect(llmCalcSections(PARERE_PRO_VERITATE_SECTIONS)).toEqual(['conclusioni_parere']);
     });
   });
 });

@@ -474,6 +474,63 @@ describe('isSimilarEvent', () => {
       expect(isSimilarEvent(eco, rmn)).toBe(false);
     });
   });
+
+  // ── A6 regression: aggregation must not collapse distinct same-modality exams ──
+  describe('A6 — aggregation does not lose distinct exams (post-audit)', () => {
+    it('keeps 3 distinct same-modality exams (RX torace/addome/bacino) separate', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX torace', description: 'Radiografia del torace' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX addome', description: 'Radiografia diretta addome' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX bacino', description: 'Radiografia del bacino' }),
+          ],
+        },
+      ]);
+      expect(result).toHaveLength(3);
+      expect(result.some((e) => e.title.toLowerCase().includes('routinari'))).toBe(false);
+    });
+
+    it('preserves requiresVerification (OR) and member diagnoses when aggregation fires', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Emocromo', description: 'Emocromo completo', requiresVerification: false, diagnosis: null }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Glicemia', description: 'Glicemia a digiuno', requiresVerification: true, diagnosis: 'Iperglicemia da verificare' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Creatinina', description: 'Creatinina sierica', requiresVerification: false, diagnosis: null }),
+          ],
+        },
+      ]);
+      const agg = result.find((e) => e.title.toLowerCase().includes('ematochimici'));
+      expect(agg).toBeDefined();
+      expect(agg!.requiresVerification).toBe(true); // a member flagged → aggregate flagged
+      expect(agg!.description).toContain('Iperglicemia da verificare'); // diagnosis not lost
+    });
+  });
+
+  // ── A5 regression: lab tokens must not be read as clock times ──
+  describe('A5 — getTimeBucket does not false-positive on lab tokens (post-audit)', () => {
+    it('does not treat a titer "1:20" as a clock time', () => {
+      // OLD: "1:20" → 01:20 → am; paired with "ore 16" → pm → conflict → merge blocked.
+      const a = makeEvent({ eventType: 'esame_ematochimico', title: 'Dosaggio ANA', description: 'Titolo 1:20 positivo' });
+      const b = makeEvent({ eventType: 'esame_ematochimico', title: 'Dosaggio ANA', description: 'Esame eseguito ore 16' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('does not treat lab factor "h 11" as a morning time', () => {
+      const a = makeEvent({ eventType: 'esame_ematochimico', title: 'Emocromo', description: 'fattore h 11 nella norma' });
+      const b = makeEvent({ eventType: 'esame_ematochimico', title: 'Emocromo', description: 'prelievo ore 16' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('still separates genuine "ore"/"alle" morning vs afternoon times', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito ore 8' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito alle 16' });
+      expect(isSimilarEvent(a, b)).toBe(false);
+    });
+  });
 });
 
 describe('isDuplicateOfExisting', () => {

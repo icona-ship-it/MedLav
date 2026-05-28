@@ -789,7 +789,11 @@ ${NO_EVN_RULE}`,
     id: 'prognosi',
     title: 'Valutazione Prognostica',
     maxTokens: TOKENS_MEDIUM,
-    dataSources: ['events-medical', 'context-summaries', 'calculations', 'guidelines'],
+    // No 'calculations' here: the graduated ITT/ITP table is rendered once, in
+    // conclusioni_parere (mirrors parere_pro_veritate). Listing 'calculations'
+    // on both sections made formatCalculationsForPrompt emit the reproduce-table
+    // directive twice → duplicated table in the same report.
+    dataSources: ['events-medical', 'context-summaries', 'guidelines'],
     contextMaxChars: 600,
     needsOcr: false,
     promptDirective: `Genera una valutazione prognostica basata sulla documentazione clinica disponibile.
@@ -797,7 +801,6 @@ Includi:
 - Decorso clinico atteso sulla base della patologia documentata e della letteratura
 - Tempistiche prevedibili di guarigione o stabilizzazione
 - Eventuali necessita terapeutiche future prevedibili (interventi, riabilitazione, terapie)
-- Periodi di invalidita temporanea residua stimabili (ITT/ITP) se i calcoli sono disponibili
 - Esiti permanenti prevedibili sulla base del quadro attuale
 NON quantificare percentuali di invalidita permanente — il perito le determinera.
 Stile prudente e basato su evidenze documentali.

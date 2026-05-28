@@ -595,6 +595,80 @@ ${padding}`;
       // Only the generic REQUIRED_SECTIONS check runs (both present here)
       expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
     });
+
+    // Post-audit regression: a section whose CONTENT starts with its own sub-heading
+    // (the rendered intestazione begins with "### Dati del professionista …") was
+    // wrongly reported empty because body-extraction stopped at the first '#'.
+    // That would have blocked EVERY sectional report.
+    // Distinct-word padding: long enough to clear MIN_WORD_COUNT and varied so it
+    // never trips duplicate_content.
+    const pad = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p}${i}`).join(' ');
+
+    it('does NOT flag a section whose content starts with a ### sub-heading', () => {
+      const report = `## Intestazione
+
+### Dati del professionista incaricato
+Dott.ssa Anna Belli — Medico legale, Specialista in Medicina Legale
+
+### Dati del periziando
+**Nome e cognome**: M.R.
+
+## Dati della Documentazione Sanitaria
+In data 15.03.2024 il paziente veniva visitato. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Intestazione', 'Dati della Documentazione Sanitaria', 'Epicrisi'],
+      };
+      const result = validateReport(report, 5, context);
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('still flags a TRULY empty section (heading immediately followed by next section)', () => {
+      const report = `## Intestazione
+
+## Dati della Documentazione Sanitaria
+In data 15.03.2024. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Intestazione'],
+      };
+      const result = validateReport(report, 5, context);
+      expect(result.issues.some((i) => i.type === 'missing_section' && i.message.includes('vuota'))).toBe(true);
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('A3 — coverage counts extended Italian prose dates (post-audit)', () => {
+    const pad = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p}${i}`).join(' ');
+    it('does not block a narrative report that writes dates in prose', () => {
+      // 6 events; report cites every date ONLY in extended Italian prose.
+      const report = `## Dati della Documentazione Sanitaria
+Il 15 gennaio 2024 visita iniziale. Il 20 febbraio 2024 controllo. Il 5 marzo 2024 esame.
+Il 10 aprile 2024 intervento. Il 18 maggio 2024 dimissione. Il 25 giugno 2024 follow-up. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-20' },
+          { orderNumber: 3, eventDate: '2024-03-05' },
+          { orderNumber: 4, eventDate: '2024-04-10' },
+          { orderNumber: 5, eventDate: '2024-05-18' },
+          { orderNumber: 6, eventDate: '2024-06-25' },
+        ],
+      };
+      const result = validateReport(report, 6, context);
+      expect(result.eventCoverage).toBeGreaterThanOrEqual(80);
+      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
+    });
   });
 
   describe('A3 — getBlockingIssues policy', () => {

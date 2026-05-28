@@ -34,6 +34,7 @@ import {
   type HeaderData,
 } from './header-schema';
 import { renderHeaderMarkdown, variantForSectionId } from './header-template';
+import { buildTailPrioritizedOcrInput } from './document-summarizer';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -196,8 +197,13 @@ export function buildSectionUserPrompt(params: {
         const MAX_OCR_CHARS_PER_SECTION = 200_000;
         if (ocrText && ocrText.length > MAX_OCR_CHARS_PER_SECTION) {
           const originalLength = ocrText.length;
-          ocrText = ocrText.slice(0, MAX_OCR_CHARS_PER_SECTION) + '\n\n[... testo OCR troncato per limiti di contesto. I documenti successivi non sono inclusi in questa sezione.]';
-          logger.warn('section-generator', `OCR text truncated to ${MAX_OCR_CHARS_PER_SECTION} chars for section "${spec.id}" (was ${originalLength})`);
+          // A7: tail-priority truncation (not a head-only slice). A plain
+          // slice(0, N) drops the END of the OCR — exactly where the discharge
+          // letter / final therapy live. buildTailPrioritizedOcrInput keeps the
+          // head AND the closing pages. This is the <10-doc path (map-reduce off),
+          // which is the path a few-but-huge-docs "caso grande" actually takes.
+          ocrText = buildTailPrioritizedOcrInput(ocrText, MAX_OCR_CHARS_PER_SECTION);
+          logger.warn('section-generator', `OCR text tail-priority truncated to ${MAX_OCR_CHARS_PER_SECTION} chars for section "${spec.id}" (was ${originalLength})`);
         }
         if (ocrText) parts.push(ocrText);
       }

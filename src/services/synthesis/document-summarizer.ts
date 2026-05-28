@@ -43,16 +43,24 @@ export interface DocumentSummary {
  * the text is returned unchanged.
  */
 const TAIL_OMISSION_MARKER =
-  '\n\n[...PORZIONE CENTRALE OMESSA PER LIMITE DI LUNGHEZZA — le pagine FINALI del documento (dimissione, terapia conclusiva, follow-up) sono riportate integralmente qui sotto...]\n\n';
+  '\n\n[...PORZIONE CENTRALE OMESSA PER LIMITE DI LUNGHEZZA — le pagine FINALI (dimissione, terapia conclusiva, follow-up) sono riportate integralmente qui sotto...]\n\n';
+
+/** Chars reserved for the closing pages (discharge letter + final therapy +
+ * follow-up are short). Everything else goes to the head, so mid-document
+ * content (e.g. an operative report in the first half) is preserved — minimizing
+ * the regression vs the old head-only slice while still capturing the tail. */
+const TAIL_RESERVE_CHARS = 12_000;
 
 export function buildTailPrioritizedOcrInput(fullText: string, limit: number): string {
   if (fullText.length <= limit) return fullText;
   // Reserve the marker within the budget so the returned string never exceeds `limit`.
   const contentBudget = Math.max(0, limit - TAIL_OMISSION_MARKER.length);
-  const headBudget = Math.floor(contentBudget / 3); // first third
-  const tailBudget = contentBudget - headBudget; // last two thirds — tail priority
+  // Fixed tail reserve, head gets the rest (head-maximizing). Cap the tail at
+  // half the budget so a tiny limit still splits sanely.
+  const tailBudget = Math.min(TAIL_RESERVE_CHARS, Math.floor(contentBudget / 2));
+  const headBudget = contentBudget - tailBudget;
   const head = fullText.slice(0, headBudget);
-  const tail = fullText.slice(fullText.length - tailBudget);
+  const tail = tailBudget > 0 ? fullText.slice(fullText.length - tailBudget) : '';
   return `${head}${TAIL_OMISSION_MARKER}${tail}`;
 }
 

@@ -156,4 +156,28 @@ describe('A2 — graduated ITT/ITP segments', () => {
   it('formatITTITPTable returns empty string for no segments', () => {
     expect(formatITTITPTable([])).toBe('');
   });
+
+  // Post-audit: the UI passes RAW DB rows, which can carry the sentinel date
+  // '1900-01-01' for undated clinical events. Those must be filtered, else the
+  // table shows "Data non documentata" and multi-decade windows.
+  it('calculateITTITP ignores sentinel-dated and malformed-date events', () => {
+    const segments = calculateITTITP([
+      makeEvent('1900-01-01', 'visita', 'Visita non datata'),
+      makeEvent('2024-03', 'esame', 'Esame con data parziale'),
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione in buone condizioni'),
+    ]);
+    const itt = segments.find((s) => s.percentage === 100);
+    expect(itt).toBeDefined();
+    expect(itt!.startDate).toBe('2024-01-10'); // anchored on the real ricovero, not 1900
+    expect(segments.every((s) => s.startDate !== '1900-01-01' && s.endDate !== '1900-01-01')).toBe(true);
+  });
+
+  it('formatITTITPTable escapes pipe characters in labels', () => {
+    const table = formatITTITPTable([
+      { label: 'ITT | 100', percentage: 100, days: 5, startDate: '2024-01-10', endDate: '2024-01-15', estimated: false },
+    ]);
+    // The literal pipe in the label must be escaped so columns don't shift.
+    expect(table).toContain('ITT \\| 100');
+  });
 });

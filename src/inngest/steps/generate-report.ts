@@ -406,7 +406,7 @@ const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
  * as a proposal to verify — it surfaces the arithmetic without making the
  * medico-legal judgment (which stays the perito's).
  */
-function buildPlaceholderContent(
+export function buildPlaceholderContent(
   spec: SectionSpec,
   synthesisParams: SynthesisParams,
 ): string {

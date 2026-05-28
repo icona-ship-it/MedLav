@@ -10,6 +10,9 @@ interface CalcEvent {
   description: string;
 }
 
+/** Sentinel date written by the extractor when no real date can be inferred. */
+const SENTINEL_EVENT_DATE = '1900-01-01';
+
 export interface MedicoLegalCalculation {
   label: string;
   value: string;
@@ -73,7 +76,17 @@ export function calculationsToITTITPSegments(
  * client-safe — also used by the UI summary table in events-tab.
  */
 export function calculateITTITP(events: CalcEvent[]): ITPSegment[] {
-  const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  // Drop non-clinical events AND sentinel/malformed dates. The UI path
+  // (itt-itp-summary.tsx) passes RAW DB rows, where an undated clinical event
+  // carries the sentinel '1900-01-01'; without this filter it would anchor the
+  // recovery window in 1900 → multi-decade ITP rows + "Data non documentata"
+  // in the table. (The pipeline path is already pre-filtered by the consolidator.)
+  const clinical = events.filter(
+    (e) =>
+      !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
+      e.event_date !== SENTINEL_EVENT_DATE &&
+      /^\d{4}-\d{2}-\d{2}$/.test(e.event_date),
+  );
   if (clinical.length === 0) return [];
   return calculationsToITTITPSegments(calculateGraduatedITTITP(clinical));
 }
@@ -86,10 +99,12 @@ export function calculateITTITP(events: CalcEvent[]): ITPSegment[] {
 export function formatITTITPTable(segments: ITPSegment[]): string {
   if (segments.length === 0) return '';
   const rows = segments.map((s) => {
+    // Escape pipes so a label can never break the Markdown table columns.
+    const label = s.label.replace(/\|/g, '\\|');
     const dal = s.startDate ? formatDate(s.startDate) : '—';
     const al = s.endDate ? formatDate(s.endDate) : '—';
     const stima = s.estimated ? ' *(stima)*' : '';
-    return `| ${s.label} | ${dal} | ${al} | ${s.days} | ${s.percentage}%${stima} |`;
+    return `| ${label} | ${dal} | ${al} | ${s.days} | ${s.percentage}%${stima} |`;
   });
   const totalDays = segments.reduce((sum, s) => sum + s.days, 0);
   return [

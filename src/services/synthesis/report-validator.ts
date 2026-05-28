@@ -213,24 +213,17 @@ export function validateReport(
     const eventsWithDate = context.events.filter((e) => e.eventDate && e.eventDate !== '1900-01-01');
     if (eventsWithDate.length > 0) {
       const synthesisLower = synthesis.toLowerCase();
-      const coveredCount = eventsWithDate.filter((e) => {
-        // Check if the event date appears in DD/MM/YYYY or DD.MM.YYYY or YYYY-MM-DD format
-        const d = e.eventDate;
-        const parts = d.split('-');
-        if (parts.length !== 3) return true; // skip malformed dates
-        const ddmmyyyy = `${parts[2]}/${parts[1]}/${parts[0]}`;
-        const ddmmyyyyDot = `${parts[2]}.${parts[1]}.${parts[0]}`;
-        return synthesisLower.includes(d) || synthesisLower.includes(ddmmyyyy) || synthesisLower.includes(ddmmyyyyDot);
-      }).length;
+      const coveredCount = eventsWithDate.filter((e) => eventDateAppearsInReport(e.eventDate, synthesisLower)).length;
       eventCoverage = Math.round((coveredCount / eventsWithDate.length) * 100);
       if (eventCoverage < MIN_EVENT_COVERAGE_PERCENT) {
-        // A3: coverage is a PROXY (it string-matches event dates in DD.MM.YYYY
-        // form). A report that legitimately writes some dates in extended prose
-        // ("15 marzo 2024") undercounts here. And since the block fires at
-        // assembly with a deterministic seed, an Inngest retry would reproduce
-        // the same report — a false positive permanently fails a good case.
-        // So we only HARD-BLOCK on gross failure (near-zero coverage with enough
-        // dated events to trust the signal); the 10-30% band stays a warning.
+        // A3: coverage is a PROXY. eventDateAppearsInReport() matches numeric
+        // forms (DD.MM.YYYY, DD/MM/YYYY, ISO) AND extended Italian prose
+        // ("15 marzo 2024", "15 marzo") so narrative stragiudiziale reports
+        // aren't undercounted. Still imperfect, and the block fires at assembly
+        // with a deterministic seed (a retry reproduces the same report), so a
+        // false positive permanently fails a good case. Therefore we HARD-BLOCK
+        // only on gross failure (near-zero coverage with enough dated events to
+        // trust the signal); the 10-30% band stays a warning.
         const grossFailure =
           eventCoverage < COVERAGE_HARD_BLOCK_PERCENT &&
           eventsWithDate.length >= COVERAGE_MIN_EVENTS_FOR_BLOCK;
@@ -264,16 +257,20 @@ export function validateReport(
 
 // ── A3: Role-mandatory section presence ──
 
-/** Minimum non-whitespace words a required section must contain after its
- * heading. Placeholder sections always exceed this; an empty/failed LLM
- * section falls below it. */
-const MIN_SECTION_CONTENT_WORDS = 5;
-
 /**
  * For each role-mandatory section title, verify the report contains a matching
- * "## heading" with non-empty content. A missing heading OR an empty section
- * body is flagged as a blocking `missing_section` error (A3). Only runs when
- * `context.requiredSectionTitles` is provided (resolved section plan).
+ * section heading with non-empty content. A missing heading OR a truly-empty
+ * section body is flagged as a blocking `missing_section` error (A3). Only runs
+ * when `context.requiredSectionTitles` is provided (resolved section plan).
+ *
+ * Section headings are emitted by the assembler as exactly `## <title>` (two
+ * hashes). Section CONTENT may legitimately contain its own headings — the
+ * rendered intestazione starts with `# <title>` and `### Dati …` sub-headings.
+ * So the "next section" boundary must be the next 2-hash `## ` heading ONLY;
+ * matching any `#{1,3}` here wrongly treated a content sub-heading as the next
+ * section and reported a fully-populated section as empty (would block EVERY
+ * report). We block only on a genuinely empty body (0 words) — a terse-but-real
+ * section must not deterministically fail the case.
  */
 function checkRequiredSections(
   synthesis: string,
@@ -290,10 +287,8 @@ function checkRequiredSections(
     if (normalizedTitle.length === 0 || seen.has(normalizedTitle.toLowerCase())) continue;
     seen.add(normalizedTitle.toLowerCase());
 
-    // Match "## Title" (1-3 hashes) on its own line, case-insensitive.
-    // Use [ \t]* (not \s*) so the match stops at the heading's newline and
-    // doesn't swallow a following blank line — otherwise an empty section's
-    // body extraction would bleed into the next section.
+    // Match the section heading on its own line, case-insensitive. Use [ \t]*
+    // (not \s*) so the match stops at the heading's newline.
     const headingRe = new RegExp(`(?:^|\\n)#{1,3}[ \\t]*${escapeRegex(normalizedTitle)}[ \\t]*(?:\\n|$)`, 'i');
     const match = headingRe.exec(synthesis);
     if (!match) {
@@ -305,17 +300,18 @@ function checkRequiredSections(
       continue;
     }
 
-    // Extract content from end of heading to next "## " heading.
+    // Body = text from end of this heading to the NEXT 2-hash section heading
+    // (`\n## `). Content-internal `#`/`###` headings are NOT boundaries.
     const contentStart = match.index + match[0].length;
     const rest = synthesis.slice(contentStart);
-    const nextHeading = rest.search(/\n#{1,3}\s+\S/);
+    const nextHeading = rest.search(/\n##[ \t]/);
     const body = (nextHeading === -1 ? rest : rest.slice(0, nextHeading)).trim();
     const bodyWords = body.split(/\s+/).filter((w) => w.length > 0).length;
-    if (bodyWords < MIN_SECTION_CONTENT_WORDS) {
+    if (bodyWords === 0) {
       issues.push({
         type: 'missing_section',
         severity: 'error',
-        message: `Sezione obbligatoria vuota: "${normalizedTitle}" (${bodyWords} parole). Generazione incompleta — report bloccato.`,
+        message: `Sezione obbligatoria vuota: "${normalizedTitle}". Generazione incompleta — report bloccato.`,
       });
     }
   }
@@ -378,6 +374,42 @@ function checkPhantomDates(
   }
 
   return issues;
+}
+
+/** Italian month names, indexed 1-12, for matching extended prose dates. */
+const ITALIAN_MONTHS = [
+  '', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+  'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre',
+];
+
+/**
+ * True if an ISO event date (YYYY-MM-DD) is cited anywhere in the (lowercased)
+ * report, in any common Italian form: numeric (15.03.2024 / 15/03/2024 / ISO)
+ * OR extended prose ("15 marzo 2024", "15 marzo"). The prose forms matter for
+ * narrative reports (stragiudiziale) that rarely write numeric dates — without
+ * them the coverage proxy under-counts and can falsely block a sound report.
+ */
+function eventDateAppearsInReport(isoDate: string, synthesisLower: string): boolean {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return true; // malformed → don't penalise
+  const [yyyy, mm, dd] = parts;
+  const day = parseInt(dd, 10);
+  const monthIdx = parseInt(mm, 10);
+
+  if (synthesisLower.includes(isoDate)) return true;
+  if (synthesisLower.includes(`${dd}/${mm}/${yyyy}`)) return true;
+  if (synthesisLower.includes(`${dd}.${mm}.${yyyy}`)) return true;
+  if (synthesisLower.includes(`${dd}-${mm}-${yyyy}`)) return true;
+
+  // Extended prose: "15 marzo 2024" or non-zero-padded "5 marzo 2024", and the
+  // year-less "15 marzo" form. Require the day number to avoid matching a bare
+  // month name shared by many events.
+  const monthName = ITALIAN_MONTHS[monthIdx];
+  if (monthName) {
+    if (synthesisLower.includes(`${day} ${monthName} ${yyyy}`)) return true;
+    if (synthesisLower.includes(`${day} ${monthName}`)) return true;
+  }
+  return false;
 }
 
 /** Convert YYYY-MM-DD, DD/MM/YYYY, or DD.MM.YYYY to a canonical DD/MM/YYYY for set comparison. */

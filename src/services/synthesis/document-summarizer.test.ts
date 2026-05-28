@@ -113,14 +113,29 @@ describe('document-summarizer', () => {
       expect(result.endsWith('FINE')).toBe(true);
     });
 
-    it('gives the tail roughly double the head budget', () => {
+    it('maximizes the head with a bounded tail reserve (minimizes middle-drop)', () => {
       const full = 'A'.repeat(90_000);
-      const result = buildTailPrioritizedOcrInput(full, 30_000);
-      const [headPart, tailPart] = result.split('[...PORZIONE CENTRALE OMESSA');
-      // tail part includes the marker remainder; compare order of magnitude
-      const tailLen = tailPart.length;
-      const headLen = headPart.length;
-      expect(tailLen).toBeGreaterThan(headLen * 1.5);
+      const result = buildTailPrioritizedOcrInput(full, 45_000);
+      const markerIdx = result.indexOf('[...PORZIONE');
+      const beforeMarker = result.slice(0, markerIdx);
+      const afterMarker = result.slice(result.indexOf(']', markerIdx) + 1).trim();
+      // Head gets most of the budget; tail is a bounded reserve (~12K).
+      expect(beforeMarker.length).toBeGreaterThan(25_000);
+      expect(beforeMarker.length).toBeGreaterThan(afterMarker.length);
+      expect(afterMarker.length).toBeLessThanOrEqual(12_000);
+    });
+
+    it('keeps mid-document content within the head budget (operative report at ~30K)', () => {
+      // A 60-page-equivalent doc; operative report marker at offset ~30K must
+      // survive in the head (the regression the rebalance fixes).
+      const pre = 'X'.repeat(30_000);
+      const opReport = 'DESCRIZIONE OPERATORIA: osteosintesi piatto tibiale.';
+      const mid = 'Y'.repeat(20_000);
+      const tail = 'LETTERA DI DIMISSIONE: terapia domiciliare, follow-up 30gg.';
+      const full = pre + opReport + mid + tail;
+      const result = buildTailPrioritizedOcrInput(full, 45_000);
+      expect(result).toContain('DESCRIZIONE OPERATORIA'); // mid-doc preserved in head
+      expect(result).toContain('LETTERA DI DIMISSIONE');   // tail preserved
     });
 
     it('keeps both head and tail with an omission marker between', () => {

@@ -210,8 +210,12 @@ function aggregateIdenticalEventsPerDay(
 
   // Identify groups eligible for aggregation (size >=3).
   // For esame_ematochimico (already a specific category), always aggregate.
-  // For esame/esame_strumentale (broader), require token overlap >=0.3 to
-  // avoid merging "RX gomito" + "RX ginocchio" + "Risonanza colonna".
+  // For esame/esame_strumentale (broader), require token overlap >=0.5.
+  // Threshold is 0.5 (not 0.3): once A6 keeps the modality token (RX/TC/ECO),
+  // distinct districts like "RX torace"/"RX addome"/"RX bacino" share exactly
+  // {modality} → Jaccard 0.333. At 0.3 they wrongly aggregated (3 distinct
+  // exams → 1, dropping findings); at 0.5 only near-identical titles (≈1.0)
+  // aggregate, so distinct-district AND distinct-modality exams stay separate.
   const aggregatedIndices = new Set<number>();
   const replacements: Array<{ insertAt: number; event: ExtractedEvent & { documentId: string } }> = [];
 
@@ -220,20 +224,30 @@ function aggregateIdenticalEventsPerDay(
     const sampleType = events[indices[0]].eventType;
     const groupTitles = indices.map((i) => events[i].title ?? '');
     if (sampleType !== 'esame_ematochimico') {
-      if (!titlesShareKeywords(groupTitles, 0.3)) continue;
+      if (!titlesShareKeywords(groupTitles, 0.5)) continue;
     }
 
-    // Build aggregated event
+    // Build aggregated event. Preserve safety-critical fields from ALL members
+    // (not just the first): requiresVerification is OR-ed, and any member
+    // diagnosis is carried into the description, so a "DA VERIFICARE" flag or a
+    // diagnosis on a non-first member (e.g. a suspicious finding) is never lost.
     const sample = events[indices[0]];
     const eventTypeLabel = sample.eventType === 'esame_ematochimico'
       ? 'Esami ematochimici'
       : sample.eventType === 'esame_strumentale'
         ? 'Esami strumentali'
         : 'Esami';
+    const memberDiagnoses = indices
+      .map((i) => events[i].diagnosis)
+      .filter((d): d is string => Boolean(d && d.trim()));
+    const diagnosisSuffix = memberDiagnoses.length > 0
+      ? ` | Diagnosi/reperti: ${Array.from(new Set(memberDiagnoses)).join('; ')}`
+      : '';
     const aggregated: ExtractedEvent & { documentId: string } = {
       ...sample,
       title: `${eventTypeLabel} routinari (${indices.length} esami raggruppati)`,
-      description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}`,
+      description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}${diagnosisSuffix}`,
+      requiresVerification: indices.some((i) => events[i].requiresVerification),
       sourcePages: dedupSortPages(indices.flatMap((i) => events[i].sourcePages ?? [])),
       confidence: Math.min(...indices.map((i) => events[i].confidence ?? 0)),
       sourceText: indices.map((i) => events[i].sourceText ?? '').filter(Boolean).join(' / ').slice(0, 200),
@@ -413,10 +427,12 @@ function findDiscrepancyInGroup(
 function getTimeBucket(event: ExtractedEvent): 'am' | 'pm' | null {
   const text = `${event.title ?? ''} ${event.description ?? ''}`.toLowerCase();
 
-  // Explicit clock time wins: "ore 14:30", "h 8", "08:00", "alle 16".
-  const hourMatch =
-    text.match(/\b(?:ore|alle|h)\s*(\d{1,2})(?:[:.]\d{2})?\b/) ??
-    text.match(/\b(\d{1,2}):\d{2}\b/);
+  // Explicit clock time, only with an unambiguous time word ("ore"/"alle"):
+  // "ore 14:30", "alle 16", "ore 8". We deliberately do NOT match a bare "h N"
+  // (collides with lab factor "h 11", height) nor a bare "N:NN" (collides with
+  // titers/ratios "1:20", "1:08") — those caused spurious time buckets and
+  // blocked legitimate same-day merges (clutter).
+  const hourMatch = text.match(/\b(?:ore|alle)\s*(\d{1,2})(?:[:.]\d{2})?\b/);
   if (hourMatch) {
     const hour = parseInt(hourMatch[1], 10);
     if (hour >= 0 && hour <= 23) return hour < 12 ? 'am' : 'pm';
