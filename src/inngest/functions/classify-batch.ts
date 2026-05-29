@@ -23,6 +23,22 @@ export const classifyBatchJob = inngest.createFunction(
       try {
         const failureData = event.data as { event: { data: { caseId: string; userId: string; totalCredits: number } } };
         const { caseId, userId, totalCredits } = failureData.event.data;
+        // IDEMPOTENCY: refundCredits just adds credits, so a second onFailure
+        // delivery would double-refund. Skip if a categorizzazione refund for this
+        // case already exists.
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const { data: existingRefunds } = await supabase
+          .from('credit_transactions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('entity_id', caseId)
+          .eq('type', 'refund')
+          .eq('operation', 'categorizzazione');
+        if (existingRefunds && existingRefunds.length > 0) {
+          logger.info('classify-batch', `Skipping refund for case ${caseId} — already refunded`);
+          return;
+        }
         // Refund all credits on total failure
         await refundCredits(userId, totalCredits, 'categorizzazione', caseId, { reason: 'classify_batch_failed' });
         logger.error('classify-batch', `Batch classification failed for case ${caseId}, refunded ${totalCredits} credits`);

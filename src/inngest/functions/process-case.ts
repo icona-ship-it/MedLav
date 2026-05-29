@@ -109,7 +109,7 @@ async function handlePipelineFailure(event: { data: unknown }) {
         .eq('id', caseId)
         .single();
       if (caseForRefund) {
-        // Find the consumption transaction for this case to know how much to refund
+        // Find the consumption transactions for this case (newest first → amount).
         const { data: transactions } = await supabase
           .from('credit_transactions')
           .select('amount')
@@ -117,11 +117,29 @@ async function handlePipelineFailure(event: { data: unknown }) {
           .eq('entity_id', caseId)
           .eq('type', 'consumption')
           .eq('operation', 'elaborazione')
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
 
-        if (transactions && transactions.length > 0) {
-          const refundAmount = Math.abs(transactions[0].amount as number);
+        // IDEMPOTENCY: refundCredits is NOT idempotent (it just adds credits). If
+        // onFailure is delivered twice for the same case (Inngest re-delivery /
+        // manual replay) the user would be refunded twice. Only refund when there
+        // are FEWER refunds than consumptions for this case+operation, so each
+        // consumption is refunded at most once (a legitimate re-run adds a new
+        // consumption and is therefore still refundable).
+        const { data: existingRefunds } = await supabase
+          .from('credit_transactions')
+          .select('id')
+          .eq('user_id', caseForRefund.user_id)
+          .eq('entity_id', caseId)
+          .eq('type', 'refund')
+          .eq('operation', 'elaborazione');
+
+        const consumptionCount = transactions?.length ?? 0;
+        const refundCount = existingRefunds?.length ?? 0;
+
+        if (consumptionCount > 0 && refundCount >= consumptionCount) {
+          logger.info('pipeline', `Skipping refund for case ${caseId} — already refunded (${refundCount} refunds >= ${consumptionCount} consumptions)`);
+        } else if (consumptionCount > 0) {
+          const refundAmount = Math.abs(transactions![0].amount as number);
           const { refundCredits } = await import('@/services/credits/credit-service');
           await refundCredits(
             caseForRefund.user_id as string,
