@@ -153,6 +153,17 @@ export function calculateMilano(
   percentage: number,
   age: number,
 ): MilanoResult {
+  // Guard non-finite inputs first (NaN/Infinity bypass the range checks below
+  // and would silently anchor on the first table row → bogus euro figure).
+  if (!Number.isFinite(percentage) || !Number.isFinite(age)) {
+    return {
+      percentage: 0, ageAtEvent: 0, ageUsed: 0, ageDemoltiplicator: 0,
+      isInterpolated: false, estimatedAmount: 0, perPointValue: 0,
+      tableReference: 'Tabelle Milano 2024', confidence: 'da_verificare',
+      notes: 'Percentuale o età non valida (non numerica).',
+    };
+  }
+
   const roundedPercentage = Math.round(percentage);
   const clampedAge = Math.max(0, Math.min(age, 100));
 

@@ -58,8 +58,10 @@ export function calculateBalthazard(
     };
   }
 
-  // Validate all percentages
-  const invalidIdx = percentages.findIndex((p) => p < 0 || p > 100);
+  // Validate all percentages. Number.isFinite first: NaN/Infinity slip past
+  // `p < 0 || p > 100` (NaN comparisons are always false) and would propagate a
+  // "€NaN" into a court document.
+  const invalidIdx = percentages.findIndex((p) => !Number.isFinite(p) || p < 0 || p > 100);
   if (invalidIdx !== -1) {
     return {
       combinedPercentage: 0,
