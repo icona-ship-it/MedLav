@@ -35,6 +35,24 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
+  // IDEMPOTENCY: Stripe delivers webhooks at-least-once. Without dedup a replayed
+  // event re-grants a credit pack or re-runs grantMonthlyCredits (which resets the
+  // monthly quota) — a money leak. Record the event id (PK); a duplicate hits the
+  // conflict and we ack without re-processing. Fail-open if the table is missing
+  // (migration 0028 not yet applied) so the webhook keeps working in the meantime.
+  const { error: dedupError } = await supabase
+    .from('stripe_processed_events')
+    .insert({ event_id: event.id, event_type: event.type });
+  if (dedupError) {
+    if (dedupError.code === '23505') {
+      logger.info('stripe', `Duplicate webhook event ${event.id} (${event.type}) — already processed, skipping`);
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    // Unique-violation is the only "stop" signal; any other error (e.g. table
+    // not yet created) is logged and processing continues (fail-open).
+    logger.warn('stripe', `Idempotency insert failed for event ${event.id} (continuing): ${dedupError.message}`);
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
