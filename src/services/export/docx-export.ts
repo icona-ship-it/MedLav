@@ -647,14 +647,17 @@ interface ProfessionalDocxExportParams {
 /**
  * Parse a markdown pipe table into rows of cells.
  */
-function parseMarkdownTable(text: string): string[][] | null {
+export function parseMarkdownTable(text: string): string[][] | null {
   const lines = text.split('\n').filter((l) => l.trim().startsWith('|'));
   if (lines.length < 2) return null;
   // Filter separator rows
   const dataLines = lines.filter((l) => !/^\|[\s\-:|]+\|$/.test(l));
   if (dataLines.length === 0) return null;
+  // Split on UNESCAPED pipes (a `\|` is a literal pipe inside a cell), then
+  // un-escape it — matching the HTML export. A naive split('|') broke cells
+  // containing an escaped pipe (e.g. from formatITTITPTable).
   return dataLines.map((line) =>
-    line.split('|').slice(1, -1).map((c) => c.trim()),
+    line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, '|')),
   );
 }
 
@@ -662,7 +665,7 @@ function parseMarkdownTable(text: string): string[][] | null {
  * Convert a section's markdown content to DOCX paragraphs.
  * Handles headings, bold/italic, lists, tables, and plain text.
  */
-function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
+export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
   const lines = content.split('\n');
   let i = 0;
@@ -761,6 +764,15 @@ function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
         );
         result.push(new Table({ rows, width: { size: 9000, type: WidthType.DXA } }));
         result.push(new Paragraph({ text: '' }));
+      } else {
+        // Collected pipe-lines that are NOT a real table (e.g. a stray "| nota").
+        // Preserve them as plain paragraphs instead of dropping the content.
+        for (const tl of tableLines) {
+          result.push(new Paragraph({
+            children: parseInlineFormatting(tl),
+            alignment: AlignmentType.JUSTIFIED,
+          }));
+        }
       }
       continue;
     }
