@@ -181,3 +181,93 @@ describe('A2 — graduated ITT/ITP segments', () => {
     expect(table).toContain('ITT \\| 100');
   });
 });
+
+// ── Ondata 1 (audit project-wide): correttezza calcoli ITT/ITP ──
+describe('Audit Ondata 1 — ITT/ITP correctness', () => {
+  const ittDays = (calcs: ReturnType<typeof calculateMedicoLegalPeriods>) =>
+    calcs.find((c) => c.label.includes('ITT'))?.days ?? null;
+  const hospitalRows = (calcs: ReturnType<typeof calculateMedicoLegalPeriods>) =>
+    calcs.filter((c) => c.label === 'Giorni di ricovero');
+
+  it('does NOT double-count when 2 admissions share 1 discharge', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Primo ricovero'),
+      makeEvent('2024-01-15', 'ricovero', 'Secondo ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+      makeEvent('2024-03-01', 'follow-up', 'Controllo'),
+    ]);
+    expect(hospitalRows(calcs)).toHaveLength(1); // discharge paired once
+    expect(ittDays(calcs)).toBe(10); // Jan10→Jan20, not 15
+  });
+
+  it('detects a discharge NOT labeled "dimissione" ("Relazione di fine ricovero")', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'referto', 'Relazione di fine ricovero', 'Paziente dimesso'),
+      makeEvent('2024-03-01', 'follow-up', 'Controllo'),
+    ]);
+    expect(ittDays(calcs)).toBe(10); // hospital stay not lost
+  });
+
+  it('does NOT produce a backward ITP period when the only follow-up precedes the discharge', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-05', 'follow-up', 'Visita pre-ricovero'),
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+    ]);
+    // No ITP segment may have endDate before startDate.
+    for (const c of calcs.filter((x) => x.label.startsWith('ITP'))) {
+      if (c.startDate && c.endDate) expect(c.endDate >= c.startDate).toBe(true);
+    }
+  });
+
+  it('uses explicit rehab phases for English "physiotherapy" (not the thirds estimate)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+      makeEvent('2024-02-01', 'terapia', 'Start physiotherapy', 'physical therapy cycle'),
+      makeEvent('2024-03-01', 'terapia', 'End physiotherapy', 'physiotherapy completed'),
+      makeEvent('2024-04-01', 'follow-up', 'Controllo finale'),
+    ]);
+    const itp = calcs.filter((c) => c.label.startsWith('ITP'));
+    // Explicit phases are NOT marked "(stima)".
+    expect(itp.length).toBeGreaterThan(0);
+    expect(itp.every((c) => !c.value.includes('stima'))).toBe(true);
+  });
+
+  it('keeps the thirds invariant (sum of ITP days == total recovery) and emits no 0-day rows', () => {
+    for (const totalApprox of [2, 5, 10, 100, 101, 102]) {
+      const end = new Date(Date.UTC(2024, 0, 11) + totalApprox * 86_400_000).toISOString().slice(0, 10);
+      const calcs = calculateMedicoLegalPeriods([
+        makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+        makeEvent('2024-01-11', 'ricovero', 'Dimissione', 'Dimissione'),
+        makeEvent(end, 'follow-up', 'Controllo'),
+      ]);
+      const itp = calcs.filter((c) => c.label.startsWith('ITP') && c.value.includes('stima'));
+      expect(itp.every((c) => (c.days ?? 0) > 0)).toBe(true); // no "0 giorni" rows
+      const sum = itp.reduce((a, c) => a + (c.days ?? 0), 0);
+      // total recovery = end - dischargeDate(2024-01-11)
+      const total = Math.round((Date.parse(end + 'T00:00:00Z') - Date.parse('2024-01-11T00:00:00Z')) / 86_400_000);
+      expect(sum).toBe(total);
+    }
+  });
+
+  it('is robust to unsorted input (sorts internally)', () => {
+    const sorted = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+      makeEvent('2024-03-01', 'follow-up', 'Controllo'),
+    ]);
+    const shuffled = calculateMedicoLegalPeriods([
+      makeEvent('2024-03-01', 'follow-up', 'Controllo'),
+      makeEvent('2024-01-20', 'ricovero', 'Dimissione', 'Dimissione'),
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+    ]);
+    expect(ittDays(shuffled)).toBe(ittDays(sorted));
+    const totSorted = sorted.find((c) => c.label === 'Periodo totale malattia');
+    const totShuffled = shuffled.find((c) => c.label === 'Periodo totale malattia');
+    expect(totShuffled?.days).toBe(totSorted?.days);
+    expect(totShuffled?.startDate).toBe('2024-01-10');
+    expect(totShuffled?.endDate).toBe('2024-03-01');
+  });
+});

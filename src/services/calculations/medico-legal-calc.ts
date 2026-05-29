@@ -13,6 +13,77 @@ interface CalcEvent {
 /** Sentinel date written by the extractor when no real date can be inferred. */
 const SENTINEL_EVENT_DATE = '1900-01-01';
 
+/** Well-formed ISO date YYYY-MM-DD. */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Keep only clinical events with a real, well-formed date, in chronological
+ * order. The whole module assumes chronological input (events[0] = first,
+ * events[last] = last; the recovery endpoint is the last visita/follow-up after
+ * the acute phase). The pipeline feeds
+ * consolidated/sorted events, but the UI path (calculateITTITP) passes RAW DB
+ * rows — without this, unsorted rows produced ITP periods running BACKWARD
+ * (endDate < startDate) and totals anchored on the wrong events.
+ */
+function clinicalSortedByDate(events: CalcEvent[]): CalcEvent[] {
+  return events
+    .filter(
+      (e) =>
+        !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
+        e.event_date !== SENTINEL_EVENT_DATE &&
+        ISO_DATE_RE.test(e.event_date),
+    )
+    .slice()
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
+}
+
+/** True for an event that marks the END of a hospital stay. Matches Italian
+ * variants (dimissione/dimesso/fine ricovero) and English ("discharge"); the
+ * old code matched only "dimission" → a discharge labeled "Relazione di fine
+ * ricovero" was missed and the hospital stay vanished from ITT. */
+function isDischargeEvent(e: CalcEvent): boolean {
+  const text = `${e.title} ${e.description}`.toLowerCase();
+  return (
+    text.includes('dimiss') ||
+    text.includes('dimess') ||
+    text.includes('fine ricovero') ||
+    text.includes('fine del ricovero') ||
+    text.includes('discharge')
+  );
+}
+
+/**
+ * Pair each admission with at most ONE discharge (the earliest unused discharge
+ * after it). Prevents the double-count bug: with 2 admissions and 1 discharge,
+ * the old `discharges.find()` returned the SAME discharge for both admissions,
+ * summing overlapping periods and inflating ITT.
+ */
+function pairAdmissionsToDischarges(
+  admissions: CalcEvent[],
+  discharges: CalcEvent[],
+): Array<{ admission: CalcEvent; discharge: CalcEvent }> {
+  const pairs: Array<{ admission: CalcEvent; discharge: CalcEvent }> = [];
+  const used = new Set<number>();
+  for (const admission of admissions) {
+    for (let i = 0; i < discharges.length; i++) {
+      if (used.has(i)) continue;
+      if (discharges[i].event_date > admission.event_date) {
+        used.add(i);
+        pairs.push({ admission, discharge: discharges[i] });
+        break;
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Add N days to an ISO date, UTC-safe (avoids local-timezone off-by-one from
+ * mixing UTC parsing with local getDate/setDate). */
+function addDaysIso(base: string, n: number): string {
+  const ms = Date.parse(`${base}T00:00:00Z`);
+  return new Date(ms + n * 86_400_000).toISOString().slice(0, 10);
+}
+
 export interface MedicoLegalCalculation {
   label: string;
   value: string;
@@ -76,17 +147,11 @@ export function calculationsToITTITPSegments(
  * client-safe — also used by the UI summary table in events-tab.
  */
 export function calculateITTITP(events: CalcEvent[]): ITPSegment[] {
-  // Drop non-clinical events AND sentinel/malformed dates. The UI path
-  // (itt-itp-summary.tsx) passes RAW DB rows, where an undated clinical event
-  // carries the sentinel '1900-01-01'; without this filter it would anchor the
-  // recovery window in 1900 → multi-decade ITP rows + "Data non documentata"
-  // in the table. (The pipeline path is already pre-filtered by the consolidator.)
-  const clinical = events.filter(
-    (e) =>
-      !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
-      e.event_date !== SENTINEL_EVENT_DATE &&
-      /^\d{4}-\d{2}-\d{2}$/.test(e.event_date),
-  );
+  // Drop non-clinical/sentinel/malformed events AND sort chronologically. The UI
+  // path (itt-itp-summary.tsx) passes RAW DB rows: undated events carry the
+  // sentinel '1900-01-01' (→ multi-decade rows) and rows are not guaranteed
+  // sorted (→ ITP periods running backward). clinicalSortedByDate fixes both.
+  const clinical = clinicalSortedByDate(events);
   if (clinical.length === 0) return [];
   return calculationsToITTITPSegments(calculateGraduatedITTITP(clinical));
 }
@@ -126,11 +191,11 @@ export function calculateMedicoLegalPeriods(
   if (events.length === 0) return [];
 
   // Filter out non-clinical events (ticket SSN, avvisi pagamento, certificati
-  // amministrativi). They distort the illness period and gap calculations
-  // because their dates are administrative, not clinical. Trigger: Passaniti
-  // regression — perito Lavini found ITT/ITP being skewed by SSN cost notices
-  // dated weeks after the actual last clinical event.
-  events = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  // amministrativi) AND sentinel/malformed dates, then sort chronologically.
+  // Non-clinical events distort periods (Passaniti regression: SSN cost notices
+  // dated weeks after the last clinical event); sentinel dates would anchor the
+  // total-illness period in 1900; sorting guarantees first/last are correct.
+  events = clinicalSortedByDate(events);
   if (events.length === 0) return [];
 
   const calculations: MedicoLegalCalculation[] = [];
@@ -217,34 +282,22 @@ export function calculateMedicoLegalPeriods(
 }
 
 function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
-  const results: MedicoLegalCalculation[] = [];
-  const admissions = events.filter((e) => e.event_type === 'ricovero');
+  // Admissions exclude rows that are themselves discharges (a "Dimissione" row
+  // sometimes carries eventType 'ricovero'). Each discharge is paired once.
+  const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
+  const discharges = events.filter(isDischargeEvent);
 
-  for (const admission of admissions) {
-    // Find discharge for this admission (next ricovero-type event with "dimissione" or lettera dimissione)
-    const admissionDate = admission.event_date;
-    const discharge = events.find(
-      (e) =>
-        e.event_date >= admissionDate &&
-        e.event_date !== admissionDate &&
-        (e.description.toLowerCase().includes('dimission') ||
-         e.title.toLowerCase().includes('dimission')),
-    );
-
-    if (discharge) {
-      const days = daysDiff(admissionDate, discharge.event_date);
-      results.push({
-        label: 'Giorni di ricovero',
-        value: `${days} giorni`,
-        days,
-        startDate: admissionDate,
-        endDate: discharge.event_date,
-        notes: `Dal ricovero del ${formatDate(admissionDate)} alla dimissione del ${formatDate(discharge.event_date)}`,
-      });
-    }
-  }
-
-  return results;
+  return pairAdmissionsToDischarges(admissions, discharges).map(({ admission, discharge }) => {
+    const days = daysDiff(admission.event_date, discharge.event_date);
+    return {
+      label: 'Giorni di ricovero',
+      value: `${days} giorni`,
+      days,
+      startDate: admission.event_date,
+      endDate: discharge.event_date,
+      notes: `Dal ricovero del ${formatDate(admission.event_date)} alla dimissione del ${formatDate(discharge.event_date)}`,
+    };
+  });
 }
 
 function calculateTotalIllnessPeriod(events: CalcEvent[]): MedicoLegalCalculation {
@@ -319,41 +372,42 @@ function calculateDiagnosisToTreatment(events: CalcEvent[]): MedicoLegalCalculat
 function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[] {
   const results: MedicoLegalCalculation[] = [];
 
-  // Find key milestones
-  const admissions = events.filter((e) => e.event_type === 'ricovero');
-  const discharges = events.filter((e) =>
-    e.description.toLowerCase().includes('dimission') || e.title.toLowerCase().includes('dimission'),
-  );
+  // Find key milestones. Events are pre-sorted chronologically by the caller.
+  const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
+  const discharges = events.filter(isDischargeEvent);
   const rehabEvents = events.filter((e) => {
     const text = `${e.title} ${e.description}`.toLowerCase();
     return text.includes('riabilitaz') || text.includes('fisioterapi') || text.includes('fkt') ||
-      text.includes('fisiokinesiterapi') || text.includes('rieducazione');
+      text.includes('fisiokinesiterapi') || text.includes('rieducazione') ||
+      // English / variant phrasings (mixed-language reports)
+      text.includes('physiotherap') || text.includes('physical therapy') || text.includes('rehabilitat');
   });
-  const lastFollowUp = [...events]
-    .reverse()
-    .find((e) => e.event_type === 'follow-up' || e.event_type === 'visita');
   const immobilizationEvents = events.filter((e) => {
     const text = `${e.title} ${e.description}`.toLowerCase();
     return text.includes('tutore') || text.includes('gesso') || text.includes('immobilizzaz') ||
-      text.includes('doccia gessata') || text.includes('stecca') || text.includes('palmarino');
+      text.includes('doccia gessata') || text.includes('stecca') || text.includes('palmarino') ||
+      // English / variant phrasings
+      text.includes('brace') || text.includes('plaster cast') || text.includes('splint');
   });
 
-  // ITT (100%) — hospitalization + immobilization
+  // ITT (100%) — hospitalization + immobilization. Pair each discharge once to
+  // avoid double-counting overlapping admissions.
   let ittDays = 0;
   let ittStart: string | null = null;
   let ittEnd: string | null = null;
 
   // Hospital days
-  for (const admission of admissions) {
-    const discharge = discharges.find((d) => d.event_date > admission.event_date);
-    if (discharge) {
-      ittDays += daysDiff(admission.event_date, discharge.event_date);
-      if (!ittStart) ittStart = admission.event_date;
-      ittEnd = discharge.event_date;
-    }
+  for (const { admission, discharge } of pairAdmissionsToDischarges(admissions, discharges)) {
+    ittDays += daysDiff(admission.event_date, discharge.event_date);
+    if (!ittStart) ittStart = admission.event_date;
+    ittEnd = discharge.event_date;
   }
 
-  // Add immobilization period if after hospital
+  // Add immobilization period if after hospital. NOTE: this is classified as
+  // ITT 100% and bounded by the LAST immobilization mention — a late incidental
+  // mention ("rimosso il tutore" at a follow-up) can extend the window. We make
+  // that explicit in the note so the perito can verify/reclassify (it may be ITP).
+  let immobNote = '';
   if (immobilizationEvents.length > 0) {
     const immobStart = ittEnd ?? immobilizationEvents[0].event_date;
     const immobEnd = immobilizationEvents[immobilizationEvents.length - 1].event_date;
@@ -362,6 +416,7 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
       ittDays += immobDays;
       if (!ittStart) ittStart = immobStart;
       ittEnd = immobEnd;
+      immobNote = ` Include un periodo di immobilizzazione documentata dal ${formatDate(immobStart)} al ${formatDate(immobEnd)} (${immobDays} gg): verificare se classificabile come ITT o ITP e se la data di rimozione è corretta.`;
     }
   }
 
@@ -376,24 +431,32 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
     days: ittDays || null,
     startDate: ittStart,
     endDate: ittEnd,
-    notes: 'Stima basata su ricovero + immobilizzazione documentata. Il perito verifica e corregge.',
+    notes: `Stima basata su ricovero + immobilizzazione documentata. Il perito verifica e corregge.${immobNote}`,
   });
 
-  // ITP graduated periods
+  // ITP graduated periods. The recovery endpoint must be a follow-up/visita that
+  // occurs AFTER the ITT end — otherwise the recovery window would run backward
+  // (a pre-ricovero visit must not close the recovery period).
   const ittEndDate = ittEnd ?? ittStart;
-  if (!ittEndDate || !lastFollowUp) {
+  const recoveryCandidates = ittEndDate
+    ? events.filter(
+        (e) => (e.event_type === 'follow-up' || e.event_type === 'visita') && e.event_date > ittEndDate,
+      )
+    : [];
+  const recoveryEnd = recoveryCandidates.length > 0 ? recoveryCandidates[recoveryCandidates.length - 1] : null;
+  if (!ittEndDate || !recoveryEnd) {
     results.push({
       label: 'Invalidità Temporanea Parziale (ITP) graduata',
       value: 'Non calcolabile',
       days: null,
       startDate: null,
       endDate: null,
-      notes: 'Dati insufficienti per stimare i periodi ITP. Il perito definisce manualmente.',
+      notes: 'Dati insufficienti per stimare i periodi ITP (nessuna visita di controllo successiva alla fase acuta). Il perito definisce manualmente.',
     });
     return results;
   }
 
-  const totalRecoveryDays = daysDiff(ittEndDate, lastFollowUp.event_date);
+  const totalRecoveryDays = daysDiff(ittEndDate, recoveryEnd.event_date);
   if (totalRecoveryDays <= 0) return results;
 
   // Detect rehabilitation start/end to split the recovery period
@@ -404,7 +467,7 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
     // We have clear phases: post-immob → rehab → stabilization
     const itp75Days = daysDiff(ittEndDate, rehabStart);
     const itp50Days = daysDiff(rehabStart, rehabEnd);
-    const itp25Days = daysDiff(rehabEnd, lastFollowUp.event_date);
+    const itp25Days = daysDiff(rehabEnd, recoveryEnd.event_date);
 
     if (itp75Days > 0) {
       results.push({
@@ -432,46 +495,51 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
         value: `${itp25Days} giorni`,
         days: itp25Days,
         startDate: rehabEnd,
-        endDate: lastFollowUp.event_date,
+        endDate: recoveryEnd.event_date,
         notes: 'Dalla fine riabilitazione alla stabilizzazione clinica.',
       });
     }
   } else {
-    // No clear rehab phase — divide recovery into thirds as estimate
+    // No clear rehab phase — divide recovery into thirds as estimate.
+    // Invariant: third + third + (total - 2*third) == total (holds for any rounding).
     const third = Math.round(totalRecoveryDays / 3);
-    const addDays = (base: string, n: number): string => {
-      const d = new Date(base);
-      d.setDate(d.getDate() + n);
-      return d.toISOString().slice(0, 10);
-    };
+    const phase1Days = third;
+    const phase2Days = third;
+    const phase3Days = totalRecoveryDays - third * 2;
+    const phase1End = addDaysIso(ittEndDate, third);
+    const phase2End = addDaysIso(ittEndDate, third * 2);
 
-    const phase1End = addDays(ittEndDate, third);
-    const phase2End = addDays(ittEndDate, third * 2);
-
-    results.push({
-      label: 'ITP al 75%',
-      value: `${third} giorni (stima)`,
-      days: third,
-      startDate: ittEndDate,
-      endDate: phase1End,
-      notes: 'Stima: primo terzo del periodo di recupero. Il perito deve verificare.',
-    });
-    results.push({
-      label: 'ITP al 50%',
-      value: `${third} giorni (stima)`,
-      days: third,
-      startDate: phase1End,
-      endDate: phase2End,
-      notes: 'Stima: secondo terzo del periodo di recupero. Il perito deve verificare.',
-    });
-    results.push({
-      label: 'ITP al 25%',
-      value: `${totalRecoveryDays - third * 2} giorni (stima)`,
-      days: totalRecoveryDays - third * 2,
-      startDate: phase2End,
-      endDate: lastFollowUp.event_date,
-      notes: 'Stima: ultimo terzo del periodo di recupero. Il perito deve verificare.',
-    });
+    // Guard each push on > 0 so tiny recovery windows don't emit "0 giorni" rows.
+    if (phase1Days > 0) {
+      results.push({
+        label: 'ITP al 75%',
+        value: `${phase1Days} giorni (stima)`,
+        days: phase1Days,
+        startDate: ittEndDate,
+        endDate: phase1End,
+        notes: 'Stima: primo terzo del periodo di recupero. Il perito deve verificare.',
+      });
+    }
+    if (phase2Days > 0) {
+      results.push({
+        label: 'ITP al 50%',
+        value: `${phase2Days} giorni (stima)`,
+        days: phase2Days,
+        startDate: phase1End,
+        endDate: phase2End,
+        notes: 'Stima: secondo terzo del periodo di recupero. Il perito deve verificare.',
+      });
+    }
+    if (phase3Days > 0) {
+      results.push({
+        label: 'ITP al 25%',
+        value: `${phase3Days} giorni (stima)`,
+        days: phase3Days,
+        startDate: phase2End,
+        endDate: recoveryEnd.event_date,
+        notes: 'Stima: ultimo terzo del periodo di recupero. Il perito deve verificare.',
+      });
+    }
   }
 
   return results;
