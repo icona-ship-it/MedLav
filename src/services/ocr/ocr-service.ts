@@ -83,7 +83,7 @@ interface OcrRawPage {
  * inside a template literal, producing the literal text `[object Object]`
  * which then polluted the cronistoria with 50+ "Tabelle non interpretabili".
  */
-function coerceTableToHtml(table: string | Record<string, unknown>, pageNumber: number): string {
+export function coerceTableToHtml(table: string | Record<string, unknown>, pageNumber: number): string {
   if (typeof table === 'string') return table;
   if (table && typeof table === 'object') {
     // Common Mistral OCR 3 shapes — try in priority order
@@ -92,7 +92,17 @@ function coerceTableToHtml(table: string | Record<string, unknown>, pageNumber: 
       const v = table[key];
       if (typeof v === 'string' && v.trim().length > 0) return v;
     }
-    logger.warn('ocr', `Unknown table shape on page ${pageNumber}: keys=${Object.keys(table).join(',')}`);
+    // Unknown shape: do NOT drop the table — that silently loses lab/diagnostic
+    // values (medico-legal data). Serialize as JSON so the content still reaches
+    // ocr_text and the extractor can read it. (NOT `${table}` — that produced the
+    // literal "[object Object]" in the Schönweger incident.)
+    logger.warn('ocr', `Unknown table shape on page ${pageNumber}: keys=${Object.keys(table).join(',')} — preserving as JSON`);
+    try {
+      const json = JSON.stringify(table);
+      if (json && json !== '{}' && json !== 'null' && json !== '[]') return json;
+    } catch {
+      // non-serializable (unexpected) → fall through to empty
+    }
   }
   return '';
 }

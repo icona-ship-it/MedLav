@@ -62,7 +62,7 @@ async function saveOcrImagesToStorage(
 
   // Update pages in parallel
   const savedCount = [...byPage.values()].reduce((sum, paths) => sum + paths.length, 0);
-  await Promise.allSettled(
+  const updateResults = await Promise.allSettled(
     [...byPage.entries()].map(([pageNumber, paths]) =>
       supabase
         .from('pages')
@@ -71,6 +71,15 @@ async function saveOcrImagesToStorage(
         .eq('page_number', pageNumber),
     ),
   );
+
+  // Surface image_path DB-update failures: a swallowed failure means the image is
+  // in Storage but NOT linked to its page → it never reaches the report (silent).
+  const linkFailures = updateResults.filter(
+    (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error),
+  ).length;
+  if (linkFailures > 0) {
+    logger.error('pipeline', `Step 2: ${linkFailures}/${updateResults.length} image_path update(s) FAILED for doc ${documentId} — those diagnostic images will not appear in the report`);
+  }
 
   logger.info('pipeline', ` Step 2: Saved ${savedCount}/${imagesToSave.length} images to storage for doc ${documentId}`);
 }
