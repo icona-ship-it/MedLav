@@ -22,3 +22,9 @@ CREATE TABLE IF NOT EXISTS stripe_processed_events (
 -- Retention housekeeping helper (events older than 90 days can be pruned).
 CREATE INDEX IF NOT EXISTS idx_stripe_processed_events_processed_at
   ON stripe_processed_events (processed_at);
+
+-- RLS: la tabella la scrive SOLO il webhook Stripe via service_role (bypassa RLS
+-- by design). Abilitare RLS senza policy = anon/authenticated bloccati, webhook ok.
+-- Nessun dato utente qui (solo event_id Stripe), ma difesa-in-profondità coerente
+-- con 0026: tutte le tabelle public hanno RLS attiva.
+ALTER TABLE stripe_processed_events ENABLE ROW LEVEL SECURITY;
