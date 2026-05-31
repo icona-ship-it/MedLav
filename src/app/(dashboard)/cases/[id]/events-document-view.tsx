@@ -1,6 +1,7 @@
 'use client';
 
 import { formatDate } from '@/lib/format';
+import { sortEventsChrono } from '@/lib/event-order';
 import type { EventRow } from './types';
 
 /**
@@ -21,9 +22,9 @@ export function EventsDocumentView({
   patientInitials?: string | null;
   caseCode?: string;
 }) {
-  const clinicalEvents = events
-    .filter((e) => e.event_type !== 'documento_amministrativo' && e.event_type !== 'spesa_medica')
-    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
+  const clinicalEvents = sortEventsChrono(
+    events.filter((e) => e.event_type !== 'documento_amministrativo' && e.event_type !== 'spesa_medica'),
+  );
 
   return (
     <div className="mx-auto max-w-[794px] bg-white dark:bg-zinc-950 shadow-lg rounded border print:shadow-none print:border-none">
