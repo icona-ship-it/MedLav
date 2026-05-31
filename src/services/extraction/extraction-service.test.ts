@@ -405,6 +405,33 @@ describe('extraction-service', () => {
       expect(result[0].confidence).toBeLessThanOrEqual(40);
       expect(result[0].confidence).toBeGreaterThanOrEqual(10);
     });
+
+    // ── Ondata 9 (bug Lavini): donor ambiguo non deve inventare una data ──
+    it('does NOT infer when the page has MULTIPLE distinct dates (ambiguity → no fabricated date)', () => {
+      // Pagina con ricovero (10.01) + esame senza data + dimissione (20.01).
+      // Il vecchio codice assegnava la dimissione (più recente) all'esame: data
+      // SBAGLIATA in un timeline forense. Ora resta sentinella (perito decide).
+      const events = [
+        makeTestEvent({ eventDate: '2024-01-10', sourcePages: [5], eventType: 'ricovero', title: 'Ricovero' }),
+        makeTestEvent({ eventDate: '1900-01-01', sourcePages: [5], eventType: 'esame', title: 'Esami ematochimici senza data' }),
+        makeTestEvent({ eventDate: '2024-01-20', sourcePages: [5], title: 'Dimissione' }),
+      ];
+
+      const result = inferMissingDates(events);
+      const undated = result.find((e) => e.title.includes('senza data'))!;
+      expect(undated.eventDate).toBe('1900-01-01'); // NON eredita la dimissione
+    });
+
+    it('still infers when the page is unambiguous (single date among donors)', () => {
+      const events = [
+        makeTestEvent({ eventDate: '2024-03-15', sourcePages: [7], title: 'Visita' }),
+        makeTestEvent({ eventDate: '2024-03-15', sourcePages: [7], title: 'Esame stesso giorno' }),
+        makeTestEvent({ eventDate: '1900-01-01', sourcePages: [7], title: 'Referto senza data' }),
+      ];
+      const result = inferMissingDates(events);
+      const undated = result.find((e) => e.title.includes('senza data'))!;
+      expect(undated.eventDate).toBe('2024-03-15'); // pagina mono-data → eredita
+    });
   });
 
   describe('prepareExtractionChunks', () => {

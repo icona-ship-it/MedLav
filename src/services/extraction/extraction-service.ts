@@ -466,11 +466,16 @@ export function flagLegislativeReferences(events: ExtractedEvent[]): ExtractedEv
 }
 
 /**
- * Find the best date donor for an event without a date.
+ * Find a date donor for an event without a date.
  * Priority: same page > adjacent page (±1).
- * When multiple donors exist on the same page, pick the one with the
- * LATEST date (most recent), as undated events typically follow the main
- * dated event on the page (e.g., lab values after admission note).
+ *
+ * MEDICO-LEGAL SAFETY (audit 2026-05-31, confermato Lavini): inherit a date
+ * ONLY when the page is unambiguous — i.e. all candidate donors share a SINGLE
+ * date. The previous heuristic "pick the most recent" silently assigned the
+ * DISCHARGE date to an undated lab that sat between an admission and a discharge
+ * on the same page — a confidently-wrong date in a forensic timeline. When
+ * multiple distinct dates are present, refuse to guess: leave the event undated
+ * (sentinel) and flagged, so the perito assigns the correct date.
  */
 function findDateDonor(
   sourcePages: number[],
@@ -497,9 +502,12 @@ function findDateDonor(
 
   if (candidates.length === 0) return null;
 
-  // Pick the LATEST date (most recent) — undated events typically follow the main dated event
-  candidates.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
-  return candidates[0];
+  // Inherit ONLY if the page is unambiguous (one single date among candidates).
+  const distinctDates = Array.from(
+    new Set(candidates.map((c) => c.eventDate).filter((d): d is string => Boolean(d) && d !== SENTINEL_DATE)),
+  );
+  if (distinctDates.length !== 1) return null; // ambiguous → do not fabricate a date
+  return candidates.find((c) => c.eventDate === distinctDates[0]) ?? null;
 }
 
 /**
