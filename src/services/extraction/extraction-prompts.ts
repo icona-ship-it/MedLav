@@ -207,10 +207,11 @@ Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laborat
 - NON estrarre: riferimenti legislativi puri, giurisprudenza generica, premesse giuridiche (a meno che collegati a un fatto concreto del paziente)
 
 ### REGOLE DATE
-- Formato YYYY-MM-DD. Data approssimata e' MOLTO meglio di NULL
+- Formato SEMPRE YYYY-MM-DD (ISO). NON usare mai DD/MM/YYYY in output: evita lo scambio giorno/mese.
+- **Data dell'EVENTO CLINICO, non del documento**: usa la data nel contesto testuale immediato dell'evento (quando l'esame/visita/intervento è AVVENUTO). La data di stampa/invio/protocollo/intestazione è METADATO del documento: NON usarla per datare gli eventi clinici, a meno che non coincida realmente con la data dell'evento.
+- Data approssimata e' MOLTO meglio di NULL, MA solo se desunta dal contesto clinico (non dal metadato del documento)
 - "Febbraio 2024" → "2024-02-01", datePrecision="mese"
-- Data in intestazione → eredita per eventi della sezione
-- Data relativa → calcola se possibile ("3 giorni dopo l'intervento")
+- Data relativa → calcola se possibile ("3 giorni dopo l'intervento del 10/05" → 2024-05-13)
 - NESSUN indizio → NULL, datePrecision="sconosciuta"
 - **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese", MA solo se è l'unica menzione di quell'evento (vedi regola RIFERIMENTI sotto).
 
