@@ -301,10 +301,12 @@ DROP POLICY IF EXISTS case_shares_select_own ON case_shares;
 CREATE POLICY case_shares_select_own ON case_shares
   FOR SELECT
   USING (
-    -- Owner of the case can see all shares
+    -- Owner of the case can see its shares
     EXISTS (SELECT 1 FROM cases WHERE cases.id = case_shares.case_id AND cases.user_id = auth.uid())
-    -- Or recipient can see shares directed at them
-    OR shared_with_user_id = auth.uid()
+    -- Or the user who created the share (case_shares.user_id). NB: la condivisione
+    -- e' a TOKEN (link pubblico via app/(public)/shared/[token], service_role) —
+    -- non esiste un destinatario registrato, quindi nessun shared_with_user_id.
+    OR user_id = auth.uid()
   );
 
 DROP POLICY IF EXISTS case_shares_insert_own ON case_shares;
@@ -322,7 +324,9 @@ CREATE POLICY case_shares_delete_own ON case_shares
   ));
 
 -- ============================================================================
--- 10. report_ratings — via cases.user_id
+-- 10. report_ratings — ownership diretta via user_id (chi ha dato il rating).
+--     NB: la tabella NON ha case_id; ha report_id + user_id. Il rating appartiene
+--     all'utente che l'ha scritto → user_id = auth.uid() su tutte le op.
 -- ============================================================================
 
 ALTER TABLE report_ratings ENABLE ROW LEVEL SECURITY;
@@ -330,30 +334,23 @@ ALTER TABLE report_ratings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS report_ratings_select_own ON report_ratings;
 CREATE POLICY report_ratings_select_own ON report_ratings
   FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM cases WHERE cases.id = report_ratings.case_id AND cases.user_id = auth.uid()
-  ));
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS report_ratings_insert_own ON report_ratings;
 CREATE POLICY report_ratings_insert_own ON report_ratings
   FOR INSERT
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM cases WHERE cases.id = report_ratings.case_id AND cases.user_id = auth.uid()
-  ));
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS report_ratings_update_own ON report_ratings;
 CREATE POLICY report_ratings_update_own ON report_ratings
   FOR UPDATE
-  USING (EXISTS (
-    SELECT 1 FROM cases WHERE cases.id = report_ratings.case_id AND cases.user_id = auth.uid()
-  ));
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS report_ratings_delete_own ON report_ratings;
 CREATE POLICY report_ratings_delete_own ON report_ratings
   FOR DELETE
-  USING (EXISTS (
-    SELECT 1 FROM cases WHERE cases.id = report_ratings.case_id AND cases.user_id = auth.uid()
-  ));
+  USING (auth.uid() = user_id);
 
 -- ============================================================================
 -- 11. profiles — ognuno vede solo se stesso
@@ -424,8 +421,8 @@ COMMENT ON TABLE reports IS 'RLS: via cases.user_id';
 COMMENT ON TABLE anomalies IS 'RLS: via cases.user_id';
 COMMENT ON TABLE missing_documents IS 'RLS: via cases.user_id';
 COMMENT ON TABLE event_images IS 'RLS: via events.case_id → cases.user_id';
-COMMENT ON TABLE case_shares IS 'RLS: owner + recipient (shared_with_user_id)';
-COMMENT ON TABLE report_ratings IS 'RLS: via cases.user_id';
+COMMENT ON TABLE case_shares IS 'RLS: case owner + share creator (user_id). Share a token, no recipient.';
+COMMENT ON TABLE report_ratings IS 'RLS: auth.uid() = user_id (own ratings)';
 COMMENT ON TABLE profiles IS 'RLS: auth.uid() = id (own profile only)';
 COMMENT ON TABLE credit_transactions IS 'RLS: auth.uid() = user_id (SELECT only, modifiche solo via service_role)';
 COMMENT ON TABLE audit_log IS 'RLS: SELECT own, INSERT solo service_role, no UPDATE/DELETE';
