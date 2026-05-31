@@ -438,9 +438,15 @@ function getTimeBucket(event: ExtractedEvent): 'am' | 'pm' | null {
     if (hour >= 0 && hour <= 23) return hour < 12 ? 'am' : 'pm';
   }
 
-  // Time-of-day words.
-  if (/\b(mattin[oae]|mattutin[oa]|antimeridian[oa])\b/.test(text)) return 'am';
-  if (/\b(pomerigg(?:io|i)|pomeridian[oa]|ser[ae]|seral[ei]|nott[ee]|notturn[oa]|mezzogiorno)\b/.test(text)) return 'pm';
+  // Time-of-day words. If BOTH a morning and an afternoon/evening marker are
+  // present ("eseguito mattina e pomeriggio"), the event spans both → ambiguous,
+  // return null so it isn't wrongly kept apart from / merged with a single-period
+  // event on the basis of one bucket.
+  const isAm = /\b(mattin[oae]|mattutin[oa]|antimeridian[oa])\b/.test(text);
+  const isPm = /\b(pomerigg(?:io|i)|pomeridian[oa]|ser[ae]|seral[ei]|nott[ee]|notturn[oa]|mezzogiorno)\b/.test(text);
+  if (isAm && isPm) return null;
+  if (isAm) return 'am';
+  if (isPm) return 'pm';
 
   return null;
 }
@@ -526,16 +532,15 @@ function normalizeMedicalWord(word: string): string {
 }
 
 function calculateSimilarity(a: string, b: string): number {
-  const wordsA = new Set(
-    a.split(/\s+/)
-      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
-      .map(normalizeMedicalWord),
-  );
-  const wordsB = new Set(
-    b.split(/\s+/)
-      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
-      .map(normalizeMedicalWord),
-  );
+  // Unicode-aware tokenizer (split on any non-letter/digit), consistent with
+  // titlesShareKeywords. The old /\s+/ left punctuation attached ("ecg,") so a
+  // comma/em-dash broke word matching and diverged from the aggregation path.
+  const tokenize = (s: string) =>
+    s.split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length > 0 && (w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)))
+      .map(normalizeMedicalWord);
+  const wordsA = new Set(tokenize(a));
+  const wordsB = new Set(tokenize(b));
 
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;

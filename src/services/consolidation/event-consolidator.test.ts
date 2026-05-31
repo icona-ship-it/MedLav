@@ -530,6 +530,22 @@ describe('isSimilarEvent', () => {
       const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito alle 16' });
       expect(isSimilarEvent(a, b)).toBe(false);
     });
+
+    it('does NOT conflict an event spanning "mattina e pomeriggio" with a pm event', () => {
+      // Spans both → null bucket → no spurious time conflict (post-audit fix).
+      const both = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito mattina e pomeriggio' });
+      const pm = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito nel pomeriggio' });
+      expect(isSimilarEvent(both, pm)).toBe(true);
+    });
+  });
+
+  // ── Tokenizer unicode-aware: punteggiatura non rompe la similarità (post-audit) ──
+  describe('similarity is robust to punctuation', () => {
+    it('matches titles that differ only by punctuation (comma)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'Radiografia torace, due proiezioni', description: 'RX torace' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'Radiografia torace due proiezioni', description: 'RX torace' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
   });
 });
 
