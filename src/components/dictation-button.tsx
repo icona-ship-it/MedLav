@@ -135,6 +135,7 @@ export function DictationButton({
     if (!isSupported) return 'Dettatura non supportata da questo browser';
     if (state === 'recording') return `Registrazione in corso (${formatMmSs(elapsedSec)} / ${formatMmSs(effectiveMax)}). Clicca per fermare, ESC per annullare.`;
     if (state === 'transcribing') return 'Trascrizione in corso…';
+    if (state === 'requesting-permission') return 'Richiesta di accesso al microfono…';
     return 'Detta con la voce (Mistral Voxtral, EU). Clicca per registrare.';
   }, [isSupported, state, elapsedSec, effectiveMax]);
 
@@ -154,6 +155,7 @@ export function DictationButton({
         size={size}
         onClick={handleClick}
         disabled={disabled || !isSupported || isBusy}
+        aria-disabled={disabled || !isSupported || isBusy}
         title={title}
         aria-label={label}
         aria-pressed={state === 'recording'}

@@ -76,6 +76,7 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 - Crea SEMPRE una voce SEPARATA per il bollo. Esempio: description "Imposta di bollo", amount 2.00, category "altro", notes "Bollo ex DPR 642/1972 su fattura n.X del...".
 - Stesso trattamento per: marca da bollo, oneri amministrativi, spese postali, contributi ENPAM/cassa previdenziale, IVA esposta separatamente.
 - Cosi il perito vede la composizione completa: prestazione + bollo + altri oneri = totale fatturato.
+- Se un documento espone un TOTALE comprensivo di bollo (es. "Visita € 102 di cui bollo € 2", oppure "importo € 102 incluso bollo"), SCORPORA in due voci: prestazione (€ 100) + imposta di bollo (€ 2). Non lasciare mai l'importo aggregato in un'unica voce.
 
 ## STRUTTURA DEL TESTO IN INGRESSO
 Il testo OCR e' organizzato in blocchi documento separati da:

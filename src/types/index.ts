@@ -88,6 +88,7 @@ export interface PeriziaMetadata {
   tribunale?: string;          // "Tribunale Ordinario di Brescia"
   sezione?: string;            // "Sezione Centrale Civile"
   rgNumber?: string;           // "10965/2025"
+  tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
   judgeName?: string;           // "Dott. Raffaele Del Porto"
   ctuName?: string;            // "Dott. Nicola Pigaiani"
   ctuTitle?: string;           // "Specialista in Medicina Legale"
@@ -104,6 +105,16 @@ export interface PeriziaMetadata {
   speseMediche?: string;       // testo libero spese mediche
   esameObiettivo?: string;     // testo libero esame del paziente
   fondoSpese?: string;         // "Euro 1.800,00"
+  // Anamnesi (perizie RC medico-legali — compilata dal perito, NON narrata dall'AI)
+  ilFattoEStoriaClinica?: string;      // narrazione evento indice + iter clinico (testo del perito)
+  anamnesiFamiliare?: string;          // anamnesi familiare
+  anamnesiFisiologica?: string;        // anamnesi fisiologica (peso/altezza/BMI a parte)
+  pesoKg?: number;                     // peso in kg (per BMI)
+  altezzaCm?: number;                  // altezza in cm (per BMI)
+  anamnesiPatologicaRemota?: string;   // patologie pregresse
+  anamnesiPatologicaProssima?: string; // patologia attuale correlata all'evento
+  anamnesiFarmacologica?: string;      // terapie/farmaci
+  anamnesiLavorativa?: string;         // anamnesi lavorativa/occupazionale
 }
 
 // API Response

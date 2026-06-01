@@ -20,6 +20,7 @@ import { CASE_TYPES } from '@/lib/constants';
 import type { CaseType } from '@/types';
 import type { CaseData, PeriziaMetadataUI } from './types';
 import { DictationButton } from '@/components/dictation-button';
+import { computeBMI } from '@/services/synthesis/anamnesi-template';
 
 // --- Section config ---
 
@@ -31,12 +32,76 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
-  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'judgeName', 'fondoSpese'] },
+  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese'] },
   { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
   { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
   { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
   { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
 ];
+
+/** Module id della perizia medico-legale di Responsabilità Civile. */
+const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
+
+/**
+ * Sezioni compilate dal perito SOLO per le perizie RC medico-legali.
+ * I dati anamnestici e "Il Fatto e la Storia Clinica" confluiscono nel report
+ * come testo del perito (deterministico, vedi anamnesi-template + section-catalog).
+ */
+const RC_PERITO_SECTIONS: SectionDef[] = [
+  { id: 'ilFatto', title: 'Il Fatto e la Storia Clinica', fields: ['ilFattoEStoriaClinica'] },
+  {
+    id: 'anamnesi',
+    title: 'Dati Anamnestici',
+    fields: [
+      'anamnesiFamiliare', 'anamnesiFisiologica', 'pesoKg', 'altezzaCm',
+      'anamnesiPatologicaRemota', 'anamnesiPatologicaProssima',
+      'anamnesiFarmacologica', 'anamnesiLavorativa',
+    ],
+  },
+];
+
+/** Parsa un input numerico (accetta virgola IT) → numero positivo o undefined. */
+function parseOptionalPositive(value: string): number | undefined {
+  const n = Number(value.trim().replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Campo textarea con dettatura vocale, riusato per le sottosezioni anamnesi. */
+function AnamnesiTextarea({
+  label, value, caseId, contextHint, placeholder, onChange,
+}: {
+  label: string;
+  value: string;
+  caseId: string;
+  contextHint: string;
+  placeholder: string;
+  onChange: (text: string) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        <DictationButton
+          size="icon"
+          variant="icon-only"
+          caseId={caseId}
+          contextHint={contextHint}
+          onTranscript={(text) => {
+            const sep = value.length > 0 && !value.endsWith('\n') ? '\n' : '';
+            onChange(`${value}${sep}${text}`);
+          }}
+          className="h-7 w-7"
+        />
+      </div>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-[90px] text-sm mt-1"
+      />
+    </div>
+  );
+}
 
 // --- Component ---
 
@@ -50,6 +115,12 @@ export function PeriziaMetadataForm({
 }) {
   const [isPending, startTransition] = useTransition();
   const existing = caseData.perizia_metadata ?? {};
+  const isRC = caseData.module_id === RC_CIVILE_MODULE_ID;
+  // RC perizie collect anamnesi + "Il Fatto" from the perito; other case types don't.
+  const sections = useMemo(
+    () => (isRC ? [...SECTIONS, ...RC_PERITO_SECTIONS] : SECTIONS),
+    [isRC],
+  );
   const [form, setForm] = useState({
     patientFullName: existing.patientFullName ?? '',
     patientDateOfBirth: existing.patientDateOfBirth ?? '',
@@ -59,6 +130,7 @@ export function PeriziaMetadataForm({
     tribunale: existing.tribunale ?? '',
     sezione: existing.sezione ?? '',
     rgNumber: existing.rgNumber ?? '',
+    tipoProcedimento: existing.tipoProcedimento ?? '',
     judgeName: existing.judgeName ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
@@ -73,6 +145,16 @@ export function PeriziaMetadataForm({
     dataDeposito: existing.dataDeposito ?? '',
     fondoSpese: existing.fondoSpese ?? '',
     esameObiettivo: existing.esameObiettivo ?? '',
+    // Anamnesi (RC) — peso/altezza tenuti come stringa nel form, convertiti a numero al salvataggio
+    ilFattoEStoriaClinica: existing.ilFattoEStoriaClinica ?? '',
+    anamnesiFamiliare: existing.anamnesiFamiliare ?? '',
+    anamnesiFisiologica: existing.anamnesiFisiologica ?? '',
+    pesoKg: existing.pesoKg != null ? String(existing.pesoKg) : '',
+    altezzaCm: existing.altezzaCm != null ? String(existing.altezzaCm) : '',
+    anamnesiPatologicaRemota: existing.anamnesiPatologicaRemota ?? '',
+    anamnesiPatologicaProssima: existing.anamnesiPatologicaProssima ?? '',
+    anamnesiFarmacologica: existing.anamnesiFarmacologica ?? '',
+    anamnesiLavorativa: existing.anamnesiLavorativa ?? '',
   });
   const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? []);
   const [newQuesito, setNewQuesito] = useState('');
@@ -80,7 +162,7 @@ export function PeriziaMetadataForm({
   // Track which sections are open — first incomplete one starts open
   const sectionFilled = useMemo(() => {
     const filled: Record<string, boolean> = {};
-    for (const section of SECTIONS) {
+    for (const section of sections) {
       if (section.id === 'quesiti') {
         filled[section.id] = quesiti.length > 0;
       } else {
@@ -88,12 +170,12 @@ export function PeriziaMetadataForm({
       }
     }
     return filled;
-  }, [form, quesiti]);
+  }, [form, quesiti, sections]);
 
-  const firstIncompleteIdx = SECTIONS.findIndex((s) => !sectionFilled[s.id]);
+  const firstIncompleteIdx = sections.findIndex((s) => !sectionFilled[s.id]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    SECTIONS.forEach((s, i) => {
+    sections.forEach((s, i) => {
       initial[s.id] = i === (firstIncompleteIdx >= 0 ? firstIncompleteIdx : 0);
     });
     return initial;
@@ -116,10 +198,19 @@ export function PeriziaMetadataForm({
 
   const handleProceed = () => {
     startTransition(async () => {
+      const pesoKg = parseOptionalPositive(form.pesoKg);
+      const altezzaCm = parseOptionalPositive(form.altezzaCm);
       const metadata: PeriziaMetadataUI = {
+        // Dati paziente (fix: in precedenza non venivano salvati → intestazione vuota)
+        ...(form.patientFullName ? { patientFullName: form.patientFullName } : {}),
+        ...(form.patientDateOfBirth ? { patientDateOfBirth: form.patientDateOfBirth } : {}),
+        ...(form.patientAddress ? { patientAddress: form.patientAddress } : {}),
+        ...(form.patientFiscalCode ? { patientFiscalCode: form.patientFiscalCode } : {}),
+        ...(form.patientPhone ? { patientPhone: form.patientPhone } : {}),
         ...(form.tribunale ? { tribunale: form.tribunale } : {}),
         ...(form.sezione ? { sezione: form.sezione } : {}),
         ...(form.rgNumber ? { rgNumber: form.rgNumber } : {}),
+        ...(form.tipoProcedimento ? { tipoProcedimento: form.tipoProcedimento } : {}),
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
@@ -134,6 +225,16 @@ export function PeriziaMetadataForm({
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
         ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
+        // Anamnesi (RC) — i campi non renderizzati per non-RC restano vuoti → esclusi
+        ...(form.ilFattoEStoriaClinica ? { ilFattoEStoriaClinica: form.ilFattoEStoriaClinica } : {}),
+        ...(form.anamnesiFamiliare ? { anamnesiFamiliare: form.anamnesiFamiliare } : {}),
+        ...(form.anamnesiFisiologica ? { anamnesiFisiologica: form.anamnesiFisiologica } : {}),
+        ...(pesoKg != null ? { pesoKg } : {}),
+        ...(altezzaCm != null ? { altezzaCm } : {}),
+        ...(form.anamnesiPatologicaRemota ? { anamnesiPatologicaRemota: form.anamnesiPatologicaRemota } : {}),
+        ...(form.anamnesiPatologicaProssima ? { anamnesiPatologicaProssima: form.anamnesiPatologicaProssima } : {}),
+        ...(form.anamnesiFarmacologica ? { anamnesiFarmacologica: form.anamnesiFarmacologica } : {}),
+        ...(form.anamnesiLavorativa ? { anamnesiLavorativa: form.anamnesiLavorativa } : {}),
         ...(quesiti.length > 0 ? { quesiti } : {}),
       };
 
@@ -179,7 +280,7 @@ export function PeriziaMetadataForm({
       </Card>
 
       {/* Collapsible sections */}
-      {SECTIONS.map((section) => {
+      {sections.map((section) => {
         const isOpen = openSections[section.id] ?? false;
         const isFilled = sectionFilled[section.id];
 
@@ -256,6 +357,11 @@ export function PeriziaMetadataForm({
                         <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 10965/2025" />
                         <p className="text-xs text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
                       </div>
+                    </div>
+                    <div>
+                      <Label>Tipo di procedimento</Label>
+                      <Input value={form.tipoProcedimento ?? ''} onChange={(e) => setForm({ ...form, tipoProcedimento: e.target.value })} placeholder="es. Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)" />
+                      <p className="text-xs text-muted-foreground mt-1">Appare nell&apos;intestazione formale (ATP, CTU, ecc.)</p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
@@ -453,6 +559,125 @@ export function PeriziaMetadataForm({
                         </DropdownMenu>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {section.id === 'ilFatto' && (
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-muted-foreground flex-1">
+                        Ricostruzione dell&apos;evento e dell&apos;iter clinico, scritta da te. Questo testo appare nel report nella sezione &quot;Il Fatto e la Storia Clinica&quot; senza essere rielaborato dall&apos;AI.
+                      </p>
+                      <DictationButton
+                        size="sm"
+                        variant="icon-label"
+                        caseId={caseId}
+                        contextHint="il fatto e la storia clinica, evento indice, iter diagnostico terapeutico, perizia medico-legale"
+                        onTranscript={(text) => {
+                          const prev = form.ilFattoEStoriaClinica;
+                          const sep = prev.length > 0 && !prev.endsWith('\n') ? '\n' : '';
+                          setForm({ ...form, ilFattoEStoriaClinica: `${prev}${sep}${text}` });
+                        }}
+                      />
+                    </div>
+                    <Textarea
+                      value={form.ilFattoEStoriaClinica}
+                      onChange={(e) => setForm({ ...form, ilFattoEStoriaClinica: e.target.value })}
+                      placeholder={'es. In data ... il/la sig./sig.ra ... riportava ... Veniva condotto/a presso il PS di ..., dove veniva posta diagnosi di ... Seguivano controlli ...'}
+                      className="min-h-[200px] text-sm"
+                    />
+                  </div>
+                )}
+
+                {section.id === 'anamnesi' && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-muted-foreground">
+                      Dati anamnestici raccolti dal perito. Confluiscono nel report nella sezione &quot;Dati Anamnestici&quot; come testo tuo (l&apos;AI non li rielabora). Compila solo i campi pertinenti.
+                    </p>
+                    <AnamnesiTextarea
+                      label="Anamnesi familiare"
+                      caseId={caseId}
+                      contextHint="anamnesi familiare, perizia medico-legale"
+                      placeholder="es. Nega familiarità per patologie di rilievo..."
+                      value={form.anamnesiFamiliare}
+                      onChange={(t) => setForm({ ...form, anamnesiFamiliare: t })}
+                    />
+                    <AnamnesiTextarea
+                      label="Anamnesi fisiologica"
+                      caseId={caseId}
+                      contextHint="anamnesi fisiologica, perizia medico-legale"
+                      placeholder="es. Nato/a a termine; alvo e diuresi regolari; non fumatore/trice..."
+                      value={form.anamnesiFisiologica}
+                      onChange={(t) => setForm({ ...form, anamnesiFisiologica: t })}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Peso (kg)</Label>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.1"
+                          value={form.pesoKg}
+                          onChange={(e) => setForm({ ...form, pesoKg: e.target.value })}
+                          placeholder="es. 70"
+                        />
+                      </div>
+                      <div>
+                        <Label>Altezza (cm)</Label>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="1"
+                          value={form.altezzaCm}
+                          onChange={(e) => setForm({ ...form, altezzaCm: e.target.value })}
+                          placeholder="es. 175"
+                        />
+                      </div>
+                    </div>
+                    {(() => {
+                      const bmi = computeBMI(parseOptionalPositive(form.pesoKg), parseOptionalPositive(form.altezzaCm));
+                      return bmi ? (
+                        <p className="text-xs text-muted-foreground">
+                          BMI calcolato:{' '}
+                          <span className="font-medium text-foreground">{String(bmi.value).replace('.', ',')}</span>{' '}
+                          ({bmi.category}) — incluso automaticamente nell&apos;anamnesi fisiologica del report
+                        </p>
+                      ) : null;
+                    })()}
+                    <AnamnesiTextarea
+                      label="Anamnesi patologica remota"
+                      caseId={caseId}
+                      contextHint="anamnesi patologica remota, patologie pregresse, perizia medico-legale"
+                      placeholder="es. Pregressa frattura del polso sx (2015); ipertensione arteriosa in terapia..."
+                      value={form.anamnesiPatologicaRemota}
+                      onChange={(t) => setForm({ ...form, anamnesiPatologicaRemota: t })}
+                    />
+                    <AnamnesiTextarea
+                      label="Anamnesi patologica prossima"
+                      caseId={caseId}
+                      contextHint="anamnesi patologica prossima, evento, perizia medico-legale"
+                      placeholder="es. In data ... a seguito di ... lamenta..."
+                      value={form.anamnesiPatologicaProssima}
+                      onChange={(t) => setForm({ ...form, anamnesiPatologicaProssima: t })}
+                    />
+                    <AnamnesiTextarea
+                      label="Anamnesi farmacologica"
+                      caseId={caseId}
+                      contextHint="anamnesi farmacologica, terapie, farmaci, perizia medico-legale"
+                      placeholder="es. Assume ...; nega allergie note a farmaci"
+                      value={form.anamnesiFarmacologica}
+                      onChange={(t) => setForm({ ...form, anamnesiFarmacologica: t })}
+                    />
+                    <AnamnesiTextarea
+                      label="Anamnesi lavorativa"
+                      caseId={caseId}
+                      contextHint="anamnesi lavorativa, occupazione, perizia medico-legale"
+                      placeholder="es. Impiegato/a; attività che richiede..."
+                      value={form.anamnesiLavorativa}
+                      onChange={(t) => setForm({ ...form, anamnesiLavorativa: t })}
+                    />
                   </div>
                 )}
               </div>

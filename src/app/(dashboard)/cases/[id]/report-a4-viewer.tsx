@@ -133,26 +133,6 @@ export function ReportA4Viewer({
   return (
     <div className="report-page-container">
       <div className="report-a4-page">
-        {/* Legend — explains [Ev.N] and source categories */}
-        <details className="mb-6 rounded-lg border border-border/50 bg-muted/20 text-xs">
-          <summary className="cursor-pointer px-4 py-2.5 font-medium text-muted-foreground hover:text-foreground select-none">
-            Legenda riferimenti del report
-          </summary>
-          <div className="px-4 pb-3 pt-1 space-y-2 text-muted-foreground">
-            <div>
-              <span className="font-semibold text-foreground">[Ev.N]</span> — Riferimento
-              all&apos;evento N nella cronologia clinica (es. [Ev.3] = terzo evento in ordine cronologico).
-              Clicca sul riferimento per vedere i dettagli dell&apos;evento.
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              <div><span className="font-semibold text-foreground">(A)</span> Cartella clinica</div>
-              <div><span className="font-semibold text-foreground">(B)</span> Referti e controlli medici</div>
-              <div><span className="font-semibold text-foreground">(C)</span> Esami strumentali (RX, TAC, RM)</div>
-              <div><span className="font-semibold text-foreground">(D)</span> Esami ematochimici</div>
-            </div>
-          </div>
-        </details>
-
         {sections.map((section, index) => {
           const isPreamble = section.id === 'preamble';
           const isFullReport = section.id === 'full_report';
@@ -282,7 +262,7 @@ export function ReportA4Viewer({
       {/* Version compare below A4 page */}
       {showVersionCompare && versions.length > 1 && (
         <div className="mt-6">
-          <VersionCompare currentReport={report} versions={versions} />
+          <VersionCompare currentReport={report} versions={versions} events={events} />
         </div>
       )}
 

@@ -206,6 +206,22 @@ ${Array(100).fill('parola').join(' ')}`;
     });
   });
 
+  describe('sentinel name leak — Antoniazzi il_fatto example', () => {
+    it('should flag the Antoniazzi narrative example tokens if copied verbatim', () => {
+      const report = buildFullReport() + '\nMentre attraversava la strada davanti alla Scuola Cangrande in Corso Porta Nuova veniva investita da un motociclo delle Poste.';
+      const result = validateReport(report, 5);
+
+      const leaks = result.issues.filter((i) => i.type === 'sentinel_name_leak');
+      expect(leaks.length).toBeGreaterThanOrEqual(1);
+      expect(leaks.some((i) => i.message.includes('Antoniazzi'))).toBe(true);
+    });
+
+    it('should not flag a clean report', () => {
+      const result = validateReport(buildFullReport(), 5);
+      expect(result.issues.filter((i) => i.type === 'sentinel_name_leak')).toHaveLength(0);
+    });
+  });
+
   describe('event coverage', () => {
     it('should always return 100% coverage (Ev.N references removed from report format)', () => {
       const report = buildFullReport({ events: 3 });

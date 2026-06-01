@@ -77,6 +77,12 @@ export const HeaderDataSchema = z.object({
       resistente: z.string().nullable(),
       ctpRicorrente: z.string().nullable(),
       ctpResistente: z.string().nullable(),
+      // Benchmark Del Porto — popolati via overlay dai metadati perito (autoritativi),
+      // non dall'LLM: optional così l'omissione del modello non rompe il parse.
+      tipoProcedimento: z.string().nullable().optional(),
+      dataInizioOperazioni: z.string().nullable().optional(),
+      termineDeposito: z.string().nullable().optional(),
+      fondoSpese: z.string().nullable().optional(),
     })
     .nullable(),
 });
