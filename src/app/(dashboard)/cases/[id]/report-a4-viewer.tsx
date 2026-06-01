@@ -12,6 +12,7 @@ import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { parseSections } from '@/lib/section-parser-client';
+import { expandDeterministicBlocks } from '@/services/calculations/deterministic-tables';
 import { getSectionStatus } from '@/lib/section-state';
 import { setSectionLock } from '../../actions';
 import type { ReportRow, EventRow } from './types';
@@ -50,8 +51,15 @@ export function ReportA4Viewer({
   versions,
 }: ReportA4ViewerProps) {
   const router = useRouter();
-  const synthesis = report.synthesis ?? '';
+  // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from the
+  // CURRENT events at read time → always in sync, no LLM, no regeneration.
+  // No-op on legacy reports (no sentinel markers).
+  const rawSynthesis = report.synthesis ?? '';
+  const synthesis = expandDeterministicBlocks(rawSynthesis, events);
   const sections = parseSections(synthesis);
+  // The editor must operate on the RAW content (preserving the sentinel marker),
+  // never on the expanded table — otherwise a save would freeze the table.
+  const rawContentById = new Map(parseSections(rawSynthesis).map((s) => [s.canonicalId, s.content]));
   const eventRefs = events.map((e) => ({
     orderNumber: e.order_number,
     title: e.title,
@@ -183,7 +191,7 @@ export function ReportA4Viewer({
                         id: section.id,
                         canonicalId: section.canonicalId,
                         title: section.title,
-                        content: section.content,
+                        content: rawContentById.get(section.canonicalId) ?? section.content,
                       })}
                     >
                       <Pencil className="h-3.5 w-3.5" />

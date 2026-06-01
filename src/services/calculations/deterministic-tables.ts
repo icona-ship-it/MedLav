@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
 
 /** Minimal event shape needed to render the deterministic tables. Compatible
  * with the DB row (snake_case) and easily mapped from ConsolidatedEvent. */
@@ -109,4 +110,53 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
     '|---|---|---|---|',
     ...rows,
   ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic-block expansion (at-read-time)
+// ---------------------------------------------------------------------------
+
+/** Sentinel markers embedded in the saved report markdown. Expanded from the
+ * CURRENT events at read time (UI + export) so the factual blocks never drift.
+ * HTML comments → fail-safe: if a surface forgets to expand, they render as
+ * nothing rather than breaking the layout. */
+export const DETERMINISTIC_MARKERS = {
+  ITT_ITP: '<!--MEDLAV:ITT_ITP-->',
+  SPESE: '<!--MEDLAV:SPESE-->',
+  CRONO: '<!--MEDLAV:CRONO-->',
+} as const;
+
+const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
+  ITT_ITP: '_Periodi di invalidità temporanea non calcolabili dai dati disponibili._',
+  SPESE: '_Nessuna spesa medica documentata._',
+  CRONO: '_Nessun evento clinico in cronologia._',
+};
+
+/** True if the synthesis contains at least one deterministic marker. */
+export function hasDeterministicMarkers(synthesis: string): boolean {
+  return Object.values(DETERMINISTIC_MARKERS).some((m) => synthesis.includes(m));
+}
+
+/**
+ * Replace the deterministic sentinel markers in a report's markdown with tables
+ * rendered from the CURRENT events. Pure, no LLM. Idempotent and a no-op on
+ * legacy reports (no markers) — returns the input unchanged.
+ */
+export function expandDeterministicBlocks(
+  synthesis: string,
+  events: DeterministicTableEvent[],
+): string {
+  if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
+
+  const replacements: Array<[string, string]> = [
+    [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events)) || EMPTY_FALLBACK.ITT_ITP],
+    [DETERMINISTIC_MARKERS.SPESE, formatExpenseTable(events) || EMPTY_FALLBACK.SPESE],
+    [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
+  ];
+
+  let out = synthesis;
+  for (const [marker, rendered] of replacements) {
+    if (out.includes(marker)) out = out.split(marker).join(rendered);
+  }
+  return out;
 }

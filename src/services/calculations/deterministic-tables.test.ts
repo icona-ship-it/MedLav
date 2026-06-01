@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { formatExpenseTable, formatChronologyIndex, type DeterministicTableEvent } from './deterministic-tables';
+import {
+  formatExpenseTable,
+  formatChronologyIndex,
+  expandDeterministicBlocks,
+  hasDeterministicMarkers,
+  DETERMINISTIC_MARKERS,
+  type DeterministicTableEvent,
+} from './deterministic-tables';
 
 function ev(partial: Partial<DeterministicTableEvent>): DeterministicTableEvent {
   return {
@@ -86,5 +93,47 @@ describe('formatChronologyIndex', () => {
     ]);
     expect(out).toContain('Esame strumentale');
     expect(out).toContain('TAC \\| torace');
+  });
+});
+
+describe('expandDeterministicBlocks', () => {
+  const expenses: DeterministicTableEvent[] = [
+    ev({ event_type: 'spesa_medica', event_date: '2024-01-05', title: 'Fattura', description: '€ 100,00' }),
+  ];
+
+  it('is a no-op on legacy reports without markers (idempotent)', () => {
+    const md = '## Epicrisi\n\nTesto senza marker.';
+    expect(hasDeterministicMarkers(md)).toBe(false);
+    expect(expandDeterministicBlocks(md, expenses)).toBe(md);
+    // idempotent: running twice changes nothing
+    const once = expandDeterministicBlocks(md, expenses);
+    expect(expandDeterministicBlocks(once, expenses)).toBe(once);
+  });
+
+  it('replaces the SPESE marker with the rendered expense table', () => {
+    const md = `## Spese mediche\n\n${DETERMINISTIC_MARKERS.SPESE}`;
+    const out = expandDeterministicBlocks(md, expenses);
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.SPESE);
+    expect(out).toContain('| Data | Descrizione | Struttura | Importo |');
+    expect(out).toContain('Fattura');
+  });
+
+  it('replaces ITT/ITP and CRONO markers', () => {
+    const clinical: DeterministicTableEvent[] = [
+      ev({ event_type: 'ricovero', event_date: '2024-01-01', title: 'Ricovero' }),
+      ev({ event_type: 'dimissione', event_date: '2024-01-10', title: 'Dimissione' }),
+    ];
+    const md = `${DETERMINISTIC_MARKERS.ITT_ITP}\n\n${DETERMINISTIC_MARKERS.CRONO}`;
+    const out = expandDeterministicBlocks(md, clinical);
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.CRONO);
+    expect(out).toContain('Autore/Struttura'); // chrono table header
+  });
+
+  it('uses a fallback note when the data yields an empty table', () => {
+    const md = DETERMINISTIC_MARKERS.SPESE;
+    const out = expandDeterministicBlocks(md, []); // no expenses
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.SPESE);
+    expect(out).toContain('Nessuna spesa medica documentata');
   });
 });
