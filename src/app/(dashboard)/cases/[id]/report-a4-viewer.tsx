@@ -12,7 +12,7 @@ import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { parseSections } from '@/lib/section-parser-client';
-import { expandDeterministicBlocks } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, hasDeterministicMarkers } from '@/services/calculations/deterministic-tables';
 import { getSectionStatus } from '@/lib/section-state';
 import { setSectionLock } from '../../actions';
 import type { ReportRow, EventRow } from './types';
@@ -160,6 +160,10 @@ export function ReportA4Viewer({
           const isFirst = index === 0;
           const status = getSectionStatus(report.generation_metadata, section.canonicalId);
           const isLocked = status === 'locked';
+          // A section that embeds a deterministic block (e.g. the ITT/ITP table)
+          // must NOT be LLM-regenerated — that would discard the live sentinel.
+          // The factual table is always in sync; correct it by editing the events.
+          const hasDeterministic = hasDeterministicMarkers(rawContentById.get(section.canonicalId) ?? '');
 
           return (
             <div
@@ -179,6 +183,9 @@ export function ReportA4Viewer({
                     )}
                     {isLocked && (
                       <Badge variant="success" title="Confermata — protetta dalla rigenerazione"><Lock className="mr-1 h-3 w-3" />Confermata</Badge>
+                    )}
+                    {hasDeterministic && (
+                      <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Timeline.">Tabella automatica</Badge>
                     )}
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
@@ -206,14 +213,18 @@ export function ReportA4Viewer({
                     >
                       {isLocked ? <Lock className="h-3.5 w-3.5 text-success" /> : <LockOpen className="h-3.5 w-3.5" />}
                     </Button>
-                    <SectionRegenerateButton
-                      caseId={caseId}
-                      sectionId={section.canonicalId}
-                      sectionTitle={section.title}
-                      reportVersion={report.version}
-                      disabled={regeneratingSection !== null}
-                      onRegenerated={() => handleSectionRegenerated(section.id)}
-                    />
+                    {/* No LLM regeneration for sections with a deterministic
+                        block — it would discard the live table. */}
+                    {!hasDeterministic && (
+                      <SectionRegenerateButton
+                        caseId={caseId}
+                        sectionId={section.canonicalId}
+                        sectionTitle={section.title}
+                        reportVersion={report.version}
+                        disabled={regeneratingSection !== null}
+                        onRegenerated={() => handleSectionRegenerated(section.id)}
+                      />
+                    )}
                   </div>
                 </div>
               )}
