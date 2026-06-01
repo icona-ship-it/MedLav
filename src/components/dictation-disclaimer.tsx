@@ -69,9 +69,11 @@ export function DictationDisclaimer({ open, onOpenChange, onAccept }: DictationD
             LegMed né da Mistral dopo l&apos;elaborazione.
           </p>
           <p>
-            Per ridurre il rischio sui dati sanitari (GDPR art. 9), evita quando possibile
-            di pronunciare ad alta voce <strong>nome e cognome del paziente</strong>,
-            <strong> codice fiscale</strong> o altri identificatori diretti.
+            I dati del paziente (nome e cognome, <strong>codice fiscale</strong>, ecc.) li
+            inserisci <strong>normalmente</strong> nei campi dedicati: questo avviso non te lo
+            vieta. Riguarda <strong>solo la dettatura</strong> — mentre parli, quando puoi evita
+            di pronunciare ad alta voce gli identificatori diretti, per ridurre il rischio sui
+            dati sanitari (GDPR art. 9).
           </p>
           <p>
             Il testo trascritto compare nel campo che hai aperto. Lo salverai tu, come

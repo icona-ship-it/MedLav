@@ -84,6 +84,26 @@ describe('POST /api/transcribe — GDPR: audio never persisted, transcript not l
     expect(refundCredits).toHaveBeenCalledWith(UUID, 1, 'dettatura', undefined, expect.objectContaining({ reason: 'transcription_failed' }));
   });
 
+  it('returns 403 (no charge, no transcription) when the provided caseId is not owned by the user', async () => {
+    const mod = await import('@/lib/supabase/server');
+    vi.spyOn(mod, 'createClient').mockResolvedValueOnce({
+      auth: { getUser: async () => ({ data: { user: { id: UUID } } }) },
+      from: () => ({
+        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
+      }),
+    } as unknown as Awaited<ReturnType<typeof mod.createClient>>);
+
+    const fd = new FormData();
+    fd.append('audio', new Blob([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], { type: 'audio/webm' }));
+    fd.append('metadata', JSON.stringify({ language: 'it', caseId: '33333333-3333-4333-8333-333333333333' }));
+    const req = { formData: async () => fd, headers: { get: () => null } } as unknown as NextRequest;
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect(transcribeDictation).not.toHaveBeenCalled();
+  });
+
   it('does not transcribe (and does not charge) when the user is unauthenticated', async () => {
     // override auth for this test
     const mod = await import('@/lib/supabase/server');

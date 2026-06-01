@@ -106,6 +106,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return jsonError('Metadata dettatura non valida.', 400);
   }
 
+  // If a caseId is provided (used only for audit attribution), verify it belongs
+  // to the user — never attribute/log dictation against someone else's case (GDPR
+  // audit integrity). RLS already filters, this is an explicit fail-fast guard.
+  if (metadata.caseId) {
+    const { data: ownedCase } = await supabase
+      .from('cases')
+      .select('id')
+      .eq('id', metadata.caseId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!ownedCase) {
+      return jsonError('Caso non trovato o non accessibile.', 403);
+    }
+  }
+
   // Read bytes once and validate magic bytes
   const audioBuffer = new Uint8Array(await audioField.arrayBuffer());
   if (!looksLikeAudioBytes(audioBuffer)) {

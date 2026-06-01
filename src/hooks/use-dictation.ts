@@ -166,6 +166,11 @@ export function useDictation(options: UseDictationOptions): UseDictationApi {
 
   const uploadAndTranscribe = useCallback(async (blob: Blob): Promise<void> => {
     setState('transcribing');
+    // Hard client-side timeout so the "sto trascrivendo…" spinner can never hang
+    // forever if the network stalls after the server has already replied.
+    // Server maxDuration=60s + Mistral timeout=60s → 90s gives margin.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
     try {
       const fd = new FormData();
       fd.append('audio', blob, `dictation.${mimeTypeRef.current.split('/')[1]?.split(';')[0] ?? 'webm'}`);
@@ -182,6 +187,7 @@ export function useDictation(options: UseDictationOptions): UseDictationApi {
         method: 'POST',
         headers: { ...csrfHeaders() },
         body: fd,
+        signal: controller.signal,
       });
 
       const json = (await res.json().catch(() => null)) as
@@ -204,7 +210,13 @@ export function useDictation(options: UseDictationOptions): UseDictationApi {
         durationSec: json.data.durationSec,
       });
     } catch (err) {
-      reportError(err instanceof Error ? err.message : 'Errore di rete durante la trascrizione.');
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        reportError('Trascrizione interrotta: il server non ha risposto in tempo. Riprova.');
+      } else {
+        reportError(err instanceof Error ? err.message : 'Errore di rete durante la trascrizione.');
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }, [language, contextHint, caseId, reportError]);
 
