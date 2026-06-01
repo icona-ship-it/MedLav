@@ -8,7 +8,7 @@ import {
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
-import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
+import { DETERMINISTIC_MARKERS, expandDeterministicBlocks } from '@/services/calculations/deterministic-tables';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -513,7 +513,20 @@ export async function assembleSectionsAndSaveReport(
     requiredSectionTitles: sections.map((s) => s.title),
   };
 
-  const validation = validateReport(fullReport, synthesisParams.events.length, validationContext);
+  // Valida il report ESPANSO: i marker deterministici (ITT/ITP, spese, cronologia)
+  // si espandono in tabelle con contenuto reale solo at-read-time. Un report molto
+  // ridotto (selettore sezioni) ha pochi "parole" in forma grezza ma supera la soglia
+  // una volta espanso → evitiamo il falso "report troppo corto" (e il retry Inngest).
+  // NB: salviamo comunque `fullReport` GREZZO (marker intatti) → l'espansione resta
+  // dinamica a read-time (ITT/ITP/spese sempre in sync con gli eventi correnti).
+  const validationEvents = synthesisParams.events.map((e) => ({
+    event_date: e.eventDate,
+    event_type: e.eventType,
+    title: e.title,
+    description: e.description,
+  }));
+  const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents);
+  const validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');

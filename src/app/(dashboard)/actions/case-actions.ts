@@ -29,6 +29,13 @@ const caseStatusSchema = z.enum(['bozza', 'in_revisione', 'definitivo', 'archivi
 const moduleIdSchema = z.enum(ALL_MODULE_IDS as unknown as [string, ...string[]]);
 
 const periziaMetadataSchema = z.object({
+  patientFullName: z.string().max(200).optional(),
+  patientDateOfBirth: z.string().max(40).optional(),
+  patientAddress: z.string().max(300).optional(),
+  patientFiscalCode: z.string().max(20).optional(),
+  patientPhone: z.string().max(40).optional(),
+  specialita: z.string().max(200).optional(),
+  alboNumber: z.string().max(80).optional(),
   tribunale: z.string().max(200).optional(),
   sezione: z.string().max(200).optional(),
   rgNumber: z.string().max(50).optional(),

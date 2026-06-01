@@ -125,6 +125,16 @@ describe('validateReport', () => {
 
       expect(result.issues.some((i) => i.type === 'too_short')).toBe(false);
     });
+
+    it('treats a deliberately short report (150-500 words) as a non-blocking warning', () => {
+      // ~225 words — sotto la soglia consigliata (500) ma sopra il minimo assoluto.
+      const body = 'Il paziente e stato valutato e i dati clinici risultano coerenti con la documentazione esaminata. '.repeat(15);
+      const report = `## Intestazione\n${body}\n## Considerazioni Medico-Legali\n${body.slice(0, 0)}`;
+      const result = validateReport(report, 0);
+      const tooShort = result.issues.find((i) => i.type === 'too_short');
+      expect(tooShort?.severity).toBe('warning');
+      expect(getBlockingIssues(result).some((i) => i.type === 'too_short')).toBe(false);
+    });
   });
 
   describe('missing sections', () => {

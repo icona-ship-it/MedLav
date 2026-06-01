@@ -109,6 +109,14 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 // budgets (section-catalog.ts) and prompt directives (synthesis-prompts.ts).
 const MIN_WORD_COUNT = 500;
 
+/**
+ * Soglia BLOCCANTE: sotto questa il report è quasi certamente una generazione
+ * fallita (crash/rete). Tra ABSOLUTE_MIN e MIN_WORD_COUNT è solo un warning —
+ * un report volutamente ridotto col selettore "Sezioni del report" è legittimo
+ * e non deve essere bloccato (col conseguente retry Inngest a vuoto).
+ */
+const ABSOLUTE_MIN_WORD_COUNT = 150;
+
 /** A3: expected minimum % of dated clinical events cited in the report. Below
  * this we warn; below COVERAGE_HARD_BLOCK_PERCENT (with enough events) we block. */
 const MIN_EVENT_COVERAGE_PERCENT = 30;
@@ -142,13 +150,21 @@ export function validateReport(
     return { valid: false, issues, eventCoverage: 0 };
   }
 
-  // 2. Too short
+  // 2. Too short. Blocca SOLO se grossolanamente vuoto (generazione fallita).
+  // Tra ABSOLUTE_MIN e MIN_WORD_COUNT è un warning: un report volutamente ridotto
+  // (selettore "Sezioni del report") è legittimo, non un errore.
   const wordCount = synthesis.split(/\s+/).filter((w) => w.length > 0).length;
-  if (wordCount < MIN_WORD_COUNT) {
+  if (wordCount < ABSOLUTE_MIN_WORD_COUNT) {
     issues.push({
       type: 'too_short',
       severity: 'error',
-      message: `Report has ${wordCount} words (minimum: ${MIN_WORD_COUNT})`,
+      message: `Report has ${wordCount} words (minimo assoluto: ${ABSOLUTE_MIN_WORD_COUNT})`,
+    });
+  } else if (wordCount < MIN_WORD_COUNT) {
+    issues.push({
+      type: 'too_short',
+      severity: 'warning',
+      message: `Report has ${wordCount} words (sotto la soglia consigliata: ${MIN_WORD_COUNT})`,
     });
   }
 
