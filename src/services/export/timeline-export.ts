@@ -69,26 +69,24 @@ function sourceLabel(raw: string): string {
  */
 function buildEventBlock(ev: TimelineEvent): Paragraph[] {
   const paragraphs: Paragraph[] = [];
-  const isLowConfidence = typeof ev.confidence === 'number' && ev.confidence < 60;
 
-  // Intestazione "DATA — TIPO" (con flag DA VERIFICARE se necessario)
-  const headerChildren: TextRun[] = [];
-  if (ev.requires_verification) {
-    headerChildren.push(new TextRun({ text: '⚠ DA VERIFICARE — ', bold: true, color: 'DC2626', size: 22, font: 'Calibri' }));
-  }
-  headerChildren.push(new TextRun({
-    text: `${formatDate(ev.event_date)} — ${eventTypeLabel(ev.event_type)}`,
-    bold: true,
-    size: 22,
-    font: 'Calibri',
-    color: '1B3A6B',
+  // Intestazione "DATA — TIPO". Documento professionale: NESSUN flag interno di
+  // lavoro (DA VERIFICARE / confidenza). La revisione avviene a schermo.
+  paragraphs.push(new Paragraph({
+    children: [new TextRun({
+      text: `${formatDate(ev.event_date)} — ${eventTypeLabel(ev.event_type)}`,
+      bold: true,
+      size: 22,
+      font: 'Calibri',
+      color: '1B3A6B',
+    })],
+    spacing: { before: 180, after: 40 },
   }));
-  paragraphs.push(new Paragraph({ children: headerChildren, spacing: { before: 180, after: 40 } }));
 
   // Titolo
   if (ev.title) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: ev.title, bold: true, italics: isLowConfidence, size: 20, font: 'Calibri' })],
+      children: [new TextRun({ text: ev.title, bold: true, size: 20, font: 'Calibri' })],
       spacing: { after: 30 },
     }));
   }
@@ -96,7 +94,7 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
   // Descrizione
   if (ev.description) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: ev.description, italics: isLowConfidence, size: 20, font: 'Calibri' })],
+      children: [new TextRun({ text: ev.description, size: 20, font: 'Calibri' })],
       spacing: { after: 30 },
     }));
   }
@@ -112,21 +110,14 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
     }));
   }
 
-  // Riga meta: medico — struttura — fonte — confidenza
+  // Riga meta: medico — struttura — fonte
   const meta: string[] = [];
   if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? ev.doctor : `Dr. ${ev.doctor}`);
   if (ev.facility) meta.push(ev.facility);
   if (ev.source_type) meta.push(sourceLabel(ev.source_type));
-  if (isLowConfidence) meta.push(`Confidenza ${Math.round(ev.confidence ?? 0)}%`);
   if (meta.length > 0) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({
-        text: meta.join(' — '),
-        size: 16,
-        italics: true,
-        color: isLowConfidence ? 'B91C1C' : '777777',
-        font: 'Calibri',
-      })],
+      children: [new TextRun({ text: meta.join(' — '), size: 16, italics: true, color: '777777', font: 'Calibri' })],
       spacing: { after: 80 },
     }));
   }

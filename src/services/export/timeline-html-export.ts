@@ -112,14 +112,12 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
       const metaStr = meta.length > 0
         ? `<p class="event-meta">${meta.join(' &mdash; ')}</p>`
         : '';
-      const verify = ev.requires_verification
-        ? '<span class="verify-flag">⚠ DA VERIFICARE — </span>'
-        : '';
       const diag = ev.diagnosis
         ? `<p class="event-diag"><strong>Diagnosi:</strong> ${escapeHtml(ev.diagnosis)}</p>`
         : '';
+      // Documento professionale: nessun flag interno di lavoro (DA VERIFICARE).
       return `<div class="event-block">
-      <p class="event-head">${verify}${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(eventTypeLabel(ev.event_type))}</p>
+      <p class="event-head">${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(eventTypeLabel(ev.event_type))}</p>
       ${ev.title ? `<p class="event-title">${escapeHtml(ev.title)}</p>` : ''}
       ${ev.description ? `<p class="event-desc">${escapeHtml(ev.description)}</p>` : ''}
       ${diag}

@@ -59,7 +59,7 @@ describe('generateTimelineHtml — documento scritto (non tabella)', () => {
     expect(html).not.toContain('EventoSenzaData');
   });
 
-  it('renders diagnosis and DA VERIFICARE flag when present', () => {
+  it('renders diagnosis but NO internal "DA VERIFICARE" flag (documento professionale)', () => {
     const html = generateTimelineHtml({
       caseCode: 'C1',
       patientInitials: null,
@@ -67,7 +67,7 @@ describe('generateTimelineHtml — documento scritto (non tabella)', () => {
     });
     expect(html).toContain('Frattura di Colles');
     expect(html).toContain('event-diag');
-    expect(html).toContain('DA VERIFICARE');
+    expect(html).not.toContain('DA VERIFICARE'); // flag interno di lavoro, non nel documento finale
   });
 
   it('shows an empty-state message when no events qualify', () => {
