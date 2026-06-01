@@ -1,15 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Pencil } from 'lucide-react';
+import { Pencil, Lock, LockOpen } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { parseSections } from '@/lib/section-parser-client';
+import { getSectionStatus } from '@/lib/section-state';
+import { setSectionLock } from '../../actions';
 import type { ReportRow, EventRow } from './types';
 
 const ReportSectionEditor = dynamic(
@@ -57,9 +61,30 @@ export function ReportA4Viewer({
   // Section editing state
   const [editingSection, setEditingSection] = useState<{
     id: string;
+    canonicalId: string;
     title: string;
     content: string;
   } | null>(null);
+
+  // Lock/unlock per-section
+  const [isLocking, startLock] = useTransition();
+  const handleToggleLock = useCallback((canonicalId: string, currentlyLocked: boolean) => {
+    startLock(async () => {
+      const result = await setSectionLock({
+        caseId,
+        reportId: report.id,
+        sectionCanonicalId: canonicalId,
+        locked: !currentlyLocked,
+        expectedUpdatedAt: report.updated_at,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(currentlyLocked ? 'Sezione sbloccata' : 'Sezione confermata');
+      router.refresh();
+    });
+  }, [caseId, report.id, report.updated_at, router]);
 
   // Rating state
   const [existingRating, setExistingRating] = useState<number | null>(null);
@@ -125,6 +150,8 @@ export function ReportA4Viewer({
           const isFullReport = section.id === 'full_report';
           const showRegenerate = !isPreamble && !isFullReport;
           const isFirst = index === 0;
+          const status = getSectionStatus(report.generation_metadata, section.canonicalId);
+          const isLocked = status === 'locked';
 
           return (
             <div
@@ -132,12 +159,20 @@ export function ReportA4Viewer({
               id={`section-${section.id}`}
               className={`group ${lastRegeneratedSection === section.id ? 'animate-highlight-flash' : ''}${!isFirst ? ' mt-10 pt-8 border-t border-border/40' : ''}`}
             >
-              {/* Section heading with edit + regenerate buttons */}
+              {/* Section heading with state badge + edit/lock/regenerate buttons */}
               {showRegenerate && (
                 <div className="flex items-start justify-between gap-4 mb-4">
-                  <h2 className="text-xl font-bold tracking-tight leading-tight">
-                    {section.title}
-                  </h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl font-bold tracking-tight leading-tight">
+                      {section.title}
+                    </h2>
+                    {status === 'edited' && (
+                      <Badge variant="info" title="Modificata a mano — la rigenerazione chiederà conferma prima di sovrascrivere">Modificata</Badge>
+                    )}
+                    {isLocked && (
+                      <Badge variant="success" title="Confermata — protetta dalla rigenerazione"><Lock className="mr-1 h-3 w-3" />Confermata</Badge>
+                    )}
+                  </div>
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
                     <Button
                       variant="ghost"
@@ -146,11 +181,22 @@ export function ReportA4Viewer({
                       title={`Modifica "${section.title}"`}
                       onClick={() => setEditingSection({
                         id: section.id,
+                        canonicalId: section.canonicalId,
                         title: section.title,
                         content: section.content,
                       })}
                     >
                       <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={isLocking}
+                      title={isLocked ? `Sblocca "${section.title}"` : `Conferma "${section.title}" (protegge dalla rigenerazione)`}
+                      onClick={() => handleToggleLock(section.canonicalId, isLocked)}
+                    >
+                      {isLocked ? <Lock className="h-3.5 w-3.5 text-success" /> : <LockOpen className="h-3.5 w-3.5" />}
                     </Button>
                     <SectionRegenerateButton
                       caseId={caseId}
@@ -227,6 +273,7 @@ export function ReportA4Viewer({
         caseId={caseId}
         reportId={report.id}
         sectionId={editingSection?.id ?? ''}
+        sectionCanonicalId={editingSection?.canonicalId}
         sectionTitle={editingSection?.title ?? ''}
         sectionContent={editingSection?.content ?? ''}
         reportUpdatedAt={report.updated_at}
