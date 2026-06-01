@@ -13,6 +13,10 @@ export interface PeriziaMetadataUI {
   ctuTitle?: string;
   specialita?: string;
   alboNumber?: string;
+  ctuEmail?: string;
+  ctuPec?: string;
+  collaboratoreName?: string;
+  collaboratoreTitle?: string;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;

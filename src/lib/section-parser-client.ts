@@ -30,12 +30,17 @@ const SECTION_ID_MAP: Array<{ pattern: RegExp; id: string }> = [
   { pattern: /dati\s+della\s+documentazione\s+sanitaria|documentazione\s+sanitaria|documentazione\s+medica\s+prodotta/i, id: 'documentazione_sanitaria' },
   { pattern: /spese\s+mediche/i, id: 'spese_mediche' },
   { pattern: /precedenti\s+pareri\s+tecnici|pareri\s+tecnici/i, id: 'pareri_tecnici' },
-  { pattern: /incontro\s+con\s+le\s+parti|operazioni\s+peritali/i, id: 'operazioni_peritali' },
+  // "operazioni tecniche" = nuovo titolo veronese; "incontro con le parti"/"operazioni peritali" = retrocompat.
+  { pattern: /incontro\s+con\s+le\s+parti|operazioni\s+(peritali|tecniche)/i, id: 'operazioni_peritali' },
+  // Conciliazione ATP 696-bis: PRIMA di osservazioni; ante/post distinte da antecedente/successiva.
+  { pattern: /tentativo\s+di\s+conciliazione.*(antecedente|prima)/i, id: 'conciliazione_ante_bozza' },
+  { pattern: /tentativo\s+di\s+conciliazione.*(successiv|dopo)/i, id: 'conciliazione_post_bozza' },
   { pattern: /considerazioni\s+medico-?\s*legali/i, id: 'considerazioni_ml' },
   { pattern: /il\s+fatto\s+e\s+la\s+storia\s+clinica/i, id: 'il_fatto_e_storia_clinica' },
   { pattern: /epicrisi/i, id: 'epicrisi' },
   { pattern: /bibliografia/i, id: 'bibliografia' },
-  { pattern: /osservazioni\s+(alla\s+)?bozza/i, id: 'osservazioni_bozza' },
+  // "invio delle bozze" = nuovo titolo veronese; "osservazioni alla bozza" = retrocompat.
+  { pattern: /invio\s+delle\s+bozze|osservazioni\s+(alla\s+)?bozza/i, id: 'osservazioni_bozza' },
   // Legacy aliases kept for backward compat with already-saved reports
   { pattern: /sintesi\s+conclusiva|^conclusioni$/i, id: 'conclusioni' },
   // Legacy/domain-knowledge sections

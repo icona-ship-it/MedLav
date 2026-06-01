@@ -32,6 +32,8 @@ const NEVER_STALE_SECTIONS: ReadonlySet<string> = new Set([
   'spese_mediche',           // deterministic table (auto-updates)
   'considerazioni_ml',       // placeholder (+ deterministic ITT/ITP)
   'operazioni_peritali',     // placeholder
+  'conciliazione_ante_bozza', // placeholder (ATP 696-bis)
+  'conciliazione_post_bozza', // placeholder (ATP 696-bis)
   'osservazioni_bozza',      // placeholder
   'visita_clinica',          // placeholder
   'valutazione_responsabilita', // placeholder

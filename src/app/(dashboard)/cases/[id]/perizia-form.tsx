@@ -33,7 +33,7 @@ interface SectionDef {
 const SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
   { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese'] },
-  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
+  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
   { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
   { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
   { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
@@ -139,6 +139,10 @@ export function PeriziaMetadataForm({
     ctuTitle: existing.ctuTitle ?? '',
     specialita: existing.specialita ?? '',
     alboNumber: existing.alboNumber ?? '',
+    ctuEmail: existing.ctuEmail ?? '',
+    ctuPec: existing.ctuPec ?? '',
+    collaboratoreName: existing.collaboratoreName ?? '',
+    collaboratoreTitle: existing.collaboratoreTitle ?? '',
     ctpRicorrente: existing.ctpRicorrente ?? '',
     ctpResistente: existing.ctpResistente ?? '',
     parteRicorrente: existing.parteRicorrente ?? '',
@@ -232,6 +236,10 @@ export function PeriziaMetadataForm({
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
         ...(form.specialita ? { specialita: form.specialita } : {}),
         ...(form.alboNumber ? { alboNumber: form.alboNumber } : {}),
+        ...(form.ctuEmail ? { ctuEmail: form.ctuEmail } : {}),
+        ...(form.ctuPec ? { ctuPec: form.ctuPec } : {}),
+        ...(form.collaboratoreName ? { collaboratoreName: form.collaboratoreName } : {}),
+        ...(form.collaboratoreTitle ? { collaboratoreTitle: form.collaboratoreTitle } : {}),
         ...(form.ctpRicorrente ? { ctpRicorrente: form.ctpRicorrente } : {}),
         ...(form.ctpResistente ? { ctpResistente: form.ctpResistente } : {}),
         ...(form.parteRicorrente ? { parteRicorrente: form.parteRicorrente } : {}),
@@ -411,13 +419,36 @@ export function PeriziaMetadataForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Specialita</Label>
-                        <Input value={form.specialita ?? ''} onChange={(e) => setForm({ ...form, specialita: e.target.value })} placeholder="es. Ortopedia, Medicina Legale" />
-                        <p className="text-xs text-muted-foreground mt-1">Specializzazione medica del perito</p>
+                        <Input value={form.specialita ?? ''} onChange={(e) => setForm({ ...form, specialita: e.target.value })} placeholder="es. Specialista in Ortopedia; Specialista in Medicina Legale" />
+                        <p className="text-xs text-muted-foreground mt-1">Specializzazioni del perito (separale con ; per andare a capo nella carta intestata)</p>
                       </div>
                       <div>
                         <Label>N. Iscrizione Albo</Label>
                         <Input value={form.alboNumber ?? ''} onChange={(e) => setForm({ ...form, alboNumber: e.target.value })} placeholder="es. 12345 - Ordine Medici di Verona" />
                         <p className="text-xs text-muted-foreground mt-1">Numero di iscrizione all&apos;Albo professionale</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>E-mail perito</Label>
+                        <Input value={form.ctuEmail ?? ''} onChange={(e) => setForm({ ...form, ctuEmail: e.target.value })} placeholder="es. nome@studio.it" />
+                        <p className="text-xs text-muted-foreground mt-1">Mostrata nella carta intestata</p>
+                      </div>
+                      <div>
+                        <Label>PEC perito</Label>
+                        <Input value={form.ctuPec ?? ''} onChange={(e) => setForm({ ...form, ctuPec: e.target.value })} placeholder="es. nome@pec.omceo..." />
+                        <p className="text-xs text-muted-foreground mt-1">Posta elettronica certificata</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Ausiliario (nome)</Label>
+                        <Input value={form.collaboratoreName ?? ''} onChange={(e) => setForm({ ...form, collaboratoreName: e.target.value })} placeholder="es. Dr. Luigi Bongiovanni" />
+                        <p className="text-xs text-muted-foreground mt-1">Specialista che assiste il CTU (se nominato)</p>
+                      </div>
+                      <div>
+                        <Label>Ausiliario (specializzazione)</Label>
+                        <Input value={form.collaboratoreTitle ?? ''} onChange={(e) => setForm({ ...form, collaboratoreTitle: e.target.value })} placeholder="es. Specialista in Neurologia" />
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">

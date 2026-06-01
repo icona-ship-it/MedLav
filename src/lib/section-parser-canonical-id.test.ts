@@ -22,6 +22,14 @@ const HEADINGS: Array<[string, string]> = [
   ['Osservazioni alla bozza', 'osservazioni_bozza'],
   ['Bibliografia', 'bibliografia'],
   ['Nesso causale', 'nesso_causale'],
+  // Titoli ESATTI prodotti dal catalogo veronese (2026-06-02): la rinomina NON
+  // deve orfanare lo stato per-sezione e le 2 conciliazione NON devono collidere.
+  ['I Dati della Documentazione in Atti', 'documentazione_atti'],
+  ['I Dati della Documentazione Sanitaria in Atti', 'documentazione_sanitaria'],
+  ['I Dati delle Operazioni Tecniche', 'operazioni_peritali'],
+  ['I Dati dell\'Invio delle Bozze di CTU alle Parti, loro Osservazioni e Relativa Risposta', 'osservazioni_bozza'],
+  ['I Dati Relativi alla Disponibilità ad Esperire un Tentativo di Conciliazione in Fase Antecedente l\'Invio della Bozza di CTU', 'conciliazione_ante_bozza'],
+  ['I Dati Relativi alla Disponibilità ad Esperire un Tentativo di Conciliazione in Fase Successiva all\'Invio della Bozza di CTU', 'conciliazione_post_bozza'],
   // Unmapped → fallback slug (still must agree client/server)
   ['Sezione Personalizzata Del Perito', 'sezione_personalizzata_del_perito'],
 ];

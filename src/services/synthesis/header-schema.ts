@@ -25,6 +25,11 @@ export const HeaderDataSchema = z.object({
       qualifica: z.string().nullable(),
       specializzazione: z.string().nullable(),
       iscrizioneAlbo: z.string().nullable(),
+      // Carta intestata (CTU/CTP) — popolati via overlay dai metadati perito,
+      // non dall'LLM: optional così l'omissione del modello non rompe il parse.
+      email: z.string().nullable().optional(),
+      pec: z.string().nullable().optional(),
+      ausiliario: z.string().nullable().optional(),
     })
     .nullable(),
 
