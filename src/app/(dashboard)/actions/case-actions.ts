@@ -31,6 +31,7 @@ const periziaMetadataSchema = z.object({
   tribunale: z.string().max(200).optional(),
   sezione: z.string().max(200).optional(),
   rgNumber: z.string().max(50).optional(),
+  tipoProcedimento: z.string().max(200).optional(),
   judgeName: z.string().max(100).optional(),
   ctuName: z.string().max(100).optional(),
   ctuTitle: z.string().max(200).optional(),

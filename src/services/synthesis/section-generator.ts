@@ -33,7 +33,7 @@ import {
   parseHeaderData,
   type HeaderData,
 } from './header-schema';
-import { renderHeaderMarkdown, variantForSectionId } from './header-template';
+import { renderHeaderMarkdown, variantForSectionId, overlayGiudizialeFromMetadata } from './header-template';
 import { buildTailPrioritizedOcrInput } from './document-summarizer';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
@@ -651,6 +651,14 @@ OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backti
     headerData = emptyHeaderData();
   } else {
     headerData = parsed.data;
+  }
+
+  // CTU/CTP: i campi formali d'incarico (tribunale, R.G., giudice, CC.TT.P., date
+  // operazioni, fondo spese, tipo procedimento) provengono dai metadati che il
+  // perito ha compilato — autoritativi e non fabbricabili. Sovrapponili sull'estratto
+  // LLM così l'intestazione Del Porto è completa e deterministica.
+  if (variant === 'ctu' || variant === 'ctp') {
+    headerData = overlayGiudizialeFromMetadata(headerData, synthesisParams.periziaMetadata);
   }
 
   const markdown = renderHeaderMarkdown(headerData, { variant });

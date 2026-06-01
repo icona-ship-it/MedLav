@@ -32,7 +32,7 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
-  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'judgeName', 'fondoSpese'] },
+  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese'] },
   { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
   { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
   { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
@@ -130,6 +130,7 @@ export function PeriziaMetadataForm({
     tribunale: existing.tribunale ?? '',
     sezione: existing.sezione ?? '',
     rgNumber: existing.rgNumber ?? '',
+    tipoProcedimento: existing.tipoProcedimento ?? '',
     judgeName: existing.judgeName ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
@@ -209,6 +210,7 @@ export function PeriziaMetadataForm({
         ...(form.tribunale ? { tribunale: form.tribunale } : {}),
         ...(form.sezione ? { sezione: form.sezione } : {}),
         ...(form.rgNumber ? { rgNumber: form.rgNumber } : {}),
+        ...(form.tipoProcedimento ? { tipoProcedimento: form.tipoProcedimento } : {}),
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
@@ -355,6 +357,11 @@ export function PeriziaMetadataForm({
                         <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 10965/2025" />
                         <p className="text-xs text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
                       </div>
+                    </div>
+                    <div>
+                      <Label>Tipo di procedimento</Label>
+                      <Input value={form.tipoProcedimento ?? ''} onChange={(e) => setForm({ ...form, tipoProcedimento: e.target.value })} placeholder="es. Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)" />
+                      <p className="text-xs text-muted-foreground mt-1">Appare nell&apos;intestazione formale (ATP, CTU, ecc.)</p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>

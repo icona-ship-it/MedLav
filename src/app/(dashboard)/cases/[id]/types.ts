@@ -7,6 +7,7 @@ export interface PeriziaMetadataUI {
   tribunale?: string;
   sezione?: string;
   rgNumber?: string;
+  tipoProcedimento?: string;
   judgeName?: string;
   ctuName?: string;
   ctuTitle?: string;

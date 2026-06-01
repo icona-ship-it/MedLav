@@ -88,6 +88,7 @@ export interface PeriziaMetadata {
   tribunale?: string;          // "Tribunale Ordinario di Brescia"
   sezione?: string;            // "Sezione Centrale Civile"
   rgNumber?: string;           // "10965/2025"
+  tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
   judgeName?: string;           // "Dott. Raffaele Del Porto"
   ctuName?: string;            // "Dott. Nicola Pigaiani"
   ctuTitle?: string;           // "Specialista in Medicina Legale"
