@@ -10,18 +10,25 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import { regenerateSection } from '@/services/synthesis/section-regenerator';
+import { parseSynthesisSections } from '@/services/synthesis/section-parser';
 import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
 import { deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
+import { getSectionStatus, markSectionState } from '@/lib/section-state';
+import type { ReportGenerationMetadata } from '@/db/schema/reports';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 800; // section regeneration needs margin for LLM timeout + retries
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
-  sectionId: z.string().min(1).max(50),
+  sectionId: z.string().min(1).max(50), // canonical section id
   instruction: z.string().max(500).optional(),
+  /** Overwrite an edited/locked section after explicit user confirmation. */
+  force: z.boolean().optional(),
+  /** Optimistic concurrency: the report version the client is acting on. */
+  expectedVersion: z.number().int().optional(),
 });
 
 /**
@@ -61,27 +68,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Credit check for section regeneration
-    const deduction = await deductCredits(
-      user.id,
-      CREDIT_COSTS.rigenerazione_sezione,
-      'rigenerazione_sezione',
-    );
-    if (!deduction.success) {
-      return NextResponse.json(
-        { success: false, error: deduction.error },
-        { status: 402 },
-      );
-    }
-    creditsDeducted = true;
-
     const body = await request.json() as unknown;
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: 'Parametri non validi' }, { status: 400 });
     }
 
-    const { caseId, sectionId, instruction } = parsed.data;
+    const { caseId, sectionId, instruction, force, expectedVersion } = parsed.data;
 
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
@@ -95,10 +88,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
     }
 
-    // Get current report
+    // Get current report (incl. per-section state)
     const { data: currentReport } = await admin
       .from('reports')
-      .select('id, version, synthesis')
+      .select('id, version, synthesis, generation_metadata')
       .eq('case_id', caseId)
       .order('version', { ascending: false })
       .limit(1)
@@ -107,6 +100,39 @@ export async function POST(request: NextRequest) {
     if (!currentReport?.synthesis) {
       return NextResponse.json({ success: false, error: 'Nessun report esistente' }, { status: 400 });
     }
+
+    // Protect the perito's work: never silently overwrite an edited/locked
+    // section. Return blocked → the client asks for explicit confirmation.
+    // This runs BEFORE deductCredits so a blocked regen is never charged.
+    const currentMetadata = (currentReport.generation_metadata ?? null) as ReportGenerationMetadata | null;
+    const sectionStatus = getSectionStatus(currentMetadata, sectionId);
+    if ((sectionStatus === 'edited' || sectionStatus === 'locked') && !force) {
+      const title = parseSynthesisSections(currentReport.synthesis as string)
+        .find((s) => s.id === sectionId)?.title ?? sectionId;
+      return NextResponse.json({ success: false, blocked: true, reason: sectionStatus, sectionTitle: title });
+    }
+
+    // Optimistic concurrency: reject if a newer version exists than the client saw.
+    if (typeof expectedVersion === 'number' && (currentReport.version as number) !== expectedVersion) {
+      return NextResponse.json(
+        { success: false, error: 'Il report è stato modificato da un\'altra operazione. Ricarica la pagina e riprova.' },
+        { status: 409 },
+      );
+    }
+
+    // Credit check — AFTER block/version checks so a blocked regen is never charged.
+    const deduction = await deductCredits(
+      user.id,
+      CREDIT_COSTS.rigenerazione_sezione,
+      'rigenerazione_sezione',
+    );
+    if (!deduction.success) {
+      return NextResponse.json(
+        { success: false, error: deduction.error },
+        { status: 402 },
+      );
+    }
+    creditsDeducted = true;
 
     // Fetch events
     const { data: eventsRaw } = await admin
@@ -176,14 +202,19 @@ export async function POST(request: NextRequest) {
       documentsOcrText,
     });
 
-    // Save as new version
+    // Save as new version. Preserve the whole generation_metadata (per-section
+    // state, promptVersion, HRS, …) — previously this was dropped on every
+    // regeneration — and reset ONLY the regenerated section to 'auto'.
     const newVersion = ((currentReport.version as number) ?? 0) + 1;
+    const newMetadata = markSectionState(currentMetadata, sectionId, () => ({ status: 'auto' }))
+      ?? currentMetadata ?? undefined;
 
     const { error: insertError } = await admin.from('reports').insert({
       case_id: caseId,
       version: newVersion,
       report_status: 'bozza',
       synthesis: updatedSynthesis,
+      ...(newMetadata ? { generation_metadata: newMetadata } : {}),
     });
 
     if (insertError) {

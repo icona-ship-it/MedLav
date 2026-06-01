@@ -200,8 +200,9 @@ export function ReportA4Viewer({
                     </Button>
                     <SectionRegenerateButton
                       caseId={caseId}
-                      sectionId={section.id}
+                      sectionId={section.canonicalId}
                       sectionTitle={section.title}
+                      reportVersion={report.version}
                       disabled={regeneratingSection !== null}
                       onRegenerated={() => handleSectionRegenerated(section.id)}
                     />
