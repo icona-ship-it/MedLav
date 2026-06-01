@@ -6,13 +6,11 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { resolveAnomalies } from '@/services/validation/anomaly-resolver';
 import type { OcrPageFetcher } from '@/services/validation/anomaly-resolver';
-import { generateSynthesis } from '@/services/synthesis/synthesis-service';
+import { inngest } from '@/lib/inngest/client';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
-import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
+import type { CaseType } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
-import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -74,13 +72,23 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata')
+      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata, processing_stage')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
 
     if (!caseRow) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
+    }
+
+    // Concurrency guard: don't start a regeneration while the pipeline (or another
+    // regeneration) is already running on this case.
+    const currentStage = (caseRow.processing_stage as string) ?? 'idle';
+    if (currentStage === 'elaborazione' || currentStage === 'generazione_report') {
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione già in corso su questo caso. Attendi il completamento.' },
+        { status: 409 },
+      );
     }
 
     // Fetch current active events
@@ -223,87 +231,42 @@ export async function POST(request: NextRequest) {
       if (insertMissing) logger.error('regenerate', `Failed to insert missing docs: ${insertMissing.message}`);
     }
 
-    // Calculate medico-legal periods for report integration
-    const calcEvents = events.map((e) => ({
-      event_date: e.eventDate,
-      event_type: e.eventType,
-      title: e.title,
-      description: e.description,
-    }));
-    const calculations = calculateMedicoLegalPeriods(calcEvents);
-
-    // Fetch OCR text for faithful transcription
-    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
-    const ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
-    logger.info('processing/regenerate', `Fetched OCR text for regeneration: ${documentsOcrText.length} docs, ${ocrTotalChars} chars`);
-
-    // Regenerate synthesis with role-adaptive prompts + calculations + OCR text
-    const result = await generateSynthesis({
-      caseType: caseRow.case_type as CaseType,
-      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
-      caseRole: caseRow.case_role as CaseRole,
-      patientInitials: caseRow.patient_initials as string | null,
-      events,
-      anomalies,
-      missingDocuments: missingDocs,
-      calculations,
-      periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
-      documentsOcrText,
-    });
-
-    // Get current max version
-    const { data: latestReport } = await admin
-      .from('reports')
-      .select('version')
-      .eq('case_id', caseId)
-      .order('version', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const newVersion = (latestReport?.version ?? 0) + 1;
-
-    const generationMetadata: Record<string, unknown> = { promptVersion: result.promptVersion };
-    if (ocrTotalChars > 0) {
-      generationMetadata.ocrTextProvided = true;
-      generationMetadata.ocrTotalChars = ocrTotalChars;
+    // Hand the SECTIONAL deterministic synthesis off to Inngest (async): per-section
+    // steps + doc-sanitaria batching → no Vercel timeout/truncation, and the
+    // spese/ITT-ITP tables are the DETERMINISTIC sentinels (not LLM prose). The
+    // UI already polls processing_stage + generationProgress to show the bar.
+    const existingMeta = (caseRow.perizia_metadata ?? {}) as Record<string, unknown>;
+    const { error: stageError } = await admin.from('cases').update({
+      processing_stage: 'generazione_report',
+      perizia_metadata: {
+        ...existingMeta,
+        generationProgress: { currentSection: 0, totalSections: 1, currentSectionTitle: 'Avvio rigenerazione…' },
+      },
+      updated_at: new Date().toISOString(),
+    }).eq('id', caseId);
+    if (stageError) {
+      logger.error('processing/regenerate', `Failed to set generazione_report for case ${caseId}`, { error: stageError.message });
+      return NextResponse.json({ success: false, error: 'Errore avvio rigenerazione.' }, { status: 500 });
     }
 
-    const { error: insertError } = await admin.from('reports').insert({
-      case_id: caseId,
-      version: newVersion,
-      report_status: 'bozza',
-      synthesis: result.synthesis,
-      generation_metadata: generationMetadata,
-    });
+    await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id } });
 
-    if (insertError) {
-      logger.error('processing/regenerate', `Report INSERT failed for case ${caseId}`, {
-        error: insertError.message,
-        code: insertError.code,
-        synthesisLength: result.synthesis?.length ?? 0,
-      });
-      return NextResponse.json({ success: false, error: 'Errore salvataggio report.' }, { status: 500 });
-    }
-
-    // Audit log
     await admin.from('audit_log').insert({
       user_id: user.id,
-      action: 'report.regenerated',
+      action: 'report.regenerate_dispatched',
       entity_type: 'report',
       entity_id: caseId,
       metadata: {
-        version: newVersion,
         eventsCount: events.length,
         anomaliesCount: anomalies.length,
         missingDocsCount: missingDocs.length,
-        wordCount: result.wordCount,
       },
     });
 
     return NextResponse.json({
       success: true,
       data: {
-        version: newVersion,
+        async: true,
         eventsCount: events.length,
         anomaliesCount: anomalies.length,
         missingDocsCount: missingDocs.length,
