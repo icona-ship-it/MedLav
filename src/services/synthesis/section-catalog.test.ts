@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSectionPlan, evaluateCondition, getAllSectionIds, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS, PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS } from './section-catalog';
+import { resolveSectionPlan, evaluateCondition, getAllSectionIds, getSelectableSections, MANDATORY_SECTION_IDS, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS, PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS } from './section-catalog';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { CaseType, PeriziaMetadata } from '@/types';
 
@@ -571,6 +571,61 @@ describe('section-catalog', () => {
 
     it('parere_pro_veritate: exactly one LLM section carries calculations', () => {
       expect(llmCalcSections(PARERE_PRO_VERITATE_SECTIONS)).toEqual(['conclusioni_parere']);
+    });
+  });
+
+  // ── Selettore "Sezioni del report" ──────────────────────────────────
+
+  describe('getSelectableSections', () => {
+    it('flags intestazione + considerazioni_ml as mandatory, documentazione optional (CTU)', () => {
+      const ctu = getSelectableSections('ctu');
+      expect(ctu.find((s) => s.id === 'intestazione')?.mandatory).toBe(true);
+      expect(ctu.find((s) => s.id === 'considerazioni_ml')?.mandatory).toBe(true);
+      expect(ctu.find((s) => s.id === 'documentazione_sanitaria')?.mandatory).toBe(false);
+    });
+    it('flags epicrisi mandatory for stragiudiziale', () => {
+      expect(getSelectableSections('stragiudiziale').find((s) => s.id === 'epicrisi')?.mandatory).toBe(true);
+    });
+    it('every section title is non-empty', () => {
+      for (const s of getSelectableSections('ctu')) expect(s.title.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('resolveSectionPlan — excludedReportSections (selettore)', () => {
+    it('removes an optional section the perito excluded', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { excludedReportSections: ['documentazione_sanitaria'] },
+      });
+      expect(plan.find((s) => s.id === 'documentazione_sanitaria')).toBeUndefined();
+    });
+
+    it('NEVER removes a mandatory section even if listed in the exclusion', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        // tribunale → soddisfa has-perizia-metadata così intestazione è nel piano
+        periziaMetadata: { tribunale: 'Tribunale di X', excludedReportSections: ['intestazione', 'considerazioni_ml'] },
+      });
+      expect(plan.find((s) => s.id === 'intestazione')).toBeDefined();
+      expect(plan.find((s) => s.id === 'considerazioni_ml')).toBeDefined();
+    });
+
+    it('keeps all sections when the exclusion list is empty (backward compatible)', () => {
+      const withEmpty = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { excludedReportSections: [] } });
+      const without = resolveSectionPlan(CTU_PARAMS);
+      expect(withEmpty.map((s) => s.id)).toEqual(without.map((s) => s.id));
+    });
+
+    it('every mandatory id is a real section id somewhere in the catalog', () => {
+      const allIds = new Set([
+        ...getAllSectionIds('ctu'),
+        ...getAllSectionIds('stragiudiziale'),
+        ...getAllSectionIds('ctu', 'parere_pro_veritate'),
+      ]);
+      for (const id of MANDATORY_SECTION_IDS) {
+        if (id.startsWith('intestazione')) continue; // intestazione varia per ruolo/modulo
+        expect(allIds.has(id)).toBe(true);
+      }
     });
   });
 });

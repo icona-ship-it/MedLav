@@ -34,6 +34,7 @@ export interface PeriziaMetadataUI {
   anamnesiPatologicaProssima?: string;
   anamnesiFarmacologica?: string;
   anamnesiLavorativa?: string;
+  excludedReportSections?: string[];
   esameObiettivoStrutturato?: {
     districts: Array<{ id: string; label: string; examined: boolean; findings: string }>;
     generalInfo?: { altezza?: string; peso?: string; deambulazione?: string; condizioni?: string };

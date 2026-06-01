@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import {
   Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info, FileText,
 } from 'lucide-react';
@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { updateCase } from '../../actions';
+import { updateCase, getReportSectionOptions } from '../../actions';
 import { getQuestiTemplates } from '@/lib/domain-knowledge';
 import { CASE_TYPES } from '@/lib/constants';
 import type { CaseType } from '@/types';
@@ -59,6 +59,9 @@ const RC_PERITO_SECTIONS: SectionDef[] = [
     ],
   },
 ];
+
+/** Sezione speciale (sempre presente): selettore delle sezioni del report. */
+const SEZIONI_REPORT_SECTION: SectionDef = { id: 'sezioniReport', title: 'Sezioni del report', fields: [] };
 
 /** Parsa un input numerico (accetta virgola IT) → numero positivo o undefined. */
 function parseOptionalPositive(value: string): number | undefined {
@@ -118,7 +121,7 @@ export function PeriziaMetadataForm({
   const isRC = caseData.module_id === RC_CIVILE_MODULE_ID;
   // RC perizie collect anamnesi + "Il Fatto" from the perito; other case types don't.
   const sections = useMemo(
-    () => (isRC ? [...SECTIONS, ...RC_PERITO_SECTIONS] : SECTIONS),
+    () => [...(isRC ? [...SECTIONS, ...RC_PERITO_SECTIONS] : SECTIONS), SEZIONI_REPORT_SECTION],
     [isRC],
   );
   const [form, setForm] = useState({
@@ -158,6 +161,17 @@ export function PeriziaMetadataForm({
   });
   const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? []);
   const [newQuesito, setNewQuesito] = useState('');
+  // Selettore "Sezioni del report": elenco opzioni (caricato dal server) + sezioni escluse.
+  const [sectionOptions, setSectionOptions] = useState<Array<{ id: string; title: string; mandatory: boolean }>>([]);
+  const [excludedSections, setExcludedSections] = useState<string[]>(existing.excludedReportSections ?? []);
+
+  useEffect(() => {
+    let active = true;
+    getReportSectionOptions(caseId).then((res) => {
+      if (active && res.sections.length > 0) setSectionOptions(res.sections);
+    });
+    return () => { active = false; };
+  }, [caseId]);
 
   // Track which sections are open — first incomplete one starts open
   const sectionFilled = useMemo(() => {
@@ -165,6 +179,8 @@ export function PeriziaMetadataForm({
     for (const section of sections) {
       if (section.id === 'quesiti') {
         filled[section.id] = quesiti.length > 0;
+      } else if (section.id === 'sezioniReport') {
+        filled[section.id] = true; // ha sempre un default valido (tutte attive)
       } else {
         filled[section.id] = section.fields.some((f) => form[f as keyof typeof form]?.trim());
       }
@@ -236,6 +252,7 @@ export function PeriziaMetadataForm({
         ...(form.anamnesiFarmacologica ? { anamnesiFarmacologica: form.anamnesiFarmacologica } : {}),
         ...(form.anamnesiLavorativa ? { anamnesiLavorativa: form.anamnesiLavorativa } : {}),
         ...(quesiti.length > 0 ? { quesiti } : {}),
+        ...(excludedSections.length > 0 ? { excludedReportSections: excludedSections } : {}),
       };
 
       const hasAnyValue = Object.keys(metadata).length > 0;
@@ -678,6 +695,46 @@ export function PeriziaMetadataForm({
                       value={form.anamnesiLavorativa}
                       onChange={(t) => setForm({ ...form, anamnesiLavorativa: t })}
                     />
+                  </div>
+                )}
+
+                {section.id === 'sezioniReport' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Scegli quali sezioni includere nel report. Quelle obbligatorie ci sono sempre. Le altre puoi spegnerle se non ti servono: il report risulta più mirato e si genera più in fretta.
+                    </p>
+                    {sectionOptions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Caricamento sezioni…</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {sectionOptions.map((opt) => {
+                          const enabled = opt.mandatory || !excludedSections.includes(opt.id);
+                          return (
+                            <label
+                              key={opt.id}
+                              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${opt.mandatory ? 'opacity-70' : 'cursor-pointer hover:bg-muted/50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                disabled={opt.mandatory}
+                                onChange={(e) => {
+                                  if (opt.mandatory) return;
+                                  setExcludedSections((prev) =>
+                                    e.target.checked ? prev.filter((id) => id !== opt.id) : [...prev, opt.id],
+                                  );
+                                }}
+                                className="h-4 w-4 rounded border-input accent-primary shrink-0"
+                              />
+                              <span className="flex-1">{opt.title}</span>
+                              {opt.mandatory && (
+                                <span className="text-[11px] text-muted-foreground">obbligatoria</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

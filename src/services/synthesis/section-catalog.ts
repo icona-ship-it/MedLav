@@ -928,6 +928,39 @@ function applyRcPeritoSections(
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
+ * Sezioni strutturali SEMPRE incluse, non disattivabili dal selettore "Sezioni
+ * del report": l'intestazione e la sezione conclusiva di ciascun ruolo. Una
+ * perizia senza queste non è un documento valido/depositabile.
+ */
+export const MANDATORY_SECTION_IDS: ReadonlySet<string> = new Set([
+  'intestazione',
+  'intestazione_stragiudiziale',
+  'intestazione_parere',
+  'considerazioni_ml', // CTU/CTP — considerazioni/conclusioni
+  'epicrisi', // stragiudiziale — conclusioni
+  'conclusioni_parere', // parere — conclusioni
+]);
+
+/**
+ * Elenco delle sezioni che POSSONO comparire nel report per questo ruolo/modulo,
+ * con titolo e flag `mandatory` — alimenta il selettore "Sezioni del report" del
+ * form info-perizia. Non filtra per condizioni-dati: il perito sceglie; le sezioni
+ * senza dati semplicemente non verranno generate.
+ */
+export function getSelectableSections(
+  caseRole: CaseRole,
+  moduleId?: string,
+): Array<{ id: string; title: string; mandatory: boolean }> {
+  let specs: SectionSpec[];
+  if (moduleId === 'parere_pro_veritate') specs = PARERE_PRO_VERITATE_SECTIONS;
+  else if (moduleId === 'parere_scopo_riserva') specs = PARERE_SCOPO_RISERVA_SECTIONS;
+  else if (caseRole === 'ctp') specs = CTP_SECTIONS;
+  else if (caseRole === 'stragiudiziale') specs = STRAGIUDIZIALE_SECTIONS;
+  else specs = CTU_SECTIONS;
+  return specs.map((s) => ({ id: s.id, title: s.title, mandatory: MANDATORY_SECTION_IDS.has(s.id) }));
+}
+
+/**
  * Resolve the full section plan for a case.
  * Returns an ordered array of SectionSpec, with role-specific structure
  * and conditional sections filtered by available data.
@@ -973,10 +1006,18 @@ export function resolveSectionPlan(params: {
   }
 
   // Filter by conditions
-  const filtered = baseSections.filter((spec) => {
+  const conditionFiltered = baseSections.filter((spec) => {
     if (!spec.condition) return true;
     return evaluateCondition(spec.condition, conditionCtx);
   });
+
+  // Selettore "Sezioni del report": il perito può disattivare le sezioni OPZIONALI
+  // (risparmio token + report su misura). Le sezioni MANDATORY non sono mai rimosse.
+  // Lista assente/vuota = tutte le sezioni (retrocompatibile coi casi esistenti).
+  const excluded = periziaMetadata?.excludedReportSections;
+  const filtered = excluded && excluded.length > 0
+    ? conditionFiltered.filter((spec) => MANDATORY_SECTION_IDS.has(spec.id) || !excluded.includes(spec.id))
+    : conditionFiltered;
 
   // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
   if (moduleId === RC_CIVILE_MODULE_ID) {
