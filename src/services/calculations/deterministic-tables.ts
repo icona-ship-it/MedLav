@@ -137,6 +137,22 @@ export function hasDeterministicMarkers(synthesis: string): boolean {
   return Object.values(DETERMINISTIC_MARKERS).some((m) => synthesis.includes(m));
 }
 
+/** Map loosely-typed DB rows (export pipeline) to the renderer event shape. */
+export function toDeterministicEvents(
+  rows: ReadonlyArray<Record<string, unknown>>,
+): DeterministicTableEvent[] {
+  return rows.map((e) => ({
+    event_date: (e.event_date as string) ?? '',
+    event_type: (e.event_type as string) ?? '',
+    title: (e.title as string) ?? '',
+    description: (e.description as string) ?? '',
+    facility: (e.facility as string | null) ?? null,
+    doctor: (e.doctor as string | null) ?? null,
+    source_type: (e.source_type as string | null) ?? null,
+    order_number: (e.order_number as number | null) ?? null,
+  }));
+}
+
 /**
  * Replace the deterministic sentinel markers in a report's markdown with tables
  * rendered from the CURRENT events. Pure, no LLM. Idempotent and a no-op on

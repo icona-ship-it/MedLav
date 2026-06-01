@@ -4,6 +4,7 @@ import {
   formatChronologyIndex,
   expandDeterministicBlocks,
   hasDeterministicMarkers,
+  toDeterministicEvents,
   DETERMINISTIC_MARKERS,
   type DeterministicTableEvent,
 } from './deterministic-tables';
@@ -135,5 +136,23 @@ describe('expandDeterministicBlocks', () => {
     const out = expandDeterministicBlocks(md, []); // no expenses
     expect(out).not.toContain(DETERMINISTIC_MARKERS.SPESE);
     expect(out).toContain('Nessuna spesa medica documentata');
+  });
+});
+
+describe('toDeterministicEvents (export mapping)', () => {
+  it('maps DB rows and tolerates missing fields', () => {
+    const out = toDeterministicEvents([
+      { event_date: '2024-01-01', event_type: 'spesa_medica', title: 'X', description: 'Y', facility: 'F', order_number: 3 },
+      { event_type: 'visita' }, // missing fields → safe defaults
+    ]);
+    expect(out[0]).toMatchObject({ event_date: '2024-01-01', event_type: 'spesa_medica', title: 'X', facility: 'F', order_number: 3 });
+    expect(out[1]).toMatchObject({ event_date: '', event_type: 'visita', title: '', description: '', facility: null });
+  });
+
+  it('round-trips through expandDeterministicBlocks from loose rows', () => {
+    const rows = [{ event_type: 'spesa_medica', event_date: '2024-01-05', title: 'Fattura', description: '€ 100,00' }];
+    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.SPESE, toDeterministicEvents(rows));
+    expect(out).toContain('Fattura');
+    expect(out).toContain('100,00');
   });
 });
