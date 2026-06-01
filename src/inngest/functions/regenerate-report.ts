@@ -33,8 +33,11 @@ const DOC_BATCH_SIZE = 4;
 
 async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<void> {
   try {
-    const failureData = event.data as { event: { data: { caseId: string } } };
+    // Inngest's onFailure wraps the ORIGINAL triggering event under data.event,
+    // and the failure cause under data.error — same shape used by process-case.ts.
+    const failureData = event.data as { event: { data: { caseId: string } }; error?: { message?: string } };
     const caseId = failureData.event.data.caseId;
+    const errMsg = failureData.error?.message ?? 'Errore sconosciuto durante la rigenerazione';
     const supabase = createAdminClient();
     const { data: caseRow } = await supabase
       .from('cases')
@@ -46,16 +49,16 @@ async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<voi
       Object.entries(existingMeta).filter(([k]) => k !== 'generationProgress'),
     );
     // The old report is still in the DB and valid → go back to 'completato',
-    // NOT 'errore'. Surface the failure as a soft note for the UI/toast.
+    // NOT 'errore'. Surface the actual failure cause as a soft note for the UI/toast.
     await supabase
       .from('cases')
       .update({
         processing_stage: 'completato',
-        perizia_metadata: { ...cleaned, lastRegenerateError: 'Rigenerazione fallita. Il report precedente è invariato.' },
+        perizia_metadata: { ...cleaned, lastRegenerateError: `Rigenerazione fallita: ${errMsg}. Il report precedente è invariato.` },
         updated_at: new Date().toISOString(),
       })
       .eq('id', caseId);
-    logger.error('regenerate-report', `Regeneration failed for case ${caseId} — report precedente preservato`);
+    logger.error('regenerate-report', `Regeneration failed for case ${caseId}: ${errMsg} — report precedente preservato`);
   } catch (err) {
     logger.error('regenerate-report', `onFailure handler error: ${err instanceof Error ? err.message : 'unknown'}`);
   }
@@ -158,6 +161,10 @@ export const regenerateReport = inngest.createFunction(
       }).eq('id', caseId);
     };
 
+    // Surface the REAL section count to the UI immediately (currentSection 0 / N)
+    // so the progress bar doesn't show a fake 0/1 then jump when work begins.
+    await step.run('regen-init-progress', () => updateProgress(-1, 'Inizializzazione…'));
+
     // ── Sectional generation (mirrors process-case: per-section step + doc-sanitaria batching) ──
     const accumulatedSections: GeneratedSection[] = [];
     let sectionGenerationFailed = false;
@@ -183,6 +190,7 @@ export const regenerateReport = inngest.createFunction(
               return generateSingleSection({ spec, synthesisParams, previousContext, documentsOcrText: batchOcr });
             });
             if (batchResult.content) batchContents.push(batchResult.content);
+            else logger.warn('regenerate-report', `Batch ${b + 1}/${totalBatches} documentazione_sanitaria: contenuto vuoto`, { caseId });
             if (batchResult.usage) {
               promptTokens += batchResult.usage.promptTokens;
               completionTokens += batchResult.usage.completionTokens;

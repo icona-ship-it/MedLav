@@ -119,6 +119,15 @@ export async function POST(request: NextRequest) {
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
     }));
 
+    // No events → nothing to regenerate. Reject up-front (immediate feedback)
+    // instead of dispatching a job that would just throw.
+    if (events.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Nessun evento disponibile: non c\'è nulla da rigenerare.' },
+        { status: 400 },
+      );
+    }
+
     // Preserve perito reviews: keep user_confirmed and user_dismissed entries.
     // Drop only AI-only statuses (detected, llm_confirmed, llm_resolved) so
     // re-detection can refresh them. The perito's notes are never lost.
@@ -236,20 +245,46 @@ export async function POST(request: NextRequest) {
     // spese/ITT-ITP tables are the DETERMINISTIC sentinels (not LLM prose). The
     // UI already polls processing_stage + generationProgress to show the bar.
     const existingMeta = (caseRow.perizia_metadata ?? {}) as Record<string, unknown>;
-    const { error: stageError } = await admin.from('cases').update({
+    // TOCTOU lock: atomically flip to 'generazione_report' ONLY if still in a
+    // non-running stage. Prevents two concurrent regenerate requests (that both
+    // passed the earlier guard) from each dispatching a generation.
+    const allowedStages = ['idle', 'completato', 'errore'];
+    const { data: lockRows, error: stageError } = await admin.from('cases').update({
       processing_stage: 'generazione_report',
       perizia_metadata: {
         ...existingMeta,
         generationProgress: { currentSection: 0, totalSections: 1, currentSectionTitle: 'Avvio rigenerazione…' },
       },
       updated_at: new Date().toISOString(),
-    }).eq('id', caseId);
+    }).eq('id', caseId).in('processing_stage', allowedStages).select('id');
     if (stageError) {
       logger.error('processing/regenerate', `Failed to set generazione_report for case ${caseId}`, { error: stageError.message });
       return NextResponse.json({ success: false, error: 'Errore avvio rigenerazione.' }, { status: 500 });
     }
+    if (!lockRows || lockRows.length === 0) {
+      // Another request grabbed the lock between our guard check and here.
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione già in corso su questo caso. Attendi il completamento.' },
+        { status: 409 },
+      );
+    }
 
-    await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id } });
+    try {
+      await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id } });
+    } catch (sendError) {
+      // Dispatch failed → REVERT the stage so the case is never stuck in
+      // 'generazione_report' with no Inngest function actually running (the
+      // onFailure handler only fires if the event was dispatched).
+      await admin.from('cases').update({
+        processing_stage: currentStage,
+        perizia_metadata: existingMeta,
+        updated_at: new Date().toISOString(),
+      }).eq('id', caseId);
+      logger.error('processing/regenerate', `inngest.send failed for case ${caseId} — stage reverted to ${currentStage}`, {
+        error: sendError instanceof Error ? sendError.message : 'unknown',
+      });
+      return NextResponse.json({ success: false, error: 'Errore avvio rigenerazione. Riprova.' }, { status: 500 });
+    }
 
     await admin.from('audit_log').insert({
       user_id: user.id,
