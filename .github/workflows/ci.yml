@@ -14,7 +14,7 @@ name: CI
     INNGEST_EVENT_KEY: stub-inngest-key
     INNGEST_SIGNING_KEY: stub-inngest-signing
     SENTRY_AUTH_TOKEN: stub-sentry-token
-
+  
   jobs:
     ci:
       runs-on: ubuntu-latest
@@ -30,14 +30,14 @@ name: CI
             cache: pnpm
         - run: pnpm install --frozen-lockfile
         - name: Typecheck
-          run: pnpm typecheck
+          run: pnpm typecheck   
         - name: Lint
           run: pnpm lint
         - name: Test
-          run: pnpm test 
+          run: pnpm test
         - name: Build
           run: pnpm build
-
+  
     e2e:
       runs-on: ubuntu-latest
       timeout-minutes: 20
