@@ -768,6 +768,15 @@ export function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata
 
   const lines: string[] = [];
 
+  // Dati identificativi del periziando inseriti dal perito — AUTORITATIVI per
+  // l'intestazione. Senza questi il generatore dell'header estraeva il nome solo
+  // dai documenti, ignorando quello digitato nel form (dato che "spariva").
+  if (periziaMetadata.patientFullName) lines.push(`PAZIENTE (nome e cognome): ${periziaMetadata.patientFullName}`);
+  if (periziaMetadata.patientDateOfBirth) lines.push(`PAZIENTE — data di nascita: ${periziaMetadata.patientDateOfBirth}`);
+  if (periziaMetadata.patientAddress) lines.push(`PAZIENTE — residenza: ${periziaMetadata.patientAddress}`);
+  if (periziaMetadata.patientFiscalCode) lines.push(`PAZIENTE — codice fiscale: ${periziaMetadata.patientFiscalCode}`);
+  if (periziaMetadata.patientPhone) lines.push(`PAZIENTE — telefono: ${periziaMetadata.patientPhone}`);
+
   if (periziaMetadata.tribunale) lines.push(`TRIBUNALE: ${periziaMetadata.tribunale}`);
   if (periziaMetadata.sezione) lines.push(`SEZIONE: ${periziaMetadata.sezione}`);
   if (periziaMetadata.rgNumber) lines.push(`N. RG: ${periziaMetadata.rgNumber}`);
