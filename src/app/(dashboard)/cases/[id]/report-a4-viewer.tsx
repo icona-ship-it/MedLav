@@ -282,7 +282,7 @@ export function ReportA4Viewer({
       {/* Version compare below A4 page */}
       {showVersionCompare && versions.length > 1 && (
         <div className="mt-6">
-          <VersionCompare currentReport={report} versions={versions} />
+          <VersionCompare currentReport={report} versions={versions} events={events} />
         </div>
       )}
 

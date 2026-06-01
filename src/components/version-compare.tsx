@@ -5,6 +5,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { MarkdownPreview } from '@/components/markdown-preview';
+import { expandDeterministicBlocks, type DeterministicTableEvent } from '@/services/calculations/deterministic-tables';
 
 interface ReportVersion {
   id: string;
@@ -16,9 +17,11 @@ interface ReportVersion {
 export function VersionCompare({
   currentReport,
   versions,
+  events,
 }: {
   currentReport: ReportVersion;
   versions: ReportVersion[];
+  events: DeterministicTableEvent[];
 }) {
   const olderVersions = versions.filter((v) => v.version < currentReport.version);
   const [selectedVersion, setSelectedVersion] = useState<string>(
@@ -57,7 +60,7 @@ export function VersionCompare({
           </p>
           <div className="rounded-md border p-4 max-h-[600px] overflow-y-auto">
             {selectedReport?.synthesis ? (
-              <MarkdownPreview content={selectedReport.synthesis} />
+              <MarkdownPreview content={expandDeterministicBlocks(selectedReport.synthesis, events)} />
             ) : (
               <p className="text-sm text-muted-foreground">Nessun contenuto</p>
             )}
@@ -69,7 +72,7 @@ export function VersionCompare({
           </p>
           <div className="rounded-md border p-4 max-h-[600px] overflow-y-auto">
             {currentReport.synthesis ? (
-              <MarkdownPreview content={currentReport.synthesis} />
+              <MarkdownPreview content={expandDeterministicBlocks(currentReport.synthesis, events)} />
             ) : (
               <p className="text-sm text-muted-foreground">Nessun contenuto</p>
             )}

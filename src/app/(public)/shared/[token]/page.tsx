@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAccess } from '@/lib/audit';
+import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -48,6 +49,22 @@ export default async function SharedCasePage({
     return <ExpiredView />;
   }
 
+  // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from the
+  // current events at read time — same as the main viewer/export. Without this
+  // the public shared link would show the raw <!--MEDLAV:*--> markers as
+  // invisible HTML comments and the spese/ITT tables would be missing.
+  const sharedReport = reportResult.data
+    ? {
+        ...reportResult.data,
+        synthesis: reportResult.data.synthesis
+          ? expandDeterministicBlocks(
+              reportResult.data.synthesis as string,
+              toDeterministicEvents(eventsResult.data ?? []),
+            )
+          : reportResult.data.synthesis,
+      }
+    : null;
+
   // Audit log: no authenticated user for shared views — userId is null
   logAccess({
     userId: null,
@@ -63,7 +80,7 @@ export default async function SharedCasePage({
       events={eventsResult.data ?? []}
       anomalies={anomaliesResult.data ?? []}
       missingDocs={missingDocsResult.data ?? []}
-      report={reportResult.data}
+      report={sharedReport}
     />
   );
 }
