@@ -460,6 +460,55 @@ describe('section-catalog', () => {
     });
   });
 
+  // ── RC medico-legale: anamnesi/il_fatto compilati dal perito ──────
+
+  describe('resolveSectionPlan — RC perito-filled anamnesi/il_fatto', () => {
+    const RC_MODULE = 'perizia_ml_rc_civile';
+
+    it('turns anamnesi into a deterministic placeholder when perito filled the fields (RC)', () => {
+      const plan = resolveSectionPlan({
+        ...STRAGIUDIZIALE_PARAMS,
+        moduleId: RC_MODULE,
+        periziaMetadata: { anamnesiFamiliare: 'Negativa.', pesoKg: 70, altezzaCm: 175 },
+      });
+      const anamnesi = plan.find((s) => s.id === 'anamnesi');
+      expect(anamnesi?.isPlaceholder).toBe(true);
+      expect(anamnesi?.maxTokens).toBe(0);
+      expect(anamnesi?.placeholderText).toContain('Anamnesi familiare');
+      expect(anamnesi?.placeholderText).toContain('BMI 22,9 (normopeso)');
+    });
+
+    it('turns il_fatto_e_storia_clinica into a placeholder with the perito text (RC)', () => {
+      const plan = resolveSectionPlan({
+        ...STRAGIUDIZIALE_PARAMS,
+        moduleId: RC_MODULE,
+        periziaMetadata: { ilFattoEStoriaClinica: 'In data X la paziente cadeva...' },
+      });
+      const fatto = plan.find((s) => s.id === 'il_fatto_e_storia_clinica');
+      expect(fatto?.isPlaceholder).toBe(true);
+      expect(fatto?.placeholderText).toBe('In data X la paziente cadeva...');
+    });
+
+    it('leaves anamnesi/il_fatto as LLM sections for RC when perito left them empty', () => {
+      const plan = resolveSectionPlan({
+        ...STRAGIUDIZIALE_PARAMS,
+        moduleId: RC_MODULE,
+        periziaMetadata: { tribunale: 'irrilevante' },
+      });
+      expect(plan.find((s) => s.id === 'anamnesi')?.isPlaceholder).toBeFalsy();
+      expect(plan.find((s) => s.id === 'il_fatto_e_storia_clinica')?.isPlaceholder).toBeFalsy();
+    });
+
+    it('does NOT touch anamnesi/il_fatto for non-RC stragiudiziale even with the same metadata', () => {
+      const plan = resolveSectionPlan({
+        ...STRAGIUDIZIALE_PARAMS,
+        periziaMetadata: { anamnesiFamiliare: 'Negativa.', ilFattoEStoriaClinica: 'testo' },
+      });
+      expect(plan.find((s) => s.id === 'anamnesi')?.isPlaceholder).toBeFalsy();
+      expect(plan.find((s) => s.id === 'il_fatto_e_storia_clinica')?.isPlaceholder).toBeFalsy();
+    });
+  });
+
   // ── getAllSectionIds ──────────────────────────────────────────────
 
   describe('getAllSectionIds', () => {

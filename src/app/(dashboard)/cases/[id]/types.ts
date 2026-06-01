@@ -23,6 +23,16 @@ export interface PeriziaMetadataUI {
   speseMediche?: string;
   esameObiettivo?: string;
   fondoSpese?: string;
+  // Anamnesi (perizie RC medico-legali — compilata dal perito)
+  ilFattoEStoriaClinica?: string;
+  anamnesiFamiliare?: string;
+  anamnesiFisiologica?: string;
+  pesoKg?: number;
+  altezzaCm?: number;
+  anamnesiPatologicaRemota?: string;
+  anamnesiPatologicaProssima?: string;
+  anamnesiFarmacologica?: string;
+  anamnesiLavorativa?: string;
   esameObiettivoStrutturato?: {
     districts: Array<{ id: string; label: string; examined: boolean; findings: string }>;
     generalInfo?: { altezza?: string; peso?: string; deambulazione?: string; condizioni?: string };

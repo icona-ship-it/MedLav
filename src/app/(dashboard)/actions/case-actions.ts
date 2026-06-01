@@ -47,6 +47,16 @@ const periziaMetadataSchema = z.object({
   speseMediche: z.string().max(5000).optional(),
   esameObiettivo: z.string().max(10000).optional(),
   fondoSpese: z.string().max(100).optional(),
+  // Anamnesi (perizie RC medico-legali — compilata dal perito)
+  ilFattoEStoriaClinica: z.string().max(20000).optional(),
+  anamnesiFamiliare: z.string().max(5000).optional(),
+  anamnesiFisiologica: z.string().max(5000).optional(),
+  pesoKg: z.number().positive().max(500).optional(),
+  altezzaCm: z.number().positive().max(300).optional(),
+  anamnesiPatologicaRemota: z.string().max(10000).optional(),
+  anamnesiPatologicaProssima: z.string().max(10000).optional(),
+  anamnesiFarmacologica: z.string().max(5000).optional(),
+  anamnesiLavorativa: z.string().max(5000).optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({

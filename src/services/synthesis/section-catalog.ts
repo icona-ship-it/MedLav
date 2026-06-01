@@ -2,6 +2,7 @@ import type { CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { SectionSpec, SectionCondition } from './section-generation-types';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
+import { renderAnamnesiMarkdown } from './anamnesi-template';
 import {
   DOCUMENT_ANALYSIS_FORMULATIONS,
   DOCUMENTAZIONE_SANITARIA_EXAMPLE,
@@ -889,6 +890,39 @@ export function evaluateCondition(
   }
 }
 
+// ── RC medico-legale: sezioni compilate dal perito ─────────────────
+
+/** Module id della perizia medico-legale di Responsabilità Civile. */
+const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
+
+/**
+ * Per le perizie RC medico-legali, "Dati Anamnestici" e "Il Fatto e la Storia
+ * Clinica" sono compilati dal perito nel form info-perizia. Quando i campi sono
+ * valorizzati, trasformiamo quelle sezioni in placeholder DETERMINISTICI (testo
+ * del perito, nessuna generazione LLM) — coerente col nord di prodotto: ciò che
+ * il perito scrive non viene reinterpretato dall'AI.
+ * Se i campi mancano, la sezione resta affidata all'LLM (fallback invariato).
+ */
+function applyRcPeritoSections(
+  specs: SectionSpec[],
+  periziaMetadata?: PeriziaMetadata,
+): SectionSpec[] {
+  if (!periziaMetadata) return specs;
+
+  const anamnesiMarkdown = renderAnamnesiMarkdown(periziaMetadata);
+  const ilFatto = periziaMetadata.ilFattoEStoriaClinica?.trim();
+
+  return specs.map((spec) => {
+    if (spec.id === 'anamnesi' && anamnesiMarkdown) {
+      return { ...spec, isPlaceholder: true, maxTokens: TOKENS_NONE, placeholderText: anamnesiMarkdown };
+    }
+    if (spec.id === 'il_fatto_e_storia_clinica' && ilFatto) {
+      return { ...spec, isPlaceholder: true, maxTokens: TOKENS_NONE, placeholderText: ilFatto };
+    }
+    return spec;
+  });
+}
+
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
@@ -937,10 +971,17 @@ export function resolveSectionPlan(params: {
   }
 
   // Filter by conditions
-  return baseSections.filter((spec) => {
+  const filtered = baseSections.filter((spec) => {
     if (!spec.condition) return true;
     return evaluateCondition(spec.condition, conditionCtx);
   });
+
+  // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
+  if (moduleId === RC_CIVILE_MODULE_ID) {
+    return applyRcPeritoSections(filtered, periziaMetadata);
+  }
+
+  return filtered;
 }
 
 /**

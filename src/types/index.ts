@@ -104,6 +104,16 @@ export interface PeriziaMetadata {
   speseMediche?: string;       // testo libero spese mediche
   esameObiettivo?: string;     // testo libero esame del paziente
   fondoSpese?: string;         // "Euro 1.800,00"
+  // Anamnesi (perizie RC medico-legali — compilata dal perito, NON narrata dall'AI)
+  ilFattoEStoriaClinica?: string;      // narrazione evento indice + iter clinico (testo del perito)
+  anamnesiFamiliare?: string;          // anamnesi familiare
+  anamnesiFisiologica?: string;        // anamnesi fisiologica (peso/altezza/BMI a parte)
+  pesoKg?: number;                     // peso in kg (per BMI)
+  altezzaCm?: number;                  // altezza in cm (per BMI)
+  anamnesiPatologicaRemota?: string;   // patologie pregresse
+  anamnesiPatologicaProssima?: string; // patologia attuale correlata all'evento
+  anamnesiFarmacologica?: string;      // terapie/farmaci
+  anamnesiLavorativa?: string;         // anamnesi lavorativa/occupazionale
 }
 
 // API Response
