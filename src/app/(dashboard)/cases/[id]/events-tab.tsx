@@ -35,7 +35,7 @@ function AddEventDialog({
   caseId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: (eventType?: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState({
@@ -69,8 +69,9 @@ function AddEventDialog({
         toast.error(result.error);
         return;
       }
+      const createdType = form.eventType;
       setForm({ eventDate: '', datePrecision: 'giorno', eventType: 'altro', title: '', description: '', sourceType: 'altro', diagnosis: '', doctor: '', facility: '' });
-      onSuccess();
+      onSuccess(createdType);
     });
   };
 
@@ -193,7 +194,7 @@ export function EventsTab({
   documents?: Array<{ id: string; file_name: string }>;
   /** UX Ondata 3-IA Fase D: chiamato dopo save/delete evento dal drawer.
       Permette al parent (report-step) di mostrare banner "rigenera sezione?". */
-  onEventMutated?: () => void;
+  onEventMutated?: (eventType?: string) => void;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
@@ -354,7 +355,7 @@ export function EventsTab({
               caseId={caseId}
               open={addEventOpen}
               onOpenChange={setAddEventOpen}
-              onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
+              onSuccess={(t) => { setAddEventOpen(false); router.refresh(); onEventMutated?.(t); }}
             />
           </div>
         </div>
@@ -569,8 +570,8 @@ export function EventsTab({
         caseId={caseId}
         open={editingEventId !== null}
         onOpenChange={(open) => { if (!open) setEditingEventId(null); }}
-        onSaved={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
-        onDeleted={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
+        onSaved={() => { const t = editingEvent?.event_type; setEditingEventId(null); router.refresh(); onEventMutated?.(t); }}
+        onDeleted={() => { const t = editingEvent?.event_type; setEditingEventId(null); router.refresh(); onEventMutated?.(t); }}
       />
     </Card>
   );
