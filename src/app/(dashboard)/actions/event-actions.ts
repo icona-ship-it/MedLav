@@ -40,6 +40,7 @@ export async function updateEvent(params: {
   facility?: string | null;
   expertNotes?: string | null;
   requiresVerification?: boolean;
+  isRelevantForChronology?: boolean;
 }) {
   const supabase = await createClient();
 
@@ -77,6 +78,7 @@ export async function updateEvent(params: {
   if (params.facility !== undefined) updateFields.facility = params.facility;
   if (params.expertNotes !== undefined) updateFields.expert_notes = params.expertNotes;
   if (params.requiresVerification !== undefined) updateFields.requires_verification = params.requiresVerification;
+  if (params.isRelevantForChronology !== undefined) updateFields.is_relevant_for_chronology = params.isRelevantForChronology;
 
   const { error } = await supabase
     .from('events')
