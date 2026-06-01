@@ -184,6 +184,7 @@ ${NO_EVN_RULE}`,
 ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice.
 ${CITATION_FORMAT}
 Riporta il contenuto essenziale virgolettato, con indicazione della fonte.
+REGOLA DI NEUTRALITÀ: riproduci/sintetizza senza commentare, valutare o evidenziare criticità, lacune, ritardi o discrepanze. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
 ${NO_EVN_RULE}`,
   },
   {
@@ -788,6 +789,7 @@ Includi:
 - Limitazioni funzionali documentate
 - Stato clinico complessivo al momento dell'ultima documentazione disponibile
 Stile descrittivo e fattuale. Riporta SOLO dati documentati.
+NON includere la parte SOGGETTIVA (sintomatologia che il periziando riferisce in visita): quella la redige il perito. Riporta solo il quadro OGGETTIVO documentato.
 ${NO_EVN_RULE}`,
   },
   {

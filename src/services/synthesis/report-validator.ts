@@ -94,6 +94,11 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bOspedale\s+San\s+Marco\b/i, label: 'Ospedale San Marco' },
   { pattern: /\bP\.?O\.?\s+San\s+Giovanni\b/i, label: 'P.O. San Giovanni' },
   { pattern: /\bLaboratorio\s+Analisi\b/i, label: 'Laboratorio Analisi' },
+  // Token distintivi dell'esempio narrativo Antoniazzi in il_fatto_e_storia_clinica
+  // (section-catalog.ts): se compaiono nel report, l'LLM ha copiato l'esempio.
+  { pattern: /\bScuola\s+Cangrande\b/i, label: 'Scuola Cangrande (esempio Antoniazzi)' },
+  { pattern: /\bCorso\s+[Pp]orta\s+[Nn]uova\b/i, label: 'Corso Porta Nuova (esempio Antoniazzi)' },
+  { pattern: /\bmotociclo\s+delle\s+[Pp]oste\b/i, label: 'motociclo delle Poste (esempio Antoniazzi)' },
 ];
 
 // Truncation-detection floor only. Real LLM truncation (finishReason='length')
