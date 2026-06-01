@@ -58,8 +58,8 @@ Ultimo aggiornamento: 2026-03-13
 - [ ] **RLS policies versionati** — esportare SQL da Supabase, committare in `db/rls/`
 - [ ] **Audit log per operazioni admin** — tracciare ogni query admin con user, timestamp, azione
 - [ ] **2FA/MFA** — secondo fattore di autenticazione per account premium
-- [ ] **HSTS header** — Strict-Transport-Security nel middleware
-- [ ] **Validazione magic bytes file** — non fidarsi solo dell'estensione, controllare i primi byte del file
+- [x] **HSTS header** — Strict-Transport-Security (in `next.config.ts`)
+- [x] **Validazione magic bytes file** — `src/lib/file-validators.ts` (Sprint 1)
 - [ ] **Soft deletes su casi** — `deleted_at` timestamp, recupero entro 30gg, poi hard delete
 
 ### Testing

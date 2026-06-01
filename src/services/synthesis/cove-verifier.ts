@@ -13,8 +13,9 @@
  * Measured 50-70% hallucination reduction in research benchmarks. Applied
  * selectively to the highest-stakes generative section (epicrisi, present
  * in stragiudiziale only — CTU/CTP send synthesis through the placeholder
- * considerazioni_ml which is not LLM-generated). Gated behind
- * LEGMED_COVE_ENABLED env flag (off by default) so the rollout can be staged.
+ * considerazioni_ml which is not LLM-generated). Gated behind the
+ * LEGMED_COVE_ENABLED env flag — ENABLED BY DEFAULT (Wave 3.1); set it to
+ * 'false' as a kill switch. See isCoVeEnabled().
  *
  * Cost overhead: ~3 extra LLM calls per CoVe-enabled section ≈ $0.05 per
  * stragiudiziale case at Mistral Large 3 pricing. Compatible with the user's
