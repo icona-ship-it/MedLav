@@ -3,6 +3,7 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
+import { calculationsToITTITPSegments, formatITTITPTable } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { DocumentSummary } from './document-summarizer';
 import { formatDate } from '@/lib/format';
@@ -737,12 +738,24 @@ export function formatCalculationsForPrompt(calculations?: MedicoLegalCalculatio
     const tableRef = c.tableReference ? `\n  Rif. tabellare: ${c.tableReference}` : '';
     return `- ${c.label}: ${c.value}${dateRange}\n  ${c.notes}${tableRef}`;
   });
+  // A2 (Lavini): render a ready-made graduated ITT/ITP table so the report
+  // contains a proper table (the perito asked for a table, not only prose).
+  const ittItpSegments = calculationsToITTITPSegments(calculations);
+  const ittItpTable = formatITTITPTable(ittItpSegments);
+  const ittItpBlock = ittItpTable
+    ? `\n\n### TABELLA INVALIDITÀ TEMPORANEA (ITT/ITP graduata)
+Riproduci questa tabella TESTUALMENTE (in formato Markdown) nella sezione che tratta il danno biologico temporaneo (Considerazioni Medico-Legali / Epicrisi). Sono valori PROPOSTI: il perito li verifica e corregge.
+
+${ittItpTable}`
+    : '';
+
   return `\n## PERIODI MEDICO-LEGALI CALCOLATI (proposti, il perito deve verificare)
 
-${lines.join('\n')}
+${lines.join('\n')}${ittItpBlock}
 
 ### ISTRUZIONI PER INTEGRAZIONE NEL REPORT
-Nella sezione "Valutazione del danno biologico" e nelle "Conclusioni", INTEGRA questi dati in forma NARRATIVA DISCORSIVA:
+Nella sezione "Valutazione del danno biologico" e nelle "Conclusioni", INTEGRA questi dati:
+- INCLUDI la tabella ITT/ITP graduata qui sopra (se presente) in formato Markdown, e accompagnala con una sintesi narrativa
 - Riporta i periodi di ITT e ITP con date precise e durata in giorni nel testo delle conclusioni
 - Indica i criteri tabellari utilizzati (es. Tabella Unica Nazionale DPR 12/2025, Tabelle Milano 2024)
 - Nella conclusione, sintetizza: "I periodi di invalidità temporanea totale ammontano a X giorni (dal DD.MM.YYYY al DD.MM.YYYY), mentre l'invalidità temporanea parziale è quantificata in Y giorni..."

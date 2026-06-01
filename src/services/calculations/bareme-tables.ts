@@ -104,14 +104,15 @@ export function calculateDannoBiologico(
   percentage: number,
   ageAtEvent?: number,
 ): DannoBiologicoResult {
-  if (percentage < 1 || percentage > 100) {
+  // Non-finite first: NaN/Infinity bypass the numeric range comparisons below.
+  if (!Number.isFinite(percentage) || percentage < 1 || percentage > 100) {
     return {
       percentage,
       tableUsed: 'N/A',
       pointValue: 0,
       estimatedAmount: null,
       ageAtEvent: ageAtEvent ?? null,
-      notes: 'Percentuale fuori range (1-100%)',
+      notes: 'Percentuale fuori range (1-100%) o non numerica',
       confidence: 'da_verificare',
     };
   }

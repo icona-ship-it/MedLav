@@ -22,7 +22,10 @@ import { PubMedTab } from './pubmed-tab';
 import type { PubMedReference } from './pubmed-tab';
 import { csrfHeaders } from '@/lib/csrf-client';
 import { parseSections } from '@/lib/section-parser-client';
+import { getSectionStatus } from '@/lib/section-state';
+import { computeStaleSections } from '@/lib/section-staleness';
 import { EventsTab } from './events-tab';
+import { RegeneratePanelDialog } from './regenerate-panel-dialog';
 import { ReportA4Viewer } from './report-a4-viewer';
 import { ReportTocSidebar } from './report-toc-sidebar';
 import { QualitySidebar, computeAlertCount } from './quality-sidebar';
@@ -109,11 +112,11 @@ export function ReportStep({
   const [pubmedDrawerOpen, setPubmedDrawerOpen] = useState(false);
   const [ocrDrawerOpen, setOcrDrawerOpen] = useState(false);
 
-  // UX Ondata 3-IA Fase D: contatore mutazioni eventi dal drawer.
-  // Quando > 0, mostra banner "hai modificato N eventi, vuoi rigenerare?".
-  // Reset a 0 quando l'utente clicca "Aggiorna sezione".
-  const [eventMutationCount, setEventMutationCount] = useState(0);
-  const [isRegeneratingDocSanitaria, setIsRegeneratingDocSanitaria] = useState(false);
+  // Track the EVENT TYPES the perito mutated since the report was generated.
+  // Drives the staleness check (which sections may be out of date) and the
+  // "scegli cosa rigenerare" panel.
+  const [mutatedEventTypes, setMutatedEventTypes] = useState<Set<string>>(new Set());
+  const [regeneratePanelOpen, setRegeneratePanelOpen] = useState(false);
 
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
@@ -141,6 +144,19 @@ export function ReportStep({
 
   const sections = report?.synthesis ? parseSections(report.synthesis) : [];
 
+  // Which sections may be out of date after the perito's event edits? Pure,
+  // dependency-based. Deterministic/placeholder/locked sections are excluded.
+  const staleForPanel = computeStaleSections(
+    sections
+      .filter((s) => s.id !== 'preamble' && s.id !== 'full_report')
+      .map((s) => ({ canonicalId: s.canonicalId, status: getSectionStatus(report?.generation_metadata, s.canonicalId) })),
+    mutatedEventTypes,
+  ).map((st) => ({
+    canonicalId: st.canonicalId,
+    title: sections.find((s) => s.canonicalId === st.canonicalId)?.title ?? st.canonicalId,
+    edited: st.edited,
+  }));
+
   const handleSectionRegenerated = useCallback((sectionId?: string) => {
     setRegeneratingSection(null);
     if (sectionId) {
@@ -149,29 +165,6 @@ export function ReportStep({
     }
     router.refresh();
   }, [router]);
-
-  // UX Ondata 3-IA Fase D: rigenera SOLO la sezione "Documentazione Sanitaria"
-  // dopo che il perito ha modificato eventi dal drawer. Reset del counter.
-  const handleRegenerateDocSanitaria = useCallback(async () => {
-    setIsRegeneratingDocSanitaria(true);
-    try {
-      const response = await fetch('/api/processing/regenerate-section', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-        body: JSON.stringify({ caseId, sectionId: 'documentazione_sanitaria' }),
-      });
-      const json = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
-      if (!response.ok || !json?.success) {
-        toast.error(json?.error ?? 'Errore durante la rigenerazione della sezione.');
-        return;
-      }
-      toast.success('Sezione "Documentazione Sanitaria" aggiornata.');
-      setEventMutationCount(0);
-      router.refresh();
-    } finally {
-      setIsRegeneratingDocSanitaria(false);
-    }
-  }, [caseId, router]);
 
   const handleRegenerate = useCallback(async () => {
     setIsRegenerating(true);
@@ -394,22 +387,21 @@ export function ReportStep({
         </InlineAlert>
       )}
 
-      {/* UX Ondata 3-IA Fase D: sync banner.
-          Quando il perito modifica/elimina eventi dal drawer Eventi, il report
-          non riflette automaticamente le modifiche. Banner informativo + CTA
-          per rigenerare SOLO la sezione "Documentazione Sanitaria". */}
-      {eventMutationCount > 0 && (
+      {/* Sync banner: the perito edited events → some narrative sections may be
+          out of date. Facts (ITT/ITP, spese) auto-update and are NOT listed.
+          The perito chooses what to regenerate (controllo a richiesta). */}
+      {staleForPanel.length > 0 && (
         <InlineAlert
           variant="info"
-          title={`Hai modificato ${eventMutationCount} ${eventMutationCount === 1 ? 'evento' : 'eventi'}. Il report non riflette ancora le modifiche.`}
+          title={`Hai modificato degli eventi: ${staleForPanel.length} ${staleForPanel.length === 1 ? 'sezione potrebbe essere' : 'sezioni potrebbero essere'} da aggiornare.`}
           action={{
-            label: isRegeneratingDocSanitaria ? 'Aggiornamento…' : 'Aggiorna sezione',
-            onClick: () => { if (!isRegeneratingDocSanitaria) void handleRegenerateDocSanitaria(); },
+            label: 'Scegli cosa rigenerare',
+            onClick: () => setRegeneratePanelOpen(true),
           }}
-          onDismiss={() => setEventMutationCount(0)}
+          onDismiss={() => setMutatedEventTypes(new Set())}
           className="mb-4"
         >
-          Aggiorna la sezione &quot;Documentazione Sanitaria&quot; per sincronizzare il report con le modifiche agli eventi.
+          Le tabelle dei fatti (ITT/ITP, spese) si aggiornano da sole. Per le sezioni descrittive, scegli quali rigenerare.
         </InlineAlert>
       )}
 
@@ -501,7 +493,11 @@ export function ReportStep({
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
-              onEventMutated={() => setEventMutationCount((c) => c + 1)}
+              onEventMutated={(t) => setMutatedEventTypes((prev) => {
+                const next = new Set(prev);
+                next.add(t ?? 'altro');
+                return next;
+              })}
             />
           </div>
         </SheetContent>
@@ -557,6 +553,17 @@ export function ReportStep({
           />
         </DialogContent>
       </Dialog>
+
+      {/* "Scegli cosa rigenerare" — sezioni interessate dalle modifiche eventi */}
+      {report && (
+        <RegeneratePanelDialog
+          open={regeneratePanelOpen}
+          onOpenChange={setRegeneratePanelOpen}
+          caseId={caseId}
+          sections={staleForPanel}
+          onDone={() => { setMutatedEventTypes(new Set()); router.refresh(); }}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { SectionSpec, SectionCondition } from './section-generation-types';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import {
   DOCUMENT_ANALYSIS_FORMULATIONS,
   DOCUMENTAZIONE_SANITARIA_EXAMPLE,
@@ -237,20 +238,23 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche Esibite',
-    maxTokens: TOKENS_TINY,
-    dataSources: ['events-expenses'],
-    contextMaxChars: 300,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
     condition: 'has-expense-events',
-    promptDirective: `Elenca le spese mediche documentate in tabella markdown con colonne: Data | Descrizione | Struttura | Importo.
-Per ogni voce valuta congruita e necessita rispetto al quadro clinico documentato.
-Includi un totale a fine tabella.
+    // DETERMINISTIC (B-pillar): the expense table is rendered mechanically from
+    // every spesa_medica event at read time — NOT narrated by the LLM. This
+    // guarantees Lavini's requirements by construction: ogni voce inclusa (anche
+    // senza data → '—'), imposta di bollo come riga separata, nessuna voce persa.
+    // La valutazione di congruità è un GIUDIZIO → resta al perito (placeholder).
+    isPlaceholder: true,
+    placeholderText: `Le spese mediche documentate sono riepilogate nella tabella seguente, calcolata automaticamente dalle voci di spesa del fascicolo.
 
-NOTA DATA NON DOCUMENTATA (post-fix Lavini 2026-05-11):
-- Alcune voci (imposta di bollo, riepiloghi, contanti senza ricevuta) possono arrivare con "Data non documentata" o data "01.01.1900".
-- Per queste voci, riporta in tabella la dicitura "—" (trattino lungo) nella colonna Data invece della stringa letterale.
-- NON escludere mai una voce per assenza di data: l'importo e' il dato vincolante.
-${NO_EVN_RULE}`,
+${DETERMINISTIC_MARKERS.SPESE}
+
+*[Il perito valuta la congruità e la necessità delle spese rispetto al quadro clinico documentato.]*`,
+    promptDirective: '',
   },
   {
     id: 'pareri_tecnici',
@@ -506,19 +510,19 @@ ${NO_EVN_RULE}`,
   {
     id: 'spese_mediche',
     title: 'Spese Mediche',
-    maxTokens: TOKENS_TINY,
-    dataSources: ['events-expenses'],
-    contextMaxChars: 200,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
     condition: 'has-expense-events',
-    promptDirective: `Elenca le spese mediche documentate in tabella markdown: Data | Descrizione | Struttura | Importo.
-Includi totale a fine tabella.
+    // DETERMINISTIC (B-pillar): table rendered from spesa_medica events at read
+    // time — every voce inclusa (anche senza data → '—'), bollo come riga
+    // separata, nessuna voce persa. Niente dipendenza dalla compliance LLM.
+    isPlaceholder: true,
+    placeholderText: `Le spese mediche documentate sono riepilogate nella tabella seguente, calcolata automaticamente dalle voci di spesa del fascicolo.
 
-NOTA DATA NON DOCUMENTATA (post-fix Lavini 2026-05-11):
-- Alcune voci (imposta di bollo, riepiloghi, contanti senza ricevuta) possono arrivare con "Data non documentata" o data "01.01.1900".
-- Per queste voci, riporta in tabella la dicitura "—" (trattino lungo) nella colonna Data invece della stringa letterale.
-- NON escludere mai una voce per assenza di data: l'importo e' il dato vincolante.
-${NO_EVN_RULE}`,
+${DETERMINISTIC_MARKERS.SPESE}`,
+    promptDirective: '',
   },
   {
     id: 'visita_clinica',
@@ -789,7 +793,11 @@ ${NO_EVN_RULE}`,
     id: 'prognosi',
     title: 'Valutazione Prognostica',
     maxTokens: TOKENS_MEDIUM,
-    dataSources: ['events-medical', 'context-summaries', 'calculations', 'guidelines'],
+    // No 'calculations' here: the graduated ITT/ITP table is rendered once, in
+    // conclusioni_parere (mirrors parere_pro_veritate). Listing 'calculations'
+    // on both sections made formatCalculationsForPrompt emit the reproduce-table
+    // directive twice → duplicated table in the same report.
+    dataSources: ['events-medical', 'context-summaries', 'guidelines'],
     contextMaxChars: 600,
     needsOcr: false,
     promptDirective: `Genera una valutazione prognostica basata sulla documentazione clinica disponibile.
@@ -797,7 +805,6 @@ Includi:
 - Decorso clinico atteso sulla base della patologia documentata e della letteratura
 - Tempistiche prevedibili di guarigione o stabilizzazione
 - Eventuali necessita terapeutiche future prevedibili (interventi, riabilitazione, terapie)
-- Periodi di invalidita temporanea residua stimabili (ITT/ITP) se i calcoli sono disponibili
 - Esiti permanenti prevedibili sulla base del quadro attuale
 NON quantificare percentuali di invalidita permanente — il perito le determinera.
 Stile prudente e basato su evidenze documentali.

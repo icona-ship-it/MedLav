@@ -418,6 +418,135 @@ describe('isSimilarEvent', () => {
 
     expect(isSimilarEvent(a, b)).toBe(false);
   });
+
+  // ── A5: same-day events at different times stay separate ──
+  describe('A5 — temporal separation', () => {
+    it('should NOT merge ECG mattina and ECG pomeriggio (same date)', () => {
+      const morning = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino' });
+      const afternoon = makeEvent({ eventType: 'esame_strumentale', title: 'ECG pomeriggio', description: 'Elettrocardiogramma eseguito nel pomeriggio' });
+      expect(isSimilarEvent(morning, afternoon)).toBe(false);
+    });
+
+    it('should NOT merge events with explicit clock times in different halves of the day', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma ore 8:00' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma ore 16:30' });
+      expect(isSimilarEvent(a, b)).toBe(false);
+    });
+
+    it('should still merge two ECG with the same time bucket (guard does not block)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino a riposo' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma eseguito al mattino a riposo' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('should behave normally when no time marker is present (identical ECG → similar)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma a riposo' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'Elettrocardiogramma a riposo' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('should keep both same-day ECG events through full consolidation', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-02-10', eventType: 'esame_strumentale', title: 'ECG mattina', description: 'Elettrocardiogramma al mattino, ritmo sinusale' }),
+            makeEvent({ eventDate: '2024-02-10', eventType: 'esame_strumentale', title: 'ECG pomeriggio', description: 'Elettrocardiogramma nel pomeriggio, ritmo sinusale' }),
+          ],
+        },
+      ]);
+      const ecgEvents = result.filter((e) => e.title.toLowerCase().includes('ecg'));
+      expect(ecgEvents).toHaveLength(2);
+    });
+  });
+
+  // ── A6: medical abbreviation whitelist (modality survives tokenization) ──
+  describe('A6 — medical abbreviations', () => {
+    it('should NOT merge "RX torace" and "TC torace" (different modalities, same body part)', () => {
+      const rx = makeEvent({ eventType: 'esame_strumentale', title: 'RX torace', description: 'Radiografia del torace in due proiezioni' });
+      const tc = makeEvent({ eventType: 'esame_strumentale', title: 'TC torace', description: 'Tomografia computerizzata del torace con mezzo di contrasto' });
+      expect(isSimilarEvent(rx, tc)).toBe(false);
+    });
+
+    it('should treat ECO and RMN as distinct modalities of the same district', () => {
+      const eco = makeEvent({ eventType: 'esame_strumentale', title: 'ECO addome', description: 'Ecografia addome completo' });
+      const rmn = makeEvent({ eventType: 'esame_strumentale', title: 'RMN addome', description: 'Risonanza magnetica nucleare addome' });
+      expect(isSimilarEvent(eco, rmn)).toBe(false);
+    });
+  });
+
+  // ── A6 regression: aggregation must not collapse distinct same-modality exams ──
+  describe('A6 — aggregation does not lose distinct exams (post-audit)', () => {
+    it('keeps 3 distinct same-modality exams (RX torace/addome/bacino) separate', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX torace', description: 'Radiografia del torace' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX addome', description: 'Radiografia diretta addome' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_strumentale', title: 'RX bacino', description: 'Radiografia del bacino' }),
+          ],
+        },
+      ]);
+      expect(result).toHaveLength(3);
+      expect(result.some((e) => e.title.toLowerCase().includes('routinari'))).toBe(false);
+    });
+
+    it('preserves requiresVerification (OR) and member diagnoses when aggregation fires', () => {
+      const result = consolidateEvents([
+        {
+          documentId: 'doc-1',
+          events: [
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Emocromo', description: 'Emocromo completo', requiresVerification: false, diagnosis: null }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Glicemia', description: 'Glicemia a digiuno', requiresVerification: true, diagnosis: 'Iperglicemia da verificare' }),
+            makeEvent({ eventDate: '2024-03-01', eventType: 'esame_ematochimico', title: 'Creatinina', description: 'Creatinina sierica', requiresVerification: false, diagnosis: null }),
+          ],
+        },
+      ]);
+      const agg = result.find((e) => e.title.toLowerCase().includes('ematochimici'));
+      expect(agg).toBeDefined();
+      expect(agg!.requiresVerification).toBe(true); // a member flagged → aggregate flagged
+      expect(agg!.description).toContain('Iperglicemia da verificare'); // diagnosis not lost
+    });
+  });
+
+  // ── A5 regression: lab tokens must not be read as clock times ──
+  describe('A5 — getTimeBucket does not false-positive on lab tokens (post-audit)', () => {
+    it('does not treat a titer "1:20" as a clock time', () => {
+      // OLD: "1:20" → 01:20 → am; paired with "ore 16" → pm → conflict → merge blocked.
+      const a = makeEvent({ eventType: 'esame_ematochimico', title: 'Dosaggio ANA', description: 'Titolo 1:20 positivo' });
+      const b = makeEvent({ eventType: 'esame_ematochimico', title: 'Dosaggio ANA', description: 'Esame eseguito ore 16' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('does not treat lab factor "h 11" as a morning time', () => {
+      const a = makeEvent({ eventType: 'esame_ematochimico', title: 'Emocromo', description: 'fattore h 11 nella norma' });
+      const b = makeEvent({ eventType: 'esame_ematochimico', title: 'Emocromo', description: 'prelievo ore 16' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+
+    it('still separates genuine "ore"/"alle" morning vs afternoon times', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito ore 8' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito alle 16' });
+      expect(isSimilarEvent(a, b)).toBe(false);
+    });
+
+    it('does NOT conflict an event spanning "mattina e pomeriggio" with a pm event', () => {
+      // Spans both → null bucket → no spurious time conflict (post-audit fix).
+      const both = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito mattina e pomeriggio' });
+      const pm = makeEvent({ eventType: 'esame_strumentale', title: 'ECG', description: 'ECG eseguito nel pomeriggio' });
+      expect(isSimilarEvent(both, pm)).toBe(true);
+    });
+  });
+
+  // ── Tokenizer unicode-aware: punteggiatura non rompe la similarità (post-audit) ──
+  describe('similarity is robust to punctuation', () => {
+    it('matches titles that differ only by punctuation (comma)', () => {
+      const a = makeEvent({ eventType: 'esame_strumentale', title: 'Radiografia torace, due proiezioni', description: 'RX torace' });
+      const b = makeEvent({ eventType: 'esame_strumentale', title: 'Radiografia torace due proiezioni', description: 'RX torace' });
+      expect(isSimilarEvent(a, b)).toBe(true);
+    });
+  });
 });
 
 describe('isDuplicateOfExisting', () => {

@@ -7,13 +7,21 @@ import { detectLanguage } from '@/lib/language-detect';
 
 export const PAGES_PER_CHUNK = 10;
 /** Overlap pages between consecutive chunks to prevent mid-document splits. */
-const OVERLAP_PAGES = 2;
+export const OVERLAP_PAGES = 2;
 
 /** Number of chunk extraction jobs per Inngest step (batch).
  * Kept at 1 for maximum parallelism on Inngest Pro (100 concurrent steps).
  * With the neutral-retry safeguard added in P0-EXT-001, a chunk can take up to
  * 2× extraction timeout (~6 min). Batching would push step duration toward the
- * Vercel 800s ceiling with retries — 1 chunk per step is the safe choice. */
+ * Vercel 800s ceiling with retries — 1 chunk per step is the safe choice.
+ *
+ * DATA-INTEGRITY INVARIANT: extractChunkBatch only rethrows when ALL jobs in the
+ * batch fail; a PARTIAL failure is logged and swallowed (the failed chunk's events
+ * are lost without failing the step). With BATCH_SIZE=1 "all fail" == "the one
+ * fails" → every chunk failure rethrows → Inngest retries → no silent loss. If you
+ * EVER raise this above 1, you MUST first make partial failures mark their
+ * document as errore (or rethrow), otherwise dense multi-chunk docs can silently
+ * lose events. */
 export const EXTRACTION_BATCH_SIZE = 1;
 
 // Enum validation — LLM can produce values outside the enum
@@ -103,17 +111,20 @@ export async function planChunks(
     updated_at: new Date().toISOString(),
   }).eq('id', documentId);
 
-  const ranges: Array<{ start: number; end: number }> = [];
-  for (let i = 1; i <= pageCount; i += PAGES_PER_CHUNK) {
-    ranges.push({ start: i, end: Math.min(i + PAGES_PER_CHUNK - 1, pageCount) });
-  }
+  // A4: delegate range computation to planChunksSync so overlap is applied
+  // consistently — there must be a single source of truth for chunk ranges.
+  const ranges = planChunksSync(pageCount);
   logger.info('pipeline', ` Doc ${documentId}: ${ranges.length} chunk(s) for ${pageCount} pages`);
   return ranges;
 }
 
 /**
- * Pure math chunk planning — no DB call.
- * Used in batched extraction to avoid separate Inngest steps for planning.
+ * Pure math chunk planning — no DB call. Single source of truth for chunk
+ * ranges (used by the batched extraction pipeline and by planChunks).
+ *
+ * Consecutive chunks overlap by OVERLAP_PAGES pages (stride = PAGES_PER_CHUNK -
+ * OVERLAP_PAGES) so a referto that straddles a chunk boundary appears, in full,
+ * in at least one chunk and is never split mid-document (A4).
  */
 export function planChunksSync(
   pageCount: number,
@@ -314,7 +325,13 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       };
     }
 
-    const MAX_CHUNK_CHARS = 100_000;
+    // 200K matches the synthesis per-section cap (MAX_OCR_CHARS_PER_SECTION) which
+    // already sends that volume to the same model (Mistral Large, ~128K-token
+    // context), so it is proven safe. A 10-page chunk would need ~20K chars/page
+    // to exceed this — essentially never. The old 100K cap silently dropped the
+    // tail of dense table-heavy chunks. NOTE: a rare output overflow on a very
+    // dense chunk is caught LOUDLY by assertNotTruncated (retry), not lost.
+    const MAX_CHUNK_CHARS = 200_000;
     if (chunkText.length > MAX_CHUNK_CHARS) {
       const originalChars = chunkText.length;
       logger.error('pipeline', `CRITICAL: Chunk ${chunkIndex + 1} text truncated from ${originalChars} to ${MAX_CHUNK_CHARS} chars for doc ${ocrResult.documentId} pages ${range.start}-${range.end}. Some page content may be LOST in extraction.`);

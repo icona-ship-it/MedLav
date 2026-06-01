@@ -7,6 +7,7 @@ import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/e
 import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
+import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
 import { getModule } from '@/types/modules';
 import type { ModuleId } from '@/types/modules';
 import { logAccess } from '@/lib/audit';
@@ -148,6 +149,10 @@ export async function GET(
     // Resolve ocr-image: placeholders to base64 data URIs for self-contained HTML
     let synthesis = data.report?.synthesis as string | null ?? null;
     if (synthesis) {
+      // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from
+      // the current events FIRST — before image/anonymization — so the table
+      // content is also anonymized and kept in sync. No-op on legacy reports.
+      synthesis = expandDeterministicBlocks(synthesis, toDeterministicEvents(data.events ?? []));
       const images = await resolveOcrImages(synthesis, caseId);
       if (images.size > 0) {
         synthesis = replaceWithDataUris(synthesis, images);

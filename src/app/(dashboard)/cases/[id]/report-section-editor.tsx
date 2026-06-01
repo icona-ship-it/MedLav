@@ -17,6 +17,7 @@ interface ReportSectionEditorProps {
   caseId: string;
   reportId: string;
   sectionId: string;
+  sectionCanonicalId?: string;
   sectionTitle: string;
   sectionContent: string;
   reportUpdatedAt?: string;
@@ -25,7 +26,7 @@ interface ReportSectionEditorProps {
 
 export function ReportSectionEditor({
   open, onOpenChange, caseId, reportId,
-  sectionId, sectionTitle, sectionContent, reportUpdatedAt, onSaved,
+  sectionId, sectionCanonicalId, sectionTitle, sectionContent, reportUpdatedAt, onSaved,
 }: ReportSectionEditorProps) {
   const router = useRouter();
   const [editedContent, setEditedContent] = useState('');
@@ -52,6 +53,7 @@ export function ReportSectionEditor({
         caseId,
         reportId,
         sectionId,
+        sectionCanonicalId,
         sectionContent: editedContent,
         expectedUpdatedAt: reportUpdatedAt,
       });
@@ -65,7 +67,7 @@ export function ReportSectionEditor({
       onSaved();
       router.refresh();
     });
-  }, [caseId, reportId, sectionId, sectionTitle, editedContent, reportUpdatedAt, router, onOpenChange, onSaved]);
+  }, [caseId, reportId, sectionId, sectionCanonicalId, sectionTitle, editedContent, reportUpdatedAt, router, onOpenChange, onSaved]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

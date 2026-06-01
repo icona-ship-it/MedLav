@@ -1,5 +1,6 @@
 import { formatDate } from '@/lib/format';
 import { sourceLabelsExport as sourceLabels } from '@/lib/constants';
+import { sortEventsChrono } from '@/lib/event-order';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,7 +73,9 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   // posto. Sono visibili nella tabella spese mediche dove l'importo e' il
   // dato vincolante.
   const SENTINEL_DATE = '1900-01-01';
-  const events = allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE);
+  // Filter undated rows, then sort chronologically (defensive: order_number may
+  // be misaligned). bug Lavini "ordine non cronologico".
+  const events = sortEventsChrono(allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE));
 
   const now = new Date().toLocaleDateString('it-IT', {
     year: 'numeric',

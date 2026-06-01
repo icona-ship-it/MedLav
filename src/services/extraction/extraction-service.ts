@@ -466,11 +466,16 @@ export function flagLegislativeReferences(events: ExtractedEvent[]): ExtractedEv
 }
 
 /**
- * Find the best date donor for an event without a date.
+ * Find a date donor for an event without a date.
  * Priority: same page > adjacent page (±1).
- * When multiple donors exist on the same page, pick the one with the
- * LATEST date (most recent), as undated events typically follow the main
- * dated event on the page (e.g., lab values after admission note).
+ *
+ * MEDICO-LEGAL SAFETY (audit 2026-05-31, confermato Lavini): inherit a date
+ * ONLY when the page is unambiguous — i.e. all candidate donors share a SINGLE
+ * date. The previous heuristic "pick the most recent" silently assigned the
+ * DISCHARGE date to an undated lab that sat between an admission and a discharge
+ * on the same page — a confidently-wrong date in a forensic timeline. When
+ * multiple distinct dates are present, refuse to guess: leave the event undated
+ * (sentinel) and flagged, so the perito assigns the correct date.
  */
 function findDateDonor(
   sourcePages: number[],
@@ -497,9 +502,12 @@ function findDateDonor(
 
   if (candidates.length === 0) return null;
 
-  // Pick the LATEST date (most recent) — undated events typically follow the main dated event
-  candidates.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
-  return candidates[0];
+  // Inherit ONLY if the page is unambiguous (one single date among candidates).
+  const distinctDates = Array.from(
+    new Set(candidates.map((c) => c.eventDate).filter((d): d is string => Boolean(d) && d !== SENTINEL_DATE)),
+  );
+  if (distinctDates.length !== 1) return null; // ambiguous → do not fabricate a date
+  return candidates.find((c) => c.eventDate === distinctDates[0]) ?? null;
 }
 
 /**
@@ -652,18 +660,39 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
 
 // ── Date format normalization ──
 
-const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
 const EURO_DATE_REGEX = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/;
+
+/**
+ * True only for a REAL calendar date. A format-only check is not enough: an
+ * invalid date like "2024-02-31" or "2024-13-01" would either silently roll
+ * over via `new Date()` ("2024-02-31" → 2024-03-02) or become an Invalid Date
+ * → NaN day-counts in the ITT/ITP calculations downstream. We reject it so the
+ * caller stores the sentinel (a flagged "data non documentata") instead of a
+ * silently-wrong date.
+ */
+function isRealCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day;
+}
 
 /**
  * Normalize a date string to ISO YYYY-MM-DD format.
  * Accepts: YYYY-MM-DD (pass-through), DD.MM.YYYY, DD/MM/YYYY.
- * Returns null if format is unrecognizable — caller should use sentinel.
+ * Returns null if the format is unrecognizable OR the date is not a real
+ * calendar date — caller should use the sentinel.
  */
-function normalizeDateFormat(dateStr: string): string | null {
-  // Already ISO format
-  if (ISO_DATE_REGEX.test(dateStr)) {
-    return dateStr;
+export function normalizeDateFormat(dateStr: string): string | null {
+  // Already ISO format — but still validate it is a REAL date (format ≠ valid).
+  const isoMatch = dateStr.match(ISO_DATE_REGEX);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (isRealCalendarDate(y, m, d)) return dateStr;
+    logger.warn('extraction', `ISO date out of calendar range: "${dateStr}" — using sentinel`);
+    return null;
   }
 
   // European format: DD.MM.YYYY or DD/MM/YYYY
@@ -672,16 +701,13 @@ function normalizeDateFormat(dateStr: string): string | null {
     const day = euroMatch[1].padStart(2, '0');
     const month = euroMatch[2].padStart(2, '0');
     const year = euroMatch[3];
-    const monthNum = parseInt(month, 10);
-    const dayNum = parseInt(day, 10);
-    // Basic sanity check
-    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31) {
+    if (isRealCalendarDate(parseInt(year, 10), parseInt(month, 10), parseInt(day, 10))) {
       return `${year}-${month}-${day}`;
     }
   }
 
-  // Unrecognizable format
-  logger.warn('extraction', `Unrecognizable date format: "${dateStr}" — using sentinel`);
+  // Unrecognizable / invalid date
+  logger.warn('extraction', `Unrecognizable or invalid date: "${dateStr}" — using sentinel`);
   return null;
 }
 

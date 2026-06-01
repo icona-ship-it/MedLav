@@ -2,12 +2,78 @@
  * Client-safe section parser for splitting report markdown into sections.
  * Based on the same logic as services/synthesis/section-parser.ts but
  * without server-only dependencies.
+ *
+ * This module is the CANONICAL home of the section-ID mapping
+ * (`SECTION_ID_MAP` / `identifySectionId`). The server parser
+ * (`services/synthesis/section-parser.ts`) re-exports them so client and
+ * server always derive the SAME stable `canonicalId` for a given heading.
+ * Per-section state (auto/edited/locked) is keyed by `canonicalId`, never by
+ * the title-derived `id` slug (which changes if the heading text changes).
  */
 
 export interface ClientSection {
+  /** Title-derived slug, deduped with _2/_3 — used by replaceSectionContent. */
   id: string;
+  /** Stable canonical id (SECTION_ID_MAP) — used as the per-section state key. */
+  canonicalId: string;
   title: string;
   content: string;
+}
+
+// Canonical section ID mapping from heading text keywords.
+// IMPORTANT: this is the single source of truth, shared with the server parser.
+const SECTION_ID_MAP: Array<{ pattern: RegExp; id: string }> = [
+  // Sectional generation universal sections
+  { pattern: /premesse\s+e\s+profilo\s+metodologico|profilo\s+metodologico/i, id: 'intestazione' },
+  { pattern: /dati\s+della\s+documentazione\s+in\s+atti|documentazione\s+in\s+atti/i, id: 'documentazione_atti' },
+  { pattern: /premesse(?!\s+e\s+profilo)/i, id: 'premesse' },
+  { pattern: /dati\s+della\s+documentazione\s+sanitaria|documentazione\s+sanitaria|documentazione\s+medica\s+prodotta/i, id: 'documentazione_sanitaria' },
+  { pattern: /spese\s+mediche/i, id: 'spese_mediche' },
+  { pattern: /precedenti\s+pareri\s+tecnici|pareri\s+tecnici/i, id: 'pareri_tecnici' },
+  { pattern: /incontro\s+con\s+le\s+parti|operazioni\s+peritali/i, id: 'operazioni_peritali' },
+  { pattern: /considerazioni\s+medico-?\s*legali/i, id: 'considerazioni_ml' },
+  { pattern: /il\s+fatto\s+e\s+la\s+storia\s+clinica/i, id: 'il_fatto_e_storia_clinica' },
+  { pattern: /epicrisi/i, id: 'epicrisi' },
+  { pattern: /bibliografia/i, id: 'bibliografia' },
+  { pattern: /osservazioni\s+(alla\s+)?bozza/i, id: 'osservazioni_bozza' },
+  // Legacy aliases kept for backward compat with already-saved reports
+  { pattern: /sintesi\s+conclusiva|^conclusioni$/i, id: 'conclusioni' },
+  // Legacy/domain-knowledge sections
+  { pattern: /riassunto\s+(del\s+)?caso/i, id: 'riassunto' },
+  { pattern: /cronologia\s+medico/i, id: 'cronologia' },
+  { pattern: /analisi\s+dell.intervento/i, id: 'analisi_intervento' },
+  { pattern: /complicanze/i, id: 'complicanze' },
+  { pattern: /danno\s+biologico/i, id: 'danno_biologico' },
+  { pattern: /nesso\s+causale/i, id: 'nesso_causale' },
+  { pattern: /timeline\s+diagnostica/i, id: 'timeline_diagnostica' },
+  { pattern: /analisi\s+del\s+ritardo/i, id: 'analisi_ritardo' },
+  { pattern: /perdita\s+di\s+chance|loss\s+of\s+chance/i, id: 'loss_of_chance' },
+  { pattern: /analisi\s+del\s+travaglio/i, id: 'analisi_travaglio' },
+  { pattern: /tracciato\s+cardiotocografico|ctg/i, id: 'ctg_analisi' },
+  { pattern: /esiti\s+neonatali/i, id: 'esiti_neonatali' },
+  { pattern: /valutazione\s+preoperatoria/i, id: 'valutazione_preoperatoria' },
+  { pattern: /gestione\s+anestesiologica/i, id: 'gestione_anestesiologica' },
+  { pattern: /analisi\s+dell.infezione/i, id: 'analisi_infettiva' },
+  { pattern: /gestione\s+terapeutica/i, id: 'gestione_terapeutica' },
+  { pattern: /percorso\s+diagnostico/i, id: 'percorso_diagnostico' },
+  { pattern: /analisi\s+dell.errore/i, id: 'analisi_errore' },
+  { pattern: /elementi\s+(di\s+rilievo|per\s+la\s+valutazione)/i, id: 'elementi_rilievo' },
+  { pattern: /profili\s+di\s+responsabilit/i, id: 'profili_responsabilita' },
+  { pattern: /valutazione\s+di\s+merito/i, id: 'valutazione_merito' },
+];
+
+/**
+ * Identify a canonical section ID from heading text.
+ * Falls back to a Unicode-aware slug when no mapping matches.
+ */
+export function identifySectionId(headingText: string): string {
+  for (const mapping of SECTION_ID_MAP) {
+    if (mapping.pattern.test(headingText)) {
+      return mapping.id;
+    }
+  }
+  // Fallback: slugify the heading (same transform as slugifyHeading).
+  return slugifyHeading(headingText);
 }
 
 /**
@@ -28,13 +94,13 @@ export function parseSections(markdown: string): ClientSection[] {
 
   if (matches.length === 0) {
     // No sections found — return entire content as single section
-    return [{ id: 'full_report', title: 'Report', content: markdown.trim() }];
+    return [{ id: 'full_report', canonicalId: 'full_report', title: 'Report', content: markdown.trim() }];
   }
 
   // Content before the first heading (preamble)
   const preamble = markdown.slice(0, matches[0].index).trim();
   if (preamble) {
-    sections.push({ id: 'preamble', title: 'Intestazione', content: preamble });
+    sections.push({ id: 'preamble', canonicalId: 'preamble', title: 'Intestazione', content: preamble });
   }
 
   const slugCounts = new Map<string, number>();
@@ -51,7 +117,7 @@ export function parseSections(markdown: string): ClientSection[] {
     slugCounts.set(baseSlug, count);
     const id = count > 1 ? `${baseSlug}_${count}` : baseSlug;
 
-    sections.push({ id, title: matches[i].title, content });
+    sections.push({ id, canonicalId: identifySectionId(matches[i].title), title: matches[i].title, content });
   }
 
   return sections;

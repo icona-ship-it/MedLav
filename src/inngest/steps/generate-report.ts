@@ -8,6 +8,7 @@ import {
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -353,7 +354,7 @@ export { insertReport as saveReportStep };
 import { resolveSectionPlan } from '@/services/synthesis/section-catalog';
 import { generateSingleSection } from '@/services/synthesis/section-generator';
 import { computeSectionalPromptVersion } from './prompt-version-sectional';
-import { validateReport } from '@/services/synthesis/report-validator';
+import { validateReport, getBlockingIssues } from '@/services/synthesis/report-validator';
 import type { ReportValidationContext } from '@/services/synthesis/report-validator';
 import { computeHrs, getHrsLevel } from '@/services/synthesis/hallucination-risk-scorer';
 import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
@@ -394,18 +395,40 @@ export function planReportSections(
  * Generate a single section inside an Inngest step.
  * Fetches OCR text from DB if needed (avoids serialization between steps).
  */
+/** Section ids whose perito-filled placeholder should be pre-populated with the
+ * computed graduated ITT/ITP table. For CTU/CTP the danno biologico temporaneo
+ * lives in `considerazioni_ml` (a placeholder), so without this the A2 table
+ * would never reach the report body — only the events-tab UI. */
+const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
+
+/**
+ * A2 + B3: build placeholder content, embedding the ITT/ITP DETERMINISTIC
+ * SENTINEL for sections where the perito assesses temporary disability. The
+ * sentinel is expanded at read time (UI + export) from the CURRENT events, so
+ * the table is ALWAYS in sync — if the perito later corrects an event, the
+ * table updates by itself, no regeneration. The arithmetic is a proposal to
+ * verify; the medico-legal judgment stays the perito's.
+ */
+export function buildPlaceholderContent(spec: SectionSpec): string {
+  const base = spec.placeholderText ?? '';
+  if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id)) {
+    return base;
+  }
+  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}`;
+}
+
 export async function generateSectionStep(
   caseId: string,
   spec: SectionSpec,
   synthesisParams: SynthesisParams,
   previousContext: SectionContext[],
 ): Promise<GeneratedSection> {
-  // Placeholder sections emit static text — no LLM call needed
+  // Placeholder sections emit static text — no LLM call needed.
   if (spec.isPlaceholder) {
     return {
       id: spec.id,
       title: spec.title,
-      content: spec.placeholderText ?? '',
+      content: buildPlaceholderContent(spec),
       contextSummary: '',
       wordCount: 0,
     };
@@ -482,10 +505,12 @@ export async function assembleSectionsAndSaveReport(
     sectionIds: sections.map((s) => s.id),
   });
 
-  // Validate assembled report
+  // Validate assembled report. A3: pass the assembled section titles as
+  // role-mandatory sections so an empty/failed section blocks the save.
   const validationContext: ReportValidationContext = {
     events: synthesisParams.events.map((e) => ({ orderNumber: e.orderNumber, eventDate: e.eventDate })),
     calculations: synthesisParams.calculations?.map((c) => ({ label: c.label, value: c.value, days: c.days })),
+    requiredSectionTitles: sections.map((s) => s.title),
   };
 
   const validation = validateReport(fullReport, synthesisParams.events.length, validationContext);
@@ -499,13 +524,10 @@ export async function assembleSectionsAndSaveReport(
       logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
     }
 
-    // Block saving for critical validation errors. Wave A.1: also block on
-    // broken_ocr_marker — a report containing "[object Object]" or stray
-    // serialization tokens cannot be deposited and must trigger Inngest retry.
-    const criticalErrors = errors.filter((e) =>
-      e.type === 'empty_report' || e.type === 'too_short' || e.type === 'missing_section' ||
-      e.type === 'broken_ocr_marker',
-    );
+    // A3: block saving for all blocking-policy errors (centralized in
+    // report-validator.ts). Includes required-section-missing, coverage floor,
+    // sentinel dates, broken OCR markers, header mismatch/fabrication.
+    const criticalErrors = getBlockingIssues(validation);
     if (criticalErrors.length > 0) {
       throw new Error(
         `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +

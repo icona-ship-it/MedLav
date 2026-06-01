@@ -10,7 +10,7 @@ Estrarre e riportare:
 - A.3 Anamnesi e Terapie: anamnesi patologica, tutte le terapie farmacologiche (farmaco, dosaggio, via, frequenza), modifiche terapeutiche, trasfusioni
 - A.4 Descrizione Operatoria: testo INTEGRALE della descrizione chirurgica, tipo intervento, operatori, tecnica, tempi operatori (durata, orario), reperti, complicanze, tipo anestesia
 - A.5 Cartella Anestesiologica: valutazione preop (ASA score), tipo anestesia, farmaci, parametri vitali intraop, complicanze
-- A.6 Diario Medico/Infermieristico: eventi avversi, complicanze, peggioramenti, interventi urgenza, allarmi, variazioni parametri vitali, modifiche terapeutiche, annotazioni cliniche significative. Includere anche andamento parametri vitali se documentato (utile per ricostruire la catena probatoria). Escludere solo annotazioni puramente logistiche (pasti, igiene personale, posizionamento)
+- A.6 Diario Medico/Infermieristico: riporta l'INTERO decorso clinico, non solo gli eventi avversi. RAGGRUPPA i periodi clinicamente stabili in UN unico evento "decorso" che indica l'arco di giorni e cosa resta invariato (es. "Decorso post-operatorio gg 2-5: paziente stabile, parametri vitali nella norma, terapia invariata, medicazioni regolari, apiretico"). Crea invece eventi SEPARATI per OGNI variazione rilevante: complicanze, peggioramenti o miglioramenti, comparsa di febbre, modifiche terapeutiche, prima mobilizzazione/deambulazione, consulenze, allarmi, variazioni dei parametri vitali. La routine clinica documentata serve a ricostruire la catena probatoria: NON scartarla. Escludere SOLO le annotazioni puramente logistiche (pasti, igiene personale, posizionamento)
 - A.7 Lettera di Dimissione: diagnosi dimissione completa, condizioni alla dimissione, terapia domiciliare, follow-up, prognosi
 
 ### FONTE B - REFERTI CONTROLLI MEDICI
@@ -207,10 +207,11 @@ Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laborat
 - NON estrarre: riferimenti legislativi puri, giurisprudenza generica, premesse giuridiche (a meno che collegati a un fatto concreto del paziente)
 
 ### REGOLE DATE
-- Formato YYYY-MM-DD. Data approssimata e' MOLTO meglio di NULL
+- Formato SEMPRE YYYY-MM-DD (ISO). NON usare mai DD/MM/YYYY in output: evita lo scambio giorno/mese.
+- **Data dell'EVENTO CLINICO, non del documento**: usa la data nel contesto testuale immediato dell'evento (quando l'esame/visita/intervento è AVVENUTO). La data di stampa/invio/protocollo/intestazione è METADATO del documento: NON usarla per datare gli eventi clinici, a meno che non coincida realmente con la data dell'evento.
+- Data approssimata e' MOLTO meglio di NULL, MA solo se desunta dal contesto clinico (non dal metadato del documento)
 - "Febbraio 2024" → "2024-02-01", datePrecision="mese"
-- Data in intestazione → eredita per eventi della sezione
-- Data relativa → calcola se possibile ("3 giorni dopo l'intervento")
+- Data relativa → calcola se possibile ("3 giorni dopo l'intervento del 10/05" → 2024-05-13)
 - NESSUN indizio → NULL, datePrecision="sconosciuta"
 - **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese", MA solo se è l'unica menzione di quell'evento (vedi regola RIFERIMENTI sotto).
 
@@ -376,7 +377,7 @@ CAMPI CRITICI DA ESTRARRE:
 - Dati di ingresso: diagnosi COMPLETA, parametri vitali (PA, FC, SpO2, T°), peso, altezza, allergie
 - Descrizione operatoria: testo INTEGRALE (tipo intervento, operatori, tecnica, durata, materiali/protesi, complicanze intraop)
 - Cartella anestesiologica: ASA score, tipo anestesia, farmaci, parametri intraop
-- Diario medico: SOLO complicanze, peggioramenti, eventi avversi, allarmi — NON la routine quotidiana ("paziente stabile, riposo a letto")
+- Diario medico: riporta TUTTO il decorso clinico, non solo le complicanze. RAGGRUPPA i giorni stabili in un unico evento "decorso" (es. "gg 2-6: stabile, parametri nella norma, terapia invariata") e crea eventi SEPARATI per ogni variazione rilevante (complicanze, peggioramenti, febbre, modifiche terapia, prima mobilizzazione, consulenze). NON limitarti agli eventi avversi: anche la routine clinica documenta la catena probatoria
 - Esami: TUTTI i valori con unità di misura e range di riferimento
 - Dimissione: diagnosi dimissione completa, terapia domiciliare (farmaco, dose, via, frequenza), follow-up, prognosi
 ERRORI COMUNI: Saltare valori di laboratorio in tabelle, ignorare annotazioni manoscritte a margine, perdere la cartella anestesiologica.

@@ -1,7 +1,11 @@
 /**
  * Post-generation report quality validator.
  * Checks the LLM-generated synthesis for structural issues BEFORE saving.
- * Non-blocking: logs warnings but never prevents saving.
+ *
+ * Issues carry a severity: 'warning' (logged, report still saved) or 'error'
+ * (blocking — the caller must refuse to save and retry/escalate). The set of
+ * error types that actually block saving is centralized in BLOCKING_ERROR_TYPES
+ * / getBlockingIssues() so the sectional and monolithic pipelines agree.
  */
 
 export interface ReportIssue {
@@ -37,6 +41,12 @@ export interface ReportValidationContext {
   calculations?: Array<{ label: string; value: string; days: number | null }>;
   /** OCR text for citation verification (Phase 5 safeguard). */
   ocrText?: Array<{ documentId: string; pages: Array<{ ocrText: string }> }>;
+  /** Role-mandatory section titles for the resolved report plan (A3). When
+   * provided, the validator checks each title is present as a "## heading" with
+   * non-empty content and flags a blocking `missing_section` error otherwise.
+   * Titles come from the resolved section plan (section-catalog.ts), so the
+   * check is role/module-aware without the validator knowing the role itself. */
+  requiredSectionTitles?: string[];
   /** Perizia metadata for header coherence checks (Wave 2.2). When provided,
    * the validator compares fields like tribunale / RG / giudice against the
    * intestazione section text and flags mismatches as errors. */
@@ -93,6 +103,15 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 // stragiudiziale reports — actual length is shaped by per-section token
 // budgets (section-catalog.ts) and prompt directives (synthesis-prompts.ts).
 const MIN_WORD_COUNT = 500;
+
+/** A3: expected minimum % of dated clinical events cited in the report. Below
+ * this we warn; below COVERAGE_HARD_BLOCK_PERCENT (with enough events) we block. */
+const MIN_EVENT_COVERAGE_PERCENT = 30;
+/** Coverage below this % is treated as a gross failure (report blocked), since
+ * even a date-format proxy artifact cannot plausibly push a sound report this low. */
+const COVERAGE_HARD_BLOCK_PERCENT = 10;
+/** Minimum dated events required before the hard block trusts the coverage signal. */
+const COVERAGE_MIN_EVENTS_FOR_BLOCK = 5;
 
 /** Regex matching DD/MM/YYYY or DD.MM.YYYY dates in report text. */
 const DATE_PATTERN = /\b(\d{2})[./](\d{2})[./](\d{4})\b/g;
@@ -194,21 +213,26 @@ export function validateReport(
     const eventsWithDate = context.events.filter((e) => e.eventDate && e.eventDate !== '1900-01-01');
     if (eventsWithDate.length > 0) {
       const synthesisLower = synthesis.toLowerCase();
-      const coveredCount = eventsWithDate.filter((e) => {
-        // Check if the event date appears in DD/MM/YYYY or DD.MM.YYYY or YYYY-MM-DD format
-        const d = e.eventDate;
-        const parts = d.split('-');
-        if (parts.length !== 3) return true; // skip malformed dates
-        const ddmmyyyy = `${parts[2]}/${parts[1]}/${parts[0]}`;
-        const ddmmyyyyDot = `${parts[2]}.${parts[1]}.${parts[0]}`;
-        return synthesisLower.includes(d) || synthesisLower.includes(ddmmyyyy) || synthesisLower.includes(ddmmyyyyDot);
-      }).length;
+      const coveredCount = eventsWithDate.filter((e) => eventDateAppearsInReport(e.eventDate, synthesisLower)).length;
       eventCoverage = Math.round((coveredCount / eventsWithDate.length) * 100);
-      if (eventCoverage < 30) {
+      if (eventCoverage < MIN_EVENT_COVERAGE_PERCENT) {
+        // A3: coverage is a PROXY. eventDateAppearsInReport() matches numeric
+        // forms (DD.MM.YYYY, DD/MM/YYYY, ISO) AND extended Italian prose
+        // ("15 marzo 2024", "15 marzo") so narrative stragiudiziale reports
+        // aren't undercounted. Still imperfect, and the block fires at assembly
+        // with a deterministic seed (a retry reproduces the same report), so a
+        // false positive permanently fails a good case. Therefore we HARD-BLOCK
+        // only on gross failure (near-zero coverage with enough dated events to
+        // trust the signal); the 10-30% band stays a warning.
+        const grossFailure =
+          eventCoverage < COVERAGE_HARD_BLOCK_PERCENT &&
+          eventsWithDate.length >= COVERAGE_MIN_EVENTS_FOR_BLOCK;
         issues.push({
           type: 'low_event_coverage',
-          severity: 'warning',
-          message: `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}). Possibile perdita di dati.`,
+          severity: grossFailure ? 'error' : 'warning',
+          message: grossFailure
+            ? `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}). Perdita massiva di dati — report bloccato.`
+            : `Solo il ${eventCoverage}% degli eventi clinici è citato nel report (${coveredCount}/${eventsWithDate.length}, atteso ≥${MIN_EVENT_COVERAGE_PERCENT}%). Possibile perdita di dati — verificare.`,
         });
       }
     }
@@ -216,6 +240,7 @@ export function validateReport(
 
   // 6-9. Context-dependent checks (backward-compatible: only run when context provided)
   if (context) {
+    issues.push(...checkRequiredSections(synthesis, context));
     issues.push(...checkPhantomDates(synthesis, context));
     issues.push(...checkNumericalMismatch(synthesis, context));
     issues.push(...checkUnverifiedCitations(synthesis, context));
@@ -229,6 +254,75 @@ export function validateReport(
 }
 
 // ── Existing helpers ──
+
+// ── A3: Role-mandatory section presence ──
+
+/**
+ * For each role-mandatory section title, verify the report contains a matching
+ * section heading with non-empty content. A missing heading OR a truly-empty
+ * section body is flagged as a blocking `missing_section` error (A3). Only runs
+ * when `context.requiredSectionTitles` is provided (resolved section plan).
+ *
+ * Section headings are emitted by the assembler as exactly `## <title>` (two
+ * hashes). Section CONTENT may legitimately contain its own headings — the
+ * rendered intestazione starts with `# <title>` and `### Dati …` sub-headings.
+ * So the "next section" boundary must be the next 2-hash `## ` heading ONLY;
+ * matching any `#{1,3}` here wrongly treated a content sub-heading as the next
+ * section and reported a fully-populated section as empty (would block EVERY
+ * report). We block only on a genuinely empty body (0 words) — a terse-but-real
+ * section must not deterministically fail the case.
+ */
+function checkRequiredSections(
+  synthesis: string,
+  context: ReportValidationContext,
+): ReportIssue[] {
+  const titles = context.requiredSectionTitles;
+  if (!titles || titles.length === 0) return [];
+
+  const issues: ReportIssue[] = [];
+  const seen = new Set<string>();
+
+  for (const title of titles) {
+    const normalizedTitle = title.trim();
+    if (normalizedTitle.length === 0 || seen.has(normalizedTitle.toLowerCase())) continue;
+    seen.add(normalizedTitle.toLowerCase());
+
+    // Match the section heading on its own line, case-insensitive. Use [ \t]*
+    // (not \s*) so the match stops at the heading's newline.
+    const headingRe = new RegExp(`(?:^|\\n)#{1,3}[ \\t]*${escapeRegex(normalizedTitle)}[ \\t]*(?:\\n|$)`, 'i');
+    const match = headingRe.exec(synthesis);
+    if (!match) {
+      issues.push({
+        type: 'missing_section',
+        severity: 'error',
+        message: `Sezione obbligatoria mancante: "${normalizedTitle}". Il report non può essere salvato senza questa sezione.`,
+      });
+      continue;
+    }
+
+    // Body = text from end of this heading to the NEXT 2-hash section heading
+    // (`\n## `). Content-internal `#`/`###` headings are NOT boundaries.
+    const contentStart = match.index + match[0].length;
+    const rest = synthesis.slice(contentStart);
+    const nextHeading = rest.search(/\n##[ \t]/);
+    const body = (nextHeading === -1 ? rest : rest.slice(0, nextHeading)).trim();
+    const bodyWords = body.split(/\s+/).filter((w) => w.length > 0).length;
+    if (bodyWords === 0) {
+      issues.push({
+        type: 'missing_section',
+        severity: 'error',
+        message: `Sezione obbligatoria vuota: "${normalizedTitle}". Generazione incompleta — report bloccato.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/** Escape a string for safe use inside a RegExp. */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ── New check: Phantom Dates ──
 
@@ -280,6 +374,42 @@ function checkPhantomDates(
   }
 
   return issues;
+}
+
+/** Italian month names, indexed 1-12, for matching extended prose dates. */
+const ITALIAN_MONTHS = [
+  '', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+  'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre',
+];
+
+/**
+ * True if an ISO event date (YYYY-MM-DD) is cited anywhere in the (lowercased)
+ * report, in any common Italian form: numeric (15.03.2024 / 15/03/2024 / ISO)
+ * OR extended prose ("15 marzo 2024", "15 marzo"). The prose forms matter for
+ * narrative reports (stragiudiziale) that rarely write numeric dates — without
+ * them the coverage proxy under-counts and can falsely block a sound report.
+ */
+function eventDateAppearsInReport(isoDate: string, synthesisLower: string): boolean {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return true; // malformed → don't penalise
+  const [yyyy, mm, dd] = parts;
+  const day = parseInt(dd, 10);
+  const monthIdx = parseInt(mm, 10);
+
+  if (synthesisLower.includes(isoDate)) return true;
+  if (synthesisLower.includes(`${dd}/${mm}/${yyyy}`)) return true;
+  if (synthesisLower.includes(`${dd}.${mm}.${yyyy}`)) return true;
+  if (synthesisLower.includes(`${dd}-${mm}-${yyyy}`)) return true;
+
+  // Extended prose: "15 marzo 2024" or non-zero-padded "5 marzo 2024", and the
+  // year-less "15 marzo" form. Require the day number to avoid matching a bare
+  // month name shared by many events.
+  const monthName = ITALIAN_MONTHS[monthIdx];
+  if (monthName) {
+    if (synthesisLower.includes(`${day} ${monthName} ${yyyy}`)) return true;
+    if (synthesisLower.includes(`${day} ${monthName}`)) return true;
+  }
+  return false;
 }
 
 /** Convert YYYY-MM-DD, DD/MM/YYYY, or DD.MM.YYYY to a canonical DD/MM/YYYY for set comparison. */
@@ -591,4 +721,38 @@ function checkHeaderFabricationSignature(synthesis: string): ReportIssue[] {
   }
 
   return [];
+}
+
+// ── A3: Centralized blocking-issue policy ────────────────────────────
+//
+// Single source of truth for which error-severity issues must PREVENT a report
+// from being saved (caller throws → Inngest retries / regenerate fails loudly).
+// Both the sectional pipeline (generate-report.ts) and the monolithic path
+// (synthesis-service.ts) consume getBlockingIssues() so they agree.
+//
+// Excluded from blocking on purpose (error severity but caller-soft):
+//  - duplicate_content / unverified_citation: dynamic heuristics with known
+//    false positives (OCR ligatures, boilerplate prose). Surfaced via HRS, not
+//    a hard block, to avoid retry loops on legitimate reports.
+
+const BLOCKING_ERROR_TYPES: ReadonlySet<ReportIssue['type']> = new Set([
+  'empty_report',
+  'too_short',
+  'missing_section',
+  'broken_ocr_marker',
+  'sentinel_date_leak',
+  'low_event_coverage',
+  'truncated_response',
+  'header_mismatch',
+  'header_fabrication_signature',
+]);
+
+/**
+ * Filter a validation's issues down to the error-severity ones that must block
+ * saving. Returns [] when the report is safe to save (warnings only).
+ */
+export function getBlockingIssues(validation: ReportValidation): ReportIssue[] {
+  return validation.issues.filter(
+    (i) => i.severity === 'error' && BLOCKING_ERROR_TYPES.has(i.type),
+  );
 }

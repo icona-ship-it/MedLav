@@ -19,9 +19,11 @@ import {
 import { addManualEvent, bulkVerifyEvents, bulkDeleteVerificationEvents } from '../../actions';
 import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import { sortEventsChrono } from '@/lib/event-order';
 import { CheckCheck, Trash2 } from 'lucide-react';
 import { EventCard } from './event-card';
 import { EventEditSheet } from './event-edit-sheet';
+import { IttItpSummary } from './itt-itp-summary';
 import { BatchRetagDialog } from '@/components/batch-retag-dialog';
 import type { EventRow } from './types';
 
@@ -33,7 +35,7 @@ function AddEventDialog({
   caseId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: (eventType?: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState({
@@ -67,8 +69,9 @@ function AddEventDialog({
         toast.error(result.error);
         return;
       }
+      const createdType = form.eventType;
       setForm({ eventDate: '', datePrecision: 'giorno', eventType: 'altro', title: '', description: '', sourceType: 'altro', diagnosis: '', doctor: '', facility: '' });
-      onSuccess();
+      onSuccess(createdType);
     });
   };
 
@@ -191,7 +194,7 @@ export function EventsTab({
   documents?: Array<{ id: string; file_name: string }>;
   /** UX Ondata 3-IA Fase D: chiamato dopo save/delete evento dal drawer.
       Permette al parent (report-step) di mostrare banner "rigenera sezione?". */
-  onEventMutated?: () => void;
+  onEventMutated?: (eventType?: string) => void;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
@@ -217,19 +220,22 @@ export function EventsTab({
     });
   }, []);
 
-  const altroEvents = events.filter((e) => e.event_type === 'altro');
-  const clinicalEvents = events.filter((e) => !NON_CLINICAL_TYPES.has(e.event_type));
-  const adminEvents = events.filter((e) => NON_CLINICAL_TYPES.has(e.event_type));
+  // Display the cronistoria in true chronological order (undated last), robust to
+  // a misaligned persisted order_number (bug Lavini "ordine non cronologico").
+  const altroEvents = sortEventsChrono(events.filter((e) => e.event_type === 'altro'));
+  const clinicalEvents = sortEventsChrono(events.filter((e) => !NON_CLINICAL_TYPES.has(e.event_type)));
+  const adminEvents = sortEventsChrono(events.filter((e) => NON_CLINICAL_TYPES.has(e.event_type)));
 
   // Split events into verification group
   const verificationEvents = events.filter((e) => isVerificationEvent(e));
 
-  // Summary stats — surgeryCount/diagnosisCount were used in the verbose summary
-  // box before the Ondata 1 compression. Kept removed to avoid noise; if a future
-  // tooltip needs them, re-derive inline.
-  const datesWithEvents = events.filter((e) => e.event_date && e.event_date !== '').map((e) => e.event_date);
-  const dateRange = datesWithEvents.length > 0
-    ? { from: datesWithEvents[0], to: datesWithEvents[datesWithEvents.length - 1] }
+  // Date range from real min/max (NOT array position — order_number may be misaligned).
+  const realDates = events
+    .map((e) => e.event_date)
+    .filter((d): d is string => Boolean(d) && d !== '' && d !== '1900-01-01')
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const dateRange = realDates.length > 0
+    ? { from: realDates[0], to: realDates[realDates.length - 1] }
     : null;
 
   // Tab-based base events
@@ -349,13 +355,15 @@ export function EventsTab({
               caseId={caseId}
               open={addEventOpen}
               onOpenChange={setAddEventOpen}
-              onSuccess={() => { setAddEventOpen(false); router.refresh(); }}
+              onSuccess={(t) => { setAddEventOpen(false); router.refresh(); onEventMutated?.(t); }}
             />
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <>
+        {/* A2: graduated ITT/ITP summary (clinical / all views only) */}
+        {eventViewTab !== 'admin' && <IttItpSummary events={events} />}
         {/* Filters */}
         {events.length > 0 && (
           <div className="mb-4 space-y-2">
@@ -562,8 +570,8 @@ export function EventsTab({
         caseId={caseId}
         open={editingEventId !== null}
         onOpenChange={(open) => { if (!open) setEditingEventId(null); }}
-        onSaved={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
-        onDeleted={() => { setEditingEventId(null); router.refresh(); onEventMutated?.(); }}
+        onSaved={() => { const t = editingEvent?.event_type; setEditingEventId(null); router.refresh(); onEventMutated?.(t); }}
+        onDeleted={() => { const t = editingEvent?.event_type; setEditingEventId(null); router.refresh(); onEventMutated?.(t); }}
       />
     </Card>
   );

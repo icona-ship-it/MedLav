@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isValidCodiceFiscale } from './codice-fiscale';
-import { isValidItalianDate } from './date-format';
+import { isValidItalianDate, normalizeItalianDateToIso } from './date-format';
 
 describe('isValidCodiceFiscale', () => {
   it('accepts well-formed CFs with valid checksum', () => {
@@ -75,5 +75,24 @@ describe('isValidItalianDate', () => {
     expect(isValidItalianDate('')).toBe(false);
     expect(isValidItalianDate('non una data')).toBe(false);
     expect(isValidItalianDate('13/2025')).toBe(false);
+  });
+});
+
+describe('normalizeItalianDateToIso', () => {
+  it('converts DD/MM/YYYY (Italian) to ISO', () => {
+    expect(normalizeItalianDateToIso('05/03/2024')).toBe('2024-03-05');
+    expect(normalizeItalianDateToIso('13.12.2025')).toBe('2025-12-13');
+    expect(normalizeItalianDateToIso('13-12-2025')).toBe('2025-12-13');
+  });
+  it('passes through a valid ISO date', () => {
+    expect(normalizeItalianDateToIso('2024-03-05')).toBe('2024-03-05');
+  });
+  it('returns null for impossible / malformed / sentinel dates', () => {
+    expect(normalizeItalianDateToIso('31/02/2024')).toBeNull();
+    expect(normalizeItalianDateToIso('2024-13-01')).toBeNull();
+    expect(normalizeItalianDateToIso('1900-01-01')).toBeNull(); // sentinel rejected
+    expect(normalizeItalianDateToIso('non una data')).toBeNull();
+    expect(normalizeItalianDateToIso('')).toBeNull();
+    expect(normalizeItalianDateToIso(null)).toBeNull();
   });
 });

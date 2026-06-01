@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 
 /**
  * Fetch all extracted events for a case, ordered chronologically.
@@ -62,7 +63,13 @@ export async function updateEvent(params: {
   if (params.title !== undefined) updateFields.title = params.title;
   if (params.description !== undefined) updateFields.description = params.description;
   if (params.eventType !== undefined) updateFields.event_type = params.eventType;
-  if (params.eventDate !== undefined) updateFields.event_date = params.eventDate;
+  if (params.eventDate !== undefined) {
+    // Normalize to ISO + reject invalid dates so a malformed/ambiguous date can
+    // never reach the date column (defense-in-depth; the UI uses <input type=date>).
+    const iso = normalizeItalianDateToIso(params.eventDate);
+    if (!iso) return { error: 'Data evento non valida (usare GG/MM/AAAA o AAAA-MM-GG).' };
+    updateFields.event_date = iso;
+  }
   if (params.datePrecision !== undefined) updateFields.date_precision = params.datePrecision;
   if (params.sourceType !== undefined) updateFields.source_type = params.sourceType;
   if (params.diagnosis !== undefined) updateFields.diagnosis = params.diagnosis;
@@ -157,6 +164,10 @@ export async function addManualEvent(params: {
 
   if (!caseData) return { error: 'Caso non trovato' };
 
+  // Validate + normalize the date to ISO (reject malformed/ambiguous).
+  const isoDate = normalizeItalianDateToIso(params.eventDate);
+  if (!isoDate) return { error: 'Data evento non valida (usare GG/MM/AAAA o AAAA-MM-GG).' };
+
   // Get the current max order number
   const { data: lastEvent } = await supabase
     .from('events')
@@ -173,7 +184,7 @@ export async function addManualEvent(params: {
     .insert({
       case_id: params.caseId,
       order_number: nextOrder,
-      event_date: params.eventDate,
+      event_date: isoDate,
       date_precision: params.datePrecision,
       event_type: params.eventType,
       title: params.title,

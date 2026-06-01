@@ -92,3 +92,27 @@ describe('balthazard', () => {
     });
   });
 });
+
+// ── Audit Ondata 1b: invarianti + guard NaN ──
+describe('Audit Ondata 1b — Balthazard invariants', () => {
+  it('is commutative (order of injuries does not change the result)', () => {
+    const a = calculateBalthazard([20, 30, 10]).combinedPercentage;
+    const b = calculateBalthazard([10, 30, 20]).combinedPercentage;
+    const c = calculateBalthazard([30, 10, 20]).combinedPercentage;
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+  });
+
+  it('never exceeds 100% and is >= the largest single injury', () => {
+    expect(calculateBalthazard([100, 100]).combinedPercentage).toBe(100);
+    const r = calculateBalthazard([60, 40, 30]);
+    expect(r.combinedPercentage).toBeLessThanOrEqual(100);
+    expect(r.combinedPercentage).toBeGreaterThanOrEqual(60);
+  });
+
+  it('rejects NaN/Infinity instead of propagating it', () => {
+    expect(calculateBalthazard([NaN, 20]).combinedPercentage).toBe(0);
+    expect(calculateBalthazard([Infinity, 20]).combinedPercentage).toBe(0);
+    expect(calculateBalthazard([NaN, 20]).notes).toMatch(/non valida/i);
+  });
+});

@@ -6,6 +6,7 @@ import {
 } from 'docx';
 import { formatDate } from '@/lib/format';
 import { sourceLabelsExport as sourceLabels } from '@/lib/constants';
+import { sortEventsChrono } from '@/lib/event-order';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -207,7 +208,9 @@ export async function generateTimelineDocx(params: TimelineDocxParams): Promise<
   // ancoraggio temporale non hanno posto qui. Sono comunque visibili nella
   // tabella spese mediche, dove il dato vincolante e' l'importo.
   const SENTINEL_DATE = '1900-01-01';
-  const events = allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE);
+  // Filter undated rows, then sort chronologically (defensive: do not trust the
+  // caller's order — the persisted order_number can be misaligned). bug Lavini.
+  const events = sortEventsChrono(allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE));
 
   const now = new Date().toLocaleDateString('it-IT', {
     year: 'numeric',

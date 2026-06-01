@@ -12,28 +12,40 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Split a markdown table row into trimmed cells, respecting escaped pipes
+ * (`\|` is a literal pipe inside a cell, not a column separator) and
+ * un-escaping them in the output. */
+function splitTableRow(row: string): string[] {
+  return row
+    .split(/(?<!\\)\|/)
+    .slice(1, -1)
+    .map((c) => c.trim().replace(/\\\|/g, '|'));
+}
+
 function convertMarkdownTable(lines: string[]): string {
   // Filter out separator rows (|---|---|)
   const dataRows = lines.filter((l) => !/^\|[\s\-:|]+\|$/.test(l));
   if (dataRows.length === 0) return '';
 
-  let html = '<table class="ocr-table">\n';
-  dataRows.forEach((row, idx) => {
-    const cells = row
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim());
-    const tag = idx === 0 ? 'th' : 'td';
-    if (idx === 0) html += '<thead>\n';
-    if (idx === 1) html += '<tbody>\n';
-    html += '<tr>';
-    for (const cell of cells) {
-      html += `<${tag}>${escapeHtml(cell)}</${tag}>`;
+  const headerCells = splitTableRow(dataRows[0]);
+  const bodyRows = dataRows.slice(1);
+
+  let html = '<table class="ocr-table">\n<thead>\n<tr>';
+  for (const cell of headerCells) html += `<th>${escapeHtml(cell)}</th>`;
+  html += '</tr>\n</thead>\n';
+
+  // Only emit <tbody> when there are body rows — a header-only table previously
+  // produced an unbalanced </tbody> (malformed HTML).
+  if (bodyRows.length > 0) {
+    html += '<tbody>\n';
+    for (const row of bodyRows) {
+      html += '<tr>';
+      for (const cell of splitTableRow(row)) html += `<td>${escapeHtml(cell)}</td>`;
+      html += '</tr>\n';
     }
-    html += '</tr>\n';
-    if (idx === 0) html += '</thead>\n';
-  });
-  html += '</tbody>\n</table>';
+    html += '</tbody>\n';
+  }
+  html += '</table>';
   return html;
 }
 

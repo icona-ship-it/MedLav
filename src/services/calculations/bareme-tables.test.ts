@@ -102,3 +102,27 @@ describe('bareme-tables', () => {
     });
   });
 });
+
+// ── Audit Ondata 1b: micro/macro boundary + guard NaN ──
+describe('Audit Ondata 1b — bareme invariants', () => {
+  it('macropermanenti coefficients are monotonic across the full 10-100 range', () => {
+    let prev = -1;
+    for (let p = 10; p <= 100; p++) {
+      const amt = calculateDannoBiologico(p).estimatedAmount;
+      expect(amt).not.toBeNull();
+      expect(amt!).toBeGreaterThan(prev);
+      prev = amt!;
+    }
+  });
+
+  it('uses micro (Art.139) at 9% and macro (TUN) at 10%', () => {
+    expect(calculateDannoBiologico(9).tableUsed).toMatch(/139|Micro/i);
+    expect(calculateDannoBiologico(10).tableUsed).toMatch(/TUN|Macro/i);
+  });
+
+  it('returns null amount for out-of-range or non-finite percentage', () => {
+    expect(calculateDannoBiologico(0).estimatedAmount).toBeNull();
+    expect(calculateDannoBiologico(101).estimatedAmount).toBeNull();
+    expect(calculateDannoBiologico(NaN).estimatedAmount).toBeNull();
+  });
+});

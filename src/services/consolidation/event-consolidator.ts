@@ -210,8 +210,12 @@ function aggregateIdenticalEventsPerDay(
 
   // Identify groups eligible for aggregation (size >=3).
   // For esame_ematochimico (already a specific category), always aggregate.
-  // For esame/esame_strumentale (broader), require token overlap >=0.3 to
-  // avoid merging "RX gomito" + "RX ginocchio" + "Risonanza colonna".
+  // For esame/esame_strumentale (broader), require token overlap >=0.5.
+  // Threshold is 0.5 (not 0.3): once A6 keeps the modality token (RX/TC/ECO),
+  // distinct districts like "RX torace"/"RX addome"/"RX bacino" share exactly
+  // {modality} → Jaccard 0.333. At 0.3 they wrongly aggregated (3 distinct
+  // exams → 1, dropping findings); at 0.5 only near-identical titles (≈1.0)
+  // aggregate, so distinct-district AND distinct-modality exams stay separate.
   const aggregatedIndices = new Set<number>();
   const replacements: Array<{ insertAt: number; event: ExtractedEvent & { documentId: string } }> = [];
 
@@ -220,20 +224,30 @@ function aggregateIdenticalEventsPerDay(
     const sampleType = events[indices[0]].eventType;
     const groupTitles = indices.map((i) => events[i].title ?? '');
     if (sampleType !== 'esame_ematochimico') {
-      if (!titlesShareKeywords(groupTitles, 0.3)) continue;
+      if (!titlesShareKeywords(groupTitles, 0.5)) continue;
     }
 
-    // Build aggregated event
+    // Build aggregated event. Preserve safety-critical fields from ALL members
+    // (not just the first): requiresVerification is OR-ed, and any member
+    // diagnosis is carried into the description, so a "DA VERIFICARE" flag or a
+    // diagnosis on a non-first member (e.g. a suspicious finding) is never lost.
     const sample = events[indices[0]];
     const eventTypeLabel = sample.eventType === 'esame_ematochimico'
       ? 'Esami ematochimici'
       : sample.eventType === 'esame_strumentale'
         ? 'Esami strumentali'
         : 'Esami';
+    const memberDiagnoses = indices
+      .map((i) => events[i].diagnosis)
+      .filter((d): d is string => Boolean(d && d.trim()));
+    const diagnosisSuffix = memberDiagnoses.length > 0
+      ? ` | Diagnosi/reperti: ${Array.from(new Set(memberDiagnoses)).join('; ')}`
+      : '';
     const aggregated: ExtractedEvent & { documentId: string } = {
       ...sample,
       title: `${eventTypeLabel} routinari (${indices.length} esami raggruppati)`,
-      description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}`,
+      description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}${diagnosisSuffix}`,
+      requiresVerification: indices.some((i) => events[i].requiresVerification),
       sourcePages: dedupSortPages(indices.flatMap((i) => events[i].sourcePages ?? [])),
       confidence: Math.min(...indices.map((i) => events[i].confidence ?? 0)),
       sourceText: indices.map((i) => events[i].sourceText ?? '').filter(Boolean).join(' / ').slice(0, 200),
@@ -264,7 +278,9 @@ function titlesShareKeywords(titles: string[], threshold: number): boolean {
     new Set(
       t.toLowerCase()
         .split(/[^\p{L}\p{N}]+/u)
-        .filter((w) => w.length >= 4),
+        // A6: keep medical abbreviations (RX, TC, ECG…) even though <4 chars so
+        // the imaging modality survives and "RX torace" vs "TC torace" don't merge.
+        .filter((w) => w.length >= 4 || MEDICAL_ABBREVIATIONS.has(w)),
     ),
   );
   for (let i = 0; i < tokenSets.length; i++) {
@@ -400,10 +416,57 @@ function findDiscrepancyInGroup(
 }
 
 /**
+ * Coarse time-of-day bucket ('am' | 'pm') extracted from an event's title and
+ * description. A5 (Lavini): two same-date same-type events that carry DISTINCT
+ * time markers (e.g. "ECG mattina" vs "ECG pomeriggio", or "ore 8" vs "ore 16")
+ * are genuinely different clinical acts and must not be deduplicated into one.
+ *
+ * Returns null when no time marker is found (the common case — then the normal
+ * similarity logic applies unchanged).
+ */
+function getTimeBucket(event: ExtractedEvent): 'am' | 'pm' | null {
+  const text = `${event.title ?? ''} ${event.description ?? ''}`.toLowerCase();
+
+  // Explicit clock time, only with an unambiguous time word ("ore"/"alle"):
+  // "ore 14:30", "alle 16", "ore 8". We deliberately do NOT match a bare "h N"
+  // (collides with lab factor "h 11", height) nor a bare "N:NN" (collides with
+  // titers/ratios "1:20", "1:08") — those caused spurious time buckets and
+  // blocked legitimate same-day merges (clutter).
+  const hourMatch = text.match(/\b(?:ore|alle)\s*(\d{1,2})(?:[:.]\d{2})?\b/);
+  if (hourMatch) {
+    const hour = parseInt(hourMatch[1], 10);
+    if (hour >= 0 && hour <= 23) return hour < 12 ? 'am' : 'pm';
+  }
+
+  // Time-of-day words. If BOTH a morning and an afternoon/evening marker are
+  // present ("eseguito mattina e pomeriggio"), the event spans both → ambiguous,
+  // return null so it isn't wrongly kept apart from / merged with a single-period
+  // event on the basis of one bucket.
+  const isAm = /\b(mattin[oae]|mattutin[oa]|antimeridian[oa])\b/.test(text);
+  const isPm = /\b(pomerigg(?:io|i)|pomeridian[oa]|ser[ae]|seral[ei]|nott[ee]|notturn[oa]|mezzogiorno)\b/.test(text);
+  if (isAm && isPm) return null;
+  if (isAm) return 'am';
+  if (isPm) return 'pm';
+
+  return null;
+}
+
+/** A5: true when both events carry a time marker and the markers disagree. */
+function hasConflictingTimeMarker(a: ExtractedEvent, b: ExtractedEvent): boolean {
+  const ta = getTimeBucket(a);
+  const tb = getTimeBucket(b);
+  return ta !== null && tb !== null && ta !== tb;
+}
+
+/**
  * Heuristic check if two events refer to the same clinical event.
  * Uses title similarity and description overlap.
  */
 export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
+  // A5: same-day events at different times of day (mattina vs pomeriggio,
+  // ore 8 vs ore 16) are distinct clinical acts — never merge them.
+  if (hasConflictingTimeMarker(a, b)) return false;
+
   // Same type and date is already checked by caller
   const titleSimilarity = calculateSimilarity(
     a.title.toLowerCase(),
@@ -431,9 +494,15 @@ export function isSimilarEvent(a: ExtractedEvent, b: ExtractedEvent): boolean {
 /**
  * Jaccard similarity on word sets, enhanced with medical synonym normalization.
  */
-// Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars
+// Medical abbreviations that must be kept in similarity calculation despite being ≤3 chars.
+// A6 (Lavini): without these the imaging-modality token (RX, TC, ECO…) is dropped
+// for being <4 chars, so "RX torace" vs "TC torace" collapse to {torace} and merge
+// even though they are different exams. The modality MUST survive tokenization.
 const MEDICAL_ABBREVIATIONS = new Set([
-  'ecg', 'tac', 'rmn', 'pcr', 'inr', 'ptt', 'tsh', 'ft3', 'ft4', 'pet', 'eeg', 'emg',
+  // Imaging / functional modalities (A6: RX, ECO, CT, TC, NMR, RM added)
+  'ecg', 'tac', 'rmn', 'rm', 'rx', 'eco', 'ct', 'tc', 'nmr', 'pet', 'eeg', 'emg',
+  // Lab / clinical
+  'pcr', 'inr', 'ptt', 'tsh', 'ft3', 'ft4',
   'moc', 'hba', 'ves', 'hcv', 'hiv', 'hbv', 'ldl', 'hdl', 'bnp', 'cpk', 'got', 'gpt',
   'alt', 'ast', 'gfr', 'psa', 'cea', 'afp', 'ldh', 'crp', 'wbc', 'rbc', 'plt', 'hgb',
   'mcv', 'mch', 'rdw', 'mpv', 'fev', 'fvc', 'dlco', 'asa', 'bmi', 'nyha',
@@ -463,16 +532,15 @@ function normalizeMedicalWord(word: string): string {
 }
 
 function calculateSimilarity(a: string, b: string): number {
-  const wordsA = new Set(
-    a.split(/\s+/)
-      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
-      .map(normalizeMedicalWord),
-  );
-  const wordsB = new Set(
-    b.split(/\s+/)
-      .filter((w) => w.length > 3 || MEDICAL_ABBREVIATIONS.has(w))
-      .map(normalizeMedicalWord),
-  );
+  // Unicode-aware tokenizer (split on any non-letter/digit), consistent with
+  // titlesShareKeywords. The old /\s+/ left punctuation attached ("ecg,") so a
+  // comma/em-dash broke word matching and diverged from the aggregation path.
+  const tokenize = (s: string) =>
+    s.split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length > 0 && (w.length > 3 || MEDICAL_ABBREVIATIONS.has(w)))
+      .map(normalizeMedicalWord);
+  const wordsA = new Set(tokenize(a));
+  const wordsB = new Set(tokenize(b));
 
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;

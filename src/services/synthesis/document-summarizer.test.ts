@@ -17,7 +17,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { summarizeDocument, summarizeDocumentBatch, OCR_PER_DOC_SUMMARY_LIMIT, DOC_SUMMARY_MAX_CHARS } from './document-summarizer';
+import { summarizeDocument, summarizeDocumentBatch, buildTailPrioritizedOcrInput, OCR_PER_DOC_SUMMARY_LIMIT, DOC_SUMMARY_MAX_CHARS } from './document-summarizer';
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamMistralChat = vi.mocked(streamMistralChat);
@@ -89,6 +89,61 @@ describe('document-summarizer', () => {
       const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
       // The OCR text in the prompt should be truncated
       expect(userMessage?.content.length).toBeLessThanOrEqual(OCR_PER_DOC_SUMMARY_LIMIT + 200); // +200 for prompt prefix
+    });
+  });
+
+  describe('buildTailPrioritizedOcrInput — A7 tail priority', () => {
+    it('returns text unchanged when within the limit', () => {
+      const text = 'Documento breve';
+      expect(buildTailPrioritizedOcrInput(text, 1000)).toBe(text);
+    });
+
+    it('never exceeds the limit', () => {
+      const text = 'Z'.repeat(5000);
+      expect(buildTailPrioritizedOcrInput(text, 1000).length).toBeLessThanOrEqual(1000);
+    });
+
+    it('preserves the END of the document (discharge / final therapy)', () => {
+      const head = 'INIZIO '.repeat(2000);
+      const tail = 'LETTERA DI DIMISSIONE: terapia domiciliare enoxaparina, follow-up a 30 giorni. FINE';
+      const full = head + 'X'.repeat(40_000) + tail;
+      const result = buildTailPrioritizedOcrInput(full, OCR_PER_DOC_SUMMARY_LIMIT);
+      expect(result).toContain('LETTERA DI DIMISSIONE');
+      expect(result).toContain('follow-up a 30 giorni');
+      expect(result.endsWith('FINE')).toBe(true);
+    });
+
+    it('maximizes the head with a bounded tail reserve (minimizes middle-drop)', () => {
+      const full = 'A'.repeat(90_000);
+      const result = buildTailPrioritizedOcrInput(full, 45_000);
+      const markerIdx = result.indexOf('[...PORZIONE');
+      const beforeMarker = result.slice(0, markerIdx);
+      const afterMarker = result.slice(result.indexOf(']', markerIdx) + 1).trim();
+      // Head gets most of the budget; tail is a bounded reserve (~12K).
+      expect(beforeMarker.length).toBeGreaterThan(25_000);
+      expect(beforeMarker.length).toBeGreaterThan(afterMarker.length);
+      expect(afterMarker.length).toBeLessThanOrEqual(12_000);
+    });
+
+    it('keeps mid-document content within the head budget (operative report at ~30K)', () => {
+      // A 60-page-equivalent doc; operative report marker at offset ~30K must
+      // survive in the head (the regression the rebalance fixes).
+      const pre = 'X'.repeat(30_000);
+      const opReport = 'DESCRIZIONE OPERATORIA: osteosintesi piatto tibiale.';
+      const mid = 'Y'.repeat(20_000);
+      const tail = 'LETTERA DI DIMISSIONE: terapia domiciliare, follow-up 30gg.';
+      const full = pre + opReport + mid + tail;
+      const result = buildTailPrioritizedOcrInput(full, 45_000);
+      expect(result).toContain('DESCRIZIONE OPERATORIA'); // mid-doc preserved in head
+      expect(result).toContain('LETTERA DI DIMISSIONE');   // tail preserved
+    });
+
+    it('keeps both head and tail with an omission marker between', () => {
+      const full = 'HEAD' + 'm'.repeat(60_000) + 'TAILEND';
+      const result = buildTailPrioritizedOcrInput(full, 20_000);
+      expect(result.startsWith('HEAD')).toBe(true);
+      expect(result.endsWith('TAILEND')).toBe(true);
+      expect(result).toContain('PORZIONE CENTRALE OMESSA');
     });
   });
 

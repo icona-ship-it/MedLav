@@ -108,4 +108,6 @@ export interface ReportRow {
   report_status: string;
   synthesis: string | null;
   updated_at?: string;
+  /** Per-section review state + generation info (JSONB). See ReportGenerationMetadata. */
+  generation_metadata?: import('@/db/schema/reports').ReportGenerationMetadata | null;
 }

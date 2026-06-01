@@ -62,3 +62,32 @@ export function isValidItalianDate(s: string | null | undefined): boolean {
 
   return isValidYMD(year, month, day);
 }
+
+/**
+ * Normalize an Italian-style or ISO date string to ISO YYYY-MM-DD.
+ * Returns null if the input is not a valid real calendar date — callers should
+ * treat null as "reject" so a malformed/ambiguous date never reaches the DB.
+ * Italian DD/MM is assumed (day first), matching the IT convention.
+ */
+export function normalizeItalianDateToIso(s: string | null | undefined): string | null {
+  if (!s || typeof s !== 'string') return null;
+  const trimmed = s.trim();
+
+  const dmy = DD_MM_YYYY_RE.exec(trimmed);
+  if (dmy) {
+    const day = parseInt(dmy[1], 10);
+    const month = parseInt(dmy[2], 10);
+    const year = parseInt(dmy[3], 10);
+    if (!isValidYMD(year, month, day)) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  const iso = ISO_RE.exec(trimmed);
+  if (iso) {
+    const year = parseInt(iso[1], 10);
+    const month = parseInt(iso[2], 10);
+    const day = parseInt(iso[3], 10);
+    if (!isValidYMD(year, month, day)) return null;
+    return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  }
+  return null;
+}

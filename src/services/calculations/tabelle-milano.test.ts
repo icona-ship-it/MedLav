@@ -156,3 +156,21 @@ describe('tabelle-milano', () => {
     });
   });
 });
+
+// ── Audit Ondata 1b: monotonicità + clamp + guard NaN ──
+describe('Audit Ondata 1b — Milano invariants', () => {
+  it('is monotonic increasing in percentage and decreasing in age', () => {
+    expect(calculateMilano(50, 35).estimatedAmount).toBeGreaterThan(calculateMilano(20, 35).estimatedAmount);
+    expect(calculateMilano(50, 70).estimatedAmount).toBeLessThan(calculateMilano(50, 20).estimatedAmount);
+  });
+
+  it('clamps age to [1,100]', () => {
+    expect(calculateMilano(50, 0).estimatedAmount).toBe(calculateMilano(50, 1).estimatedAmount);
+    expect(calculateMilano(50, 200).estimatedAmount).toBe(calculateMilano(50, 100).estimatedAmount);
+  });
+
+  it('returns 0 for non-finite percentage or age (no bogus euro figure)', () => {
+    expect(calculateMilano(NaN, 35).estimatedAmount).toBe(0);
+    expect(calculateMilano(50, NaN).estimatedAmount).toBe(0);
+  });
+});

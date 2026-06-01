@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateReport } from './report-validator';
+import { validateReport, getBlockingIssues } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
@@ -454,6 +454,252 @@ Breve. 01/01/1900.`;
       const result = validateReport(report, 5, context);
 
       expect(result.valid).toBe(true);
+    });
+  });
+
+  // ── A3: blocking validator ──────────────────────────────────────────
+
+  describe('A3 — low event coverage', () => {
+    // buildFullReport contains dates 15.01–15.05.2024. Passing events with
+    // dates that never appear in the report drives coverage to 0%.
+    const grossFailureContext: ReportValidationContext = {
+      events: [
+        { orderNumber: 1, eventDate: '2099-01-15' },
+        { orderNumber: 2, eventDate: '2099-02-15' },
+        { orderNumber: 3, eventDate: '2099-03-15' },
+        { orderNumber: 4, eventDate: '2099-04-15' },
+        { orderNumber: 5, eventDate: '2099-05-15' },
+        { orderNumber: 6, eventDate: '2099-06-15' },
+      ],
+    };
+
+    it('should HARD-BLOCK on gross failure (near-zero coverage with enough events)', () => {
+      const report = buildFullReport();
+      const result = validateReport(report, 6, grossFailureContext);
+
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('error');
+      expect(result.eventCoverage).toBeLessThan(10);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should only WARN (not block) when too few dated events to trust the proxy', () => {
+      // 4 events at 0% coverage — below the 5-event floor → warning, not block.
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2099-01-15' },
+          { orderNumber: 2, eventDate: '2099-02-15' },
+          { orderNumber: 3, eventDate: '2099-03-15' },
+          { orderNumber: 4, eventDate: '2099-04-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 4, context);
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('warning');
+      // valid stays true (no blocking error from coverage)
+      expect(result.issues.filter((i) => i.severity === 'error' && i.type === 'low_event_coverage')).toHaveLength(0);
+    });
+
+    it('should WARN (not block) in the 10-30% soft band', () => {
+      // 5 events, ~20% covered: 1 of 5 dates present in the report.
+      // buildFullReport contains 15.01.2024; the rest (2099) are absent → 1/5 = 20%.
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2099-02-15' },
+          { orderNumber: 3, eventDate: '2099-03-15' },
+          { orderNumber: 4, eventDate: '2099-04-15' },
+          { orderNumber: 5, eventDate: '2099-05-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      const coverageIssues = result.issues.filter((i) => i.type === 'low_event_coverage');
+      expect(coverageIssues).toHaveLength(1);
+      expect(coverageIssues[0].severity).toBe('warning');
+      expect(result.eventCoverage).toBeGreaterThanOrEqual(10);
+      expect(result.eventCoverage).toBeLessThan(30);
+    });
+
+    it('should not flag coverage when events are well represented', () => {
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-15' },
+          { orderNumber: 3, eventDate: '2024-03-15' },
+          { orderNumber: 4, eventDate: '2024-04-15' },
+          { orderNumber: 5, eventDate: '2024-05-15' },
+        ],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('A3 — role-mandatory sections', () => {
+    const baseEvents = [
+      { orderNumber: 1, eventDate: '2024-01-15' },
+      { orderNumber: 2, eventDate: '2024-02-15' },
+      { orderNumber: 3, eventDate: '2024-03-15' },
+      { orderNumber: 4, eventDate: '2024-04-15' },
+      { orderNumber: 5, eventDate: '2024-05-15' },
+    ];
+
+    it('should pass when all required sections are present with content', () => {
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Dati della Documentazione Sanitaria', 'Epicrisi', 'Conclusioni'],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should block when a role-mandatory section is absent', () => {
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Considerazioni Medico-Legali'],
+      };
+      const result = validateReport(buildFullReport(), 5, context);
+      const missing = result.issues.filter((i) => i.type === 'missing_section');
+      expect(missing.length).toBeGreaterThanOrEqual(1);
+      expect(missing[0].severity).toBe('error');
+      expect(missing[0].message).toContain('Considerazioni Medico-Legali');
+      expect(result.valid).toBe(false);
+    });
+
+    it('should block when a required section heading exists but is empty', () => {
+      const padding = Array.from({ length: 120 }, (_, i) => `parola${i}`).join(' ');
+      const report = `## Dati della Documentazione Sanitaria
+In data 15.01.2024 il paziente veniva visitato. ${padding}
+
+## Visita Clinica
+
+## Epicrisi
+${padding}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Visita Clinica'],
+      };
+      const result = validateReport(report, 5, context);
+      const missing = result.issues.filter((i) => i.type === 'missing_section');
+      expect(missing.some((m) => m.message.includes('vuota') && m.message.includes('Visita Clinica'))).toBe(true);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should not run the required-section check when titles are not provided', () => {
+      const context: ReportValidationContext = { events: baseEvents };
+      const result = validateReport(buildFullReport(), 5, context);
+      // Only the generic REQUIRED_SECTIONS check runs (both present here)
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+    });
+
+    // Post-audit regression: a section whose CONTENT starts with its own sub-heading
+    // (the rendered intestazione begins with "### Dati del professionista …") was
+    // wrongly reported empty because body-extraction stopped at the first '#'.
+    // That would have blocked EVERY sectional report.
+    // Distinct-word padding: long enough to clear MIN_WORD_COUNT and varied so it
+    // never trips duplicate_content.
+    const pad = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p}${i}`).join(' ');
+
+    it('does NOT flag a section whose content starts with a ### sub-heading', () => {
+      const report = `## Intestazione
+
+### Dati del professionista incaricato
+Dott.ssa Anna Belli — Medico legale, Specialista in Medicina Legale
+
+### Dati del periziando
+**Nome e cognome**: M.R.
+
+## Dati della Documentazione Sanitaria
+In data 15.03.2024 il paziente veniva visitato. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Intestazione', 'Dati della Documentazione Sanitaria', 'Epicrisi'],
+      };
+      const result = validateReport(report, 5, context);
+      expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('still flags a TRULY empty section (heading immediately followed by next section)', () => {
+      const report = `## Intestazione
+
+## Dati della Documentazione Sanitaria
+In data 15.03.2024. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: baseEvents,
+        requiredSectionTitles: ['Intestazione'],
+      };
+      const result = validateReport(report, 5, context);
+      expect(result.issues.some((i) => i.type === 'missing_section' && i.message.includes('vuota'))).toBe(true);
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('A3 — coverage counts extended Italian prose dates (post-audit)', () => {
+    const pad = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p}${i}`).join(' ');
+    it('does not block a narrative report that writes dates in prose', () => {
+      // 6 events; report cites every date ONLY in extended Italian prose.
+      const report = `## Dati della Documentazione Sanitaria
+Il 15 gennaio 2024 visita iniziale. Il 20 febbraio 2024 controllo. Il 5 marzo 2024 esame.
+Il 10 aprile 2024 intervento. Il 18 maggio 2024 dimissione. Il 25 giugno 2024 follow-up. ${pad(300, 'clin')}
+
+## Epicrisi
+${pad(300, 'epi')}`;
+      const context: ReportValidationContext = {
+        events: [
+          { orderNumber: 1, eventDate: '2024-01-15' },
+          { orderNumber: 2, eventDate: '2024-02-20' },
+          { orderNumber: 3, eventDate: '2024-03-05' },
+          { orderNumber: 4, eventDate: '2024-04-10' },
+          { orderNumber: 5, eventDate: '2024-05-18' },
+          { orderNumber: 6, eventDate: '2024-06-25' },
+        ],
+      };
+      const result = validateReport(report, 6, context);
+      expect(result.eventCoverage).toBeGreaterThanOrEqual(80);
+      expect(result.issues.filter((i) => i.type === 'low_event_coverage')).toHaveLength(0);
+    });
+  });
+
+  describe('A3 — getBlockingIssues policy', () => {
+    it('should return blocking errors for a report with a sentinel date', () => {
+      const report = buildFullReport().replace('In data 15.01.2024', 'In data 01/01/1900');
+      const validation = validateReport(report, 5);
+      const blocking = getBlockingIssues(validation);
+      expect(blocking.some((i) => i.type === 'sentinel_date_leak')).toBe(true);
+      expect(blocking.every((i) => i.severity === 'error')).toBe(true);
+    });
+
+    it('should return no blocking issues for a clean report', () => {
+      const validation = validateReport(buildFullReport(), 5);
+      expect(getBlockingIssues(validation)).toHaveLength(0);
+    });
+
+    it('should exclude non-blocking error types (duplicate_content) from blocking set', () => {
+      // Three identical 60-word blocks → duplicate_content error (3+ repeats),
+      // which is intentionally NOT in the blocking policy.
+      const block = Array.from({ length: 60 }, (_, i) => `termine${i % 7}clinico`).join(' ');
+      const report = `## Dati della Documentazione Sanitaria
+${block}
+${block}
+${block}
+
+## Epicrisi
+${block}`;
+      const validation = validateReport(report, 5);
+      const dup = validation.issues.filter((i) => i.type === 'duplicate_content');
+      expect(dup.length).toBeGreaterThanOrEqual(1);
+      expect(getBlockingIssues(validation).some((i) => i.type === 'duplicate_content')).toBe(false);
     });
   });
 });

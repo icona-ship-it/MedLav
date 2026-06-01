@@ -32,6 +32,22 @@ function mockChat(content: string) {
   mockStreamChat.mockResolvedValue({ content, usage: emptyUsage });
 }
 
+// A3: the post-generation validator now blocks unsignable reports (missing
+// required sections, <500 words, <30% event coverage). These unit tests target
+// prompt construction / return shape, not report quality, so wrap their marker
+// text in a structurally-valid report that satisfies the validator.
+function validReport(markerBody: string): string {
+  const padA = Array.from({ length: 60 }, (_, i) =>
+    `frase clinica numero ${i} di contesto narrativo medico-legale documentato`).join(' ');
+  const padB = Array.from({ length: 60 }, (_, i) =>
+    `osservazione peritale numero ${i} relativa al decorso clinico complessivo`).join(' ');
+  return `## Dati della Documentazione Sanitaria
+In data 15/01/2024 il paziente veniva sottoposto a visita. ${markerBody} ${padA}
+
+## Epicrisi
+${padB}`;
+}
+
 function buildParams(overrides?: Partial<SynthesisParams>): SynthesisParams {
   return {
     caseType: 'ortopedica',
@@ -70,10 +86,7 @@ describe('synthesis-service', () => {
   describe('generateSynthesis', () => {
     it('should return synthesis for valid events and case data', async () => {
       // Arrange
-      const reportText =
-        '## Riassunto del caso\nPaziente M.R. visitato.\n\n' +
-        '## Cronologia medico-legale\n1. 15/01/2024 — Prima visita\n\n' +
-        '## Elementi di rilievo\nNessuna anomalia.';
+      const reportText = validReport('Riassunto del caso. Cronologia medico-legale: 15/01/2024 prima visita.');
       mockChat(reportText);
 
       // Act
@@ -88,10 +101,7 @@ describe('synthesis-service', () => {
 
     it('should return synthesis even with no events', async () => {
       // Arrange
-      const reportText =
-        '## Riassunto del caso\nNon sono presenti eventi clinici.\n\n' +
-        '## Cronologia medico-legale\nNessun evento.\n\n' +
-        '## Elementi di rilievo\nDocumentazione insufficiente.';
+      const reportText = validReport('Non sono presenti eventi clinici nella documentazione insufficiente.');
       mockChat(reportText);
 
       // Act
@@ -104,10 +114,7 @@ describe('synthesis-service', () => {
 
     it('should use CTU role prompts for ctu case role', async () => {
       // Arrange
-      const ctuReport =
-        '## Riassunto del caso\nA parere di questo CTU...\n\n' +
-        '## Cronologia medico-legale\n1. Evento\n\n' +
-        '## Elementi di rilievo\nAnalisi.';
+      const ctuReport = validReport('A parere di questo CTU il quadro clinico risulta documentato.');
       mockChat(ctuReport);
 
       // Act
@@ -125,10 +132,7 @@ describe('synthesis-service', () => {
 
     it('should use CTP role prompts for ctp case role', async () => {
       // Arrange
-      const ctpReport =
-        '## Riassunto del caso\nRisulta evidente che...\n\n' +
-        '## Cronologia medico-legale\n1. Evento\n\n' +
-        '## Elementi di rilievo\nProfili di responsabilità.';
+      const ctpReport = validReport('Risulta evidente che i profili di responsabilità vanno valutati.');
       mockChat(ctpReport);
 
       // Act
@@ -156,10 +160,7 @@ describe('synthesis-service', () => {
 
     it('should include calculations when provided', async () => {
       // Arrange
-      const reportText =
-        '## Riassunto del caso\nPaziente con ITT.\n\n' +
-        '## Cronologia medico-legale\n1. Evento\n\n' +
-        '## Elementi di rilievo\nCalcoli inclusi.';
+      const reportText = validReport('Paziente con ITT stimata; calcoli inclusi nel report.');
       mockChat(reportText);
 
       // Act

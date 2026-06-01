@@ -21,6 +21,7 @@ import {
   extractEventsFromChunk,
   prepareExtractionChunks,
   inferMissingDates,
+  normalizeDateFormat,
 } from './extraction-service';
 import type { ExtractedEvent } from './extraction-schemas';
 import { streamMistralChat } from '@/lib/mistral/client';
@@ -404,6 +405,33 @@ describe('extraction-service', () => {
       expect(result[0].confidence).toBeLessThanOrEqual(40);
       expect(result[0].confidence).toBeGreaterThanOrEqual(10);
     });
+
+    // ── Ondata 9 (bug Lavini): donor ambiguo non deve inventare una data ──
+    it('does NOT infer when the page has MULTIPLE distinct dates (ambiguity → no fabricated date)', () => {
+      // Pagina con ricovero (10.01) + esame senza data + dimissione (20.01).
+      // Il vecchio codice assegnava la dimissione (più recente) all'esame: data
+      // SBAGLIATA in un timeline forense. Ora resta sentinella (perito decide).
+      const events = [
+        makeTestEvent({ eventDate: '2024-01-10', sourcePages: [5], eventType: 'ricovero', title: 'Ricovero' }),
+        makeTestEvent({ eventDate: '1900-01-01', sourcePages: [5], eventType: 'esame', title: 'Esami ematochimici senza data' }),
+        makeTestEvent({ eventDate: '2024-01-20', sourcePages: [5], title: 'Dimissione' }),
+      ];
+
+      const result = inferMissingDates(events);
+      const undated = result.find((e) => e.title.includes('senza data'))!;
+      expect(undated.eventDate).toBe('1900-01-01'); // NON eredita la dimissione
+    });
+
+    it('still infers when the page is unambiguous (single date among donors)', () => {
+      const events = [
+        makeTestEvent({ eventDate: '2024-03-15', sourcePages: [7], title: 'Visita' }),
+        makeTestEvent({ eventDate: '2024-03-15', sourcePages: [7], title: 'Esame stesso giorno' }),
+        makeTestEvent({ eventDate: '1900-01-01', sourcePages: [7], title: 'Referto senza data' }),
+      ];
+      const result = inferMissingDates(events);
+      const undated = result.find((e) => e.title.includes('senza data'))!;
+      expect(undated.eventDate).toBe('2024-03-15'); // pagina mono-data → eredita
+    });
   });
 
   describe('prepareExtractionChunks', () => {
@@ -442,5 +470,38 @@ describe('extraction-service', () => {
         expect(chunk.length).toBeLessThanOrEqual(12_000);
       }
     });
+  });
+});
+
+// ── Ondata 2 (audit): normalizeDateFormat valida la data reale, non solo il formato ──
+describe('Audit Ondata 2 — normalizeDateFormat', () => {
+  it('passes through a valid ISO date', () => {
+    expect(normalizeDateFormat('2024-03-15')).toBe('2024-03-15');
+  });
+
+  it('converts a valid European date to ISO', () => {
+    expect(normalizeDateFormat('15.03.2024')).toBe('2024-03-15');
+    expect(normalizeDateFormat('5/3/2024')).toBe('2024-03-05');
+  });
+
+  it('rejects a format-valid but NON-existent ISO date (no silent rollover)', () => {
+    // 2024-02-31 would roll over to 2024-03-02 via new Date(); must become null→sentinel.
+    expect(normalizeDateFormat('2024-02-31')).toBeNull();
+    expect(normalizeDateFormat('2024-13-01')).toBeNull(); // invalid month
+    expect(normalizeDateFormat('2024-00-10')).toBeNull(); // month 0
+    expect(normalizeDateFormat('2023-02-29')).toBeNull(); // non-leap year
+  });
+
+  it('accepts Feb 29 on a leap year', () => {
+    expect(normalizeDateFormat('2024-02-29')).toBe('2024-02-29');
+  });
+
+  it('rejects an impossible European date (31.02)', () => {
+    expect(normalizeDateFormat('31.02.2024')).toBeNull();
+  });
+
+  it('returns null for unrecognizable input', () => {
+    expect(normalizeDateFormat('not a date')).toBeNull();
+    expect(normalizeDateFormat('2024')).toBeNull();
   });
 });
