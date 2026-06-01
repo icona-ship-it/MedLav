@@ -6,8 +6,9 @@ import {
   shouldSplitSynthesis,
 } from '@/services/synthesis/synthesis-service';
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
-import { calculateMedicoLegalPeriods, calculationsToITTITPSegments, formatITTITPTable } from '@/services/calculations/medico-legal-calc';
+import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -401,22 +402,19 @@ export function planReportSections(
 const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
 
 /**
- * A2: build placeholder content, appending the computed ITT/ITP table for
- * sections where the perito assesses temporary disability. The table is labelled
- * as a proposal to verify — it surfaces the arithmetic without making the
- * medico-legal judgment (which stays the perito's).
+ * A2 + B3: build placeholder content, embedding the ITT/ITP DETERMINISTIC
+ * SENTINEL for sections where the perito assesses temporary disability. The
+ * sentinel is expanded at read time (UI + export) from the CURRENT events, so
+ * the table is ALWAYS in sync — if the perito later corrects an event, the
+ * table updates by itself, no regeneration. The arithmetic is a proposal to
+ * verify; the medico-legal judgment stays the perito's.
  */
-export function buildPlaceholderContent(
-  spec: SectionSpec,
-  synthesisParams: SynthesisParams,
-): string {
+export function buildPlaceholderContent(spec: SectionSpec): string {
   const base = spec.placeholderText ?? '';
-  if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id) || !synthesisParams.calculations) {
+  if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id)) {
     return base;
   }
-  const table = formatITTITPTable(calculationsToITTITPSegments(synthesisParams.calculations));
-  if (!table) return base;
-  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${table}`;
+  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}`;
 }
 
 export async function generateSectionStep(
@@ -430,7 +428,7 @@ export async function generateSectionStep(
     return {
       id: spec.id,
       title: spec.title,
-      content: buildPlaceholderContent(spec, synthesisParams),
+      content: buildPlaceholderContent(spec),
       contextSummary: '',
       wordCount: 0,
     };
