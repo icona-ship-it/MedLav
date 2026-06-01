@@ -115,6 +115,9 @@ export interface PeriziaMetadata {
   anamnesiPatologicaProssima?: string; // patologia attuale correlata all'evento
   anamnesiFarmacologica?: string;      // terapie/farmaci
   anamnesiLavorativa?: string;         // anamnesi lavorativa/occupazionale
+  // Selettore sezioni report: id (canonici) delle sezioni OPZIONALI disattivate dal
+  // perito. Assente/vuoto = tutte le sezioni. Le sezioni mandatory non sono mai escluse.
+  excludedReportSections?: string[];
 }
 
 // API Response

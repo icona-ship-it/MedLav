@@ -7,6 +7,7 @@ import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
+import { getSelectableSections } from '@/services/synthesis/section-catalog';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
 import { z } from 'zod';
 import {
@@ -58,6 +59,7 @@ const periziaMetadataSchema = z.object({
   anamnesiPatologicaProssima: z.string().max(10000).optional(),
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
+  excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({
@@ -455,4 +457,31 @@ export async function deleteCase(caseId: string) {
 
   revalidateCases(user.id);
   return { success: true };
+}
+
+/**
+ * Elenco delle sezioni selezionabili per il report di un caso (selettore
+ * "Sezioni del report" nel form info-perizia). Restituisce id + titolo + flag
+ * mandatory in base a ruolo/modulo del caso.
+ */
+export async function getReportSectionOptions(
+  caseId: string,
+): Promise<{ sections: Array<{ id: string; title: string; mandatory: boolean }>; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { sections: [], error: 'Non autenticato' };
+
+  const { data: caseRow } = await supabase
+    .from('cases')
+    .select('case_role, module_id')
+    .eq('id', caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseRow) return { sections: [], error: 'Caso non trovato' };
+
+  const sections = getSelectableSections(
+    (caseRow.case_role as CaseRole) ?? 'ctu',
+    (caseRow.module_id as string | null) ?? undefined,
+  );
+  return { sections };
 }
