@@ -66,6 +66,9 @@ export const events = pgTable('events', {
   sourcePages: text('source_pages'), // JSON array di numeri pagina es. "[1, 2]"
   extractionPass: extractionPassEnum('extraction_pass'), // 'both' | 'pass1_only' | 'pass2_only'
   isDeleted: boolean('is_deleted').notNull().default(false), // soft delete
+  // Inclusione nella cronologia esportata. Default true (mai nascondere in
+  // automatico). Il perito esclude esplicitamente; l'evento resta nella lista.
+  isRelevantForChronology: boolean('is_relevant_for_chronology').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

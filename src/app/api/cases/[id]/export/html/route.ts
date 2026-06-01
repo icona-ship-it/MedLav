@@ -8,6 +8,7 @@ import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { getModule } from '@/types/modules';
 import type { ModuleId } from '@/types/modules';
 import { logAccess } from '@/lib/audit';
@@ -96,16 +97,22 @@ export async function GET(
         metadata: { format: 'html-timeline', anonymized: shouldAnonymizeTimeline },
       });
 
-      const timelineEvents = data.events.map((e: Record<string, unknown>) => ({
-        order_number: (e.order_number as number) ?? 0,
-        event_date: (e.event_date as string) ?? '',
-        event_type: (e.event_type as string) ?? 'altro',
-        title: (e.title as string) ?? '',
-        description: (e.description as string) ?? '',
-        source_type: (e.source_type as string) ?? 'altro',
-        doctor: (e.doctor as string | null) ?? null,
-        facility: (e.facility as string | null) ?? null,
-      }));
+      const timelineEvents = data.events
+        .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
+        .map((e: Record<string, unknown>) => ({
+          order_number: (e.order_number as number) ?? 0,
+          event_date: (e.event_date as string) ?? '',
+          event_type: (e.event_type as string) ?? 'altro',
+          title: (e.title as string) ?? '',
+          description: (e.description as string) ?? '',
+          source_type: (e.source_type as string) ?? 'altro',
+          doctor: (e.doctor as string | null) ?? null,
+          facility: (e.facility as string | null) ?? null,
+          confidence: typeof e.confidence === 'number' ? e.confidence : undefined,
+          requires_verification: e.requires_verification === true,
+          diagnosis: (e.diagnosis as string | null) ?? null,
+          is_relevant_for_chronology: e.is_relevant_for_chronology !== false,
+        }));
 
       const timelineHtml = generateTimelineHtml({
         caseCode: data.caseData.code as string,

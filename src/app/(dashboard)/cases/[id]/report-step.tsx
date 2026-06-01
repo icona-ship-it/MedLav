@@ -488,7 +488,7 @@ export function ReportStep({
       {/* UX Ondata 3-IA Fase A: support panel drawers (additivi).
           Wrappa i tab esistenti in Sheet a destra, attivati da bottoni in toolbar. */}
       <Sheet open={eventsDrawerOpen} onOpenChange={setEventsDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-3xl lg:max-w-4xl overflow-y-auto">
           <SheetHeader className="pb-3 border-b">
             <SheetTitle>Eventi clinici</SheetTitle>
           </SheetHeader>

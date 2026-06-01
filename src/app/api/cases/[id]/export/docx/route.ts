@@ -85,6 +85,8 @@ export async function GET(
           facility: (e.facility as string | null) ?? null,
           confidence: typeof e.confidence === 'number' ? e.confidence : undefined,
           requires_verification: e.requires_verification === true,
+          diagnosis: (e.diagnosis as string | null) ?? null,
+          is_relevant_for_chronology: e.is_relevant_for_chronology !== false,
         }));
 
       // For expenses_only, use dedicated expense export if analysis data is available

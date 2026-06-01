@@ -30,6 +30,7 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0026_rls_user_owned.sql` | **APPLICATA 2026-06-01** (testata in transazione BEGIN…ROLLBACK come ruolo `authenticated` prima del COMMIT). NB: il file conteneva 2 bug — colonne inesistenti `case_shares.shared_with_user_id` e `report_ratings.case_id` — **corretti** prima dell'applicazione. | si (`DROP POLICY IF EXISTS` + `CREATE POLICY`, ENABLE RLS idempotente) | verificata via `pg_policies`: ogni policy SELECT/ALL filtra per proprietario, nessun leak |
 | `0027_audit_archive.sql` | **APPLICATA 2026-06-01** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | verificata: `to_regclass('public.audit_archive')` non-null, RLS=true |
 | `0028_stripe_event_idempotency.sql` | **APPLICATA 2026-06-01** (+ `ALTER TABLE … ENABLE ROW LEVEL SECURITY` aggiunta). Dedup anti-doppio-accredito ora ATTIVO. | si (`CREATE TABLE IF NOT EXISTS`) | verificata: tabella esiste, RLS=true |
+| `0029_add_event_chronology_relevance.sql` | **DA APPLICARE** — colonna `events.is_relevant_for_chronology` (default true) per il toggle "Includi nella cronologia". Senza, il toggle non persiste (ma il default true = comportamento attuale, niente rotture). | si (`ADD COLUMN IF NOT EXISTS … DEFAULT true`) | usare `verify_0029_event_chronology_relevance.sql` |
 
 ## Procedura per future migration
 

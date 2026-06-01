@@ -22,7 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { updateEvent, deleteEvent } from '../../actions';
-import { EVENT_TYPES } from '@/lib/constants';
+import { EVENT_TYPES, isClinicalEvent } from '@/lib/constants';
 import {
   formatDate, confidenceColor, confidenceLabel,
 } from '@/lib/format';
@@ -85,6 +85,24 @@ export function EventCard({
   const [isPending, startTransition] = useTransition();
   const [isVerifying, setIsVerifying] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Inclusione nella cronologia esportata (solo per eventi clinici: i non-clinici
+  // sono comunque esclusi per categoria). Default incluso.
+  const isClinical = isClinicalEvent(event.event_type);
+  const [includeInChrono, setIncludeInChrono] = useState(event.is_relevant_for_chronology ?? true);
+
+  const handleToggleChrono = () => {
+    const next = !includeInChrono;
+    setIncludeInChrono(next);
+    startTransition(async () => {
+      const result = await updateEvent({ eventId: event.id, caseId, isRelevantForChronology: next });
+      if (result?.error) {
+        setIncludeInChrono(!next); // revert su errore
+        toast.error(result.error);
+      } else {
+        toast.success(next ? 'Evento incluso nella cronologia' : 'Evento escluso dalla cronologia');
+      }
+    });
+  };
 
   const handleQuickVerify = () => {
     setIsVerifying(true);
@@ -160,6 +178,9 @@ export function EventCard({
                   {isVerifying ? '...' : 'da valutare'}
                 </button>
               )}
+              {isClinical && !includeInChrono && (
+                <Badge variant="secondary" className="text-[11px]">Fuori cronologia</Badge>
+              )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>
           </div>
@@ -216,6 +237,18 @@ export function EventCard({
               </span>
             )}
           </div>
+          {isClinical && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={includeInChrono}
+                onChange={handleToggleChrono}
+                disabled={isPending}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <span>Includi nella cronologia esportata</span>
+            </label>
+          )}
           {event.reliability_notes && <p className="text-sm text-muted-foreground italic">{event.reliability_notes}</p>}
           {event.expert_notes && (
             <div className="rounded bg-muted p-2">

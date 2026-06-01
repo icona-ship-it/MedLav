@@ -93,6 +93,7 @@ export interface EventRow {
   source_text: string | null;
   source_pages: string | null;
   extraction_pass: string | null;
+  is_relevant_for_chronology?: boolean;
 }
 
 export interface AnomalyRow {
