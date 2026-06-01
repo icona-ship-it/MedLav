@@ -363,6 +363,16 @@ describe('section-catalog', () => {
       expect(ids).not.toContain('spese_mediche');
     });
 
+    it('spese_mediche is a DETERMINISTIC placeholder (sentinel, no LLM) so every expense is included by construction', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        events: [makeEvent({ eventType: 'spesa_medica' })],
+      });
+      const spese = plan.find((s) => s.id === 'spese_mediche');
+      expect(spese?.isPlaceholder).toBe(true);
+      expect(spese?.placeholderText).toContain('<!--MEDLAV:SPESE-->');
+    });
+
     it('should include all conditional sections when all conditions are met (CTU)', () => {
       const periziaMetadata: PeriziaMetadata = {
         tribunale: 'Tribunale di Brescia',
