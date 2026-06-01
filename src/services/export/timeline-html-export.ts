@@ -15,6 +15,11 @@ export interface TimelineHtmlEvent {
   source_type: string;
   doctor: string | null;
   facility: string | null;
+  confidence?: number;
+  requires_verification?: boolean;
+  diagnosis?: string | null;
+  /** Inclusione nella cronologia esportata. Assente o true = incluso. */
+  is_relevant_for_chronology?: boolean;
 }
 
 interface TimelineHtmlParams {
@@ -73,9 +78,11 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   // posto. Sono visibili nella tabella spese mediche dove l'importo e' il
   // dato vincolante.
   const SENTINEL_DATE = '1900-01-01';
-  // Filter undated rows, then sort chronologically (defensive: order_number may
-  // be misaligned). bug Lavini "ordine non cronologico".
-  const events = sortEventsChrono(allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE));
+  // Filter undated rows + eventi esclusi dal perito (is_relevant_for_chronology
+  // === false; default incluso), poi ordina cronologicamente (difensivo).
+  const events = sortEventsChrono(
+    allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE && ev.is_relevant_for_chronology !== false),
+  );
 
   const now = new Date().toLocaleDateString('it-IT', {
     year: 'numeric',
@@ -96,26 +103,28 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   metaLines.push(`<strong>Numero eventi:</strong> ${events.length}`);
 
   const eventsHtml = events.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</td></tr>'
-    : events.map((ev, idx) => {
-      const bgColor = idx % 2 === 0 ? '#f8fafc' : '#ffffff';
+    ? '<p style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</p>'
+    : events.map((ev) => {
       const meta: string[] = [];
-      if (ev.doctor) meta.push(`Dr. ${escapeHtml(ev.doctor)}`);
+      if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? escapeHtml(ev.doctor) : `Dr. ${escapeHtml(ev.doctor)}`);
       if (ev.facility) meta.push(escapeHtml(ev.facility));
+      if (ev.source_type) meta.push(escapeHtml(sourceLabel(ev.source_type)));
       const metaStr = meta.length > 0
-        ? `<div style="font-size:12px;color:#64748b;margin-top:4px;font-style:italic">${meta.join(' &mdash; ')}</div>`
+        ? `<p class="event-meta">${meta.join(' &mdash; ')}</p>`
         : '';
-      return `<tr style="background:${bgColor}">
-      <td style="text-align:center;font-family:monospace;color:#64748b">${ev.order_number}</td>
-      <td style="text-align:center;font-weight:600;white-space:nowrap">${escapeHtml(formatDate(ev.event_date))}</td>
-      <td style="text-align:center"><span class="event-type-badge">${escapeHtml(eventTypeLabel(ev.event_type))}</span></td>
-      <td>
-        <div style="font-weight:600;margin-bottom:2px">${escapeHtml(ev.title)}</div>
-        ${ev.description ? `<div style="font-size:13px;color:#374151;white-space:pre-wrap">${escapeHtml(ev.description)}</div>` : ''}
-        ${metaStr}
-      </td>
-      <td><span class="source-badge">${escapeHtml(sourceLabel(ev.source_type))}</span></td>
-    </tr>`;
+      const verify = ev.requires_verification
+        ? '<span class="verify-flag">⚠ DA VERIFICARE — </span>'
+        : '';
+      const diag = ev.diagnosis
+        ? `<p class="event-diag"><strong>Diagnosi:</strong> ${escapeHtml(ev.diagnosis)}</p>`
+        : '';
+      return `<div class="event-block">
+      <p class="event-head">${verify}${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(eventTypeLabel(ev.event_type))}</p>
+      ${ev.title ? `<p class="event-title">${escapeHtml(ev.title)}</p>` : ''}
+      ${ev.description ? `<p class="event-desc">${escapeHtml(ev.description)}</p>` : ''}
+      ${diag}
+      ${metaStr}
+    </div>`;
     }).join('\n');
 
   return `<!DOCTYPE html>
@@ -169,47 +178,24 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     letter-spacing: 8px;
     text-transform: uppercase;
   }
-  .timeline-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    font-size: 14px;
+  .timeline { margin-top: 10px; }
+  .event-block {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #eef2f7;
   }
-  .timeline-table th {
-    background: #1e40af;
-    color: #ffffff;
-    font-weight: 600;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 10px 12px;
-    text-align: left;
-    border: 1px solid #1e40af;
+  .event-block:last-child { border-bottom: none; }
+  .event-head {
+    font-weight: 700;
+    color: #1b3a6b;
+    font-size: 15px;
+    margin-bottom: 2px;
   }
-  .timeline-table td {
-    padding: 10px 12px;
-    border: 1px solid #e2e8f0;
-    vertical-align: top;
-  }
-  .timeline-table tr:hover td {
-    background: #eff6ff !important;
-  }
-  .event-type-badge {
-    display: inline-block;
-    background: #e2e8f0;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 500;
-  }
-  .source-badge {
-    display: inline-block;
-    background: #dbeafe;
-    color: #1e40af;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-  }
+  .verify-flag { color: #dc2626; font-weight: 700; }
+  .event-title { font-weight: 600; margin-bottom: 2px; }
+  .event-desc { font-size: 14px; color: #374151; white-space: pre-wrap; margin-bottom: 2px; }
+  .event-diag { font-size: 14px; margin-bottom: 2px; }
+  .event-meta { font-size: 12px; color: #777; font-style: italic; margin-top: 2px; }
   .footer {
     margin-top: 30px;
     padding-top: 15px;
@@ -220,7 +206,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   }
   @media print {
     @page { margin: 1.5cm; }
-    body { padding: 0; font-size: 10pt; max-width: 100%; color: #000; }
+    body { padding: 0; font-size: 11pt; max-width: 100%; color: #000; }
     h1 { font-size: 16pt; page-break-after: avoid; }
     .header-info { page-break-inside: avoid; background: none !important; border: 1px solid #ccc; }
     .watermark-wrapper::after {
@@ -229,25 +215,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .timeline-table thead {
-      display: table-header-group;
-    }
-    .timeline-table th {
-      background: #1e40af !important;
-      color: #fff !important;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .timeline-table tr { page-break-inside: avoid; }
-    .timeline-table tr:hover td { background: inherit !important; }
-    .timeline-table td {
-      border-color: #999 !important;
-    }
-    .event-type-badge, .source-badge {
-      background: none !important;
-      border: 1px solid #999;
-      color: #000 !important;
-    }
+    .event-block { page-break-inside: avoid; }
     .footer { page-break-before: avoid; }
   }
 </style>
@@ -260,20 +228,9 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   ${metaLines.map((l) => `<p>${l}</p>`).join('\n  ')}
 </div>
 
-<table class="timeline-table">
-  <thead>
-    <tr>
-      <th style="width:50px;text-align:center">N.</th>
-      <th style="width:110px;text-align:center">Data</th>
-      <th style="width:100px;text-align:center">Tipo</th>
-      <th>Titolo / Descrizione</th>
-      <th style="width:160px">Fonte</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${eventsHtml}
-  </tbody>
-</table>
+<div class="timeline">
+  ${eventsHtml}
+</div>
 
 <div class="footer">
   Generato con LegMed &mdash; ${escapeHtml(caseCode)} &mdash; ${now}
