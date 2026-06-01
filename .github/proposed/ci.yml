@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Stub env (no real secrets) — shared by the test/build steps.
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://stub.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: stub-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: stub-service-role-key
+  MISTRAL_API_KEY: stub-mistral-key
+  INNGEST_EVENT_KEY: stub-inngest-key
+  INNGEST_SIGNING_KEY: stub-inngest-signing
+  SENTRY_AUTH_TOKEN: stub-sentry-token
+
+jobs:
+  # Meaningful gate: must stay green. Fast, deterministic, no external services.
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+
+  # E2E runs in a SEPARATE, NON-BLOCKING job. Today the credential-gated specs
+  # skip (no E2E_USER_EMAIL/PASSWORD secret), so this is informational only and
+  # must never red the PR / block the `ci` gate. To make it meaningful later:
+  # add E2E_BASE_URL/E2E_USER_EMAIL/E2E_USER_PASSWORD as GitHub secrets and
+  # remove the `continue-on-error` lines.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run E2E tests
+        continue-on-error: true
+        run: |
+          pnpm start &
+          npx wait-on http://localhost:3000 --timeout 30000
+          pnpm test:e2e
+        env:
+          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}

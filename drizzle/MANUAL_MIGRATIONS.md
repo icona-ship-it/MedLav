@@ -27,9 +27,9 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0023_hybrid_rag_multilingua.sql` | 2026-05-11 | parzialmente (DROP COLUMN + ADD) | usare `verify_0023_hybrid_rag_multilingua.sql` |
 | `0024_add_document_content_hash.sql` | 2026-05-11 | si (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`) | usare `verify_0024_add_document_content_hash.sql` |
 | `0025_perizie_benchmark.sql` | **DA APPLICARE dopo Sprint 3 ingestion** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC `match_perizie_chunks_hybrid`) | usare `verify_0025_perizie_benchmark.sql` (7 check + sanity) |
-| `0026_rls_user_owned.sql` | **DA APPLICARE — Sprint 1 Production-robust MVP** | si (`DROP POLICY IF EXISTS` + `CREATE POLICY`, ENABLE RLS idempotente) | usare `verify_0026.sql` (5 check su RLS abilitato + policies per tabella) — **TESTARE STAGING PRIMA DI PROD** |
-| `0027_audit_archive.sql` | **DA APPLICARE — Sprint 1 Production-robust MVP** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | usare `verify_0027.sql` (7 check su table + RLS + indices) |
-| `0028_stripe_event_idempotency.sql` | **DA APPLICARE — audit Ondata 6 (idempotenza webhook Stripe)** | si (`CREATE TABLE IF NOT EXISTS`) | usare `verify_0028.sql`. Il webhook è **fail-open** finché la tabella non esiste (continua a funzionare), ma il dedup anti-doppio-accredito si attiva solo DOPO l'applicazione. Applicare presto. |
+| `0026_rls_user_owned.sql` | **APPLICATA 2026-06-01** (testata in transazione BEGIN…ROLLBACK come ruolo `authenticated` prima del COMMIT). NB: il file conteneva 2 bug — colonne inesistenti `case_shares.shared_with_user_id` e `report_ratings.case_id` — **corretti** prima dell'applicazione. | si (`DROP POLICY IF EXISTS` + `CREATE POLICY`, ENABLE RLS idempotente) | verificata via `pg_policies`: ogni policy SELECT/ALL filtra per proprietario, nessun leak |
+| `0027_audit_archive.sql` | **APPLICATA 2026-06-01** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | verificata: `to_regclass('public.audit_archive')` non-null, RLS=true |
+| `0028_stripe_event_idempotency.sql` | **APPLICATA 2026-06-01** (+ `ALTER TABLE … ENABLE ROW LEVEL SECURITY` aggiunta). Dedup anti-doppio-accredito ora ATTIVO. | si (`CREATE TABLE IF NOT EXISTS`) | verificata: tabella esiste, RLS=true |
 
 ## Procedura per future migration
 

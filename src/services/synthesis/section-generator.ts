@@ -319,7 +319,7 @@ export async function generateSingleSection(params: {
   }
 
   // Optional Chain-of-Verification post-processing for high-stakes sections.
-  // Off by default; opt-in via LEGMED_COVE_ENABLED=true. See cove-verifier.ts.
+  // ENABLED BY DEFAULT (Wave 3.1); set LEGMED_COVE_ENABLED=false to disable. See cove-verifier.ts.
   let finalContent = content;
   let coveMeta: Pick<
     GeneratedSection,
