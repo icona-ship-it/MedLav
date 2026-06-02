@@ -12,7 +12,7 @@ import { LinkedReportViewer } from '@/components/linked-report-viewer';
 import { SectionRegenerateButton } from '@/components/section-regenerate-button';
 import { ReportRating } from '@/components/report-rating';
 import { parseSections } from '@/lib/section-parser-client';
-import { expandDeterministicBlocks, hasDeterministicMarkers } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, hasDeterministicMarkers, type DeterministicDoc } from '@/services/calculations/deterministic-tables';
 import { getSectionStatus } from '@/lib/section-state';
 import { setSectionLock } from '../../actions';
 import type { ReportRow, EventRow } from './types';
@@ -31,6 +31,7 @@ interface ReportA4ViewerProps {
   caseId: string;
   report: ReportRow;
   events: EventRow[];
+  docs?: DeterministicDoc[];
   onEventClick?: (orderNumber: number) => void;
   regeneratingSection: string | null;
   onSectionRegenerated: (sectionId?: string) => void;
@@ -43,6 +44,7 @@ export function ReportA4Viewer({
   caseId,
   report,
   events,
+  docs,
   onEventClick,
   regeneratingSection,
   onSectionRegenerated,
@@ -55,7 +57,7 @@ export function ReportA4Viewer({
   // CURRENT events at read time → always in sync, no LLM, no regeneration.
   // No-op on legacy reports (no sentinel markers).
   const rawSynthesis = report.synthesis ?? '';
-  const synthesis = expandDeterministicBlocks(rawSynthesis, events);
+  const synthesis = expandDeterministicBlocks(rawSynthesis, events, docs);
   const sections = parseSections(synthesis);
   // The editor must operate on the RAW content (preserving the sentinel marker),
   // never on the expanded table — otherwise a save would freeze the table.
@@ -143,7 +145,12 @@ export function ReportA4Viewer({
           // A section that embeds a deterministic block (e.g. the ITT/ITP table)
           // must NOT be LLM-regenerated — that would discard the live sentinel.
           // The factual table is always in sync; correct it by editing the events.
-          const hasDeterministic = hasDeterministicMarkers(rawContentById.get(section.canonicalId) ?? '');
+          const rawSectionContent = rawContentById.get(section.canonicalId) ?? '';
+          const hasDeterministic = hasDeterministicMarkers(rawSectionContent);
+          // documentazione_sanitaria is a VERBATIM block (not an auto-table): the
+          // perito may MATERIALIZE it on edit (final-phase manual override). The
+          // ITT/ITP/spese/crono tables, instead, must stay auto (correct via events).
+          const isDocSanitaria = rawSectionContent.includes('MEDLAV:DOC_SANITARIA');
 
           return (
             <div
@@ -164,8 +171,11 @@ export function ReportA4Viewer({
                     {isLocked && (
                       <Badge variant="success" title="Confermata — protetta dalla rigenerazione"><Lock className="mr-1 h-3 w-3" />Confermata</Badge>
                     )}
-                    {hasDeterministic && (
+                    {hasDeterministic && !isDocSanitaria && (
                       <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Timeline.">Tabella automatica</Badge>
+                    )}
+                    {isDocSanitaria && (
+                      <Badge variant="info" title="Documentazione riprodotta verbatim dall'OCR (nessuna modifica AI). Puoi modificarla a mano in fase finale: l'edit la rende testo tuo.">Trascrizione automatica</Badge>
                     )}
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
@@ -178,7 +188,13 @@ export function ReportA4Viewer({
                         id: section.id,
                         canonicalId: section.canonicalId,
                         title: section.title,
-                        content: rawContentById.get(section.canonicalId) ?? section.content,
+                        // documentazione_sanitaria: open the MATERIALIZED verbatim
+                        // (section.content = expanded), so saving replaces the
+                        // sentinel with the perito's editable text. Other
+                        // deterministic sections keep the raw marker (stay auto).
+                        content: isDocSanitaria
+                          ? section.content
+                          : (rawContentById.get(section.canonicalId) ?? section.content),
                       })}
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -203,6 +219,21 @@ export function ReportA4Viewer({
                         reportVersion={report.version}
                         disabled={regeneratingSection !== null}
                         onRegenerated={() => handleSectionRegenerated(section.id)}
+                      />
+                    )}
+                    {/* documentazione_sanitaria: deterministic by default, but the
+                        perito can ask for the LLM-elaborated variant (translation,
+                        lab tables, grouping). */}
+                    {isDocSanitaria && (
+                      <SectionRegenerateButton
+                        caseId={caseId}
+                        sectionId={section.canonicalId}
+                        sectionTitle={section.title}
+                        reportVersion={report.version}
+                        disabled={regeneratingSection !== null}
+                        onRegenerated={() => handleSectionRegenerated(section.id)}
+                        elaborated
+                        label="Versione AI"
                       />
                     )}
                   </div>
@@ -262,7 +293,7 @@ export function ReportA4Viewer({
       {/* Version compare below A4 page */}
       {showVersionCompare && versions.length > 1 && (
         <div className="mt-6">
-          <VersionCompare currentReport={report} versions={versions} events={events} />
+          <VersionCompare currentReport={report} versions={versions} events={events} docs={docs} />
         </div>
       )}
 

@@ -25,3 +25,19 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
 export function getDocumentTypeLabel(documentType: string): string {
   return DOCUMENT_TYPE_LABELS[documentType] ?? documentType;
 }
+
+/**
+ * Document types that are reproduced ELSEWHERE in the report (atti / perizie /
+ * spese) and therefore excluded from the clinical "documentazione sanitaria".
+ * Mirrors EXCLUDED_FROM_MEDICAL in section-generator (the LLM path) — kept here as
+ * a lightweight, client-safe constant for the deterministic verbatim renderer.
+ */
+export const EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA: ReadonlySet<string> = new Set([
+  'memoria_difensiva',
+  'documento_amministrativo',
+  'certificato',
+  'perizia_precedente',
+  'perizia_ctp',
+  'perizia_ctu',
+  'spese_mediche',
+]);

@@ -19,10 +19,14 @@ interface SectionRegenerateButtonProps {
   reportVersion?: number;
   disabled?: boolean;
   onRegenerated: () => void;
+  /** documentazione_sanitaria: generate the LLM-"elaborated" variant on demand. */
+  elaborated?: boolean;
+  /** Custom trigger label (default "Rigenera Sezione"). */
+  label?: string;
 }
 
 export function SectionRegenerateButton({
-  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated,
+  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated, elaborated, label,
 }: SectionRegenerateButtonProps) {
   const [open, setOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
@@ -43,6 +47,7 @@ export function SectionRegenerateButton({
           instruction: instruction.trim() || undefined,
           force,
           expectedVersion: reportVersion,
+          elaborated: elaborated || undefined,
         }),
       });
       const result = await response.json() as {
@@ -67,7 +72,7 @@ export function SectionRegenerateButton({
     } finally {
       setIsRegenerating(false);
     }
-  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated]);
+  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated, elaborated]);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
@@ -82,14 +87,14 @@ export function SectionRegenerateButton({
           size="sm"
           className="h-7 px-2 text-xs"
           disabled={disabled || isRegenerating}
-          title={`Rigenera "${sectionTitle}"`}
+          title={elaborated ? `Genera la versione elaborata (AI) di "${sectionTitle}"` : `Rigenera "${sectionTitle}"`}
         >
           {isRegenerating ? (
             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
           ) : (
             <RefreshCw className="mr-1 h-3 w-3" />
           )}
-          Rigenera Sezione
+          {label ?? 'Rigenera Sezione'}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">

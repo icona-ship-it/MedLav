@@ -11,7 +11,7 @@
 import { formatDate } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
-import { getDocumentTypeLabel } from '@/lib/document-type-labels';
+import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
 
@@ -145,6 +145,9 @@ export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
   events: DeterministicTableEvent[],
 ): string {
+  // Only CLINICAL documents: atti/perizie/spese are reproduced in their own
+  // sections (same partition as the LLM path's EXCLUDED_FROM_MEDICAL).
+  docs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
   if (docs.length === 0) return '';
 
   // Earliest dated event per document → the document's chronological position.
@@ -232,6 +235,29 @@ export function toDeterministicEvents(
     source_type: (e.source_type as string | null) ?? null,
     order_number: (e.order_number as number | null) ?? null,
     document_id: (e.document_id as string | null) ?? null,
+  }));
+}
+
+/**
+ * Build DeterministicDoc[] from a document-metadata list + a FLAT page list
+ * (client surfaces: the case page loads documents + documentPages separately).
+ * Groups pages by document_id and sorts them by page number.
+ */
+export function buildDeterministicDocs(
+  documents: ReadonlyArray<{ id: string; file_name: string; document_type: string | null }>,
+  pages: ReadonlyArray<{ document_id: string; page_number: number; ocr_text: string | null }>,
+): DeterministicDoc[] {
+  const byDoc = new Map<string, DeterministicDocPage[]>();
+  for (const p of pages) {
+    const arr = byDoc.get(p.document_id) ?? [];
+    arr.push({ pageNumber: p.page_number, ocrText: p.ocr_text ?? '' });
+    byDoc.set(p.document_id, arr);
+  }
+  return documents.map((d) => ({
+    documentId: d.id,
+    fileName: d.file_name,
+    documentType: d.document_type ?? 'altro',
+    pages: (byDoc.get(d.id) ?? []).slice().sort((a, b) => a.pageNumber - b.pageNumber),
   }));
 }
 
