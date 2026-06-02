@@ -5,6 +5,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
+import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { classifyPage, detectBoundaries } from '@/services/document-organizer/page-classifier';
@@ -133,6 +134,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Page cap: the classification loop below makes one Mistral Large call PER
+    // page. Bound it before doing any LLM work (denial-of-wallet guard).
+    if (ocrPages.length > PIPELINE_LIMITS.MAX_PAGES_PER_RUN) {
+      return NextResponse.json({
+        success: false,
+        error: `Troppe pagine (${ocrPages.length}, limite ${PIPELINE_LIMITS.MAX_PAGES_PER_RUN}).`,
+      }, { status: 400 });
+    }
+
+    // Analysis deposit: the per-page classification below is real LLM cost, so it
+    // is charged UP FRONT (before the loop) and KEPT even when the document turns
+    // out not to be splittable. This closes the "loop split-document for free
+    // classification" denial-of-wallet hole (early returns no longer do unpaid
+    // LLM work). On a successful split the per-resulting-doc remainder is added.
+    const analysisFee = CREDIT_COSTS.split_pdf;
+    const depositDeduction = await deductCredits(user.id, analysisFee, 'split_pdf', documentId, {
+      reason: 'split_analysis',
+      pages: ocrPages.length,
+    });
+    if (!depositDeduction.success) {
+      return NextResponse.json({ success: false, error: depositDeduction.error }, { status: 402 });
+    }
+    creditsCharged = analysisFee;
+
     // Step 3: Classify each page + detect boundaries
     const pageClassifications = [];
     for (const page of ocrPages) {
@@ -143,6 +168,8 @@ export async function POST(request: NextRequest) {
     const boundaries = detectBoundaries(pageClassifications);
 
     if (boundaries.length <= 1) {
+      // Single content type: nothing to split. The analysis deposit is KEPT (the
+      // per-page classification ran). No refund here — that is the exploit fix.
       return NextResponse.json({
         success: false,
         error: 'Il documento contiene un solo tipo di contenuto. Non serve dividerlo.',
@@ -152,16 +179,24 @@ export async function POST(request: NextRequest) {
     // Step 4: Split the PDF
     const segments = await splitPdf(new Uint8Array(pdfBuffer), boundaries, doc.file_name);
 
-    // Step 5: Deduct credits (3 per resulting document)
+    // Step 5: Charge the per-resulting-document remainder. Total = segments * 3,
+    // of which `analysisFee` was already taken as the deposit. Best-effort: if the
+    // user lacks credits for the remainder we still deliver the completed split
+    // (work is done) rather than failing — the under-charge is a minor revenue
+    // matter, never a security one.
     const totalCredits = segments.length * CREDIT_COSTS.split_pdf;
-    const deduction = await deductCredits(user.id, totalCredits, 'split_pdf', documentId, {
-      resultingDocs: segments.length,
-    });
-
-    if (!deduction.success) {
-      return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
+    const remainder = totalCredits - analysisFee;
+    if (remainder > 0) {
+      const remainderDeduction = await deductCredits(user.id, remainder, 'split_pdf', documentId, {
+        reason: 'split_resulting_docs',
+        resultingDocs: segments.length,
+      });
+      if (remainderDeduction.success) {
+        creditsCharged += remainder;
+      } else {
+        logger.warn('split-document', `Remainder charge of ${remainder} failed for ${documentId} — delivering split anyway`);
+      }
     }
-    creditsCharged = totalCredits;
 
     // Step 6: Upload split PDFs and create document records
     const newDocIds: string[] = [];

@@ -27,6 +27,10 @@ export const CREDIT_COSTS = {
   rigenerazione_report: 20,
   /** Split a mixed PDF (per resulting document) */
   split_pdf: 3,
+  /** Map a legal question (quesito) to events/anomalies — single Mistral Large call */
+  quesito: 1,
+  /** AI document organization/analysis (per document analyzed) */
+  organizzazione_documenti: 1,
   /**
    * Voice dictation (Voxtral) — flat per clip, regardless of duration.
    * The clip is capped to 5 min server-side, so worst-case Mistral cost is

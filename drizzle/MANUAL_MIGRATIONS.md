@@ -31,6 +31,7 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0027_audit_archive.sql` | **APPLICATA 2026-06-01** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | verificata: `to_regclass('public.audit_archive')` non-null, RLS=true |
 | `0028_stripe_event_idempotency.sql` | **APPLICATA 2026-06-01** (+ `ALTER TABLE … ENABLE ROW LEVEL SECURITY` aggiunta). Dedup anti-doppio-accredito ora ATTIVO. | si (`CREATE TABLE IF NOT EXISTS`) | verificata: tabella esiste, RLS=true |
 | `0029_add_event_chronology_relevance.sql` | **APPLICATA 2026-06-01** (utente, "sql fatto" via SQL editor). Colonna `events.is_relevant_for_chronology` (default true) per il toggle "Includi nella cronologia". | si (`ADD COLUMN IF NOT EXISTS … DEFAULT true`) | usare `verify_0029_event_chronology_relevance.sql` |
+| `0030_storage_bucket_size_limit.sql` | **DA APPLICARE** (security cost-hardening). Allinea `storage.buckets.file_size_limit` del bucket `documents` a 100 MB (= cap applicativo). Sposta il rifiuto file >100MB al confine di Storage. | si (`UPDATE` puntuale su `id='documents'`) | usare `verify_0030.sql` (atteso `file_size_limit = 104857600`) |
 
 ## Procedura per future migration
 

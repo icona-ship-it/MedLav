@@ -45,3 +45,17 @@ describe('validateCaseForProcessing', () => {
     expect(result.error).toBeDefined();
   });
 });
+
+describe('PIPELINE_LIMITS — cost caps', () => {
+  it('should define a sane per-run page cap (denial-of-wallet guard)', () => {
+    expect(PIPELINE_LIMITS.MAX_PAGES_PER_RUN).toBeGreaterThan(0);
+    // Generous enough for a large real case, but a finite ceiling on LLM cost.
+    expect(PIPELINE_LIMITS.MAX_PAGES_PER_RUN).toBeGreaterThanOrEqual(1000);
+    expect(Number.isInteger(PIPELINE_LIMITS.MAX_PAGES_PER_RUN)).toBe(true);
+  });
+
+  it('should keep the per-file size cap finite', () => {
+    expect(PIPELINE_LIMITS.MAX_FILE_SIZE_MB).toBeGreaterThan(0);
+    expect(PIPELINE_LIMITS.MAX_FILE_SIZE_MB).toBeLessThanOrEqual(500);
+  });
+});

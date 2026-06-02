@@ -92,6 +92,9 @@ export async function saveDocumentMetadata(params: {
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ]);
 
+  // Fast pre-check on the CLIENT-DECLARED size (cheap, rejects obvious lies). The
+  // authoritative check is on the real stored size (blob.size) below — the client
+  // value is never trusted for the actual limit or for what we persist.
   if (params.fileSize > MAX_FILE_SIZE) {
     return { error: 'File troppo grande. Il limite è 100 MB per documento.' };
   }
@@ -101,6 +104,11 @@ export async function saveDocumentMetadata(params: {
   if (!ALLOWED_MIME_TYPES.has(params.fileType)) {
     return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel.' };
   }
+
+  // Real (server-verified) byte size, captured from the downloaded blob below.
+  // Used for the authoritative limit check and persisted to the DB so downstream
+  // cost calculations never trust the client-declared size.
+  let verifiedFileSize: number | null = null;
 
   // Magic-byte validation: scarica primi 256 bytes dal file appena uploadato
   // e verifica che il contenuto reale corrisponda al MIME dichiarato.
@@ -112,12 +120,37 @@ export async function saveDocumentMetadata(params: {
       .from('documents')
       .download(params.storagePath);
     if (dlErr || !blob) {
-      logger.warn('document-validation', 'Magic-byte check skipped — download failed', {
+      // Fail CLOSED: without the blob we can verify neither the REAL size nor the
+      // magic bytes. An unverifiable upload must not become OCR-eligible (it could
+      // be oversized/spoofed and drive OCR cost). The bucket file_size_limit
+      // (migration 0030) is the durable boundary guard; this is the app-level
+      // safety net. Cleanup the orphan + ask the user to retry.
+      logger.warn('document-validation', 'Rejected upload — verification download failed', {
         path: params.storagePath,
         error: dlErr?.message ?? 'no blob',
       });
-      // Don't block on download failure (Storage transient issue) — DB insert proceeds
+      await admin.storage.from('documents').remove([params.storagePath]).catch(() => { /* best-effort */ });
+      return { error: 'Impossibile verificare il file caricato. Riprova.' };
     } else {
+      // Authoritative file-size check on the REAL stored bytes (blob.size), not
+      // the client-declared params.fileSize which an attacker can spoof to slip a
+      // huge file past the cheap pre-check above (denial-of-wallet via OCR cost).
+      const realSize = blob.size;
+      if (realSize > MAX_FILE_SIZE) {
+        await admin.storage.from('documents').remove([params.storagePath]);
+        logger.warn('document-validation', 'Rejected oversized file (real stored size)', {
+          path: params.storagePath,
+          realSize,
+          declaredSize: params.fileSize,
+        });
+        return { error: 'File troppo grande. Il limite è 100 MB per documento.' };
+      }
+      if (realSize <= 0) {
+        await admin.storage.from('documents').remove([params.storagePath]);
+        return { error: 'File vuoto o non valido.' };
+      }
+      verifiedFileSize = realSize;
+
       // Read first 256 bytes for magic check (enough for all formats we support)
       const head = new Uint8Array(await blob.slice(0, 256).arrayBuffer());
       const validation = validateDocumentBytes(head, params.fileType);
@@ -179,7 +212,7 @@ export async function saveDocumentMetadata(params: {
       case_id: params.caseId,
       file_name: params.fileName,
       file_type: params.fileType,
-      file_size: params.fileSize,
+      file_size: verifiedFileSize ?? params.fileSize,
       storage_path: params.storagePath,
       document_type: params.documentType ?? 'altro',
       processing_status: 'caricato',

@@ -33,6 +33,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary } from '@/services/cost-tracking/cost-calculator';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
+import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
 
 import type { OcrResult, ExtractionResult, CaseMetadata } from '../steps/types';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
@@ -136,7 +137,15 @@ async function handlePipelineFailure(event: { data: unknown }) {
         const consumptionCount = transactions?.length ?? 0;
         const refundCount = existingRefunds?.length ?? 0;
 
-        if (consumptionCount > 0 && refundCount >= consumptionCount) {
+        // Oversized-input failures are NOT refundable: the OCR cost was really
+        // incurred and refunding would let an attacker trip the page cap on a
+        // loop (deduct → fail → refund) to get free OCR. The user keeps the
+        // charge for the work performed; rate limiting bounds repetition.
+        const isInputTooLarge = errorMessage.includes('[INPUT_TOO_LARGE]');
+
+        if (isInputTooLarge) {
+          logger.warn('pipeline', `Not refunding case ${caseId} — oversized input (OCR cost already incurred)`);
+        } else if (consumptionCount > 0 && refundCount >= consumptionCount) {
           logger.info('pipeline', `Skipping refund for case ${caseId} — already refunded (${refundCount} refunds >= ${consumptionCount} consumptions)`);
         } else if (consumptionCount > 0) {
           const refundAmount = Math.abs(transactions![0].amount as number);
@@ -300,6 +309,22 @@ export const processCase = inngest.createFunction(
         failedItems: failedDocNames,
       });
       logger.warn('pipeline', `OCR partial failure: ${ocrFailedCount}/${documents.length} docs failed`);
+    }
+
+    // ── Page cap (denial-of-wallet guard) ──
+    // Sum the real OCR page count and hard-stop BEFORE the expensive extraction +
+    // synthesis stages if the case is absurdly large. OCR cost is already bounded
+    // upstream (per-file size cap + doc count cap); this gate bounds the much
+    // larger downstream LLM cost. Fail loud → onFailure refunds the elaboration.
+    const totalOcrPagesForCap = ocrResults.reduce((sum, r) => sum + (r.pageCount ?? 0), 0);
+    if (totalOcrPagesForCap > PIPELINE_LIMITS.MAX_PAGES_PER_RUN) {
+      // INPUT_TOO_LARGE marker: this failure is the USER's oversized input, and the
+      // OCR cost was already incurred. onFailure must NOT refund it (otherwise an
+      // attacker could trip the cap repeatedly to get free OCR via the refund).
+      throw new Error(
+        `[INPUT_TOO_LARGE] Caso troppo grande: ${totalOcrPagesForCap} pagine totali ` +
+        `(limite ${PIPELINE_LIMITS.MAX_PAGES_PER_RUN}). Suddividi la documentazione in più casi e riprova.`,
+      );
     }
 
     // ── Step 3.0: Refresh types + metadata (combined to reduce step overhead) ──

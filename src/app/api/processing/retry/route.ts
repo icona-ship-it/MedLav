@@ -4,6 +4,8 @@ import { inngest } from '@/lib/inngest/client';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
+import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { getElaborationCost } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -23,16 +25,6 @@ export async function POST(request: NextRequest) {
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
 
-    // Rate limiting
-    const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    const rateCheck = await checkRateLimit({ key: `processing:${ip}`, ...RATE_LIMITS.PROCESSING });
-    if (!rateCheck.success) {
-      return NextResponse.json(
-        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
-        { status: 429 },
-      );
-    }
-
     const supabase = await createClient();
 
     // Auth check
@@ -41,6 +33,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Non autenticato' },
         { status: 401 },
+      );
+    }
+
+    // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile).
+    const rateCheck = await checkRateLimit({ key: `processing:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429 },
       );
     }
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('id, user_id')
+      .select('id, user_id, pipeline_mode')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -100,6 +101,33 @@ export async function POST(request: NextRequest) {
 
     const retryIds = retryableDocs.map((d) => d.id);
 
+    // Retry re-runs the FULL pipeline (re-OCR of the failed docs + consolidation +
+    // re-synthesis = real LLM cost), so it is charged like a fresh elaboration.
+    // Using operation 'elaborazione' integrates with the pipeline's idempotent
+    // onFailure refund (a re-run is a new consumption, still refundable on failure).
+    const pipelineMode = (caseData.pipeline_mode as string) ?? 'full';
+    const creditCost = getElaborationCost(pipelineMode);
+    const balance = await getBalance(user.id);
+    if (balance.total < creditCost) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Crediti insufficienti: servono ${creditCost}, hai ${balance.total}. Acquista crediti per riprovare.`,
+          creditsNeeded: creditCost,
+          creditsAvailable: balance.total,
+        },
+        { status: 402 },
+      );
+    }
+    const deduction = await deductCredits(user.id, creditCost, 'elaborazione', caseId, {
+      pipelineMode,
+      reason: 'retry',
+      retriedDocuments: retryIds.length,
+    });
+    if (!deduction.success) {
+      return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
+    }
+
     // Reset to 'caricato'
     const { error: docError } = await supabase
       .from('documents')
@@ -110,6 +138,7 @@ export async function POST(request: NextRequest) {
       })
       .in('id', retryIds);
     if (docError) {
+      await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'retry_doc_reset_failed' });
       return NextResponse.json({ success: false, error: 'Errore durante il reset dei documenti. Riprova.' }, { status: 500 });
     }
 
@@ -120,17 +149,32 @@ export async function POST(request: NextRequest) {
       .eq('id', caseId)
       .eq('user_id', user.id);
     if (stageError) {
+      await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'retry_stage_reset_failed' });
       return NextResponse.json({ success: false, error: 'Errore durante il retry. Riprova.' }, { status: 500 });
     }
 
     // Trigger Inngest
-    await inngest.send({
-      name: 'case/pipeline.start',
-      data: {
-        caseId,
-        userId: user.id,
-      },
-    });
+    try {
+      await inngest.send({
+        name: 'case/pipeline.start',
+        data: {
+          caseId,
+          userId: user.id,
+        },
+      });
+    } catch (sendError) {
+      // No pipeline will run → refund and revert the stage so the case isn't stuck.
+      await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'retry_dispatch_failed' });
+      await supabase
+        .from('cases')
+        .update({ processing_stage: 'errore', updated_at: new Date().toISOString() })
+        .eq('id', caseId)
+        .eq('user_id', user.id);
+      logger.error('processing/retry', `inngest.send failed for case ${caseId}`, {
+        error: sendError instanceof Error ? sendError.message : 'unknown',
+      });
+      return NextResponse.json({ success: false, error: 'Errore durante il retry. Riprova.' }, { status: 500 });
+    }
 
     // Audit log
     await supabase.from('audit_log').insert({

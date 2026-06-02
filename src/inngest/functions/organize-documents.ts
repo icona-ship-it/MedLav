@@ -1,5 +1,69 @@
 import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
+import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
+
+/**
+ * Idempotent refund of the `organizzazione_documenti` charge when the job fails
+ * after all retries. The charge is VARIABLE (per-page), so we refund the exact
+ * amount of THIS run (passed in the event payload as creditCost) rather than the
+ * newest consumption. Count-based idempotency (refunds < consumptions) ensures an
+ * Inngest re-delivery never double-refunds.
+ */
+async function refundOrganizeOnFailure(event: { data: unknown }): Promise<void> {
+  try {
+    const failureData = event.data as {
+      event: { data: { caseId: string; creditCost?: number } };
+      error?: { message?: string };
+    };
+    const caseId = failureData.event.data.caseId;
+    const chargedAmount = failureData.event.data.creditCost;
+    const errMsg = failureData.error?.message ?? 'Errore organizzazione documenti';
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { data: caseForRefund } = await supabase
+      .from('cases')
+      .select('user_id')
+      .eq('id', caseId)
+      .single();
+    if (!caseForRefund) return;
+    const userId = caseForRefund.user_id as string;
+
+    const { data: consumptions } = await supabase
+      .from('credit_transactions')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('entity_id', caseId)
+      .eq('type', 'consumption')
+      .eq('operation', 'organizzazione_documenti')
+      .order('created_at', { ascending: false });
+    const { data: refunds } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('entity_id', caseId)
+      .eq('type', 'refund')
+      .eq('operation', 'organizzazione_documenti');
+
+    const consumptionCount = consumptions?.length ?? 0;
+    const refundCount = refunds?.length ?? 0;
+    if (consumptionCount === 0 || refundCount >= consumptionCount) return;
+
+    // Exact amount of THIS run (event payload); fall back to the newest
+    // consumption amount only for legacy events that predate the payload field.
+    const refundAmount = (typeof chargedAmount === 'number' && chargedAmount > 0)
+      ? chargedAmount
+      : Math.abs(consumptions![0].amount as number);
+    const { refundCredits } = await import('@/services/credits/credit-service');
+    await refundCredits(userId, refundAmount, 'organizzazione_documenti', caseId, {
+      reason: 'organize_failed',
+      error: errMsg.slice(0, 200),
+    });
+    logger.info('document-organizer', `Refunded ${refundAmount} credits for failed organization of case ${caseId}`);
+  } catch (err) {
+    logger.error('document-organizer', `onFailure refund error: ${err instanceof Error ? err.message : 'unknown'}`);
+  }
+}
 
 /** Serializable version of OrganizeResult (no Uint8Array — buffers stay in step scope). */
 interface SerializedOrganizeResult {
@@ -30,6 +94,7 @@ export const organizeDocumentsJob = inngest.createFunction(
       { limit: 50 },                              // global cap on Inngest Pro
       { limit: 30, key: 'event.data.userId' },    // per-user — organize is lightweight, parallelize aggressively
     ],
+    onFailure: async ({ event }) => refundOrganizeOnFailure(event),
   },
   { event: 'case/documents.organize' },
   async ({ event, step }) => {
@@ -76,6 +141,14 @@ export const organizeDocumentsJob = inngest.createFunction(
             ocrText: (p.ocr_text as string) ?? '',
           })),
         });
+      }
+
+      // Defensive page cap (the route already caps, but pages could grow between
+      // the route check and here). Throw BEFORE the per-page LLM classification
+      // loop so no LLM calls are made above the cap.
+      const totalPages = results.reduce((sum, d) => sum + d.pages.length, 0);
+      if (totalPages > PIPELINE_LIMITS.MAX_PAGES_PER_RUN) {
+        throw new Error(`Troppe pagine per l'organizzazione (${totalPages} > ${PIPELINE_LIMITS.MAX_PAGES_PER_RUN})`);
       }
 
       return results;
