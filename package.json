@@ -18,6 +18,7 @@
     "test:e2e:ondata-1": "playwright test ondata-1-refactor",
     "benchmark:extract": "tsx scripts/extract-gold-standards.ts",
     "benchmark:diff": "tsx scripts/diff-report-vs-gold.ts",
+    "eval:golden": "tsx scripts/eval-golden-harness.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

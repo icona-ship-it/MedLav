@@ -483,15 +483,17 @@ export async function getReportSectionOptions(
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('case_role, module_id')
+    .select('case_role, module_id, perizia_metadata')
     .eq('id', caseId)
     .eq('user_id', user.id)
     .single();
   if (!caseRow) return { sections: [], error: 'Caso non trovato' };
 
+  const ambitoPenale = (caseRow.perizia_metadata as PeriziaMetadata | null)?.ambitoPenale ?? false;
   const sections = getSelectableSections(
     (caseRow.case_role as CaseRole) ?? 'ctu',
     (caseRow.module_id as string | null) ?? undefined,
+    ambitoPenale,
   );
   return { sections };
 }

@@ -1021,6 +1021,7 @@ function applyPenaleSections(specs: SectionSpec[]): SectionSpec[] {
 export function getSelectableSections(
   caseRole: CaseRole,
   moduleId?: string,
+  ambitoPenale?: boolean,
 ): Array<{ id: string; title: string; mandatory: boolean }> {
   let specs: SectionSpec[];
   if (moduleId === 'parere_pro_veritate') specs = PARERE_PRO_VERITATE_SECTIONS;
@@ -1028,6 +1029,13 @@ export function getSelectableSections(
   else if (caseRole === 'ctp') specs = CTP_SECTIONS;
   else if (caseRole === 'stragiudiziale') specs = STRAGIUDIZIALE_SECTIONS;
   else specs = CTU_SECTIONS;
+  // Ambito penale (CTU/CTP role-based): il selettore mostra considerazioni_penale
+  // e NON le spese mediche (civilistiche), coerente con resolveSectionPlan.
+  if (ambitoPenale && (caseRole === 'ctu' || caseRole === 'ctp') &&
+      moduleId !== 'parere_pro_veritate' && moduleId !== 'parere_scopo_riserva' &&
+      moduleId !== RC_CIVILE_MODULE_ID) {
+    specs = applyPenaleSections(specs);
+  }
   return specs.map((s) => ({ id: s.id, title: s.title, mandatory: MANDATORY_SECTION_IDS.has(s.id) }));
 }
 

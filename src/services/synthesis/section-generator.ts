@@ -414,14 +414,16 @@ export async function generateSingleSection(params: {
     summaryCount,
     truncatedByCap,
   });
-  if (fidelity.note) finalContent += fidelity.note;
 
-  const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
-
-  // Generate context summary for subsequent sections
+  // Context summary (rolling, per le sezioni successive) calcolato PRIMA di
+  // appendere la nota di fedeltà, così la nota non inquina il contesto (#8).
   const contextSummary = spec.contextMaxChars > 0
     ? summarizeForContext(finalContent, spec.contextMaxChars)
     : '';
+
+  if (fidelity.note) finalContent += fidelity.note;
+
+  const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
 
   const elapsed = Date.now() - startMs;
   logger.info('section-generator',

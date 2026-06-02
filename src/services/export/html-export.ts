@@ -185,6 +185,33 @@ function buildFormalHeader(pm: PeriziaMetadataExport, caseRole: string, patientI
   return html;
 }
 
+/**
+ * Firma DOPPIA datata (bozza + deposito definitivo), collegiale se è nominato
+ * un ausiliario. Allinea l'HTML professional al DOCX e al benchmark.
+ */
+function buildDualSignatureHtml(pm: PeriziaMetadataExport, caseRole: string): string {
+  const label = caseRole === 'ctu' ? 'Il Consulente Tecnico d\'Ufficio'
+    : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
+    : 'Il Perito';
+  const signer = (dateLabel: string): string => `
+  <div style="margin-top:40px;page-break-inside:avoid">
+    <p style="font-size:14px">${dateLabel}: _________________________</p>
+    <div style="text-align:right;margin-top:24px">
+      <p style="font-weight:bold;margin:0">${escapeHtmlPro(label)}</p>
+      ${pm.ctuName ? `<p style="margin:2px 0">${escapeHtmlPro(pm.ctuName)}</p>` : ''}
+      ${pm.ctuTitle ? `<p style="margin:0;font-style:italic;font-size:13px">${escapeHtmlPro(pm.ctuTitle)}</p>` : ''}
+      <p style="margin-top:18px">_________________________</p>
+      ${pm.collaboratoreName ? `<p style="margin:18px 0 2px">${escapeHtmlPro(pm.collaboratoreName)}</p>${pm.collaboratoreTitle ? `<p style="margin:0;font-style:italic;font-size:13px">${escapeHtmlPro(pm.collaboratoreTitle)}</p>` : ''}<p style="margin-top:18px">_________________________</p>` : ''}
+    </div>
+  </div>`;
+  // Firma DOPPIA (bozza + deposito) solo per CTU/CTP, che hanno l'iter bozza→deposito.
+  // Stragiudiziale/parere: firma singola datata.
+  if (caseRole === 'ctu' || caseRole === 'ctp') {
+    return signer('Luogo e data (sottoscrizione della bozza)') + signer('Luogo e data (deposito definitivo)');
+  }
+  return signer('Luogo e data');
+}
+
 export function generateHtmlReport(params: HtmlExportParams): string {
   const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
 
@@ -1139,6 +1166,8 @@ ${synthesisHasOwnHeader(synthesis) ? '' : `<div class="cover">
      REPORT SECTIONS
      ═══════════════════════════════════════════════ -->
 ${sectionsHtml}
+
+${buildDualSignatureHtml(pm, caseRole)}
 
 ${signatureImageBase64 ? `
 <!-- ═══ Signature ═══ -->

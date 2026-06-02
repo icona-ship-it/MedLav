@@ -393,7 +393,8 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         logger.info('pipeline', ` Retry succeeded: ${retryResult.events.length} events recovered`);
         // Verbatim safety net: flag events whose sourceText isn't found in the
         // chunk OCR (deterministic cross-check, non-blocking → requiresVerification).
-        const retryVerified = verifySourceTexts(retryResult.events, chunkText).events;
+        // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
+        const retryVerified = truncationWarning ? retryResult.events : verifySourceTexts(retryResult.events, chunkText).events;
         const retryRows = retryVerified.map((e, idx) => ({
           case_id: caseId,
           document_id: ocrResult.documentId,
@@ -452,7 +453,8 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
 
     // Verbatim safety net: flag events whose sourceText isn't found in the chunk
     // OCR (deterministic cross-check, non-blocking → requiresVerification + note).
-    const verifiedEvents = verifySourceTexts(result.events, chunkText).events;
+    // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
+    const verifiedEvents = truncationWarning ? result.events : verifySourceTexts(result.events, chunkText).events;
 
     // Save events directly to DB with enum normalization
     const eventRows = verifiedEvents.map((e, idx) => ({

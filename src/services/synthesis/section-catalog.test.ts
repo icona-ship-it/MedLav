@@ -655,6 +655,16 @@ describe('section-catalog', () => {
     it('every section title is non-empty', () => {
       for (const s of getSelectableSections('ctu')) expect(s.title.length).toBeGreaterThan(0);
     });
+    it('penale-aware: mostra considerazioni_penale e nasconde spese_mediche', () => {
+      const civile = getSelectableSections('ctu').map((s) => s.id);
+      expect(civile).toContain('considerazioni_ml');
+      expect(civile).toContain('spese_mediche');
+
+      const penale = getSelectableSections('ctu', undefined, true).map((s) => s.id);
+      expect(penale).toContain('considerazioni_penale');
+      expect(penale).not.toContain('considerazioni_ml');
+      expect(penale).not.toContain('spese_mediche');
+    });
   });
 
   describe('resolveSectionPlan — excludedReportSections (selettore)', () => {

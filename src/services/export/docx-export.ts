@@ -95,13 +95,32 @@ function getDocxWatermarkText(reportStatus?: string): string {
  */
 function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, caseRole?: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
-  const pm = periziaMetadata;
-
   result.push(new Paragraph({ text: '', spacing: { before: 600 } }));
+  // Firma DOPPIA datata (benchmark scuola veronese): sottoscrizione della bozza
+  // (ai CC.TT.PP.) e deposito definitivo — solo CTU/CTP (hanno l'iter bozza→deposito).
+  // Stragiudiziale/parere: firma singola. Collegiale se è nominato un ausiliario.
+  if (caseRole === 'ctu' || caseRole === 'ctp') {
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data (sottoscrizione della bozza): _________________________');
+    result.push(new Paragraph({ text: '', spacing: { before: 500 } }));
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data (deposito definitivo): _________________________');
+  } else {
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data: _________________________');
+  }
+  return result;
+}
+
+/** Renderizza un blocco firma datato (riga "Luogo e data" + firmatari). */
+function pushDatedSignature(
+  result: (Paragraph | Table)[],
+  periziaMetadata: PeriziaMetadataExport | null | undefined,
+  caseRole: string | undefined,
+  dateLabel: string,
+): void {
+  const pm = periziaMetadata;
 
   // Location and date line
   result.push(new Paragraph({
-    children: [new TextRun({ text: 'Luogo e data: _________________________', size: 24 })],
+    children: [new TextRun({ text: dateLabel, size: 24 })],
     spacing: { after: 400 },
   }));
 
@@ -198,8 +217,6 @@ function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, cas
       spacing: { before: 200 },
     }));
   }
-
-  return result;
 }
 
 /**

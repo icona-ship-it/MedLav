@@ -52,4 +52,14 @@ describe('export: intestazione unica (no doppione)', () => {
     const html = generateProfessionalHtmlReport(profParams as any);
     expect(html).toContain('class="cover"');
   });
+
+  it('firma DOPPIA datata (bozza + deposito), collegiale con ausiliario', () => {
+    const pmColl = { ...pm, collaboratoreName: 'Dr. Bongiovanni', collaboratoreTitle: 'Neurologo' };
+    const profParams = { caseCode: 'X', caseRole: 'ctu', patientInitials: 'S.S.', periziaMetadata: pmColl, documentsWithPages: [], synthesis: '## Quesiti\n\n1. ...', anomalies: [], missingDocs: [], reportStatus: 'completato' };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const html = generateProfessionalHtmlReport(profParams as any);
+    expect(html).toContain('sottoscrizione della bozza');
+    expect(html).toContain('deposito definitivo');
+    expect(html).toContain('Dr. Bongiovanni'); // ausiliario nel blocco firma
+  });
 });
