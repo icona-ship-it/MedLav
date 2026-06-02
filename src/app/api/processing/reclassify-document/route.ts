@@ -5,6 +5,8 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 import { classifyDocument } from '@/services/classification/document-classifier';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -25,16 +27,6 @@ export async function POST(request: NextRequest) {
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
 
-    // Rate limiting
-    const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    const rateCheck = await checkRateLimit({ key: `reclassify:${ip}`, ...RATE_LIMITS.API });
-    if (!rateCheck.success) {
-      return NextResponse.json(
-        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
-        { status: 429 },
-      );
-    }
-
     const supabase = await createClient();
 
     // Auth check
@@ -43,6 +35,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Non autenticato' },
         { status: 401 },
+      );
+    }
+
+    // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile).
+    const rateCheck = await checkRateLimit({ key: `reclassify:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429 },
       );
     }
 
@@ -128,8 +129,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Re-run AI classification
-    const result = await classifyDocument(ocrText, doc.file_name);
+    // Charge 1 credit for the AI re-classification (single Mistral Large call).
+    // Deduct AFTER all cheap validations so rejected requests are never billed,
+    // and BEFORE the LLM call so the cost is always covered.
+    const balance = await getBalance(user.id);
+    if (balance.total < CREDIT_COSTS.categorizzazione) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Crediti insufficienti: serve ${CREDIT_COSTS.categorizzazione} credito per riclassificare.`,
+          creditsNeeded: CREDIT_COSTS.categorizzazione,
+          creditsAvailable: balance.total,
+        },
+        { status: 402 },
+      );
+    }
+    const deduction = await deductCredits(
+      user.id,
+      CREDIT_COSTS.categorizzazione,
+      'categorizzazione',
+      documentId,
+      { reason: 'reclassify' },
+    );
+    if (!deduction.success) {
+      return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
+    }
+
+    // Re-run AI classification — refund the credit on any failure (no work delivered).
+    let result;
+    try {
+      result = await classifyDocument(ocrText, doc.file_name);
+    } catch (classifyErr) {
+      await refundCredits(user.id, CREDIT_COSTS.categorizzazione, 'categorizzazione', documentId, {
+        reason: 'reclassify_failed',
+      });
+      throw classifyErr;
+    }
 
     // Save new classification metadata to DB
     const classificationMetadata = {
@@ -147,6 +182,9 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', documentId);
     if (updateError) {
+      await refundCredits(user.id, CREDIT_COSTS.categorizzazione, 'categorizzazione', documentId, {
+        reason: 'reclassify_save_failed',
+      });
       return NextResponse.json({ success: false, error: 'Errore nel salvataggio della classificazione.' }, { status: 500 });
     }
 

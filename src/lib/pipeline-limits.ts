@@ -10,6 +10,13 @@ export const PIPELINE_LIMITS = {
   WARN_DOCUMENTS: 100,
   /** Max single file size in MB */
   MAX_FILE_SIZE_MB: 100,
+  /**
+   * Hard cap on total OCR pages processed in a single run. Bounds the cost of the
+   * expensive downstream LLM stages (extraction + synthesis) on absurdly large
+   * inputs — a denial-of-wallet guard. Above this the run fails loudly (and is
+   * refunded) with a "split the case" message rather than silently burning tokens.
+   */
+  MAX_PAGES_PER_RUN: 5000,
 } as const;
 
 interface ValidationResult {

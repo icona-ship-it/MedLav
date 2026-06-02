@@ -26,7 +26,9 @@ import type { GeneratedSection } from '@/services/synthesis/section-generation-t
  * (generateSynthesis) is no longer used by the regenerate button.
  *
  * onFailure restores the case to 'completato' (the PREVIOUS report stays valid)
- * — never 'errore'. The regenerate is free (no credit deduction), so no refund.
+ * — never 'errore'. The regenerate is CHARGED (rigenerazione_report) by the
+ * /api/processing/regenerate route, so onFailure also refunds it (idempotently)
+ * since the user did not receive a fresh full report.
  */
 
 const DOC_BATCH_SIZE = 4;
@@ -59,9 +61,61 @@ async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<voi
       })
       .eq('id', caseId);
     logger.error('regenerate-report', `Regeneration failed for case ${caseId}: ${errMsg} — report precedente preservato`);
+
+    // Refund the regeneration cost — the user paid for a full report and got none.
+    // IDEMPOTENT (same pattern as process-case): only refund when there are fewer
+    // refunds than consumptions for this case+operation, so an Inngest re-delivery
+    // never double-refunds.
+    await refundRegenerationIfOwed(supabase, caseId, errMsg);
   } catch (err) {
     logger.error('regenerate-report', `onFailure handler error: ${err instanceof Error ? err.message : 'unknown'}`);
   }
+}
+
+/**
+ * Idempotent refund of the `rigenerazione_report` charge for a failed regeneration.
+ * Mirrors the consumption-vs-refund counting used by the main pipeline.
+ */
+async function refundRegenerationIfOwed(
+  supabase: ReturnType<typeof createAdminClient>,
+  caseId: string,
+  errMsg: string,
+): Promise<void> {
+  const { data: caseForRefund } = await supabase
+    .from('cases')
+    .select('user_id')
+    .eq('id', caseId)
+    .single();
+  if (!caseForRefund) return;
+  const userId = caseForRefund.user_id as string;
+
+  const { data: consumptions } = await supabase
+    .from('credit_transactions')
+    .select('amount')
+    .eq('user_id', userId)
+    .eq('entity_id', caseId)
+    .eq('type', 'consumption')
+    .eq('operation', 'rigenerazione_report')
+    .order('created_at', { ascending: false });
+  const { data: refunds } = await supabase
+    .from('credit_transactions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('entity_id', caseId)
+    .eq('type', 'refund')
+    .eq('operation', 'rigenerazione_report');
+
+  const consumptionCount = consumptions?.length ?? 0;
+  const refundCount = refunds?.length ?? 0;
+  if (consumptionCount === 0 || refundCount >= consumptionCount) return;
+
+  const refundAmount = Math.abs(consumptions![0].amount as number);
+  const { refundCredits } = await import('@/services/credits/credit-service');
+  await refundCredits(userId, refundAmount, 'rigenerazione_report', caseId, {
+    reason: 'regenerate_failed',
+    error: errMsg.slice(0, 200),
+  });
+  logger.info('regenerate-report', `Refunded ${refundAmount} credits for failed regeneration of case ${caseId}`);
 }
 
 export const regenerateReport = inngest.createFunction(

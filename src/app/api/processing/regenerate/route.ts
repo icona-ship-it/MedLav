@@ -13,6 +13,8 @@ import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkFeatureAccess } from '@/lib/subscription';
+import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 800; // synthesis can take several minutes (TIMEOUT_SYNTHESIS=600s)
@@ -27,6 +29,13 @@ const requestSchema = z.object({
  * Used after the expert edits/adds/deletes events.
  */
 export async function POST(request: NextRequest) {
+  // Credit-refund bookkeeping visible to the outer catch (try/catch have separate
+  // block scopes). If we charged but never successfully dispatched the Inngest job,
+  // any failure must refund.
+  let regenCharged = false;
+  let regenDispatched = false;
+  let regenUserId: string | null = null;
+  let regenCaseId: string | null = null;
   try {
     // CSRF validation
     const csrfError = validateCsrfToken(request);
@@ -127,6 +136,31 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Charge the report regeneration upfront (full sectional synthesis + inline
+    // anomaly resolution = expensive LLM run). Deduct AFTER the "no events" check
+    // so a no-op regen is never billed. Refunded on any failure before the job
+    // runs (below) and by regenerate-report's onFailure if the job itself fails.
+    const REGEN_COST = CREDIT_COSTS.rigenerazione_report;
+    const regenBalance = await getBalance(user.id);
+    if (regenBalance.total < REGEN_COST) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Crediti insufficienti: servono ${REGEN_COST} crediti per rigenerare il report, hai ${regenBalance.total}.`,
+          creditsNeeded: REGEN_COST,
+          creditsAvailable: regenBalance.total,
+        },
+        { status: 402 },
+      );
+    }
+    const regenDeduction = await deductCredits(user.id, REGEN_COST, 'rigenerazione_report', caseId, { reason: 'regenerate' });
+    if (!regenDeduction.success) {
+      return NextResponse.json({ success: false, error: regenDeduction.error }, { status: 402 });
+    }
+    regenCharged = true;
+    regenUserId = user.id;
+    regenCaseId = caseId;
 
     // Preserve perito reviews: keep user_confirmed and user_dismissed entries.
     // Drop only AI-only statuses (detected, llm_confirmed, llm_resolved) so
@@ -259,10 +293,14 @@ export async function POST(request: NextRequest) {
     }).eq('id', caseId).in('processing_stage', allowedStages).select('id');
     if (stageError) {
       logger.error('processing/regenerate', `Failed to set generazione_report for case ${caseId}`, { error: stageError.message });
+      await refundCredits(user.id, REGEN_COST, 'rigenerazione_report', caseId, { reason: 'regenerate_stage_lock_failed' });
+      regenCharged = false;
       return NextResponse.json({ success: false, error: 'Errore avvio rigenerazione.' }, { status: 500 });
     }
     if (!lockRows || lockRows.length === 0) {
       // Another request grabbed the lock between our guard check and here.
+      await refundCredits(user.id, REGEN_COST, 'rigenerazione_report', caseId, { reason: 'regenerate_already_running' });
+      regenCharged = false;
       return NextResponse.json(
         { success: false, error: 'Elaborazione già in corso su questo caso. Attendi il completamento.' },
         { status: 409 },
@@ -271,6 +309,7 @@ export async function POST(request: NextRequest) {
 
     try {
       await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id } });
+      regenDispatched = true;
     } catch (sendError) {
       // Dispatch failed → REVERT the stage so the case is never stuck in
       // 'generazione_report' with no Inngest function actually running (the
@@ -280,6 +319,9 @@ export async function POST(request: NextRequest) {
         perizia_metadata: existingMeta,
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
+      // No job will run → refund the charge.
+      await refundCredits(user.id, REGEN_COST, 'rigenerazione_report', caseId, { reason: 'regenerate_dispatch_failed' });
+      regenCharged = false;
       logger.error('processing/regenerate', `inngest.send failed for case ${caseId} — stage reverted to ${currentStage}`, {
         error: sendError instanceof Error ? sendError.message : 'unknown',
       });
@@ -309,6 +351,16 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('processing/regenerate', 'Report regeneration failed', { error: error instanceof Error ? error.message : 'unknown' });
+    // Charged but the job never got dispatched (e.g. inline anomaly resolution
+    // threw) → refund so the perito is never billed for work that never ran.
+    if (regenCharged && !regenDispatched && regenUserId) {
+      // Pass entity_id=caseId so this refund is counted on the SAME key as the
+      // consumption — keeps the regenerate-report onFailure idempotency consistent
+      // (it counts consumptions vs refunds filtered by entity_id=caseId).
+      await refundCredits(regenUserId, CREDIT_COSTS.rigenerazione_report, 'rigenerazione_report', regenCaseId ?? undefined, {
+        reason: 'regenerate_unexpected_error',
+      }).catch(() => { /* best-effort */ });
+    }
     return NextResponse.json({ success: false, error: 'Errore rigenerazione report.' }, { status: 500 });
   }
 }

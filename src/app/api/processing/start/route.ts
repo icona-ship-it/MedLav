@@ -26,16 +26,6 @@ export async function POST(request: NextRequest) {
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
 
-    // Rate limiting
-    const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    const rateCheck = await checkRateLimit({ key: `processing:${ip}`, ...RATE_LIMITS.PROCESSING });
-    if (!rateCheck.success) {
-      return NextResponse.json(
-        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
-        { status: 429 },
-      );
-    }
-
     const supabase = await createClient();
 
     // Auth check
@@ -44,6 +34,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Non autenticato' },
         { status: 401 },
+      );
+    }
+
+    // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile e
+    // penalizza utenti legittimi dietro lo stesso NAT/studio).
+    const rateCheck = await checkRateLimit({ key: `processing:${user.id}`, ...RATE_LIMITS.PROCESSING });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { success: false, error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429 },
       );
     }
 

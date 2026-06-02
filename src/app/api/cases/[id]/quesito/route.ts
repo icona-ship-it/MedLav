@@ -3,13 +3,18 @@ import { createClient } from '@/lib/supabase/server';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry, DETERMINISTIC_SEED } from '@/lib/mistral/client';
+import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
+// Cap the quesito length: a legal question is at most a few paragraphs. The .max()
+// bounds the token cost of the (billed) Mistral call and blocks denial-of-wallet
+// via oversized inputs.
 const requestSchema = z.object({
-  quesito: z.string().min(10, 'Quesito troppo corto'),
+  quesito: z.string().min(10, 'Quesito troppo corto').max(5000, 'Quesito troppo lungo (max 5000 caratteri)'),
 });
 
 interface MappedPoint {
@@ -61,6 +66,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Refund bookkeeping visible to the outer catch (separate block scope).
+  let quesitoCharged = false;
+  let quesitoUserId: string | null = null;
   try {
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
@@ -95,6 +103,28 @@ export async function POST(
     if (!caseData) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
     }
+
+    // Charge 1 credit for the quesito mapping (single Mistral Large call). Deduct
+    // after ownership/validation so rejected requests are never billed; refunded
+    // on any failure in the outer catch.
+    const balance = await getBalance(user.id);
+    if (balance.total < CREDIT_COSTS.quesito) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Crediti insufficienti: serve ${CREDIT_COSTS.quesito} credito per mappare il quesito.`,
+          creditsNeeded: CREDIT_COSTS.quesito,
+          creditsAvailable: balance.total,
+        },
+        { status: 402 },
+      );
+    }
+    const deduction = await deductCredits(user.id, CREDIT_COSTS.quesito, 'quesito', caseId, { reason: 'quesito_mapping' });
+    if (!deduction.success) {
+      return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
+    }
+    quesitoCharged = true;
+    quesitoUserId = user.id;
 
     // Load events and anomalies
     const [eventsRes, anomaliesRes] = await Promise.all([
@@ -182,6 +212,11 @@ Mappa ogni punto del quesito agli eventi e anomalie rilevanti.`,
     });
   } catch (error) {
     logger.error('quesito', 'Quesito mapping failed', { error: error instanceof Error ? error.message : 'unknown' });
+    // Refund the credit if the LLM call (or anything after the charge) failed.
+    if (quesitoCharged && quesitoUserId) {
+      await refundCredits(quesitoUserId, CREDIT_COSTS.quesito, 'quesito', undefined, { reason: 'quesito_failed' })
+        .catch(() => { /* best-effort */ });
+    }
     return NextResponse.json({ success: false, error: 'Errore mappatura quesito' }, { status: 500 });
   }
 }

@@ -44,7 +44,15 @@ export function validateEnv(): void {
     logger.warn('env', 'ADMIN_EMAILS not set — admin endpoints will deny all access');
   }
   if (!process.env.STRIPE_SECRET_KEY) {
-    logger.info('env', 'STRIPE_SECRET_KEY not set — running in mock payment mode (credits granted directly)');
+    if (process.env.NODE_ENV === 'production') {
+      // Mock payment mode (free credits) is disabled in production for security.
+      // Without the key, payment endpoints fail closed — surface this loudly so
+      // the misconfiguration is caught, but do NOT crash the app (the core
+      // report pipeline does not depend on Stripe).
+      logger.error('env', 'STRIPE_SECRET_KEY mancante in PRODUZIONE — i pagamenti falliranno (mock mode disabilitato in prod). Configurare la chiave Stripe.');
+    } else {
+      logger.info('env', 'STRIPE_SECRET_KEY not set — running in mock payment mode (credits granted directly)');
+    }
   }
   if (!process.env.RESEND_API_KEY) {
     logger.info('env', 'RESEND_API_KEY not set — email notifications disabled');

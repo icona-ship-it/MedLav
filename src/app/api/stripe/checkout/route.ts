@@ -42,6 +42,15 @@ export async function POST(request: NextRequest) {
 
     // ─── Mock mode: grant Pro directly without Stripe ───
     if (isStripeMockMode()) {
+      // Defense-in-depth: never activate a paid plan for free in production.
+      // isStripeMockMode() already returns false in production, so this is the
+      // second independent guard on the free-subscription path.
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json(
+          { success: false, error: 'Pagamenti non disponibili al momento. Riprova più tardi.' },
+          { status: 503 },
+        );
+      }
       const admin = createAdminClient();
 
       // Activate Pro subscription in profile

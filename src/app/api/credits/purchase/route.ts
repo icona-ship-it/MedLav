@@ -46,6 +46,16 @@ export async function POST(request: NextRequest) {
 
   // ─── Mock mode: grant credits directly without Stripe ───
   if (isStripeMockMode()) {
+    // Defense-in-depth: never grant unpaid credits in production, even if the
+    // predicate above were ever to regress. isStripeMockMode() already returns
+    // false in production, so this branch is unreachable there — this is the
+    // second independent guard on the free-credit path.
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { success: false, error: 'Pagamenti non disponibili al momento. Riprova più tardi.' },
+        { status: 503 },
+      );
+    }
     await grantCredits(user.id, pack.credits, 'purchase', {
       mockMode: true,
       pack: pack.credits,
