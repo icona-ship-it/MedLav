@@ -963,7 +963,7 @@ export const processCase = inngest.createFunction(
       try {
         // Special handling for documentazione_sanitaria: split into batches
         // Each batch is a separate Inngest step → separate serverless invocation → no timeout
-        if (spec.id === 'documentazione_sanitaria' && spec.needsOcr && ocrResults.length > DOC_BATCH_SIZE) {
+        if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder && spec.needsOcr && ocrResults.length > DOC_BATCH_SIZE) {
           const batchContents: string[] = [];
           const totalBatches = Math.ceil(ocrResults.length / DOC_BATCH_SIZE);
           let totalPromptTokens = 0;

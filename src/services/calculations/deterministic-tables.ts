@@ -11,6 +11,7 @@
 import { formatDate } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
+import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
 
@@ -25,6 +26,22 @@ export interface DeterministicTableEvent {
   doctor?: string | null;
   source_type?: string | null;
   order_number?: number | null;
+  /** Source document id — used to order the verbatim documentation chronologically. */
+  document_id?: string | null;
+}
+
+/** A single OCR page of a document (verbatim text). */
+export interface DeterministicDocPage {
+  pageNumber: number;
+  ocrText: string;
+}
+
+/** A document with its verbatim OCR pages, for the deterministic documentation. */
+export interface DeterministicDoc {
+  documentId: string;
+  fileName: string;
+  documentType: string;
+  pages: DeterministicDocPage[];
 }
 
 const SENTINEL_DATE = '1900-01-01';
@@ -112,6 +129,83 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
   ].join('\n');
 }
 
+/**
+ * Render the "documentazione sanitaria" section VERBATIM from the OCR text —
+ * NO LLM. Each document becomes a heading (type + file name + derived date)
+ * followed by its OCR text, page by page, exactly as extracted. Documents are
+ * ordered chronologically using the earliest dated event that references them
+ * (undated documents go last, keeping their input order). Empty/illegible pages
+ * are marked explicitly instead of being dropped silently.
+ *
+ * The doctor's text is reproduced as-is: pipes are NOT escaped (valid Markdown
+ * tables in the OCR must survive), and no rephrasing is possible. Returns '' when
+ * there are no documents (caller substitutes the empty fallback).
+ */
+/**
+ * Demote H1/H2 headings inside the verbatim OCR to H4, so an OCR line like
+ * "## REFERTO" can never collide with the report's own "## " SECTION delimiter
+ * (parseSections / the professional-export splitter would otherwise fragment the
+ * documentazione into spurious sections). H3+ are left as-is — they are NOT
+ * section boundaries (and our own per-document header is H3). The visible text is
+ * preserved — only the Markdown heading LEVEL changes (a rendering nuance).
+ */
+function demoteOcrHeadings(text: string): string {
+  return text.replace(/^(#{1,2})(\s)/gm, '####$2');
+}
+
+export function formatDocumentazioneSanitaria(
+  docs: DeterministicDoc[],
+  events: DeterministicTableEvent[],
+): string {
+  // Only CLINICAL documents: atti/perizie/spese are reproduced in their own
+  // sections (same partition as the LLM path's EXCLUDED_FROM_MEDICAL).
+  docs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
+  if (docs.length === 0) return '';
+
+  // Earliest dated event per document → the document's chronological position.
+  const docDate = new Map<string, string>();
+  for (const e of events) {
+    const id = e.document_id;
+    const d = e.event_date;
+    if (!id || !d || d === SENTINEL_DATE || !ISO_DATE_RE.test(d)) continue;
+    const prev = docDate.get(id);
+    if (!prev || d < prev) docDate.set(id, d);
+  }
+
+  // Stable chronological sort: dated docs by date, undated docs last in input order.
+  const ordered = docs
+    .map((doc, index) => ({ doc, index }))
+    .sort((a, b) => {
+      const da = docDate.get(a.doc.documentId);
+      const db = docDate.get(b.doc.documentId);
+      if (da && db) return da < db ? -1 : da > db ? 1 : a.index - b.index;
+      if (da && !db) return -1;
+      if (!da && db) return 1;
+      return a.index - b.index;
+    })
+    .map((x) => x.doc);
+
+  const parts: string[] = [];
+  for (const doc of ordered) {
+    const d = docDate.get(doc.documentId);
+    const dateSuffix = d ? ` — ${formatDate(d)}` : '';
+    parts.push(`### ${getDocumentTypeLabel(doc.documentType)}: ${doc.fileName}${dateSuffix}`);
+
+    if (doc.pages.length === 0) {
+      parts.push('*[Testo non disponibile per questo documento.]*');
+    } else {
+      for (const page of doc.pages) {
+        const text = (page.ocrText ?? '').trim();
+        parts.push(text ? demoteOcrHeadings(text) : `*[Pagina ${page.pageNumber} — testo non disponibile o illeggibile; verificare sul documento originale.]*`);
+        parts.push('\n---\n');
+      }
+    }
+    parts.push('');
+  }
+
+  return parts.join('\n').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic-block expansion (at-read-time)
 // ---------------------------------------------------------------------------
@@ -124,12 +218,14 @@ export const DETERMINISTIC_MARKERS = {
   ITT_ITP: '<!--MEDLAV:ITT_ITP-->',
   SPESE: '<!--MEDLAV:SPESE-->',
   CRONO: '<!--MEDLAV:CRONO-->',
+  DOC_SANITARIA: '<!--MEDLAV:DOC_SANITARIA-->',
 } as const;
 
 const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
   ITT_ITP: '_Periodi di invalidità temporanea non calcolabili dai dati disponibili._',
   SPESE: '_Nessuna spesa medica documentata._',
   CRONO: '_Nessun evento clinico in cronologia._',
+  DOC_SANITARIA: '_Nessun documento sanitario disponibile._',
 };
 
 /** True if the synthesis contains at least one deterministic marker. */
@@ -150,17 +246,58 @@ export function toDeterministicEvents(
     doctor: (e.doctor as string | null) ?? null,
     source_type: (e.source_type as string | null) ?? null,
     order_number: (e.order_number as number | null) ?? null,
+    document_id: (e.document_id as string | null) ?? null,
   }));
 }
 
 /**
- * Replace the deterministic sentinel markers in a report's markdown with tables
- * rendered from the CURRENT events. Pure, no LLM. Idempotent and a no-op on
- * legacy reports (no markers) — returns the input unchanged.
+ * Build DeterministicDoc[] from a document-metadata list + a FLAT page list
+ * (client surfaces: the case page loads documents + documentPages separately).
+ * Groups pages by document_id and sorts them by page number.
+ */
+export function buildDeterministicDocs(
+  documents: ReadonlyArray<{ id: string; file_name: string; document_type: string | null }>,
+  pages: ReadonlyArray<{ document_id: string; page_number: number; ocr_text: string | null }>,
+): DeterministicDoc[] {
+  const byDoc = new Map<string, DeterministicDocPage[]>();
+  for (const p of pages) {
+    const arr = byDoc.get(p.document_id) ?? [];
+    arr.push({ pageNumber: p.page_number, ocrText: p.ocr_text ?? '' });
+    byDoc.set(p.document_id, arr);
+  }
+  return documents.map((d) => ({
+    documentId: d.id,
+    fileName: d.file_name,
+    documentType: d.document_type ?? 'altro',
+    pages: (byDoc.get(d.id) ?? []).slice().sort((a, b) => a.pageNumber - b.pageNumber),
+  }));
+}
+
+/** Map document+pages rows (export/pipeline) to the verbatim renderer shape. */
+export function toDeterministicDocs(
+  rows: ReadonlyArray<{ id: string; fileName: string; documentType: string; pages: ReadonlyArray<{ pageNumber: number; ocrText: string }> }>,
+): DeterministicDoc[] {
+  return rows.map((d) => ({
+    documentId: d.id,
+    fileName: d.fileName,
+    documentType: d.documentType,
+    pages: d.pages.map((p) => ({ pageNumber: p.pageNumber, ocrText: p.ocrText })),
+  }));
+}
+
+/**
+ * Replace the deterministic sentinel markers in a report's markdown with content
+ * rendered from the CURRENT events/documents. Pure, no LLM. Idempotent and a
+ * no-op on legacy reports (no markers).
+ *
+ * `docs` is optional: when omitted (a surface that hasn't wired the OCR yet) the
+ * DOC_SANITARIA marker is LEFT IN PLACE as an invisible HTML comment — never
+ * replaced with a misleading "no documents" message.
  */
 export function expandDeterministicBlocks(
   synthesis: string,
   events: DeterministicTableEvent[],
+  docs?: DeterministicDoc[],
 ): string {
   if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
 
@@ -169,6 +306,12 @@ export function expandDeterministicBlocks(
     [DETERMINISTIC_MARKERS.SPESE, formatExpenseTable(events) || EMPTY_FALLBACK.SPESE],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
   ];
+  if (docs !== undefined) {
+    replacements.push([
+      DETERMINISTIC_MARKERS.DOC_SANITARIA,
+      formatDocumentazioneSanitaria(docs, events) || EMPTY_FALLBACK.DOC_SANITARIA,
+    ]);
+  }
 
   let out = synthesis;
   for (const [marker, rendered] of replacements) {

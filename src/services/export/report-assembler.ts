@@ -1,6 +1,7 @@
 import type { DocumentWithPages } from './load-case-data';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import { anomalyTypeLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { getDocumentTypeLabel } from '@/lib/document-type-labels';
 import { formatDate } from '@/lib/format';
 
 export interface PeriziaMetadataExport {
@@ -52,17 +53,6 @@ interface ExportMissingDoc {
   related_event: string | null;
 }
 
-const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  cartella_clinica: 'Cartella Clinica',
-  referto_specialistico: 'Referto Specialistico',
-  esame_strumentale: 'Esame Strumentale',
-  esame_laboratorio: 'Esame di Laboratorio',
-  lettera_dimissione: 'Lettera di Dimissione',
-  certificato: 'Certificato',
-  perizia_precedente: 'Perizia Precedente',
-  altro: 'Altro Documento',
-};
-
 /**
  * Build the DOCUMENTAZIONE SANITARIA section from OCR pages.
  * Each document gets a heading, then full OCR text page by page.
@@ -72,7 +62,7 @@ function buildDocumentazioneSanitaria(docs: DocumentWithPages[]): string {
 
   const parts: string[] = [];
   for (const doc of docs) {
-    const typeLabel = DOCUMENT_TYPE_LABELS[doc.documentType] ?? doc.documentType;
+    const typeLabel = getDocumentTypeLabel(doc.documentType);
     parts.push(`### ${doc.fileName} (${typeLabel})`);
 
     if (doc.pages.length === 0) {
@@ -169,7 +159,7 @@ export function assembleFullReport(params: {
 
   // 3. DOCUMENTAZIONE ESAMINATA
   const docList = documentsWithPages.map((doc) => {
-    const typeLabel = DOCUMENT_TYPE_LABELS[doc.documentType] ?? doc.documentType;
+    const typeLabel = getDocumentTypeLabel(doc.documentType);
     const pageInfo = doc.pageCount ? ` (${doc.pageCount} pagg.)` : '';
     return `- ${doc.fileName} — *${typeLabel}*${pageInfo}`;
   }).join('\n');

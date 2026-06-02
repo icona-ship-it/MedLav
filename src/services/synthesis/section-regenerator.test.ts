@@ -14,10 +14,12 @@ import type { CaseType, CaseRole } from '@/types';
 
 const mockGenerate = vi.mocked(generateSingleSection);
 
+// Use an LLM-generated (non-placeholder) section for the delegation tests;
+// documentazione_sanitaria is now a deterministic placeholder.
 function baseParams(overrides: Record<string, unknown> = {}) {
   return {
-    sectionId: 'documentazione_sanitaria',
-    currentSynthesis: '## Documentazione Sanitaria\nVecchio contenuto.\n\n## Epicrisi\nAltro.\n',
+    sectionId: 'documentazione_atti',
+    currentSynthesis: '## I Dati della Documentazione in Atti\nVecchio contenuto.\n\n## Epicrisi\nAltro.\n',
     caseType: 'ortopedica' as CaseType,
     caseRole: 'ctu' as CaseRole,
     events: [],
@@ -50,8 +52,8 @@ describe('regenerateSection — parity with generation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGenerate.mockResolvedValue({
-      id: 'documentazione_sanitaria',
-      title: 'Documentazione Sanitaria',
+      id: 'documentazione_atti',
+      title: 'I Dati della Documentazione in Atti',
       content: 'NUOVO CONTENUTO RIGENERATO',
       contextSummary: '',
       wordCount: 3,
@@ -63,9 +65,9 @@ describe('regenerateSection — parity with generation', () => {
 
     expect(mockGenerate).toHaveBeenCalledTimes(1);
     const arg = mockGenerate.mock.calls[0][0];
-    // The spec must come from the catalog (carries the load-bearing promptDirective
-    // = doc-sanitaria neutrality), NOT a weak ad-hoc prompt.
-    expect(arg.spec.id).toBe('documentazione_sanitaria');
+    // The spec must come from the catalog (carries the load-bearing promptDirective),
+    // NOT a weak ad-hoc prompt.
+    expect(arg.spec.id).toBe('documentazione_atti');
     expect(arg.spec.promptDirective.length).toBeGreaterThan(0);
     expect(result).toContain('NUOVO CONTENUTO RIGENERATO');
   });
@@ -82,7 +84,7 @@ describe('regenerateSection — parity with generation', () => {
     await regenerateSection(baseParams());
     const arg = mockGenerate.mock.calls[0][0];
     const ctxIds = arg.previousContext.map((c) => c.id);
-    expect(ctxIds).not.toContain('documentazione_sanitaria');
+    expect(ctxIds).not.toContain('documentazione_atti');
     expect(ctxIds).toContain('epicrisi');
   });
 

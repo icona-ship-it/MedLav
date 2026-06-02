@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2, Download, AlertTriangle } from 'lucide-react';
@@ -99,6 +100,13 @@ export function ReportStep({
   pipelineWarnings = [],
 }: ReportStepProps) {
   const router = useRouter();
+
+  // Verbatim documentation (deterministic): group OCR pages by document so the
+  // DOC_SANITARIA sentinel expands to the doctor's text — same as the export.
+  const deterministicDocs = useMemo(
+    () => buildDeterministicDocs(documents, documentPages),
+    [documents, documentPages],
+  );
 
   // Dialog / sheet state
   const [qualitySheetOpen, setQualitySheetOpen] = useState(false);
@@ -420,6 +428,7 @@ export function ReportStep({
             caseId={caseId}
             report={report}
             events={events}
+            docs={deterministicDocs}
             onEventClick={(orderNumber) => {
               // UX Ondata 3-IA: click su [Ev.N] -> apre il drawer eventi
               // e highlighta l'evento, invece di switchare di tab.

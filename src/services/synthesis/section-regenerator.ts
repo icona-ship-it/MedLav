@@ -6,7 +6,7 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionContext } from './section-generation-types';
-import { getSectionSpecById } from './section-catalog';
+import { getSectionSpecById, buildDocSanitariaLlmSpec } from './section-catalog';
 import { generateSingleSection, summarizeForContext } from './section-generator';
 import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
@@ -27,6 +27,10 @@ interface RegenerateSectionParams {
   /** Module id (parere_pro_veritate / parere_scopo_riserva / RC) for spec resolution. */
   moduleId?: string;
   patientInitials?: string | null;
+  /** On-demand "elaborated (AI)" variant of documentazione_sanitaria: re-enable
+   * the LLM reproduction (translation / lab tables / grouping) instead of the
+   * deterministic verbatim default. */
+  elaborated?: boolean;
 }
 
 /** Context length (chars) per prior-section summary fed back as rolling context. */
@@ -52,9 +56,16 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   } = params;
 
   // Resolve the CANONICAL spec from the catalog (same source as generation).
-  const spec = getSectionSpecById(sectionId, caseRole, moduleId, periziaMetadata);
+  let spec = getSectionSpecById(sectionId, caseRole, moduleId, periziaMetadata);
   if (!spec) {
     throw new Error(`Sezione non riconosciuta per la rigenerazione: ${sectionId}`);
+  }
+
+  // AI-on-demand: the perito asked for the LLM-elaborated documentazione sanitaria
+  // (the default is the deterministic verbatim placeholder). Re-enable the LLM spec
+  // so it goes through generateSingleSection instead of the placeholder short-circuit.
+  if (params.elaborated && sectionId === 'documentazione_sanitaria') {
+    spec = buildDocSanitariaLlmSpec(spec);
   }
 
   // PLACEHOLDER GUARD (mirrors the main pipeline, generate-report.ts): placeholder

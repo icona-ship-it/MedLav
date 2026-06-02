@@ -27,6 +27,9 @@ const requestSchema = z.object({
   instruction: z.string().max(500).optional(),
   /** Overwrite an edited/locked section after explicit user confirmation. */
   force: z.boolean().optional(),
+  /** documentazione_sanitaria: generate the LLM-"elaborated" variant on demand
+   * (default is the deterministic verbatim placeholder). */
+  elaborated: z.boolean().optional(),
   /** Optimistic concurrency: the report version the client is acting on. */
   expectedVersion: z.number().int().optional(),
 });
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Parametri non validi' }, { status: 400 });
     }
 
-    const { caseId, sectionId, instruction, force, expectedVersion } = parsed.data;
+    const { caseId, sectionId, instruction, force, expectedVersion, elaborated } = parsed.data;
 
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
@@ -202,6 +205,7 @@ export async function POST(request: NextRequest) {
       documentsOcrText,
       moduleId: (caseRow.module_id ?? undefined) as string | undefined,
       patientInitials: (caseRow.patient_initials ?? null) as string | null,
+      elaborated,
     });
 
     // Save as new version. Preserve the whole generation_metadata (per-section

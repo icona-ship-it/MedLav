@@ -29,6 +29,7 @@ export function eventTypeToDomain(eventType: string): EventDomain {
  */
 const NEVER_STALE_SECTIONS: ReadonlySet<string> = new Set([
   'intestazione',            // template-rendered header
+  'documentazione_sanitaria', // deterministic verbatim OCR (auto-updates at read time)
   'spese_mediche',           // deterministic table (auto-updates)
   'considerazioni_ml',       // placeholder (+ deterministic ITT/ITP)
   'operazioni_peritali',     // placeholder

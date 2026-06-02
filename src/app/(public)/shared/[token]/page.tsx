@@ -49,6 +49,12 @@ export default async function SharedCasePage({
     return <ExpiredView />;
   }
 
+  // GDPR Art. 9: a public, unauthenticated share link must NOT expose the raw
+  // verbatim clinical OCR (full patient/doctor names, diagnoses). So we DON'T pass
+  // the OCR docs here → the DOC_SANITARIA sentinel stays an invisible comment on
+  // the shared view (the section appears empty externally). The verbatim
+  // documentazione is available only in the owner's authenticated export.
+
   // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from the
   // current events at read time — same as the main viewer/export. Without this
   // the public shared link would show the raw <!--MEDLAV:*--> markers as
@@ -60,6 +66,8 @@ export default async function SharedCasePage({
           ? expandDeterministicBlocks(
               reportResult.data.synthesis as string,
               toDeterministicEvents(eventsResult.data ?? []),
+              // No docs on the public link → DOC_SANITARIA stays an invisible
+              // comment (no raw clinical OCR exposed externally). See above.
             )
           : reportResult.data.synthesis,
       }

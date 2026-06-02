@@ -262,9 +262,13 @@ describe('section-catalog', () => {
       ].filter((s) => s.id === 'documentazione_sanitaria');
       expect(docSan.length).toBeGreaterThanOrEqual(4);
       for (const s of docSan) {
+        // DETERMINISTIC by default: verbatim OCR reproduction via the sentinel
+        // (the guarantee is now by construction, not via the prompt).
+        expect(s.isPlaceholder).toBe(true);
+        expect(s.placeholderText).toContain('MEDLAV:DOC_SANITARIA');
+        // The dormant LLM directive (on-demand "elaborated" variant) still instructs verbatim.
         expect(s.promptDirective).toMatch(/VERBATIM/);
         expect(s.promptDirective).toMatch(/INTEGRALMENTE/);
-        expect(s.maxChars).toBe(60_000);
         // must NOT re-introduce synthesis of source content
         expect(s.promptDirective).not.toMatch(/Sintetizza le sezioni narrative accessorie/i);
         expect(s.promptDirective).not.toMatch(/diagnosi pre\/post \+ tecnica \+ complicanze \+ esito/i);
@@ -419,10 +423,12 @@ describe('section-catalog', () => {
       expect(ids).toContain('pareri_tecnici');
     });
 
-    it('should have needsOcr=true for documentazione_sanitaria', () => {
+    it('should be a deterministic placeholder for documentazione_sanitaria (verbatim OCR, no LLM)', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const docSan = plan.find((s) => s.id === 'documentazione_sanitaria');
-      expect(docSan?.needsOcr).toBe(true);
+      expect(docSan?.isPlaceholder).toBe(true);
+      expect(docSan?.needsOcr).toBe(false);
+      expect(docSan?.placeholderText).toContain('MEDLAV:DOC_SANITARIA');
     });
 
     it('includes conciliazione sections only for ATP ex art. 696-bis procedures', () => {
