@@ -189,27 +189,34 @@ function buildFormalHeader(pm: PeriziaMetadataExport, caseRole: string, patientI
  * Firma DOPPIA datata (bozza + deposito definitivo), collegiale se è nominato
  * un ausiliario. Allinea l'HTML professional al DOCX e al benchmark.
  */
-function buildDualSignatureHtml(pm: PeriziaMetadataExport, caseRole: string): string {
+function buildDualSignatureHtml(pm: PeriziaMetadataExport, caseRole: string, signatureImage?: string): string {
   const label = caseRole === 'ctu' ? 'Il Consulente Tecnico d\'Ufficio'
     : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
     : 'Il Perito';
-  const signer = (dateLabel: string): string => `
+  // L'immagine-firma (se caricata) compare UNA sola volta, nella riga di firma del
+  // blocco finale (deposito/firma unica), al posto della linea "___" — niente
+  // blocco-immagine ridondante a parte.
+  const ctuLine = (withImage: boolean): string =>
+    withImage && signatureImage
+      ? `<img src="${signatureImage}" alt="Firma" style="max-width:240px;max-height:90px;margin-top:6px" />`
+      : '_________________________';
+  const signer = (dateLabel: string, isLast: boolean): string => `
   <div style="margin-top:40px;page-break-inside:avoid">
     <p style="font-size:14px">${dateLabel}: _________________________</p>
     <div style="text-align:right;margin-top:24px">
       <p style="font-weight:bold;margin:0">${escapeHtmlPro(label)}</p>
       ${pm.ctuName ? `<p style="margin:2px 0">${escapeHtmlPro(pm.ctuName)}</p>` : ''}
       ${pm.ctuTitle ? `<p style="margin:0;font-style:italic;font-size:13px">${escapeHtmlPro(pm.ctuTitle)}</p>` : ''}
-      <p style="margin-top:18px">_________________________</p>
+      <p style="margin-top:18px">${ctuLine(isLast)}</p>
       ${pm.collaboratoreName ? `<p style="margin:18px 0 2px">${escapeHtmlPro(pm.collaboratoreName)}</p>${pm.collaboratoreTitle ? `<p style="margin:0;font-style:italic;font-size:13px">${escapeHtmlPro(pm.collaboratoreTitle)}</p>` : ''}<p style="margin-top:18px">_________________________</p>` : ''}
     </div>
   </div>`;
   // Firma DOPPIA (bozza + deposito) solo per CTU/CTP, che hanno l'iter bozza→deposito.
   // Stragiudiziale/parere: firma singola datata.
   if (caseRole === 'ctu' || caseRole === 'ctp') {
-    return signer('Luogo e data (sottoscrizione della bozza)') + signer('Luogo e data (deposito definitivo)');
+    return signer('Luogo e data (sottoscrizione della bozza)', false) + signer('Luogo e data (deposito definitivo)', true);
   }
-  return signer('Luogo e data');
+  return signer('Luogo e data', true);
 }
 
 export function generateHtmlReport(params: HtmlExportParams): string {
@@ -1167,16 +1174,7 @@ ${synthesisHasOwnHeader(synthesis) ? '' : `<div class="cover">
      ═══════════════════════════════════════════════ -->
 ${sectionsHtml}
 
-${buildDualSignatureHtml(pm, caseRole)}
-
-${signatureImageBase64 ? `
-<!-- ═══ Signature ═══ -->
-<div style="margin-top: 60px; page-break-inside: avoid;">
-  <div style="border-top: 1px solid #ccc; width: 300px; padding-top: 8px;">
-    <img src="${signatureImageBase64}" alt="Firma" style="max-width: 250px; max-height: 100px;" />
-    ${pm.ctuName ? `<p style="margin: 4px 0 0; font-size: 12px; color: #555;">${escapeHtmlPro(pm.ctuName)}</p>` : ''}
-  </div>
-</div>` : ''}
+${buildDualSignatureHtml(pm, caseRole, signatureImageBase64)}
 
 <!-- ═══ AI Act / L. 132/2025 transparency disclosure ═══ -->
 ${getAiActDisclosureHtml()}

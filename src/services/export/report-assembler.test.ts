@@ -62,4 +62,13 @@ describe('export: intestazione unica (no doppione)', () => {
     expect(html).toContain('deposito definitivo');
     expect(html).toContain('Dr. Bongiovanni'); // ausiliario nel blocco firma
   });
+
+  it('immagine-firma integrata UNA volta (no blocco-immagine ridondante)', () => {
+    const img = 'data:image/png;base64,AAAA';
+    const profParams = { caseCode: 'X', caseRole: 'ctu', patientInitials: 'S.S.', periziaMetadata: pm, documentsWithPages: [], synthesis: '## Quesiti\n\n1. ...', anomalies: [], missingDocs: [], reportStatus: 'completato', signatureImageBase64: img };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const html = generateProfessionalHtmlReport(profParams as any);
+    expect((html.match(/<img[^>]*alt="Firma"/g) || []).length).toBe(1); // una sola immagine firma
+    expect(html).not.toContain('border-top: 1px solid #ccc; width: 300px'); // vecchio blocco rimosso
+  });
 });
