@@ -206,9 +206,19 @@ Mappa ogni punto del quesito agli eventi e anomalie rilevanti.`,
       mapping = { points: [] };
     }
 
+    // Server-side grounding (deterministic): drop any relevantEvent whose
+    // orderNumber does NOT exist in the real event set. The LLM must never surface
+    // an invented event reference to the perito — this is the hard guard, the
+    // prompt is only the soft one.
+    const validOrderNumbers = new Set(events.map((e) => e.order_number as number));
+    const cleanedPoints = (mapping.points ?? []).map((p) => ({
+      ...p,
+      relevantEvents: (p.relevantEvents ?? []).filter((re) => validOrderNumbers.has(re.orderNumber)),
+    }));
+
     return NextResponse.json({
       success: true,
-      data: { mapping: mapping.points, quesito: parsed.data.quesito },
+      data: { mapping: cleanedPoints, quesito: parsed.data.quesito },
     });
   } catch (error) {
     logger.error('quesito', 'Quesito mapping failed', { error: error instanceof Error ? error.message : 'unknown' });

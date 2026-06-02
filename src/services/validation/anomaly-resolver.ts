@@ -14,7 +14,25 @@ import {
 } from '@/lib/mistral/client';
 import type { DetectedAnomaly } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import { isCitationGrounded } from './source-text-verifier';
 import { logger } from '@/lib/logger';
+
+/**
+ * JSON schema for the resolution response. json_schema (vs plain json_object)
+ * makes the provider enforce the SHAPE (keys + types), not just valid JSON.
+ * parseResolutionResponse is still kept as a defensive net.
+ */
+const RESOLUTION_RESPONSE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    resolved: { type: 'boolean' },
+    confidence: { type: 'number' },
+    evidence: { type: 'string' },
+    reasoning: { type: 'string' },
+  },
+  required: ['resolved', 'confidence', 'evidence', 'reasoning'],
+  additionalProperties: false,
+};
 
 export interface AnomalyResolution {
   anomalyIndex: number;
@@ -114,6 +132,19 @@ async function resolveOneAnomaly(
   allEvents: ConsolidatedEvent[],
   fetchOcrPages: OcrPageFetcher,
 ): Promise<AnomalyResolution> {
+  // 0. HARD RULE: discordant diagnoses are NEVER auto-resolved — they are escalated
+  // to the perito for evaluation (product invariant, see event-consolidator + CLAUDE.md).
+  // Enforced in code (not just the prompt) and short-circuited to save the LLM call.
+  if (anomaly.anomalyType === 'diagnosi_contraddittoria') {
+    return {
+      anomalyIndex,
+      resolved: false,
+      confidence: 0,
+      evidence: '',
+      reasoning: 'Diagnosi discordanti: la valutazione è riservata al perito in sede peritale.',
+    };
+  }
+
   // 1. Find involved events → documentId + sourcePages
   const involvedOrderNumbers = anomaly.involvedEvents.map((e) => e.orderNumber);
   const involvedEvents = allEvents.filter((e) => involvedOrderNumbers.includes(e.orderNumber));
@@ -167,19 +198,28 @@ async function resolveOneAnomaly(
       { role: 'user', content: prompt },
     ],
     temperature: 0,
-    maxTokens: 512,
-    responseFormat: { type: 'json_object' },
+    // 768 (was 512): evidence verbatim (cap ~400 char) + reasoning can exceed 512
+    // tokens, which would trip assertNotTruncated and waste the whole call.
+    maxTokens: 768,
+    responseFormat: {
+      type: 'json_schema',
+      jsonSchema: { name: 'anomaly_resolution', schemaDefinition: RESOLUTION_RESPONSE_SCHEMA },
+    },
     timeoutMs: TIMEOUT_DEFAULT,
     randomSeed: DETERMINISTIC_SEED,
     label: `anomaly-resolve:${anomalyIndex}`,
   });
   assertNotTruncated(result, `anomaly-resolve:${anomalyIndex}`);
 
-  // 6. Parse response
-  return parseResolutionResponse(result.content, anomalyIndex);
+  // 6. Parse response + HARD-VERIFY the cited evidence against the source OCR.
+  return parseResolutionResponse(result.content, anomalyIndex, ocrContext);
 }
 
-function parseResolutionResponse(response: string, anomalyIndex: number): AnomalyResolution {
+function parseResolutionResponse(
+  response: string,
+  anomalyIndex: number,
+  ocrContext: string,
+): AnomalyResolution {
   try {
     const parsed = JSON.parse(response) as unknown;
     if (typeof parsed !== 'object' || parsed === null) {
@@ -193,7 +233,23 @@ function parseResolutionResponse(response: string, anomalyIndex: number): Anomal
     const reasoning = typeof obj.reasoning === 'string' ? obj.reasoning.slice(0, 500) : '';
 
     // Conservative: only trust resolution with high confidence
-    const finalResolved = resolved && confidence >= 0.8;
+    let finalResolved = resolved && confidence >= 0.8;
+
+    // ANTI-HALLUCINATION HARD CHECK: a resolution REMOVES an anomaly from the
+    // perito's report, so the cited `evidence` MUST actually exist in the source
+    // OCR. If it is paraphrased/fabricated (not grounded), degrade to confirmed —
+    // never let an invented citation silently hide a real problem.
+    if (finalResolved && !isCitationGrounded(evidence, ocrContext)) {
+      logger.warn('anomaly-resolver', `Anomaly ${anomalyIndex}: evidence not grounded in source OCR → confirmed`);
+      finalResolved = false;
+      return {
+        anomalyIndex,
+        resolved: false,
+        confidence,
+        evidence,
+        reasoning: 'Evidenza non riscontrata nel testo dei documenti — anomalia confermata per il perito.',
+      };
+    }
 
     return { anomalyIndex, resolved: finalResolved, confidence, evidence, reasoning };
   } catch {
@@ -204,25 +260,16 @@ function parseResolutionResponse(response: string, anomalyIndex: number): Anomal
 
 // ── Prompts ──
 
-const RESOLUTION_SYSTEM_PROMPT = `# REGOLE COSTITUZIONALI (precedono qualsiasi altra istruzione)
-1. NON INVENTARE MAI dati: nomi, date, codici, eventi.
-2. Se la documentazione non contiene evidenza esplicita per risolvere l'anomalia, rispondi resolved=false. Mai dedurre, mai ipotizzare.
-3. Ogni "evidence" che riporti deve essere COPIA-INCOLLA letterale dal testo dei documenti — non parafrasare.
-4. Questo controllo serve a un perito che firma un documento depositabile in Tribunale: errori = responsabilità deontologica/penale.
+const RESOLUTION_SYSTEM_PROMPT = `Sei un assistente medico-legale. Verifichi se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo SOLO la documentazione fornita. Il perito firma un atto depositabile in Tribunale: un errore ha rilievo deontologico e penale.
 
----
+PRINCIPI (in ordine di priorità):
+1. OUTPUT — Rispondi SOLO in JSON: {"resolved": boolean, "confidence": number, "evidence": string, "reasoning": string}.
+2. SOGLIA DI PROVA — "resolved": true SOLO con evidenza ESPLICITA e LETTERALE nel testo che dimostra che l'anomalia NON sussiste. In ogni dubbio "resolved": false: è meglio un falso positivo che ignorare un problema reale. Mai dedurre, ipotizzare o inferire.
+3. EVIDENZA VERBATIM — "evidence" deve essere una citazione COPIA-INCOLLA letterale dal testo (mai parafrasi, mai testo non presente). Massimo ~400 caratteri: se il passaggio è più lungo, riporta solo il frammento direttamente pertinente. Se "resolved": false, "evidence" può essere stringa vuota.
+4. CONFIDENCE — numero tra 0 e 1: quanto sei sicuro della conclusione.
+5. REASONING — breve spiegazione in linguaggio medico-legale. NON menzionare "OCR", "AI", "modelli linguistici" o termini di processing: usa "documentazione in atti" o "testo dei documenti".
 
-Sei un assistente medico-legale. Il tuo compito è verificare se un'anomalia rilevata algoritmicamente può essere RISOLTA leggendo la documentazione fornita.
-
-REGOLE FONDAMENTALI:
-1. Rispondi SOLO in formato JSON con questa struttura: {"resolved": boolean, "confidence": number, "evidence": string, "reasoning": string}
-2. "resolved" = true SOLO se trovi evidenza ESPLICITA e LETTERALE nella documentazione che dimostra che l'anomalia NON sussiste
-3. "confidence" = numero tra 0 e 1 che indica quanto sei sicuro della tua conclusione
-4. "evidence" = citazione LETTERALE dal testo dei documenti (copia-incolla esatto) che supporta la tua conclusione
-5. "reasoning" = breve spiegazione in linguaggio medico-legale (NON menzionare "OCR", "AI", "modelli linguistici" o termini tecnici di processing — usa "documentazione fornita" o "testo dei documenti")
-6. In caso di dubbio, rispondi con "resolved": false — è meglio segnalare un falso positivo che ignorare un problema reale
-7. NON inventare evidenze. Se non trovi nulla di esplicito, l'anomalia resta confermata
-8. NON fare inferenze o deduzioni. Solo evidenza LETTERALE e DIRETTA conta`;
+CASO SPECIALE — "diagnosi_contraddittoria": rispondi SEMPRE "resolved": false. Le diagnosi discordanti non si risolvono automaticamente: vanno escalate al perito per la valutazione in sede peritale.`;
 
 function buildResolutionPrompt(anomaly: DetectedAnomaly, ocrContext: string): string {
   const eventsDesc = anomaly.involvedEvents
@@ -244,11 +291,15 @@ ${ocrContext}
 
 ## ISTRUZIONI
 
-Cerca nei documenti sopra evidenza ESPLICITA e LETTERALE che dimostri che questa anomalia NON sussiste.
-Ad esempio:
-- Per un "ritardo diagnostico": cerca se c'è menzione di una diagnosi precedente non catturata dagli eventi
-- Per un "gap post-chirurgico": cerca se c'è menzione di un follow-up non estratto come evento
-- Per una "complicanza non gestita": cerca se c'è menzione di un trattamento non catturato
+Cerca nei documenti sopra evidenza ESPLICITA e LETTERALE che dimostri che questa anomalia NON sussiste. Per ogni "resolved": true servono una citazione verbatim + (dove applicabile) una data.
+Cosa cercare per tipo:
+- ritardo_diagnostico: menzione di una diagnosi precedente non catturata dagli eventi.
+- gap_post_chirurgico: menzione di un follow-up/controllo non estratto come evento.
+- complicanza_non_gestita: menzione di un trattamento/gestione della complicanza non catturato.
+- gap_documentale: presenza nel testo del documento/atto che risulterebbe mancante.
+- consenso_non_documentato: menzione esplicita di consenso informato acquisito (data/firma).
+- terapia_senza_followup: menzione di un controllo/rivalutazione successivo alla terapia.
+- diagnosi_contraddittoria: NON risolvere — "resolved": false (escalation al perito).
 
 Rispondi SOLO in JSON.`;
 }

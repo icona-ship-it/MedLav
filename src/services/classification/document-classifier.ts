@@ -17,6 +17,22 @@ const VALID_DOCUMENT_TYPES = new Set([
   'altro',
 ]);
 
+/**
+ * json_schema (vs plain json_object) makes the provider enforce the SHAPE +
+ * the documentType ENUM, so an out-of-vocabulary type can't come back. The
+ * defensive parseClassificationResponse is still kept as a net.
+ */
+const CLASSIFICATION_RESPONSE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    documentType: { type: 'string', enum: [...VALID_DOCUMENT_TYPES] },
+    confidence: { type: 'number' },
+    reasoning: { type: 'string' },
+  },
+  required: ['documentType', 'confidence', 'reasoning'],
+  additionalProperties: false,
+};
+
 const CLASSIFICATION_SYSTEM_PROMPT = `Sei un sistema di classificazione documentale medico-legale italiano.
 
 Analizza il NOME FILE e il TESTO del documento per classificarlo in UNA delle seguenti categorie:
@@ -39,6 +55,14 @@ SEGNALI DA USARE:
 - Intestazione: le prime righe spesso identificano il tipo (es. "REFERTO DI RISONANZA MAGNETICA", "LETTERA DI DIMISSIONE")
 - Struttura: tabelle con valori numerici → esame_laboratorio; immagini diagnostiche → esame_strumentale
 - Linguaggio: termini giuridici → memoria_difensiva/perizia; termini clinici → cartella/referto
+
+LINGUA: il documento può essere in ITALIANO, TEDESCO o INGLESE (es. Alto Adige). Classifica per STRUTTURA e FUNZIONE del documento, non per la lingua.
+
+CONFIDENCE (0-100) — usa questa scala ancorata:
+- 85-100: tipo EVIDENTE (intestazione/struttura/firma lo dichiarano esplicitamente)
+- 70-84: tipo molto probabile (più segnali concordi, nessun segnale contrario)
+- 50-69: tipo probabile ma con AMBIGUITÀ (segnali deboli o parzialmente discordanti)
+- sotto 50: incerto (segnali insufficienti o contraddittori) → preferisci "altro"
 
 Rispondi SOLO in JSON con questo formato esatto:
 { "documentType": "categoria", "confidence": 0-100, "reasoning": "breve motivazione in italiano" }`;
@@ -77,7 +101,10 @@ export async function classifyDocument(
     ],
     temperature: 0,
     maxTokens: 256,
-    responseFormat: { type: 'json_object' },
+    responseFormat: {
+      type: 'json_schema',
+      jsonSchema: { name: 'document_classification', schemaDefinition: CLASSIFICATION_RESPONSE_SCHEMA },
+    },
     randomSeed: DETERMINISTIC_SEED,
     label: `classify-${safeFileName.slice(0, 30)}`,
   });

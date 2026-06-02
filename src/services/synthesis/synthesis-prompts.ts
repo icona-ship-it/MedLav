@@ -85,7 +85,6 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - NON inventare nomi di pazienti, medici o strutture. Usa SOLO quelli presenti negli eventi. Se mancano, usa "[struttura non indicata]", "[medico non indicato]".
 - NON aggiungere dettagli clinici dalla tua conoscenza medica. Se la documentazione non riporta un dato (es. dosaggio farmaco, parametro vitale), NON inventarlo.
 - Se un evento ha tipo "spesa_medica", riporta SOLO importo, prestazione e struttura come indicati nell'evento. NON inventare tariffari o confronti non documentati.
-- È preferibile un report più breve ma accurato rispetto a un report lungo con informazioni inventate.
 
 ## OGGETTIVITÀ ASSOLUTA (REGOLA FONDAMENTALE)
 - Il report è un DOCUMENTO DI LAVORO per il medico legale. Il TUO compito è organizzare e presentare i FATTI. Il medico legale formulerà le PROPRIE opinioni e conclusioni
@@ -100,7 +99,6 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
 - NON INVENTARE MAI riferimenti a immagini. Se un esame RX/TC/RM è menzionato ma nessuna immagine è disponibile, riporta solo il testo del referto senza inserire figure.
 - Quando immagini SONO disponibili: inseriscile INLINE nel punto cronologico appropriato usando ESATTAMENTE il percorso fornito nella lista immagini.
 - Sintassi: ![Fig. N — Descrizione formale](ocr-image:percorso-esatto-dalla-lista)
-- NON creare MAI una sezione "ALLEGATI ICONOGRAFICI" separata a fine report.
 
 ## FORMATO DATI TABULARI
 - Quando riporti DATI TABULARI (esami di laboratorio, parametri vitali, spese mediche, scale di valutazione), usa SEMPRE il formato tabella markdown pipe:
@@ -110,10 +108,6 @@ const ABSOLUTE_RULES = `## REGOLE ASSOLUTE
   NON descrivere i valori uno per uno come testo discorsivo. La tabella è più chiara e leggibile.
 - Per gli esami ematochimici: includi TUTTI i valori riportati nel documento originale. Crea una tabella SEPARATA per ogni data/prelievo. NON omettere valori nella norma — il medico legale necessita del quadro completo.
 - Per le spese mediche: riporta TUTTE le voci in tabella con Data, Descrizione e Importo.
-
-## EVENTI NON CLINICI NEL REPORT
-- Se tra gli eventi ci sono voci di tipo "spesa_medica", dedicare una sezione "## SPESE MEDICHE DOCUMENTATE" che elenca ogni voce con: data, importo, prestazione, struttura, e una valutazione di congruità/necessità rispetto al quadro clinico documentato. Se il tipo caso NON è "analisi_spese_mediche" o "perizia_assicurativa", la sezione può essere sintetica.
-- Se ci sono eventi di tipo "documento_amministrativo" o "certificato", menzionarli nella sezione più appropriata del report (cronologia per la data, documentazione esaminata per il contenuto). I certificati medici e INAIL vanno integrati nella narrazione clinica.
 
 ## TRASCRIZIONE FEDELE DAL TESTO OCR (quando fornito)
 - Se il TESTO OCR DEI DOCUMENTI ORIGINALI è fornito, USALO come fonte primaria per la trascrizione

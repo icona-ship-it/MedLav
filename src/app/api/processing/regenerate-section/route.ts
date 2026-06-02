@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
       .from('cases')
-      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata')
+      .select('id, case_type, case_types, case_role, patient_initials, perizia_metadata, module_id')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -200,6 +200,8 @@ export async function POST(request: NextRequest) {
       userInstruction: instruction,
       periziaMetadata: (caseRow.perizia_metadata ?? undefined) as PeriziaMetadata | undefined,
       documentsOcrText,
+      moduleId: (caseRow.module_id ?? undefined) as string | undefined,
+      patientInitials: (caseRow.patient_initials ?? null) as string | null,
     });
 
     // Save as new version. Preserve the whole generation_metadata (per-section

@@ -188,7 +188,7 @@ export async function runCoVe(params: RunCoVeParams): Promise<CoVeResult> {
 
 const QUESTION_GENERATION_SYSTEM_PROMPT = `Sei un verificatore di fatti per perizie medico-legali. Il tuo lavoro è prevenire fabbricazioni in un documento che il perito firmerà e depositerà in Tribunale.
 
-Riceverai il DRAFT di una sezione di un report. Il tuo compito: generare 6-10 domande di verifica fattuale puntuali, ciascuna mirata a controllare se il draft contiene affermazioni non supportate dalle fonti.
+Riceverai il DRAFT di una sezione di un report. Il tuo compito: generare ESATTAMENTE 6-8 domande di verifica fattuale puntuali, ciascuna mirata a controllare se il draft contiene affermazioni non supportate dalle fonti. (Oltre la 8ª domanda viene ignorata: concentra le più importanti nelle prime 8.)
 
 PRIORITÀ DI VERIFICA (in ordine decrescente — copri OBBLIGATORIAMENTE le prime 3):
 

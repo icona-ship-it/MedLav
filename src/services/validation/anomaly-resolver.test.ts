@@ -103,6 +103,39 @@ describe('resolveAnomalies', () => {
     expect(result[0].resolution?.confidence).toBe(0.95);
   });
 
+  it('should CONFIRM (not resolve) when cited evidence is NOT grounded in the source OCR', async () => {
+    // LLM claims a high-confidence resolution but the `evidence` is fabricated /
+    // paraphrased and does not exist in the OCR → must degrade to confirmed.
+    mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
+      resolved: true,
+      confidence: 0.95,
+      evidence: 'Diagnosi di frattura formulata il 10/01/2024 — citazione del tutto inventata',
+      reasoning: 'Diagnosi precedente presente.',
+    })));
+
+    const anomalies = [makeAnomaly()];
+    const events = [makeEvent({ orderNumber: 1, documentId: 'doc-1', sourcePages: [1] })];
+    const fetcher = makeFetcher(new Map([['doc-1:1', 'Referto privo di qualsiasi diagnosi pregressa.']]));
+
+    const result = await resolveAnomalies(anomalies, events, fetcher);
+
+    expect(result[0].resolution?.resolved).toBe(false);
+    expect(result[0].resolution?.reasoning).toContain('non riscontrata');
+  });
+
+  it('should ALWAYS escalate diagnosi_contraddittoria to the perito without calling the LLM', async () => {
+    const anomalies = [makeAnomaly({ anomalyType: 'diagnosi_contraddittoria' })];
+    const events = [makeEvent({ orderNumber: 1, documentId: 'doc-1', sourcePages: [1] })];
+    const fetcher = makeFetcher(new Map([['doc-1:1', 'Diagnosi A e diagnosi B discordanti.']]));
+
+    const result = await resolveAnomalies(anomalies, events, fetcher);
+
+    expect(result[0].resolution?.resolved).toBe(false);
+    expect(result[0].resolution?.reasoning).toContain('sede peritale');
+    // Short-circuited in code → no LLM call, no wasted cost.
+    expect(mockStreamMistralChat).not.toHaveBeenCalled();
+  });
+
   it('should confirm anomaly when LLM finds no evidence', async () => {
     mockStreamMistralChat.mockResolvedValueOnce(mockChatResult(JSON.stringify({
       resolved: false,

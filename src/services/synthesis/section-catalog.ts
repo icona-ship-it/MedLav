@@ -359,10 +359,11 @@ ${NO_EVN_RULE}`,
 *Ricostruzione cronologica essenziale dei fatti principali (i dati di dettaglio sono nelle sezioni precedenti).*
 
 *2. ANALISI MEDICO-LEGALE*
-*- Valutazione del nesso di causalita materiale (criterio controfattuale) e giuridico ("piu probabile che non")*
+*- Nesso di causalita materiale: applicare i criteri criteriologici (cronologico, topografico, di idoneita/efficienza lesiva, di continuita fenomenologica, di esclusione di altre cause); nesso giuridico secondo il criterio del "piu probabile che non"; per la malpractice omissiva, giudizio controfattuale ad alta probabilita logica*
+*- In presenza di preesistenze: valutazione dello stato anteriore e del danno differenziale*
 *- Analisi della condotta sanitaria alla luce delle linee guida e buone pratiche cliniche applicabili al momento dei fatti*
 *- Valutazione del danno biologico temporaneo (ITT/ITP) con date e periodi*
-*- Valutazione del danno biologico permanente con riferimento alle tabelle SIMLA*
+*- Valutazione del danno biologico permanente con barème di riferimento citato esplicitamente (Tabella SIMLA / Tabella Unica Nazionale / Tabella di Milano)*
 *- Eventuale danno morale ed esistenziale*
 *- Personalizzazione del danno se applicabile*
 
@@ -1113,6 +1114,49 @@ export function resolveSectionPlan(params: {
   }
 
   return roleAdjusted;
+}
+
+/**
+ * Resolve the CANONICAL SectionSpec for a single section id, ignoring inclusion
+ * conditions and the section selector (the perito explicitly asked to regenerate
+ * THIS section, so we want its spec regardless of whether a condition would have
+ * excluded it from a fresh plan). Penale/RC transforms ARE applied so the spec
+ * matches what the case actually uses (e.g. considerazioni_penale, RC deterministic).
+ *
+ * Used by the single-section regeneration path so it inherits the exact same
+ * promptDirective / token budget / intestazione routing as initial generation.
+ */
+export function getSectionSpecById(
+  sectionId: string,
+  caseRole: CaseRole,
+  moduleId?: string,
+  periziaMetadata?: PeriziaMetadata,
+): SectionSpec | undefined {
+  let base: SectionSpec[];
+  if (moduleId === 'parere_pro_veritate') {
+    base = PARERE_PRO_VERITATE_SECTIONS;
+  } else if (moduleId === 'parere_scopo_riserva') {
+    base = PARERE_SCOPO_RISERVA_SECTIONS;
+  } else {
+    switch (caseRole) {
+      case 'ctu': base = CTU_SECTIONS; break;
+      case 'ctp': base = CTP_SECTIONS; break;
+      case 'stragiudiziale': base = STRAGIUDIZIALE_SECTIONS; break;
+      default: base = CTU_SECTIONS;
+    }
+  }
+
+  const penaleApplicable = !!periziaMetadata?.ambitoPenale &&
+    (caseRole === 'ctu' || caseRole === 'ctp') &&
+    moduleId !== 'parere_pro_veritate' &&
+    moduleId !== 'parere_scopo_riserva' &&
+    moduleId !== RC_CIVILE_MODULE_ID;
+  let sections = penaleApplicable ? applyPenaleSections(base) : base;
+  if (moduleId === RC_CIVILE_MODULE_ID) {
+    sections = applyRcPeritoSections(sections, periziaMetadata);
+  }
+
+  return sections.find((s) => s.id === sectionId);
 }
 
 /**

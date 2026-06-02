@@ -24,12 +24,25 @@ const VALID_TYPES = new Set([
   'perizia_ctp', 'perizia_ctu', 'altro',
 ]);
 
-const SYSTEM_PROMPT = `Sei un classificatore di documenti medico-legali italiani.
+/** json_schema enforces the SHAPE + documentType ENUM (no out-of-vocabulary type). */
+const PAGE_CLASSIFICATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    documentType: { type: 'string', enum: [...VALID_TYPES] },
+    confidence: { type: 'number' },
+    reasoning: { type: 'string' },
+    dateFound: { type: ['string', 'null'] },
+  },
+  required: ['documentType', 'confidence', 'reasoning', 'dateFound'],
+  additionalProperties: false,
+};
+
+const SYSTEM_PROMPT = `Sei un classificatore di documenti medico-legali (testo in ITALIANO, TEDESCO o INGLESE — es. Alto Adige). Classifica per STRUTTURA e FUNZIONE, non per la lingua.
 Analizza il testo di una SINGOLA PAGINA di un documento e determina:
 1. Il tipo di documento a cui appartiene questa pagina
 2. La tua confidenza (0-100)
 3. Il motivo della classificazione (1 frase)
-4. Una data rilevante trovata nella pagina (formato YYYY-MM-DD) o null
+4. La data DEL DOCUMENTO stesso (data del referto / della prestazione / di emissione, formato YYYY-MM-DD), NON una data citata nell'anamnesi o nella storia clinica passata; null se assente o incerta
 
 Tipi validi: cartella_clinica, referto_specialistico, esame_strumentale, esame_laboratorio, lettera_dimissione, certificato, perizia_precedente, spese_mediche, memoria_difensiva, perizia_ctp, perizia_ctu, altro
 
@@ -55,7 +68,10 @@ export async function classifyPage(
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Pagina ${pageNumber}:\n${truncated}` },
       ],
-      responseFormat: { type: 'json_object' },
+      responseFormat: {
+        type: 'json_schema',
+        jsonSchema: { name: 'page_classification', schemaDefinition: PAGE_CLASSIFICATION_SCHEMA },
+      },
       temperature: 0,
       maxTokens: 256,
       timeoutMs: 30_000,

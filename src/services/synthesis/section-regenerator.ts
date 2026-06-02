@@ -1,15 +1,15 @@
-import { MISTRAL_MODELS, streamMistralChat, TIMEOUT_EXTRACTION, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
-import { formatRoleDirectiveForPrompt } from './role-prompts';
-import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge } from '@/lib/domain-knowledge';
-import { formatDocumentsOcrForPrompt } from './synthesis-prompts';
+import type { SynthesisParams } from './synthesis-service';
+import type { SectionContext } from './section-generation-types';
+import { getSectionSpecById } from './section-catalog';
+import { generateSingleSection, summarizeForContext } from './section-generator';
+import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
-import { formatDate } from '@/lib/format';
 
 interface RegenerateSectionParams {
   sectionId: string;
@@ -24,111 +24,90 @@ interface RegenerateSectionParams {
   userInstruction?: string;
   periziaMetadata?: PeriziaMetadata;
   documentsOcrText?: DocumentOcrContext[];
+  /** Module id (parere_pro_veritate / parere_scopo_riserva / RC) for spec resolution. */
+  moduleId?: string;
+  patientInitials?: string | null;
 }
+
+/** Context length (chars) per prior-section summary fed back as rolling context. */
+const PREVIOUS_CONTEXT_CHARS = 600;
 
 /**
  * Regenerate a single section of the report, preserving all other sections.
  * Returns the full updated synthesis text.
+ *
+ * IMPORTANT: this path now delegates to the SAME generation pipeline as the
+ * initial report (resolve the canonical SectionSpec from the catalog →
+ * generateSingleSection). That guarantees regeneration inherits EVERY defense of
+ * the first pass — CONSTITUTIONAL_PREAMBLE, ANTI_FABRICATION_RULE, REFUSAL_RULE,
+ * doc-sanitaria neutrality, ABSOLUTE_RULES, and the JSON-mode deterministic
+ * routing for `intestazione*` (anti-Regnoto). Previously it used a separate,
+ * much weaker system prompt, silently dropping those guards on a routine action.
  */
 export async function regenerateSection(params: RegenerateSectionParams): Promise<string> {
   const {
     sectionId, currentSynthesis, caseType, caseTypes, caseRole,
     events, anomalies, missingDocuments, calculations, userInstruction,
+    periziaMetadata, documentsOcrText, moduleId, patientInitials,
   } = params;
 
-  const sections = parseSynthesisSections(currentSynthesis);
-  const targetSection = sections.find((s) => s.id === sectionId);
-  const sectionTitle = targetSection?.title ?? sectionId;
-  const effectiveTypes = caseTypes && caseTypes.length > 1 ? caseTypes : [caseType];
-  const knowledge = effectiveTypes.length > 1
-    ? getCombinedCaseTypeKnowledge(effectiveTypes)
-    : getCaseTypeKnowledge(caseType);
-
-  // Find the section spec from domain knowledge
-  const sectionSpec = knowledge.reportSections.find((s) => s.id === sectionId);
-  const wordRange = sectionSpec?.wordRange;
-  const wordGuidance = wordRange && wordRange.max > 0
-    ? `La sezione deve essere di ${wordRange.min}-${wordRange.max} parole.`
-    : 'La sezione non ha limiti di parole specifici.';
-
-  const roleDirective = formatRoleDirectiveForPrompt(caseRole);
-  const causalNexus = sectionId === 'nesso_causale' ? formatCausalNexusForPrompt() : '';
-
-  // Ambito penale: la rigenerazione di qualsiasi sezione valutativa deve restare
-  // penale (no ITT/ITP/SIMLA), altrimenti l'LLM reintroduce il quadro civilistico.
-  const penaleDirective = params.periziaMetadata?.ambitoPenale
-    ? `\n## AMBITO PENALE (responsabilità medico-sanitaria colposa)
-Questa è una perizia in ambito PENALE: NON quantificare il danno biologico — NIENTE ITT/ITP, NIENTE tabelle SIMLA. Il fulcro è la CAUSA dell'evento/decesso, il NESSO CAUSALE penale (giudizio controfattuale: la condotta alternativa lecita avrebbe evitato l'evento?) e i PROFILI DI COLPA (imperizia / negligenza / imprudenza rispetto alle linee guida), con scala probabilistica VERBALE ("oltre ogni ragionevole dubbio", "elevata probabilità"), non percentuali di danno.`
-    : '';
-
-  const systemPrompt = `Sei un medico legale esperto. Devi RIGENERARE SOLO la sezione "${sectionTitle}" di un report peritale.
-
-${roleDirective}${penaleDirective}
-
-## ISTRUZIONI SPECIFICHE
-- Genera ESCLUSIVAMENTE la sezione richiesta: "${sectionTitle}"
-- ${wordGuidance}
-- ${sectionSpec?.description ?? 'Segui le linee guida standard per questa sezione.'}
-- NON generare altre sezioni del report
-- NON includere heading ## — verrà aggiunto automaticamente
-${causalNexus ? `\n## CRITERI NESSO CAUSALE\n${causalNexus}` : ''}`;
-
-  // Build context from events (abbreviated for single-section regen)
-  const eventsContext = events.length > 30
-    ? events.slice(0, 30).map((e) =>
-      `${formatDate(e.eventDate)} | ${e.eventType}: ${e.title} — ${e.description.slice(0, 200)}`,
-    ).join('\n') + `\n... (${events.length - 30} altri eventi)`
-    : events.map((e) =>
-      `${formatDate(e.eventDate)} | ${e.eventType}: ${e.title} — ${e.description.slice(0, 300)}`,
-    ).join('\n');
-
-  const anomaliesContext = anomalies.length > 0
-    ? anomalies.map((a) => `- [${a.severity}] ${a.anomalyType}: ${a.description}`).join('\n')
-    : 'Nessuna anomalia.';
-
-  const calcsContext = calculations && calculations.length > 0
-    ? calculations.map((c) => `- ${c.label}: ${c.value}`).join('\n')
-    : '';
-
-  let userPrompt = `REPORT ATTUALE (per contesto):\n\n${currentSynthesis.slice(0, 4000)}${currentSynthesis.length > 4000 ? '\n...(troncato)' : ''}`;
-  userPrompt += `\n\n## EVENTI (${events.length} totali)\n${eventsContext}`;
-  userPrompt += `\n\n## ANOMALIE\n${anomaliesContext}`;
-  if (calcsContext) userPrompt += `\n\n## CALCOLI\n${calcsContext}`;
-
-  if (missingDocuments.length > 0) {
-    const missingContext = missingDocuments.map((d) => `- ${d.documentName}: ${d.reason}`).join('\n');
-    userPrompt += `\n\n## DOCUMENTAZIONE MANCANTE\n${missingContext}`;
+  // Resolve the CANONICAL spec from the catalog (same source as generation).
+  const spec = getSectionSpecById(sectionId, caseRole, moduleId, periziaMetadata);
+  if (!spec) {
+    throw new Error(`Sezione non riconosciuta per la rigenerazione: ${sectionId}`);
   }
 
-  // Add OCR text for faithful transcription (especially for cronologia/documentazione sections)
-  const ocrSection = formatDocumentsOcrForPrompt(params.documentsOcrText);
-  if (ocrSection) {
-    userPrompt += '\n\n' + ocrSection;
+  // PLACEHOLDER GUARD (mirrors the main pipeline, generate-report.ts): placeholder
+  // sections — the medico-legal VALUATIONS (considerazioni, operazioni peritali,
+  // visita clinica/esame obiettivo, osservazioni bozza) and the RC deterministic
+  // sections written BY THE PERITO (anamnesi, il fatto) — must NEVER be sent to the
+  // LLM. The AI must not author or rewrite them (VINCOLO #1: oggettività assoluta).
+  // Re-emit the deterministic placeholder content (keeps the ITT/ITP sentinel).
+  if (spec.isPlaceholder) {
+    return replaceSectionContent(currentSynthesis, sectionId, buildPlaceholderContent(spec));
   }
 
-  if (userInstruction) {
-    userPrompt += `\n\n## ISTRUZIONE SPECIFICA DELL'UTENTE\n${userInstruction}`;
-  }
+  // Inject the perito's free-text instruction into the section directive. This
+  // keeps ALL the generation defenses (buildSectionSystemPrompt wraps
+  // promptDirective with the constitutional preamble + anti-fabrication rules)
+  // while honoring the custom request.
+  const effectiveSpec = userInstruction
+    ? {
+      ...spec,
+      promptDirective: `${spec.promptDirective}\n\n## ISTRUZIONE SPECIFICA DEL PERITO\n${userInstruction}\n(Rispetta comunque tutti i vincoli sopra: oggettività, nessuna invenzione, citazioni verbatim.)`,
+    }
+    : spec;
 
-  userPrompt += `\n\n---\nGenera ORA la sezione "${sectionTitle}". Solo il contenuto, senza heading ##.`;
-  if (params.documentsOcrText && params.documentsOcrText.length > 0) {
-    userPrompt += '\nUsa il testo OCR come fonte primaria per la trascrizione fedele.';
-  }
+  const synthesisParams: SynthesisParams = {
+    caseType,
+    caseTypes: caseTypes && caseTypes.length > 1 ? caseTypes : undefined,
+    caseRole,
+    patientInitials: patientInitials ?? null,
+    events,
+    anomalies,
+    missingDocuments,
+    calculations,
+    periziaMetadata,
+    documentsOcrText,
+  };
 
-  const hasOcr = params.documentsOcrText && params.documentsOcrText.length > 0;
-  const result = await streamMistralChat({
-    model: MISTRAL_MODELS.MISTRAL_LARGE,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0,
-    maxTokens: hasOcr ? 16384 : 4096,
-    timeoutMs: TIMEOUT_EXTRACTION,
-    randomSeed: DETERMINISTIC_SEED,
-    label: `regen-section:${sectionId}`,
+  // Rolling context: the OTHER sections of the current report, summarized — so a
+  // regenerated section stays coherent with what surrounds it.
+  const parsed = parseSynthesisSections(currentSynthesis);
+  const previousContext: SectionContext[] = parsed
+    .filter((s) => s.id !== sectionId && s.content.trim().length > 0)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      contextSummary: summarizeForContext(s.content, PREVIOUS_CONTEXT_CHARS),
+    }));
+
+  const generated = await generateSingleSection({
+    spec: effectiveSpec,
+    synthesisParams,
+    previousContext,
+    documentsOcrText,
   });
-  assertNotTruncated(result, `regen-section:${sectionId}`);
 
-  return replaceSectionContent(currentSynthesis, sectionId, result.content);
+  return replaceSectionContent(currentSynthesis, sectionId, generated.content);
 }

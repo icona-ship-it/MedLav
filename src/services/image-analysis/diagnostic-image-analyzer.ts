@@ -85,7 +85,7 @@ async function analyzeSingleImage(
 ): Promise<ImageAnalysisResult | null> {
   const client = getMistralClient();
 
-  const systemPrompt = `Sei un radiologo esperto. Descrivi questa immagine diagnostica in modo OGGETTIVO e DESCRITTIVO.
+  const systemPrompt = `Sei un assistente che DESCRIVE OGGETTIVAMENTE immagini diagnostiche per una perizia medico-legale. NON sei chiamato a diagnosticare: il giudizio clinico spetta al perito. Riferisci solo ciò che è visibile.
 
 REGOLE:
 - Descrivi SOLO ciò che osservi nell'immagine

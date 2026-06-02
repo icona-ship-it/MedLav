@@ -148,16 +148,21 @@ describe('document-classifier', () => {
       expect(callArgs.model).toBe('mistral-large-latest');
     });
 
-    it('should request json_object response format', async () => {
+    it('should request json_schema response format with the documentType enum', async () => {
       // Arrange
       mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
       // Act
       await classifyDocument('Testo', 'file.pdf');
 
-      // Assert
+      // Assert: json_schema enforces the shape + the documentType enum at the provider.
       const callArgs = mockStreamChat.mock.calls[0][0];
-      expect(callArgs.responseFormat).toEqual({ type: 'json_object' });
+      expect(callArgs.responseFormat.type).toBe('json_schema');
+      const schema = callArgs.responseFormat.jsonSchema.schemaDefinition as {
+        properties: { documentType: { enum: string[] } };
+      };
+      expect(schema.properties.documentType.enum).toContain('altro');
+      expect(schema.properties.documentType.enum).toContain('referto_specialistico');
     });
   });
 });

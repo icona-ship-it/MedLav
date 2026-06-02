@@ -99,6 +99,21 @@ export function verifySourceTexts(
 }
 
 /**
+ * Public single-string grounding check: is `citation` actually present in
+ * `fullText` (exact → normalized → LCS ≥ 0.80)? Reuses the same matching logic
+ * as verifySourceTexts. Used to hard-verify LLM-produced verbatim citations
+ * (e.g. the anomaly resolver's `evidence`) against the source OCR before trusting
+ * them. Empty/whitespace citations are never grounded.
+ */
+export function isCitationGrounded(citation: string, fullText: string): boolean {
+  if (!citation || citation.trim().length === 0) return false;
+  const cleanFullText = stripPageMarkers(fullText);
+  const normalizedFullText = normalizeText(cleanFullText);
+  const fullTextWords = normalizeForWords(fullText);
+  return verifyOneSourceText(citation, cleanFullText, normalizedFullText, fullTextWords, 0).verified;
+}
+
+/**
  * Verify a single sourceText against the full text.
  */
 function verifyOneSourceText(

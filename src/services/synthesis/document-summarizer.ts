@@ -90,7 +90,8 @@ export async function summarizeDocument(
 - Esiti di esami (valori chiave)
 - Eventuali criticità o anomalie
 - PRIORITÀ ALLE PAGINE FINALI: diagnosi di dimissione, terapia domiciliare conclusiva e follow-up programmato vanno SEMPRE riportati se presenti (sono spesso nelle ultime pagine del documento).
-Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sanitario (memoria, ricorso, fattura), riassumi il contenuto pertinente.`,
+Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sanitario (memoria, ricorso, fattura), riassumi il contenuto pertinente.
+GROUNDING (vincolo assoluto): riporta SOLO informazioni effettivamente presenti nel testo fornito. Se un dato (diagnosi, valore, data, nome) NON è nel testo, NON inferirlo e NON colmarlo con conoscenza medica generale: ometti o scrivi "non indicato". Nessuna invenzione.`,
       },
       {
         role: 'user',
