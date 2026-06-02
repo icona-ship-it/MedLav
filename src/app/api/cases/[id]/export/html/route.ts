@@ -7,7 +7,7 @@ import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/e
 import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
-import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { getModule } from '@/types/modules';
 import type { ModuleId } from '@/types/modules';
@@ -159,7 +159,11 @@ export async function GET(
       // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from
       // the current events FIRST — before image/anonymization — so the table
       // content is also anonymized and kept in sync. No-op on legacy reports.
-      synthesis = expandDeterministicBlocks(synthesis, toDeterministicEvents(data.events ?? []));
+      synthesis = expandDeterministicBlocks(
+        synthesis,
+        toDeterministicEvents(data.events ?? []),
+        toDeterministicDocs(data.documentsWithPages ?? []),
+      );
       const images = await resolveOcrImages(synthesis, caseId);
       if (images.size > 0) {
         synthesis = replaceWithDataUris(synthesis, images);

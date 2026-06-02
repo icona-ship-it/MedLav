@@ -8,7 +8,7 @@ import {
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
-import { DETERMINISTIC_MARKERS, expandDeterministicBlocks } from '@/services/calculations/deterministic-tables';
+import { DETERMINISTIC_MARKERS, expandDeterministicBlocks, type DeterministicDoc } from '@/services/calculations/deterministic-tables';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -533,7 +533,21 @@ export async function assembleSectionsAndSaveReport(
     title: e.title,
     description: e.description,
   }));
-  const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents);
+  // documentazione_sanitaria is a DETERMINISTIC placeholder (verbatim OCR via the
+  // DOC_SANITARIA sentinel). The raw report only carries the marker, so validate
+  // against the EXPANDED report (with the OCR docs) — otherwise coverage/word-count
+  // sees a near-empty body and falsely blocks the save as "too short".
+  let docsForValidation: DeterministicDoc[] | undefined;
+  if (fullReport.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+    const ocrDocs = await fetchDocumentsOcrContext(caseId);
+    docsForValidation = ocrDocs.map((d) => ({
+      documentId: d.documentId,
+      fileName: d.fileName,
+      documentType: d.documentType,
+      pages: d.pages.map((p) => ({ pageNumber: p.pageNumber, ocrText: p.ocrText })),
+    }));
+  }
+  const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents, docsForValidation);
   const validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');

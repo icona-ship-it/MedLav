@@ -227,7 +227,7 @@ export const regenerateReport = inngest.createFunction(
       const previousContext = accumulatedSections.map((s) => ({ id: s.id, title: s.title, contextSummary: s.contextSummary }));
 
       try {
-        if (spec.id === 'documentazione_sanitaria' && spec.needsOcr && prep.docIds.length > DOC_BATCH_SIZE) {
+        if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder && spec.needsOcr && prep.docIds.length > DOC_BATCH_SIZE) {
           const batchContents: string[] = [];
           const totalBatches = Math.ceil(prep.docIds.length / DOC_BATCH_SIZE);
           let promptTokens = 0;

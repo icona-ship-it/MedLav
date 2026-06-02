@@ -12,7 +12,7 @@ import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer
 import { getModule } from '@/types/modules';
 import type { ModuleId } from '@/types/modules';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
-import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -166,7 +166,11 @@ export async function GET(
     let synthesis = data.report?.synthesis as string | null ?? null;
     if (synthesis) {
       // Expand deterministic factual blocks from current events first (no-op on legacy).
-      synthesis = expandDeterministicBlocks(synthesis, toDeterministicEvents(data.events ?? []));
+      synthesis = expandDeterministicBlocks(
+        synthesis,
+        toDeterministicEvents(data.events ?? []),
+        toDeterministicDocs(data.documentsWithPages ?? []),
+      );
       const images = await resolveOcrImages(synthesis, caseId);
       if (images.size > 0) {
         synthesis = replaceWithDataUris(synthesis, images);

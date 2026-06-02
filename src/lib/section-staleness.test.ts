@@ -14,8 +14,9 @@ describe('eventTypeToDomain', () => {
 
 describe('computeStaleSections', () => {
   const sections: SectionStalenessInput[] = [
-    { canonicalId: 'documentazione_sanitaria', status: 'auto' },
+    { canonicalId: 'documentazione_sanitaria', status: 'auto' }, // deterministic verbatim → never stale
     { canonicalId: 'il_fatto_e_storia_clinica', status: 'edited' },
+    { canonicalId: 'premesse', status: 'auto' },          // clinical narrative (LLM) → stale-able
     { canonicalId: 'epicrisi', status: 'locked' },
     { canonicalId: 'documentazione_atti', status: 'auto' },
     { canonicalId: 'spese_mediche', status: 'auto' },     // deterministic → never stale
@@ -30,9 +31,10 @@ describe('computeStaleSections', () => {
   it('flags clinical narrative sections when a clinical event changed', () => {
     const stale = computeStaleSections(sections, new Set(['visita']));
     const ids = stale.map((s) => s.canonicalId);
-    expect(ids).toContain('documentazione_sanitaria');
+    expect(ids).toContain('premesse');
     expect(ids).toContain('il_fatto_e_storia_clinica');
     // never-stale / placeholder / deterministic excluded
+    expect(ids).not.toContain('documentazione_sanitaria'); // deterministic verbatim
     expect(ids).not.toContain('spese_mediche');
     expect(ids).not.toContain('considerazioni_ml');
     expect(ids).not.toContain('intestazione');
@@ -46,8 +48,10 @@ describe('computeStaleSections', () => {
     const stale = computeStaleSections(sections, new Set(['diagnosi']));
     const fatto = stale.find((s) => s.canonicalId === 'il_fatto_e_storia_clinica');
     expect(fatto?.edited).toBe(true);
-    const docSan = stale.find((s) => s.canonicalId === 'documentazione_sanitaria');
-    expect(docSan?.edited).toBe(false);
+    const premesse = stale.find((s) => s.canonicalId === 'premesse');
+    expect(premesse?.edited).toBe(false);
+    // documentazione_sanitaria is deterministic → never flagged stale at all
+    expect(stale.map((s) => s.canonicalId)).not.toContain('documentazione_sanitaria');
   });
 
   it('an admin document change flags only admin-dependent sections', () => {

@@ -94,6 +94,17 @@ const ANTI_REPETITION_AND_LENGTH_RULES = `REGOLE ANTI-RIPETIZIONE (vincolanti �
  * VERBATIM (benchmark scuola veronese / Lavini 2026-06-01). Il valore primario
  * è la fedeltà al documento; la concisione vincola solo la prosa di raccordo.
  */
+/**
+ * DETERMINISTIC documentazione sanitaria (default): the doctor's text is
+ * reproduced VERBATIM from the OCR, assembled mechanically (no LLM) at read time
+ * via the DOC_SANITARIA sentinel. Guarantees 100% fidelity to the OCR by
+ * construction. The "elaborated (AI)" variant remains available on demand
+ * (buildDocSanitariaLlmSpec) — it re-enables the LLM directive kept on the spec.
+ */
+const DOC_SANITARIA_PLACEHOLDER = `Di seguito la documentazione sanitaria in atti, riprodotta integralmente e fedelmente dai documenti acquisiti, in ordine cronologico.
+
+${DETERMINISTIC_MARKERS.DOC_SANITARIA}`;
+
 const DOC_SANITARIA_INTRO = `Riproduzione FEDELE, CRONOLOGICA e VERBATIM della documentazione sanitaria. OGNI evento fornito DEVE comparire come blocco distinto — completezza non negoziabile. La concisione vincola SOLO la prosa di raccordo tra le citazioni, MAI il contenuto-fonte: il testo dei documenti va riprodotto fedelmente, non riassunto.
 
 FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
@@ -244,11 +255,16 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'I Dati della Documentazione Sanitaria in Atti',
-    maxTokens: TOKENS_HUGE,
-    maxChars: 60_000,
-    dataSources: ['events-medical', 'image-analysis'],
-    contextMaxChars: 1500,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    // DETERMINISTIC default: the doctor's text is reproduced VERBATIM from the
+    // OCR (no LLM) via the DOC_SANITARIA sentinel. The promptDirective below is
+    // the "elaborated (AI)" variant, used only when the perito regenerates with
+    // isPlaceholder disabled (buildDocSanitariaLlmSpec).
+    isPlaceholder: true,
+    placeholderText: DOC_SANITARIA_PLACEHOLDER,
     promptDirective: `${DOC_SANITARIA_INTRO}
 
 ${DOC_REPRODUCTION_RULES}
@@ -544,11 +560,14 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_HUGE,
-    maxChars: 60_000,
-    dataSources: ['events-medical', 'image-analysis'],
-    contextMaxChars: 1000,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    // DETERMINISTIC default: verbatim OCR reproduction (no LLM) via the
+    // DOC_SANITARIA sentinel; the promptDirective below is the on-demand AI variant.
+    isPlaceholder: true,
+    placeholderText: DOC_SANITARIA_PLACEHOLDER,
     promptDirective: `${DOC_SANITARIA_INTRO}
 
 ${DOC_REPRODUCTION_RULES}
@@ -676,11 +695,14 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_HUGE,
-    maxChars: 60_000,
-    dataSources: ['events-medical', 'image-analysis'],
-    contextMaxChars: 1000,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    // DETERMINISTIC default: verbatim OCR reproduction (no LLM) via the
+    // DOC_SANITARIA sentinel; the promptDirective below is the on-demand AI variant.
+    isPlaceholder: true,
+    placeholderText: DOC_SANITARIA_PLACEHOLDER,
     promptDirective: `${DOC_SANITARIA_INTRO}
 
 ${DOC_REPRODUCTION_RULES}
@@ -779,11 +801,14 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
-    maxTokens: TOKENS_HUGE,
-    maxChars: 60_000,
-    dataSources: ['events-medical', 'image-analysis'],
-    contextMaxChars: 1000,
-    needsOcr: true,
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    // DETERMINISTIC default: verbatim OCR reproduction (no LLM) via the
+    // DOC_SANITARIA sentinel; the promptDirective below is the on-demand AI variant.
+    isPlaceholder: true,
+    placeholderText: DOC_SANITARIA_PLACEHOLDER,
     promptDirective: `${DOC_SANITARIA_INTRO}
 
 ${DOC_REPRODUCTION_RULES}
@@ -1157,6 +1182,29 @@ export function getSectionSpecById(
   }
 
   return sections.find((s) => s.id === sectionId);
+}
+
+/**
+ * On-demand "elaborated (AI)" variant of the documentazione_sanitaria spec: the
+ * default spec is a deterministic placeholder (verbatim OCR, no LLM), but it
+ * still carries the full LLM promptDirective + OCR config. This returns the spec
+ * with the placeholder short-circuit disabled, so the perito can explicitly
+ * regenerate the LLM-elaborated version (translation, lab tables, grouping) when
+ * they want readability over the raw verbatim. No-op for non-placeholder specs.
+ */
+export function buildDocSanitariaLlmSpec(spec: SectionSpec): SectionSpec {
+  if (spec.id !== 'documentazione_sanitaria' || !spec.isPlaceholder) return spec;
+  // Restore the LLM runtime config (the placeholder zeroes it); the per-role
+  // promptDirective is kept dormant on the spec and reused as-is.
+  return {
+    ...spec,
+    isPlaceholder: false,
+    maxTokens: TOKENS_HUGE,
+    maxChars: 60_000,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1500,
+    needsOcr: true,
+  };
 }
 
 /**

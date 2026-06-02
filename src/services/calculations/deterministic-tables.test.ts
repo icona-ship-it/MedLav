@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   formatExpenseTable,
   formatChronologyIndex,
+  formatDocumentazioneSanitaria,
   expandDeterministicBlocks,
   hasDeterministicMarkers,
   toDeterministicEvents,
+  toDeterministicDocs,
   DETERMINISTIC_MARKERS,
   type DeterministicTableEvent,
+  type DeterministicDoc,
 } from './deterministic-tables';
 
 function ev(partial: Partial<DeterministicTableEvent>): DeterministicTableEvent {
@@ -154,5 +157,105 @@ describe('toDeterministicEvents (export mapping)', () => {
     const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.SPESE, toDeterministicEvents(rows));
     expect(out).toContain('Fattura');
     expect(out).toContain('100,00');
+  });
+});
+
+function doc(partial: Partial<DeterministicDoc>): DeterministicDoc {
+  return {
+    documentId: 'd1',
+    fileName: 'referto.pdf',
+    documentType: 'referto_specialistico',
+    pages: [{ pageNumber: 1, ocrText: 'Testo referto.' }],
+    ...partial,
+  };
+}
+
+describe('formatDocumentazioneSanitaria', () => {
+  it('reproduces the OCR text VERBATIM with a per-document header', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura del radio distale.' }] })],
+      [],
+    );
+    expect(out).toContain('### Referto Specialistico: referto.pdf');
+    expect(out).toContain('Diagnosi: frattura del radio distale.');
+  });
+
+  it('orders documents chronologically by the earliest dated event referencing them', () => {
+    const docs = [
+      doc({ documentId: 'late', fileName: 'b.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_LATE' }] }),
+      doc({ documentId: 'early', fileName: 'a.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_EARLY' }] }),
+    ];
+    const events: DeterministicTableEvent[] = [
+      ev({ document_id: 'late', event_date: '2024-06-01' }),
+      ev({ document_id: 'early', event_date: '2024-01-01' }),
+    ];
+    const out = formatDocumentazioneSanitaria(docs, events);
+    expect(out.indexOf('CONTENUTO_EARLY')).toBeLessThan(out.indexOf('CONTENUTO_LATE'));
+  });
+
+  it('puts undated documents after dated ones, keeping input order', () => {
+    const docs = [
+      doc({ documentId: 'undated', fileName: 'u.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_UNDATED' }] }),
+      doc({ documentId: 'dated', fileName: 'd.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_DATED' }] }),
+    ];
+    const events: DeterministicTableEvent[] = [ev({ document_id: 'dated', event_date: '2024-01-01' })];
+    const out = formatDocumentazioneSanitaria(docs, events);
+    expect(out.indexOf('CONTENUTO_DATED')).toBeLessThan(out.indexOf('CONTENUTO_UNDATED'));
+  });
+
+  it('marks empty/illegible pages explicitly instead of dropping them', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ pages: [{ pageNumber: 1, ocrText: 'Pagina 1 ok.' }, { pageNumber: 2, ocrText: '   ' }] })],
+      [],
+    );
+    expect(out).toContain('Pagina 1 ok.');
+    expect(out).toContain('[Pagina 2 — testo non disponibile o illeggibile');
+  });
+
+  it('does NOT escape pipes — a valid Markdown table in the OCR survives intact', () => {
+    const table = '| Analita | Valore |\n|---|---|\n| Hb | 9.7 |';
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: table }] })], []);
+    expect(out).toContain('| Analita | Valore |');
+    expect(out).not.toContain('\\|');
+  });
+
+  it('returns empty string when there are no documents', () => {
+    expect(formatDocumentazioneSanitaria([], [])).toBe('');
+  });
+});
+
+describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
+  it('expands the DOC_SANITARIA marker with the verbatim documentation when docs are provided', () => {
+    const docs = [doc({ pages: [{ pageNumber: 1, ocrText: 'TESTO_MEDICO_VERBATIM' }] })];
+    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, [], docs);
+    expect(out).toContain('TESTO_MEDICO_VERBATIM');
+    expect(out).not.toContain('MEDLAV:DOC_SANITARIA');
+  });
+
+  it('LEAVES the marker untouched (invisible comment) when docs are NOT provided', () => {
+    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, []);
+    expect(out).toBe(DETERMINISTIC_MARKERS.DOC_SANITARIA);
+  });
+
+  it('shows the empty fallback when docs are provided but empty', () => {
+    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, [], []);
+    expect(out).toContain('Nessun documento sanitario disponibile');
+  });
+
+  it('is idempotent (re-expansion is a no-op once the marker is gone)', () => {
+    const docs = [doc({})];
+    const once = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, [], docs);
+    const twice = expandDeterministicBlocks(once, [], docs);
+    expect(twice).toBe(once);
+  });
+});
+
+describe('toDeterministicDocs (mapping)', () => {
+  it('maps id→documentId and preserves pages', () => {
+    const out = toDeterministicDocs([
+      { id: 'x', fileName: 'f.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'T' }] },
+    ]);
+    expect(out[0]).toMatchObject({ documentId: 'x', fileName: 'f.pdf', documentType: 'cartella_clinica' });
+    expect(out[0].pages[0]).toMatchObject({ pageNumber: 1, ocrText: 'T' });
   });
 });
