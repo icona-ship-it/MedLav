@@ -441,6 +441,33 @@ describe('section-catalog', () => {
       expect(ordinario).not.toContain('conciliazione_post_bozza');
     });
 
+    it('ambito penale: swaps considerazioni_ml → considerazioni_penale e droppa spese_mediche', () => {
+      const ids = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { ambitoPenale: true },
+        events: [makeEvent({ eventType: 'spesa_medica' }), makeEvent()],
+      }).map((s) => s.id);
+      expect(ids).toContain('considerazioni_penale');
+      expect(ids).not.toContain('considerazioni_ml');
+      expect(ids).not.toContain('spese_mediche');
+    });
+
+    it('ambito penale: il placeholder NON cita ITT/ITP/SIMLA (civilistici)', () => {
+      const pen = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { ambitoPenale: true } })
+        .find((s) => s.id === 'considerazioni_penale');
+      expect(pen?.isPlaceholder).toBe(true);
+      // Non deve ISTRUIRE la valutazione del danno biologico (civilistica)
+      expect(pen?.placeholderText).not.toMatch(/Valutazione del danno biologico/i);
+      expect(pen?.placeholderText).not.toMatch(/tabelle SIMLA per la valutazione/i);
+      expect(pen?.placeholderText).toMatch(/colpa|nesso|ragionevole dubbio/i);
+    });
+
+    it('civile (default): mantiene considerazioni_ml, niente penale', () => {
+      const ids = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: {} }).map((s) => s.id);
+      expect(ids).toContain('considerazioni_ml');
+      expect(ids).not.toContain('considerazioni_penale');
+    });
+
     it('should have needsOcr=false for epicrisi (stragiudiziale)', () => {
       const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
       const epicrisi = plan.find((s) => s.id === 'epicrisi');

@@ -2,7 +2,7 @@ import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels,
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
-import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { assembleFullReport, synthesisHasOwnHeader, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { markdownToHtml } from './markdown-to-html';
 import { getAiActDisclosureHtml } from './ai-act-disclosure';
 
@@ -275,7 +275,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
 </head>
 <body>
 <div class="watermark-wrapper">
-${periziaMetadata ? buildFormalHeader(periziaMetadata, caseRole, patientInitials) : ''}
+${periziaMetadata && !synthesisHasOwnHeader(synthesis) ? buildFormalHeader(periziaMetadata, caseRole, patientInitials) : ''}
 ${reportStatus === 'bozza' ? '<div class="draft-banner">⚠ DOCUMENTO IN BOZZA — NON UTILIZZARE IN SEDE GIUDIZIARIA SENZA REVISIONE DEL PERITO</div>' : ''}
 <h1>Report Medico-Legale</h1>
 <div class="header-info">
@@ -1086,7 +1086,7 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
 <!-- ═══════════════════════════════════════════════
      COVER PAGE (Frontespizio)
      ═══════════════════════════════════════════════ -->
-<div class="cover">
+${synthesisHasOwnHeader(synthesis) ? '' : `<div class="cover">
   <div class="cover-rule"></div>
   <div class="cover-rule-thin"></div>
 
@@ -1122,7 +1122,7 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
   </div>
 
   <div class="cover-casecode">${escapeHtmlPro(caseCode)}</div>
-</div>
+</div>`}
 
 <!-- ═══════════════════════════════════════════════
      TABLE OF CONTENTS (Indice)

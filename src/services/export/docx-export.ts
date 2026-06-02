@@ -8,7 +8,7 @@ import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels,
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
-import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { assembleFullReport, synthesisHasOwnHeader, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { getAiActDisclosureDocxParagraphs } from './ai-act-disclosure';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -213,8 +213,9 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   const children: (Paragraph | Table)[] = [];
 
-  // Formal perizia header (if metadata present)
-  if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName)) {
+  // Formal perizia header (if metadata present) — saltato se la sintesi contiene
+  // già la propria intestazione veronese (evita il doppione: ADR 2026-06-02).
+  if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName) && !synthesisHasOwnHeader(synthesis)) {
     const roleTitle = caseRole === 'ctu' ? 'CONSULENZA TECNICA D\'UFFICIO'
       : caseRole === 'ctp' ? 'CONSULENZA TECNICA DI PARTE'
       : 'PERIZIA STRAGIUDIZIALE';
@@ -1019,6 +1020,9 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
 
   const children: (Paragraph | Table)[] = [];
 
+  // Cover/intestazione strutturata — soppressa se la sintesi contiene già la sua
+  // intestazione veronese (## Intestazione), per non duplicare il frontespizio.
+  if (!synthesisHasOwnHeader(synthesis)) {
   // Cover page
   if (pm.tribunale) {
     children.push(new Paragraph({
@@ -1073,6 +1077,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   }
 
   children.push(new Paragraph({ text: '', spacing: { after: 400 } }));
+  } // fine cover gateata (no doppione intestazione)
 
   // Table of Contents
   children.push(new Paragraph({

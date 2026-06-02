@@ -69,6 +69,7 @@ const periziaMetadataSchema = z.object({
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
+  ambitoPenale: z.boolean().optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({

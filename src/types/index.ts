@@ -122,6 +122,9 @@ export interface PeriziaMetadata {
   // Selettore sezioni report: id (canonici) delle sezioni OPZIONALI disattivate dal
   // perito. Assente/vuoto = tutte le sezioni. Le sezioni mandatory non sono mai escluse.
   excludedReportSections?: string[];
+  // Ambito penale (CTU/CTP): true = responsabilità penale (causa morte + colpa, niente
+  // ITT/ITP/SIMLA); false/undefined = civile (default).
+  ambitoPenale?: boolean;
 }
 
 // API Response

@@ -54,9 +54,16 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   const roleDirective = formatRoleDirectiveForPrompt(caseRole);
   const causalNexus = sectionId === 'nesso_causale' ? formatCausalNexusForPrompt() : '';
 
+  // Ambito penale: la rigenerazione di qualsiasi sezione valutativa deve restare
+  // penale (no ITT/ITP/SIMLA), altrimenti l'LLM reintroduce il quadro civilistico.
+  const penaleDirective = params.periziaMetadata?.ambitoPenale
+    ? `\n## AMBITO PENALE (responsabilità medico-sanitaria colposa)
+Questa è una perizia in ambito PENALE: NON quantificare il danno biologico — NIENTE ITT/ITP, NIENTE tabelle SIMLA. Il fulcro è la CAUSA dell'evento/decesso, il NESSO CAUSALE penale (giudizio controfattuale: la condotta alternativa lecita avrebbe evitato l'evento?) e i PROFILI DI COLPA (imperizia / negligenza / imprudenza rispetto alle linee guida), con scala probabilistica VERBALE ("oltre ogni ragionevole dubbio", "elevata probabilità"), non percentuali di danno.`
+    : '';
+
   const systemPrompt = `Sei un medico legale esperto. Devi RIGENERARE SOLO la sezione "${sectionTitle}" di un report peritale.
 
-${roleDirective}
+${roleDirective}${penaleDirective}
 
 ## ISTRUZIONI SPECIFICHE
 - Genera ESCLUSIVAMENTE la sezione richiesta: "${sectionTitle}"

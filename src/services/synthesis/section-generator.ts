@@ -404,6 +404,18 @@ export async function generateSingleSection(params: {
     );
   }
 
+  // Trasparenza fedeltà: su casi voluminosi il map-reduce alimenta le sezioni
+  // documentali con riassunti automatici (NON trascrizione verbatim). È silenzioso
+  // di default — lo rendiamo VISIBILE al perito (decisione 2026-06-02).
+  const summaryCount = synthesisParams.documentSummaries?.length ?? 0;
+  const fidelity = fidelitySignal({
+    needsOcr: spec.needsOcr,
+    sectionId: spec.id,
+    summaryCount,
+    truncatedByCap,
+  });
+  if (fidelity.note) finalContent += fidelity.note;
+
   const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
 
   // Generate context summary for subsequent sections
@@ -425,7 +437,30 @@ export async function generateSingleSection(params: {
     usage,
     ...coveMeta,
     ...(truncatedByCap ? { truncatedByCap, originalCharLength } : {}),
+    ...(fidelity.mode ? { fidelityMode: fidelity.mode } : {}),
+    ...(fidelity.mode === 'summaries' ? { fidelitySummaryCount: summaryCount } : {}),
   };
+}
+
+/**
+ * Calcola il segnale di fedeltà di una sezione documentale e l'eventuale nota
+ * visibile da appendere. Su casi voluminosi il map-reduce usa riassunti automatici
+ * (NON verbatim): lo rendiamo trasparente al perito. Pura e testabile.
+ */
+export function fidelitySignal(params: {
+  needsOcr: boolean;
+  sectionId: string;
+  summaryCount: number;
+  truncatedByCap: boolean;
+}): { mode?: 'ocr_complete' | 'ocr_truncated' | 'summaries'; note?: string } {
+  if (!params.needsOcr) return {};
+  const usedSummaries = params.summaryCount > 0;
+  const mode = usedSummaries ? 'summaries' : (params.truncatedByCap ? 'ocr_truncated' : 'ocr_complete');
+  let note: string | undefined;
+  if (usedSummaries && params.sectionId.startsWith('documentazione')) {
+    note = `\n\n*[⚠️ Nota di fedeltà: per la dimensione del fascicolo questa sezione è stata generata da ${params.summaryCount} riassunti automatici dei documenti, non dalla loro trascrizione integrale. Per la precisione legale delle citazioni virgolettate, fare riferimento ai documenti originali in atti.]*`;
+  }
+  return { mode, note };
 }
 
 // ── Context summarization ───────────────────────────────────────────

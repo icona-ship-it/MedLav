@@ -62,7 +62,7 @@ export function verifySourceTexts(
       updatedEvents.push({
         ...event,
         requiresVerification: true,
-        reliabilityNotes: appendNote(event.reliabilityNotes, 'sourceText assente'),
+        reliabilityNotes: appendNote(event.reliabilityNotes, 'Testo sorgente assente — verificare.'),
       });
       continue;
     }
@@ -83,7 +83,7 @@ export function verifySourceTexts(
         requiresVerification: true,
         reliabilityNotes: appendNote(
           event.reliabilityNotes,
-          'sourceText non verificato nel testo OCR',
+          'Testo sorgente non riscontrato nel documento — verificare.',
         ),
       });
     } else {

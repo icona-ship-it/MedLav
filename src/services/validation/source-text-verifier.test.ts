@@ -79,7 +79,7 @@ describe('verifySourceTexts', () => {
     expect(result.unverifiedCount).toBe(1);
     expect(result.verifications[0].verified).toBe(false);
     expect(result.events[0].requiresVerification).toBe(true);
-    expect(result.events[0].reliabilityNotes).toContain('sourceText non verificato');
+    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente non riscontrato');
   });
 
   it('should handle empty sourceText', () => {
@@ -89,7 +89,7 @@ describe('verifySourceTexts', () => {
 
     expect(result.unverifiedCount).toBe(1);
     expect(result.events[0].requiresVerification).toBe(true);
-    expect(result.events[0].reliabilityNotes).toContain('sourceText assente');
+    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente assente');
   });
 
   it('should skip LCS for very short sourceText', () => {
@@ -117,7 +117,7 @@ describe('verifySourceTexts', () => {
     const result = verifySourceTexts(events, FULL_TEXT);
 
     expect(result.events[0].reliabilityNotes).toContain('Testo manoscritto');
-    expect(result.events[0].reliabilityNotes).toContain('sourceText non verificato');
+    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente non riscontrato');
   });
 
   it('should not modify verified events', () => {

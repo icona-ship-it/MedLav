@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { HeaderDataSchema, parseHeaderData, type HeaderData } from './header-schema';
 import { renderHeaderMarkdown } from './header-template';
-import { validateReport } from './report-validator';
+import { validateReport, getBlockingIssues } from './report-validator';
 
 // ── Header schema / template — deterministic anti-fabrication ───────
 
@@ -224,7 +224,7 @@ Valutazione relativa a frattura tibia/perone presso Ospedale Niguarda del 5 magg
     expect(mismatch).toBeUndefined();
   });
 
-  it('10) Bulk-fabricated citations (>50% unverified) escalate to error', () => {
+  it('10) Bulk-fabricated citations (>50% unverified) → warning VISIBILE ma NON bloccante (decisione 2026-06-02)', () => {
     // Create a report with 4 long quoted strings, none of which exist in OCR.
     const fabricatedQuotes = `## Dati della Documentazione Sanitaria
 Dalla cartella si rileva: "questa frase fittizia non è presente nei documenti originali del caso reale". Il decorso è descritto come "una seconda frase totalmente inventata che non potrebbe essere trovata nell'OCR fornito". La diagnosi: "terza citazione fabbricata che è scollegata dalla documentazione". Si conclude con: "quarta citazione fabbricata altrettanto inesistente nel materiale documentale fornito".`;
@@ -240,8 +240,11 @@ Dalla cartella si rileva: "questa frase fittizia non è presente nei documenti o
       }],
     });
 
-    const errors = result.issues.filter((i) => i.type === 'unverified_citation' && i.severity === 'error');
-    expect(errors.length).toBeGreaterThan(0);
-    expect(result.valid).toBe(false);
+    // Le citazioni non verificate sono SEGNALATE (visibili al perito)...
+    const citationIssues = result.issues.filter((i) => i.type === 'unverified_citation');
+    expect(citationIssues.length).toBeGreaterThan(0);
+    // ...ma SOLO come warning: mai 'error', mai bloccanti (fiducia di default, controllo a richiesta).
+    expect(citationIssues.every((i) => i.severity === 'warning')).toBe(true);
+    expect(getBlockingIssues(result).some((i) => i.type === 'unverified_citation')).toBe(false);
   });
 });

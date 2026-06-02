@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL } from './section-generator';
+import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL, fidelitySignal } from './section-generator';
 import type { SectionSpec } from './section-generation-types';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 
@@ -223,6 +223,38 @@ describe('filterOcrForSection', () => {
       for (const type of medicalTypes) {
         expect(EXCLUDED_FROM_MEDICAL.has(type)).toBe(false);
       }
+    });
+  });
+
+  describe('fidelitySignal — trasparenza fedeltà', () => {
+    it('OCR completo → ocr_complete, nessuna nota', () => {
+      const r = fidelitySignal({ needsOcr: true, sectionId: 'documentazione_sanitaria', summaryCount: 0, truncatedByCap: false });
+      expect(r.mode).toBe('ocr_complete');
+      expect(r.note).toBeUndefined();
+    });
+
+    it('output troncato → ocr_truncated', () => {
+      const r = fidelitySignal({ needsOcr: true, sectionId: 'documentazione_sanitaria', summaryCount: 0, truncatedByCap: true });
+      expect(r.mode).toBe('ocr_truncated');
+    });
+
+    it('map-reduce su sezione documentale → summaries + nota visibile col conteggio', () => {
+      const r = fidelitySignal({ needsOcr: true, sectionId: 'documentazione_sanitaria', summaryCount: 14, truncatedByCap: false });
+      expect(r.mode).toBe('summaries');
+      expect(r.note).toContain('Nota di fedeltà');
+      expect(r.note).toContain('14 riassunti');
+    });
+
+    it('summaries ma sezione NON documentale → nessuna nota (solo mode)', () => {
+      const r = fidelitySignal({ needsOcr: true, sectionId: 'epicrisi', summaryCount: 14, truncatedByCap: false });
+      expect(r.mode).toBe('summaries');
+      expect(r.note).toBeUndefined();
+    });
+
+    it('sezione senza OCR → nessun segnale', () => {
+      const r = fidelitySignal({ needsOcr: false, sectionId: 'considerazioni_ml', summaryCount: 0, truncatedByCap: false });
+      expect(r.mode).toBeUndefined();
+      expect(r.note).toBeUndefined();
     });
   });
 });

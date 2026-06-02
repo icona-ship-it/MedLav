@@ -251,6 +251,25 @@ ${Array(100).fill('parola').join(' ')}`;
     });
   });
 
+  describe('citazioni non verificate — sempre warning, mai bloccanti (2026-06-02)', () => {
+    it('non blocca il report anche con oltre il 50% di citazioni assenti dall\'OCR', () => {
+      const report = buildFullReport() +
+        '\n"Citazione inventata numero uno che non esiste affatto nei documenti originali"' +
+        '\n"Seconda citazione inventata totalmente assente dal testo OCR di riferimento"' +
+        '\n"Terza frase fabbricata che non compare da nessuna parte nella documentazione"' +
+        '\n"Quarta citazione del tutto inventata e non riscontrabile nei referti acquisiti"';
+      const context: ReportValidationContext = {
+        events: [],
+        ocrText: [{ documentId: 'd1', pages: [{ ocrText: 'Testo OCR reale privo delle citazioni indicate.' }] }],
+      };
+      const result = validateReport(report, 5, context);
+      const citationIssues = result.issues.filter((i) => i.type === 'unverified_citation');
+      expect(citationIssues.length).toBeGreaterThan(0); // segnalate (visibili)
+      expect(citationIssues.every((i) => i.severity === 'warning')).toBe(true); // ma solo warning
+      expect(getBlockingIssues(result).some((i) => i.type === 'unverified_citation')).toBe(false); // mai bloccanti
+    });
+  });
+
   describe('phantom dates', () => {
     // buildFullReport() generates dates 15.01–15.05.2024, so context must include them all
     const context: ReportValidationContext = {

@@ -92,6 +92,15 @@ function buildDocumentazioneSanitaria(docs: DocumentWithPages[]): string {
 }
 
 /**
+ * True quando la sintesi contiene già la propria intestazione veronese
+ * ("## Intestazione"): in tal caso gli export NON devono aggiungere una seconda
+ * intestazione/cover dai metadati (evita il doppione). Pura.
+ */
+export function synthesisHasOwnHeader(synthesis: string | null | undefined): boolean {
+  return !!synthesis && /^##\s+Intestazione\s*$/m.test(synthesis);
+}
+
+/**
  * Assemble a full professional report combining programmatic and LLM sections.
  * Produces a structured report suitable for court-quality HTML/DOCX export.
  */
@@ -149,7 +158,10 @@ export function assembleFullReport(params: {
     pm.quesiti.forEach((q, i) => premesseLines.push(`${i + 1}. ${q}`));
   }
 
-  addSection('premesse', 'PREMESSE', premesseLines.join('\n'));
+  // Salta PREMESSE se la sintesi ha già la sua intestazione veronese (no doppione).
+  if (!synthesisHasOwnHeader(synthesis)) {
+    addSection('premesse', 'PREMESSE', premesseLines.join('\n'));
+  }
 
   // 2. PROFILO METODOLOGICO
   const metodologico = `La presente relazione è stata redatta sulla base dell'esame della documentazione sanitaria acquisita agli atti, secondo i criteri della medicina legale e nel rispetto delle linee guida scientifiche vigenti.\n\nIl metodo adottato ha previsto:\n- Esame sistematico di tutta la documentazione clinica in atti\n- Ricostruzione cronologica degli eventi\n- Analisi critica dei profili di responsabilità\n- Valutazione del nesso causale secondo il criterio del "più probabile che non"\n- Quantificazione del danno biologico secondo i criteri tabellari`;

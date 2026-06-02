@@ -960,10 +960,57 @@ export const MANDATORY_SECTION_IDS: ReadonlySet<string> = new Set([
   'intestazione',
   'intestazione_stragiudiziale',
   'intestazione_parere',
-  'considerazioni_ml', // CTU/CTP — considerazioni/conclusioni
+  'considerazioni_ml', // CTU/CTP civile — considerazioni/conclusioni
+  'considerazioni_penale', // CTU/CTP penale — considerazioni/conclusioni
   'epicrisi', // stragiudiziale — conclusioni
   'conclusioni_parere', // parere — conclusioni
 ]);
+
+/**
+ * Considerazioni medico-legali in ambito PENALE (responsabilità medico-sanitaria
+ * colposa). Diversa dalla civilistica: NON si valuta il danno (no ITT/ITP/SIMLA);
+ * il fulcro è la causa dell'evento/morte, il nesso causale penale e i profili di
+ * colpa, con scala probabilistica VERBALE (benchmark CTU penale "Vitali").
+ * Placeholder: lo compila il perito.
+ */
+const CONSIDERAZIONI_PENALE_SECTION: SectionSpec = {
+  id: 'considerazioni_penale',
+  title: 'Considerazioni Medico-Legali',
+  maxTokens: TOKENS_NONE,
+  dataSources: [],
+  contextMaxChars: 0,
+  needsOcr: false,
+  isPlaceholder: true,
+  placeholderText: `*[Inserire qui le considerazioni medico-legali in ambito PENALE. Questa sezione contiene la valutazione conclusiva del Perito e le risposte ai quesiti.*
+
+*1. INQUADRAMENTO E CAUSA DELL'EVENTO/DECESSO*
+*Ricostruzione essenziale della vicenda e identificazione della causa dell'evento lesivo o del decesso (substrato anatomo-patologico, criterio cronologico, criterio di esclusione delle altre cause).*
+
+*2. NESSO DI CAUSALITÀ PENALE*
+*- Nesso tra la condotta (commissiva/omissiva) e l'evento secondo il giudizio controfattuale (la condotta alternativa lecita avrebbe evitato l'evento?)*
+*- Scala probabilistica VERBALE: "oltre ogni ragionevole dubbio" / "elevatissima probabilità" / "alta probabilità" / "altamente improbabile" — NON percentuali di danno*
+*- Eventuale ruolo concausale e fattori endogeni preesistenti*
+
+*3. PROFILI DI COLPA*
+*- Valutazione di imperizia / negligenza / imprudenza rispetto alle linee guida e alle buone pratiche vigenti al momento dei fatti (condotta esigibile)*
+
+*NOTA: in ambito penale NON si quantifica il danno biologico (no ITT/ITP, no tabelle SIMLA).*
+
+*4. RISPOSTE AI QUESITI*
+*Per ciascun quesito, ri-citare testualmente il quesito tra virgolette come intestazione e articolare la risposta motivata. I quesiti omogenei possono essere accorpati.]*`,
+  promptDirective: '',
+};
+
+/**
+ * Trasforma il piano CTU/CTP civile in penale: sostituisce considerazioni_ml con
+ * considerazioni_penale ed esclude le sezioni puramente civilistiche (spese mediche).
+ * Pura.
+ */
+function applyPenaleSections(specs: SectionSpec[]): SectionSpec[] {
+  return specs
+    .filter((s) => s.id !== 'spese_mediche')
+    .map((s) => (s.id === 'considerazioni_ml' ? CONSIDERAZIONI_PENALE_SECTION : s));
+}
 
 /**
  * Elenco delle sezioni che POSSONO comparire nel report per questo ruolo/modulo,
@@ -1043,12 +1090,21 @@ export function resolveSectionPlan(params: {
     ? conditionFiltered.filter((spec) => MANDATORY_SECTION_IDS.has(spec.id) || !excluded.includes(spec.id))
     : conditionFiltered;
 
+  // Ambito penale (CTU/CTP role-based): considerazioni civilistiche → penali e
+  // niente spese mediche. Non si applica ai moduli parere/RC (civilistici).
+  const penaleApplicable = !!periziaMetadata?.ambitoPenale &&
+    (caseRole === 'ctu' || caseRole === 'ctp') &&
+    moduleId !== 'parere_pro_veritate' &&
+    moduleId !== 'parere_scopo_riserva' &&
+    moduleId !== RC_CIVILE_MODULE_ID;
+  const roleAdjusted = penaleApplicable ? applyPenaleSections(filtered) : filtered;
+
   // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
   if (moduleId === RC_CIVILE_MODULE_ID) {
-    return applyRcPeritoSections(filtered, periziaMetadata);
+    return applyRcPeritoSections(roleAdjusted, periziaMetadata);
   }
 
-  return filtered;
+  return roleAdjusted;
 }
 
 /**
@@ -1065,13 +1121,14 @@ export function getAllSectionIds(caseRole: CaseRole, moduleId?: string): string[
 
   switch (caseRole) {
     case 'ctu':
-      return CTU_SECTIONS.map((s) => s.id);
+      // considerazioni_penale: variante penale, swappata in resolveSectionPlan.
+      return [...CTU_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
     case 'ctp':
-      return CTP_SECTIONS.map((s) => s.id);
+      return [...CTP_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
     case 'stragiudiziale':
       return STRAGIUDIZIALE_SECTIONS.map((s) => s.id);
     default:
-      return CTU_SECTIONS.map((s) => s.id);
+      return [...CTU_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
   }
 }
 

@@ -134,6 +134,7 @@ export function PeriziaMetadataForm({
     sezione: existing.sezione ?? '',
     rgNumber: existing.rgNumber ?? '',
     tipoProcedimento: existing.tipoProcedimento ?? '',
+    ambitoPenale: existing.ambitoPenale ?? false,
     judgeName: existing.judgeName ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
@@ -186,7 +187,10 @@ export function PeriziaMetadataForm({
       } else if (section.id === 'sezioniReport') {
         filled[section.id] = true; // ha sempre un default valido (tutte attive)
       } else {
-        filled[section.id] = section.fields.some((f) => form[f as keyof typeof form]?.trim());
+        filled[section.id] = section.fields.some((f) => {
+          const v = form[f as keyof typeof form];
+          return typeof v === 'string' && v.trim().length > 0;
+        });
       }
     }
     return filled;
@@ -231,6 +235,7 @@ export function PeriziaMetadataForm({
         ...(form.sezione ? { sezione: form.sezione } : {}),
         ...(form.rgNumber ? { rgNumber: form.rgNumber } : {}),
         ...(form.tipoProcedimento ? { tipoProcedimento: form.tipoProcedimento } : {}),
+        ...(form.ambitoPenale ? { ambitoPenale: true } : {}),
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
@@ -387,6 +392,14 @@ export function PeriziaMetadataForm({
                       <Label>Tipo di procedimento</Label>
                       <Input value={form.tipoProcedimento ?? ''} onChange={(e) => setForm({ ...form, tipoProcedimento: e.target.value })} placeholder="es. Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)" />
                       <p className="text-xs text-muted-foreground mt-1">Appare nell&apos;intestazione formale (ATP, CTU, ecc.)</p>
+                    </div>
+                    <div>
+                      <Label>Ambito (CTU/CTP)</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Button type="button" size="sm" variant={form.ambitoPenale ? 'outline' : 'default'} onClick={() => setForm({ ...form, ambitoPenale: false })}>Civile</Button>
+                        <Button type="button" size="sm" variant={form.ambitoPenale ? 'default' : 'outline'} onClick={() => setForm({ ...form, ambitoPenale: true })}>Penale</Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Penale: causa dell&apos;evento/morte + profili di colpa, senza ITT/ITP n&eacute; tabelle SIMLA.</p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
