@@ -63,7 +63,7 @@ describe('overlayGiudizialeFromMetadata', () => {
   });
 });
 
-describe('renderHeaderMarkdown — CTU benchmark Del Porto', () => {
+describe('renderHeaderMarkdown — CTU benchmark scuola veronese (Del Balzo/Lavini)', () => {
   function ctuHeader(): HeaderData {
     const d = emptyHeader();
     d.paziente.nome = 'Luca Mao';
@@ -73,19 +73,110 @@ describe('renderHeaderMarkdown — CTU benchmark Del Porto', () => {
     return overlayGiudizialeFromMetadata(d, DEL_PORTO_META);
   }
 
-  it('renders the full formal Del Porto structure', () => {
+  it('renders the full formal veronese structure', () => {
     const md = renderHeaderMarkdown(ctuHeader(), { variant: 'ctu' });
     expect(md).toContain('**TRIBUNALE ORDINARIO DI BRESCIA**');
     expect(md).toContain('**SEZIONE CENTRALE CIVILE**');
-    expect(md).toContain('**n. R.G. 10965/2025**');
+    expect(md).toContain('**Numero di Ruolo Generale 10965/2025**');
     expect(md).toContain('Accertamento tecnico preventivo');
-    expect(md).toContain('relativo alla vicenda clinica del/della sig./sig.ra Luca Mao');
+    // Destinatario: giudice maschile → "Ill.mo Signore" + "Giudice Istruttore"
+    expect(md).toContain('Ill.mo Signore');
     expect(md).toContain('Dott. Raffaele Del Porto');
-    expect(md).toContain('conferiva al sottoscritto Dott. Nicola Pigaiani');
+    expect(md).toContain('Giudice Istruttore');
+    // Caption parti
+    expect(md).toContain('**Luca Mao // ASST della Franciacorta**');
+    // Formula di conferimento veronese
+    expect(md).toContain('la Signoria Vostra Illustrissima conferiva al sottoscritto Dott. Nicola Pigaiani');
+    expect(md).toContain('incarico di Consulenza Tecnica in merito alla vicenda clinica di');
+    expect(md).not.toContain('del/della Sig./Sig.ra'); // chiusura neutra, niente placeholder gender
+    // Periziando in MAIUSCOLO
+    expect(md).toContain('**LUCA MAO**');
     expect(md).toContain('nato/a a Mirano (VE) il 02/10/1960');
     expect(md).toContain('CC.TT.P. Dott.ssa Sarah Nalin');
     expect(md).toContain('L\'inizio delle operazioni peritali era fissato per il giorno 13.01.2026');
     expect(md).toContain('Era stabilito un fondo spese di Euro 1.800,00');
+    expect(md).toContain('precisato nei quesiti formulati nell\'ordinanza di conferimento');
+  });
+
+  it('concorda al femminile quando il perito è una Dr.ssa', () => {
+    const d = emptyHeader();
+    d.paziente.nome = 'Anna Rossi';
+    const female = overlayGiudizialeFromMetadata(d, {
+      ...DEL_PORTO_META,
+      ctuName: 'Dr.ssa Giovanna Del Balzo',
+      judgeName: 'Dott.ssa Stefania Polichetti',
+    });
+    const md = renderHeaderMarkdown(female, { variant: 'ctu' });
+    expect(md).toContain('conferiva alla sottoscritta Dr.ssa Giovanna Del Balzo');
+    expect(md).toContain('Ill.ma Signora');
+  });
+
+  it('renders the perito letterhead when specialization is present', () => {
+    const d = emptyHeader();
+    d.paziente.nome = 'Luca Mao';
+    d.perito = { nome: 'Dott. Nicola Pigaiani', qualifica: 'medico legale', specializzazione: 'Specialista in Medicina Legale', iscrizioneAlbo: 'OMCeO Verona n. 1234' };
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(d, DEL_PORTO_META), { variant: 'ctu' });
+    expect(md).toContain('*Specialista in Medicina Legale*');
+    expect(md).toContain('Iscrizione Albo: OMCeO Verona n. 1234');
+  });
+
+  it('renders the FULL perito letterhead (specializ., albo, e-mail, PEC, ausiliario) from metadata', () => {
+    const d = emptyHeader();
+    d.paziente.nome = 'Stefan Schoenweger';
+    const meta: PeriziaMetadata = {
+      tribunale: 'Tribunale Ordinario di Bolzano',
+      sezione: 'Sezione Seconda Civile',
+      rgNumber: '653/2026',
+      judgeName: 'Dott. Andrea Pappalardo',
+      dataIncarico: '06/05/2026',
+      ctuName: 'Dr. Franco Lavini',
+      ctuTitle: 'medico legale, specialista in Ortopedia e Traumatologia e in Fisiatria',
+      specialita: 'Specialista in Ortopedia e Traumatologia; Specialista in Fisiatria; Specialista in Medicina Legale',
+      alboNumber: 'OMCeO Verona n. 1234',
+      ctuEmail: 'frnclvn@gmail.com',
+      ctuPec: 'franco.lavini@pec.omceovr.it',
+      collaboratoreName: 'Dr. Luigi Giuseppe Bongiovanni',
+      collaboratoreTitle: 'Specialista in Neurologia',
+    };
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(d, meta), { variant: 'ctu' });
+    expect(md).toContain('**Dr. Franco Lavini**');
+    expect(md).toContain('*Specialista in Ortopedia e Traumatologia*');
+    expect(md).toContain('*Specialista in Fisiatria*');
+    expect(md).toContain('*Specialista in Medicina Legale*');
+    expect(md).toContain('Iscrizione Albo: OMCeO Verona n. 1234');
+    expect(md).toContain('E-mail: frnclvn@gmail.com');
+    expect(md).toContain('PEC: franco.lavini@pec.omceovr.it');
+    expect(md).toContain('Ausiliario del CTU: Dr. Luigi Giuseppe Bongiovanni — Specialista in Neurologia');
+    // conferimento al maschile (Dr. Franco)
+    expect(md).toContain('conferiva al sottoscritto Dr. Franco Lavini');
+  });
+
+  it('caption parti: una sola parte nota viene etichettata col ruolo (no nome ambiguo)', () => {
+    const dR = emptyHeader();
+    dR.paziente.nome = 'Tizio';
+    const mdR = renderHeaderMarkdown(overlayGiudizialeFromMetadata(dR, { tribunale: 'Tribunale di Verona', parteRicorrente: 'Tizio Caio' }), { variant: 'ctu' });
+    expect(mdR).toContain('**Parte ricorrente: Tizio Caio**');
+    expect(mdR).not.toContain('Tizio Caio //');
+
+    const dResist = emptyHeader();
+    dResist.paziente.nome = 'Tizio';
+    const mdResist = renderHeaderMarkdown(overlayGiudizialeFromMetadata(dResist, { tribunale: 'Tribunale di Verona', parteResistente: 'ASST X' }), { variant: 'ctu' });
+    expect(mdResist).toContain('**Parte resistente: ASST X**');
+  });
+
+  it('concorda al femminile anche con titolo per esteso ("Dottoressa")', () => {
+    const d = emptyHeader();
+    d.paziente.nome = 'Mario Rossi';
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(d, { ctuName: 'Dottoressa Anna Bianchi' }), { variant: 'ctu' });
+    expect(md).toContain('conferiva alla sottoscritta Dottoressa Anna Bianchi');
+  });
+
+  it('ausiliario senza titolo: nessun trattino penzolante', () => {
+    const d = emptyHeader();
+    d.paziente.nome = 'Mario Rossi';
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(d, { ctuName: 'Dr. X', collaboratoreName: 'Dr. Y' }), { variant: 'ctu' });
+    expect(md).toContain('Ausiliario del CTU: Dr. Y');
+    expect(md).not.toContain('Dr. Y —');
   });
 
   it('has NO internal markdown headings so the validator extracts the whole block', () => {

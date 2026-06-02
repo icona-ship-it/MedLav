@@ -2,6 +2,7 @@ import { formatDate } from '@/lib/format';
 import type { CaseType } from '@/types';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { estimateBiologicalDamage } from './damage-estimator';
+import { numberToItalianWords } from '@/lib/number-to-words-it';
 
 interface CalcEvent {
   event_date: string;
@@ -169,14 +170,17 @@ export function formatITTITPTable(segments: ITPSegment[]): string {
     const dal = s.startDate ? formatDate(s.startDate) : '—';
     const al = s.endDate ? formatDate(s.endDate) : '—';
     const stima = s.estimated ? ' *(stima)*' : '';
-    return `| ${label} | ${dal} | ${al} | ${s.days} | ${s.percentage}%${stima} |`;
+    // Notazione formale cifra + lettere (benchmark: "giorni 90 (novanta)", "75% (settantacinque per cento)").
+    const giorni = `${s.days} (${numberToItalianWords(s.days)})`;
+    const invalidita = `${s.percentage}% (${numberToItalianWords(s.percentage)} per cento)`;
+    return `| ${label} | ${dal} | ${al} | ${giorni} | ${invalidita}${stima} |`;
   });
   const totalDays = segments.reduce((sum, s) => sum + s.days, 0);
   return [
     '| Periodo | Dal | Al | Giorni | Invalidità |',
     '|---|---|---|---|---|',
     ...rows,
-    `| **Totale giorni** | | | **${totalDays}** | |`,
+    `| **Totale giorni** | | | **${totalDays} (${numberToItalianWords(totalDays)})** | |`,
   ].join('\n');
 }
 

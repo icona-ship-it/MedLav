@@ -15,15 +15,21 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 
+const execFileAsync = promisify(execFile);
 const EXAMPLE_DIR = path.resolve(process.cwd(), 'Example');
+const BENCHMARK_DIR = path.resolve(process.cwd(), 'benchmark');
 const GOLD_DIR = path.resolve(process.cwd(), 'benchmark', 'gold');
 
 interface BenchmarkSource {
-  /** Filename or relative path under Example/ */
+  /** Path relativo alla baseDir (default Example/) */
   source: string;
+  /** Cartella base: 'Example' (default) o 'benchmark' */
+  baseDir?: 'Example' | 'benchmark';
   /** Output slug (becomes benchmark/gold/<slug>.md) */
   slug: string;
   /** Free-form description for the README */
@@ -62,6 +68,43 @@ const SOURCES: BenchmarkSource[] = [
     slug: 'regnoto-perizia-completa',
     description: 'Perizia completa Regnoto Valeria (CTU resp. civile, output di riferimento)',
   },
+  // ── Benchmark 2026-06-01 (cartelle in benchmark/, nome = tipo analisi) ──
+  {
+    source: 'CTU - Responsabilità civile - LIVIA REICHEGGER Singolo incarico dal TAR/CTU - Responsabilità civile - LIVIA REICHEGGER Singolo incarico dal TAR.doc',
+    baseDir: 'benchmark',
+    slug: 'reichegger-ctu-rc-verbale',
+    description: 'CTU RC — verbale operazioni peritali (TAR Bolzano, Del Balzo collegio)',
+  },
+  {
+    source: 'CTU - Responsabilità Penale - Vitali perizia/CTU - Responsabilità Penale - Vitali perizia.docx',
+    baseDir: 'benchmark',
+    slug: 'vitali-ctu-penale',
+    description: 'CTU Responsabilità PENALE (Vitali, decesso, causa morte + colpa)',
+  },
+  {
+    source: 'CTU Responsabilità civile -  LEONI MANUEL + ustioni danno psichico/CTU Responsabilità civile -  LEONI MANUEL + ustioni danno psichico.docx',
+    baseDir: 'benchmark',
+    slug: 'leoni-ctu-rc-psichico',
+    description: 'CTU RC — ustioni + danno psichico (ITT/ITP + IP SIMLA)',
+  },
+  {
+    source: 'CTU Responsabiltà civile - Caccialanza/CTU Responsabiltà civile - Caccialanza.docx',
+    baseDir: 'benchmark',
+    slug: 'caccialanza-ctu-rc',
+    description: 'CTU RC — qualificatoria RSA/LEA (art. 30 DPCM)',
+  },
+  {
+    source: 'CTU Responsabiltà civile - CALASCIBETTA/CTU Responsabiltà civile - CALASCIBETTA.doc',
+    baseDir: 'benchmark',
+    slug: 'calascibetta-ctu-rc-decesso',
+    description: 'CTU RC — decesso, nesso più-probabile-che-non (Del Balzo + Cazzadori)',
+  },
+  {
+    source: 'Tedesco Scho - CTU Responsabilità Civile/Tedesco Scho - CTU Responsabilità Civile.pages',
+    baseDir: 'benchmark',
+    slug: 'tedesco-schoenweger-ctu-rc',
+    description: 'CTU RC — paraplegia/parapendio, polizza infortuni (scritta dal Dr. LAVINI)',
+  },
 ];
 
 async function extractDocx(filePath: string): Promise<string> {
@@ -76,10 +119,30 @@ async function extractPdf(filePath: string): Promise<string> {
   return result.text;
 }
 
+/** Vecchio formato Word binario (.doc) via antiword (brew install antiword). */
+async function extractDoc(filePath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync('antiword', [filePath], { maxBuffer: 64 * 1024 * 1024 });
+    return stdout;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`antiword non disponibile o fallito (${msg.slice(0, 80)}). Installa: brew install antiword`);
+  }
+}
+
+/** Apple Pages (.pages, IWA) via decoder python stdlib (scripts/extract-pages.py). */
+async function extractPages(filePath: string): Promise<string> {
+  const script = path.resolve(process.cwd(), 'scripts', 'extract-pages.py');
+  const { stdout } = await execFileAsync('python3', [script, filePath], { maxBuffer: 64 * 1024 * 1024 });
+  return stdout;
+}
+
 async function extractText(filePath: string): Promise<string> {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.docx') return extractDocx(filePath);
   if (ext === '.pdf') return extractPdf(filePath);
+  if (ext === '.doc') return extractDoc(filePath);
+  if (ext === '.pages') return extractPages(filePath);
   throw new Error(`Unsupported file extension: ${ext}`);
 }
 
@@ -97,7 +160,7 @@ lineCount: ${lines.length}
 
 # ${source.description}
 
-> Estratto da \`Example/${source.source}\` il ${new Date().toLocaleDateString('it-IT')}.
+> Estratto da \`${source.baseDir ?? 'Example'}/${source.source}\` il ${new Date().toLocaleDateString('it-IT')}.
 > Questo è il **gold standard**: la generazione di LegMed deve avvicinarsi a questo testo come giudicato da Lavini.
 
 ---
@@ -116,13 +179,15 @@ async function main(): Promise<void> {
   let failCount = 0;
 
   for (const source of SOURCES) {
-    const inputPath = path.join(EXAMPLE_DIR, source.source);
+    const baseDir = source.baseDir === 'benchmark' ? BENCHMARK_DIR : EXAMPLE_DIR;
+    const baseLabel = source.baseDir === 'benchmark' ? 'benchmark' : 'Example';
+    const inputPath = path.join(baseDir, source.source);
     const outputPath = path.join(GOLD_DIR, `${source.slug}.md`);
 
     try {
       await fs.access(inputPath);
     } catch {
-      console.log(`⏭️  SKIP   ${source.slug} (file missing: Example/${source.source})`);
+      console.log(`⏭️  SKIP   ${source.slug} (file missing: ${baseLabel}/${source.source})`);
       continue;
     }
 

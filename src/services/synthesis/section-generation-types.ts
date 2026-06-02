@@ -65,7 +65,8 @@ export type SectionCondition =
   | 'has-expense-events'
   | 'has-perizie-docs'
   | 'has-quesiti'
-  | 'has-pubmed-references';
+  | 'has-pubmed-references'
+  | 'has-conciliazione-procedure';
 
 /**
  * Output of generating a single section.
@@ -107,6 +108,16 @@ export interface GeneratedSection {
   truncatedByCap?: boolean;
   /** Original char length before truncation (only set if truncatedByCap). */
   originalCharLength?: number;
+  /**
+   * Trasparenza fedeltà (sezioni documentali): come è stata alimentata.
+   * 'ocr_complete' = OCR integrale (verbatim affidabile);
+   * 'ocr_truncated' = output troncato al cap;
+   * 'summaries' = riassunti map-reduce (caso voluminoso, NON verbatim integrale).
+   * Solo per sezioni needsOcr.
+   */
+  fidelityMode?: 'ocr_complete' | 'ocr_truncated' | 'summaries';
+  /** Numero di documenti riassunti quando fidelityMode='summaries'. */
+  fidelitySummaryCount?: number;
 }
 
 /**

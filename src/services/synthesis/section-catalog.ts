@@ -82,12 +82,48 @@ const CITATION_FORMAT = `FORMATO CITAZIONE per ogni documento:
  * tende a ridondare e ripetere informazioni. Sono regole rinforzate rispetto
  * al solo "stile sintetico" precedente.
  */
-const ANTI_REPETITION_AND_LENGTH_RULES = `REGOLE ANTI-RIPETIZIONE E LUNGHEZZA (vincolanti — Lavini 2026-05-17):
-- **MAX 80 parole di prosa di commento** tra una citazione e la successiva. Le citazioni testuali del documento (tra virgolette) possono essere illimitate, MA la prosa NO.
+const ANTI_REPETITION_AND_LENGTH_RULES = `REGOLE ANTI-RIPETIZIONE (vincolanti — la fedeltà al documento NON è verbosità):
+- **MAX 80 parole di prosa di commento** tra una citazione e la successiva. Le citazioni testuali del documento (tra virgolette) sono illimitate e vanno riprodotte fedelmente; è solo la TUA prosa di raccordo a dover essere breve.
 - **Se hai gia citato un fatto clinico** (stessa data + stesso tipo, es. "intervento del 15.03.2024") in un blocco precedente di questa stessa sezione, **NON ripeterlo**. Riferisciti con UNA SOLA RIGA: "Per i dettagli dell'intervento del 15.03.2024 vedi blocco precedente."
-- **Diari clinici pluri-giornalieri**: raggruppa SEMPRE i giorni con QUADRO INVARIATO in un blocco unico: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri vitali nella norma, terapia [X] proseguita." MAI ripetere giorno per giorno se il quadro non cambia.
+- **Diari clinici pluri-giornalieri**: raggruppa in un blocco unico SOLO i giorni con QUADRO CLINICAMENTE IDENTICO: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri vitali nella norma, terapia [X] proseguita." Ogni giorno che presenta una variazione (parametri, terapia, complicanza, evento) va riportato per esteso.
 - **Esami di laboratorio identici nello stesso giorno**: 1 sola tabella per data, non duplicare.
-- **Limite sezione**: se la sezione supera 30.000 caratteri, il sistema la taglia automaticamente al boundary di paragrafo piu vicino. Quindi sii CONCISO: il perito preferisce 20 blocchi essenziali a 50 ridondanti.`;
+- **Completezza > concisione**: riporta TUTTI i documenti/episodi del fascicolo, ciascuno riprodotto fedelmente. Per contenere la lunghezza raggruppa i giorni identici e non ripetere un fatto già citato — MAI tagliare o riassumere il contenuto di un documento per brevità. Se la sezione supera 60.000 caratteri il sistema taglia automaticamente al boundary di paragrafo: in tal caso il perito rigenererà in modalità split.`;
+
+/**
+ * Intro condivisa per la sezione documentazione sanitaria — riproduzione
+ * VERBATIM (benchmark scuola veronese / Lavini 2026-06-01). Il valore primario
+ * è la fedeltà al documento; la concisione vincola solo la prosa di raccordo.
+ */
+const DOC_SANITARIA_INTRO = `Riproduzione FEDELE, CRONOLOGICA e VERBATIM della documentazione sanitaria. OGNI evento fornito DEVE comparire come blocco distinto — completezza non negoziabile. La concisione vincola SOLO la prosa di raccordo tra le citazioni, MAI il contenuto-fonte: il testo dei documenti va riprodotto fedelmente, non riassunto.
+
+FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
+**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."`;
+
+/**
+ * Regole di riproduzione per tipo di documento — VERBATIM. Allineate al modo in
+ * cui il Dr. Lavini trascrive (verbali operatori integrali con équipe e misure,
+ * referti interi, lettere di dimissione con le sotto-rubriche originali).
+ */
+const DOC_REPRODUCTION_RULES = `Regole di riproduzione FEDELE per tipo di documento (la sintesi del contenuto-fonte è VIETATA):
+- **Diari clinici (cartella clinica)**: riporta OGNI giorno con variazioni cliniche rilevanti. Conserva le rubriche originali del diario (es. NEUROLOGICO:, RESPIRATORIO:, CARDIOCIRCOLATORIO:, ADDOME:, RENALE/METABOLICO:) e l'indicazione di reparto/medico ove presente. Raggruppa con date inizio-fine SOLO i giorni clinicamente identici (vedi regole anti-ripetizione).
+- **Verbali operatori**: riporta INTEGRALMENTE — diagnosi pre-operatoria, tecnica chirurgica completa (vie d'accesso, gesti chirurgici, materiali e mezzi di sintesi CON misure/diametri), équipe operatoria, orari di sala, decorso intra-operatorio, diagnosi post-operatoria ed esito. NON sintetizzare le fasi (anche anestesia e preparazione vanno riportate se nel documento).
+- **Referti radiologici/strumentali**: riporta INTEGRALMENTE tecnica d'esame + descrizione dei reperti + conclusione, come nel referto originale.
+- **Lettere di dimissione**: riporta INTEGRALMENTE conservando le sotto-rubriche originali (Anamnesi/Ammissione, Decorso clinico, Diagnosi alla dimissione, Terapia alla dimissione, Indicazioni/Follow-up).
+- **Esami di laboratorio**: SEMPRE in tabella markdown pipe, una tabella separata per ogni data/prelievo. Valori alterati rispetto al range in grassetto. Includi TUTTI i valori del documento, anche quelli nella norma.
+- **Documenti in lingua straniera (es. tedesco)**: riporta il referto in originale e aggiungi la traduzione italiana; marca "(Referto riprodotto in originale)". Rendi esplicite sigle e posologie con nota fra parentesi quadre, es. "1-0-1 [Nota: 1 compressa mattino, 0 mezzogiorno, 1 sera]".
+- **Immagini diagnostiche disponibili nella lista**: inseriscile INLINE subito dopo la citazione pertinente con la sintassi ![Fig. N — descrizione formale](ocr-image:percorso-esatto).
+- **Stile**: prosa discorsiva neutra SOLO tra le citazioni (mai elenchi puntati per la narrazione clinica, tabelle escluse per i lab); la citazione testuale del documento può essere lunga quanto serve alla fedeltà.`;
+
+/**
+ * Regola di neutralità assoluta per la sezione documentazione (è riproduzione,
+ * non analisi). Condivisa fra CTU, stragiudiziale e pareri.
+ */
+const DOC_SANITARIA_NEUTRALITY = `REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
+- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
+- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
+- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
+- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
+- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.`;
 
 // ── CTU Giudiziale sections (15) ────────────────────────────────────
 
@@ -174,17 +210,22 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'documentazione_atti',
-    title: 'Dati della Documentazione in Atti',
-    maxTokens: TOKENS_MEDIUM,
+    title: 'I Dati della Documentazione in Atti',
+    maxTokens: TOKENS_LARGE,
+    // 32K char (~8K token) sta sotto il budget TOKENS_LARGE (10K): il cap taglia
+    // al boundary di paragrafo prima che scatti il troncamento token (throw).
+    maxChars: 32_000,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
     condition: 'has-non-medical-docs',
-    promptDirective: `Riproduci FEDELMENTE il contenuto rilevante dei documenti NON sanitari presenti nel fascicolo:
-ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice.
+    promptDirective: `Riproduzione FEDELE e VERBATIM dei documenti NON sanitari presenti nel fascicolo, in ordine cronologico:
+ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice, clausole di polizza.
 ${CITATION_FORMAT}
-Riporta il contenuto essenziale virgolettato, con indicazione della fonte.
-REGOLA DI NEUTRALITÀ: riproduci/sintetizza senza commentare, valutare o evidenziare criticità, lacune, ritardi o discrepanze. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
+- Ogni atto introdotto da una riga con tipo + autore/avvocato + data di deposito: **Ricorso ex art. ... depositato dall'Avv. [nome] in data DD.MM.YYYY:** "..."
+- Riproduci il contenuto VIRGOLETTATO mantenendo la NUMERAZIONE ORIGINALE dei punti dell'atto (1), 2), 3)...) e i virgolettati testuali (PEC, clausole, certificati) come nell'originale. NON riassumere il testo dell'atto.
+- I documenti che scegli di non riprodurre integralmente vanno comunque elencati con la formula: "... che non viene riportato per economia espositiva."
+REGOLA DI NEUTRALITÀ: riproduci senza commentare, valutare o evidenziare criticità, lacune, ritardi o discrepanze. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
 ${NO_EVN_RULE}`,
   },
   {
@@ -202,33 +243,17 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'documentazione_sanitaria',
-    title: 'Dati della Documentazione Sanitaria',
+    title: 'I Dati della Documentazione Sanitaria in Atti',
     maxTokens: TOKENS_HUGE,
-    maxChars: 30_000,
+    maxChars: 60_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
-    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire come blocco distinto — questo è il principio di completezza non negoziabile. Il principio di concisione vincola la PROSA tra le citazioni, non i fatti.
+    promptDirective: `${DOC_SANITARIA_INTRO}
 
-FORMATO CITAZIONE OBBLIGATORIO per OGNI documento/episodio clinico:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele riprodotto dal documento originale ..."
+${DOC_REPRODUCTION_RULES}
 
-Regole di riproduzione fedele ma sintetica (mai a scapito dei fatti clinici):
-- Intestazione in GRASSETTO con tipo + autore/struttura + data, seguita dal contenuto fra VIRGOLETTE.
-- **Diari clinici (cartella clinica)**: riporta i giorni con variazioni cliniche rilevanti (sintomatologia, parametri alterati, terapie modificate, complicanze, eventi acuti, decisioni terapeutiche). I periodi clinicamente stabili raggruppali con date inizio-fine: "Dal DD.MM al DD.MM.YYYY: decorso regolare, parametri vitali stabili, terapia [X] proseguita senza modifiche". Non duplicare giorni con identico quadro clinico.
-- **Verbali operatori**: riporta diagnosi pre-operatoria + tecnica chirurgica eseguita + diagnosi post-operatoria + eventuali complicanze intra/post-operatorie + esito immediato. Sintetizza le sezioni narrative accessorie (anestesia routine senza eventi, preparazione del campo).
-- **Referti radiologici/strumentali**: tecnica utilizzata + reperti rilevanti + conclusione/diagnosi del referto. Non riprodurre descrizioni anatomiche routinarie senza significato clinico.
-- **Lettere di dimissione**: diagnosi alla dimissione + terapia domiciliare prescritta + indicazioni follow-up. Sintetizza il riassunto del decorso (già esposto nei diari clinici della stessa cartella).
-- **Esami di laboratorio**: SEMPRE in tabella markdown pipe, una tabella separata per ogni data/prelievo. Valori alterati rispetto al range di riferimento in grassetto. Includi tutti i valori del documento, anche quelli nella norma (il perito necessita del quadro completo).
-- **Immagini diagnostiche disponibili nella lista**: inserisci INLINE subito dopo la citazione pertinente con la sintassi ![Fig. N — descrizione formale](ocr-image:percorso-esatto).
-- **Stile narrativo**: prosa discorsiva tra le citazioni (mai elenchi puntati per la narrazione clinica). Le tabelle markdown per i dati strutturati sono l'unica eccezione.
-
-REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
-- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
-- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
-- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
-- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "ELEMENTO" (in senso valutativo), "appare", "si ritiene".
-- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}
@@ -274,7 +299,7 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'operazioni_peritali',
-    title: 'I Dati dell\'Incontro con le Parti',
+    title: 'I Dati delle Operazioni Tecniche',
     maxTokens: TOKENS_NONE,
     dataSources: [],
     contextMaxChars: 0,
@@ -301,6 +326,26 @@ ${NO_EVN_RULE}`,
     promptDirective: '',
   },
   {
+    // Solo nei procedimenti ATP ex art. 696-bis c.p.c. (funzione conciliativa):
+    // il tentativo di conciliazione antecedente l'invio della bozza è un atto
+    // dovuto del CTU, riportato come sezione propria nei benchmark Calascibetta/
+    // Caccialanza. Placeholder: lo compila il perito dopo le operazioni.
+    id: 'conciliazione_ante_bozza',
+    title: 'I Dati Relativi alla Disponibilità ad Esperire un Tentativo di Conciliazione in Fase Antecedente l\'Invio della Bozza di CTU',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-conciliazione-procedure',
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui — solo per procedimenti ATP ex art. 696-bis c.p.c. — la cronologia del tentativo di conciliazione nella fase antecedente l'invio della bozza:*
+
+*- Date e modalita dei contatti fra le parti (PEC, incontri)*
+*- Posizioni espresse dai legali e dai CC.TT.P.*
+*- Esito del tentativo (riuscito / non riuscito) in questa fase]*`,
+    promptDirective: '',
+  },
+  {
     id: 'considerazioni_ml',
     title: 'Considerazioni Medico-Legali',
     maxTokens: TOKENS_NONE,
@@ -322,7 +367,7 @@ ${NO_EVN_RULE}`,
 *- Personalizzazione del danno se applicabile*
 
 *3. RISPOSTE AI QUESITI DEL GIUDICE*
-*Per ciascun quesito formulato dal Giudice (vedi sezione "Quesiti"), articolare risposta motivata richiamando i fatti documentali e l'analisi sopra esposta.]*`,
+*Per ciascun quesito formulato dal Giudice (vedi sezione "Quesiti"), ri-citare testualmente il quesito tra virgolette come intestazione e articolare di seguito la risposta motivata, richiamando i fatti documentali e l'analisi sopra esposta. I quesiti omogenei possono essere accorpati.]*`,
     promptDirective: '',
   },
   {
@@ -357,7 +402,7 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'osservazioni_bozza',
-    title: 'Osservazioni alla Bozza',
+    title: 'I Dati dell\'Invio delle Bozze di CTU alle Parti, loro Osservazioni e Relativa Risposta',
     maxTokens: TOKENS_NONE,
     dataSources: [],
     contextMaxChars: 0,
@@ -367,8 +412,26 @@ ${NO_EVN_RULE}`,
 
 *Dopo il deposito della bozza e la ricezione delle osservazioni dei Consulenti di Parte, inserire qui:*
 *- Sintesi delle osservazioni ricevute da ciascun CTP*
-*- Controdeduzioni puntuali a ciascuna osservazione*
+*- Controdeduzioni puntuali a ciascuna osservazione (formula: "Risposta del C.T.U.")*
 *- Eventuali modifiche apportate alla relazione a seguito delle osservazioni]*`,
+    promptDirective: '',
+  },
+  {
+    // Secondo giro conciliativo (post-bozza) nei procedimenti ATP ex art.
+    // 696-bis c.p.c.: cronologia datata + esito, chiusura con deposito.
+    id: 'conciliazione_post_bozza',
+    title: 'I Dati Relativi alla Disponibilità ad Esperire un Tentativo di Conciliazione in Fase Successiva all\'Invio della Bozza di CTU',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-conciliazione-procedure',
+    isPlaceholder: true,
+    placeholderText: `*[Inserire qui — solo per procedimenti ATP ex art. 696-bis c.p.c. — la cronologia del tentativo di conciliazione nella fase successiva all'invio della bozza:*
+
+*- Date e modalita dei contatti fra le parti dopo l'invio della bozza*
+*- Posizioni finali dei legali / esito del tentativo*
+*- Formula di chiusura: "Non essendo stato possibile addivenire ad una soluzione bonaria della controversia ... si procede al deposito dell'elaborato tecnico."]*`,
     promptDirective: '',
   },
 ];
@@ -481,30 +544,15 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
-    maxChars: 30_000,
+    maxChars: 60_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+    promptDirective: `${DOC_SANITARIA_INTRO}
 
-FORMATO CITAZIONE per OGNI documento:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+${DOC_REPRODUCTION_RULES}
 
-Regole:
-- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
-- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
-- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
-- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
-- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
-- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
-- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
-
-REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
-- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
-- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
-- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
-- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
-- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
@@ -628,30 +676,15 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
-    maxChars: 30_000,
+    maxChars: 60_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+    promptDirective: `${DOC_SANITARIA_INTRO}
 
-FORMATO CITAZIONE per OGNI documento:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+${DOC_REPRODUCTION_RULES}
 
-Regole:
-- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
-- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
-- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
-- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
-- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
-- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
-- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
-
-REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
-- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
-- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
-- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
-- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
-- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
@@ -746,30 +779,15 @@ ${NO_EVN_RULE}`,
     id: 'documentazione_sanitaria',
     title: 'La Documentazione Medica Prodotta',
     maxTokens: TOKENS_HUGE,
-    maxChars: 30_000,
+    maxChars: 60_000,
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1000,
     needsOcr: true,
-    promptDirective: `Riproduzione FEDELE e CRONOLOGICA della documentazione sanitaria. OGNI evento fornito DEVE comparire — completezza dei fatti non negoziabile. Concisione della prosa tra le citazioni.
+    promptDirective: `${DOC_SANITARIA_INTRO}
 
-FORMATO CITAZIONE per OGNI documento:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."
+${DOC_REPRODUCTION_RULES}
 
-Regole:
-- **Diari clinici**: solo giorni con variazioni cliniche rilevanti; periodi stabili raggruppati con date inizio-fine.
-- **Verbali operatori**: diagnosi pre/post + tecnica + complicanze + esito. Sintetizza le narrazioni accessorie (anestesia routine, preparazione campo).
-- **Referti radiologici/strumentali**: tecnica + reperti rilevanti + conclusione.
-- **Lettere di dimissione**: diagnosi + terapia domiciliare + follow-up.
-- **Esami lab**: TUTTI i valori in tabella markdown (una tabella per data/prelievo). Valori alterati in grassetto.
-- **Immagini diagnostiche disponibili**: inseriscile INLINE subito dopo la citazione pertinente.
-- **Stile**: prosa discorsiva tra le citazioni, MAI elenchi puntati per la narrazione clinica.
-
-REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezione è una RIPRODUZIONE DOCUMENTALE, NON un'analisi:
-- VIETATO il pattern "FATTO DOCUMENTATO / STANDARD DI RIFERIMENTO / ELEMENTI A SUPPORTO / ELEMENTI CONTRARI / CONSEGUENZE" (è destinato ESCLUSIVAMENTE alla sezione anomalie/considerazioni medico-legali).
-- VIETATO sotto-titoli interpretativi tipo "Profili critici documentali", "Quadro documentale complessivo", "Elementi favorevoli/sfavorevoli".
-- VIETATO commenti su standard di cura, linee guida, ritardi, omissioni, conformità o non-conformità a protocolli — qui SOLO citazioni testuali fedeli e prosa cronologica neutra.
-- VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
-- Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.
+${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
@@ -887,6 +905,12 @@ export function evaluateCondition(
     case 'has-perizie-docs':
       return ctx.documentTypes.some((t) => PERIZIA_DOC_TYPES.has(t));
 
+    case 'has-conciliazione-procedure':
+      // Tentativo di conciliazione = atto dovuto solo nell'ATP ex art. 696-bis
+      // c.p.c. (istruzione preventiva con funzione conciliativa). Riconosciuto
+      // dal tipo di procedimento nei metadati perizia.
+      return /\b696[\s-]?bis\b|concilia/i.test(ctx.periziaMetadata?.tipoProcedimento ?? '');
+
     default:
       return false;
   }
@@ -936,10 +960,57 @@ export const MANDATORY_SECTION_IDS: ReadonlySet<string> = new Set([
   'intestazione',
   'intestazione_stragiudiziale',
   'intestazione_parere',
-  'considerazioni_ml', // CTU/CTP — considerazioni/conclusioni
+  'considerazioni_ml', // CTU/CTP civile — considerazioni/conclusioni
+  'considerazioni_penale', // CTU/CTP penale — considerazioni/conclusioni
   'epicrisi', // stragiudiziale — conclusioni
   'conclusioni_parere', // parere — conclusioni
 ]);
+
+/**
+ * Considerazioni medico-legali in ambito PENALE (responsabilità medico-sanitaria
+ * colposa). Diversa dalla civilistica: NON si valuta il danno (no ITT/ITP/SIMLA);
+ * il fulcro è la causa dell'evento/morte, il nesso causale penale e i profili di
+ * colpa, con scala probabilistica VERBALE (benchmark CTU penale "Vitali").
+ * Placeholder: lo compila il perito.
+ */
+const CONSIDERAZIONI_PENALE_SECTION: SectionSpec = {
+  id: 'considerazioni_penale',
+  title: 'Considerazioni Medico-Legali',
+  maxTokens: TOKENS_NONE,
+  dataSources: [],
+  contextMaxChars: 0,
+  needsOcr: false,
+  isPlaceholder: true,
+  placeholderText: `*[Inserire qui le considerazioni medico-legali in ambito PENALE. Questa sezione contiene la valutazione conclusiva del Perito e le risposte ai quesiti.*
+
+*1. INQUADRAMENTO E CAUSA DELL'EVENTO/DECESSO*
+*Ricostruzione essenziale della vicenda e identificazione della causa dell'evento lesivo o del decesso (substrato anatomo-patologico, criterio cronologico, criterio di esclusione delle altre cause).*
+
+*2. NESSO DI CAUSALITÀ PENALE*
+*- Nesso tra la condotta (commissiva/omissiva) e l'evento secondo il giudizio controfattuale (la condotta alternativa lecita avrebbe evitato l'evento?)*
+*- Scala probabilistica VERBALE: "oltre ogni ragionevole dubbio" / "elevatissima probabilità" / "alta probabilità" / "altamente improbabile" — NON percentuali di danno*
+*- Eventuale ruolo concausale e fattori endogeni preesistenti*
+
+*3. PROFILI DI COLPA*
+*- Valutazione di imperizia / negligenza / imprudenza rispetto alle linee guida e alle buone pratiche vigenti al momento dei fatti (condotta esigibile)*
+
+*NOTA: in ambito penale NON si quantifica il danno biologico (no ITT/ITP, no tabelle SIMLA).*
+
+*4. RISPOSTE AI QUESITI*
+*Per ciascun quesito, ri-citare testualmente il quesito tra virgolette come intestazione e articolare la risposta motivata. I quesiti omogenei possono essere accorpati.]*`,
+  promptDirective: '',
+};
+
+/**
+ * Trasforma il piano CTU/CTP civile in penale: sostituisce considerazioni_ml con
+ * considerazioni_penale ed esclude le sezioni puramente civilistiche (spese mediche).
+ * Pura.
+ */
+function applyPenaleSections(specs: SectionSpec[]): SectionSpec[] {
+  return specs
+    .filter((s) => s.id !== 'spese_mediche')
+    .map((s) => (s.id === 'considerazioni_ml' ? CONSIDERAZIONI_PENALE_SECTION : s));
+}
 
 /**
  * Elenco delle sezioni che POSSONO comparire nel report per questo ruolo/modulo,
@@ -950,6 +1021,7 @@ export const MANDATORY_SECTION_IDS: ReadonlySet<string> = new Set([
 export function getSelectableSections(
   caseRole: CaseRole,
   moduleId?: string,
+  ambitoPenale?: boolean,
 ): Array<{ id: string; title: string; mandatory: boolean }> {
   let specs: SectionSpec[];
   if (moduleId === 'parere_pro_veritate') specs = PARERE_PRO_VERITATE_SECTIONS;
@@ -957,6 +1029,13 @@ export function getSelectableSections(
   else if (caseRole === 'ctp') specs = CTP_SECTIONS;
   else if (caseRole === 'stragiudiziale') specs = STRAGIUDIZIALE_SECTIONS;
   else specs = CTU_SECTIONS;
+  // Ambito penale (CTU/CTP role-based): il selettore mostra considerazioni_penale
+  // e NON le spese mediche (civilistiche), coerente con resolveSectionPlan.
+  if (ambitoPenale && (caseRole === 'ctu' || caseRole === 'ctp') &&
+      moduleId !== 'parere_pro_veritate' && moduleId !== 'parere_scopo_riserva' &&
+      moduleId !== RC_CIVILE_MODULE_ID) {
+    specs = applyPenaleSections(specs);
+  }
   return specs.map((s) => ({ id: s.id, title: s.title, mandatory: MANDATORY_SECTION_IDS.has(s.id) }));
 }
 
@@ -1019,12 +1098,21 @@ export function resolveSectionPlan(params: {
     ? conditionFiltered.filter((spec) => MANDATORY_SECTION_IDS.has(spec.id) || !excluded.includes(spec.id))
     : conditionFiltered;
 
+  // Ambito penale (CTU/CTP role-based): considerazioni civilistiche → penali e
+  // niente spese mediche. Non si applica ai moduli parere/RC (civilistici).
+  const penaleApplicable = !!periziaMetadata?.ambitoPenale &&
+    (caseRole === 'ctu' || caseRole === 'ctp') &&
+    moduleId !== 'parere_pro_veritate' &&
+    moduleId !== 'parere_scopo_riserva' &&
+    moduleId !== RC_CIVILE_MODULE_ID;
+  const roleAdjusted = penaleApplicable ? applyPenaleSections(filtered) : filtered;
+
   // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
   if (moduleId === RC_CIVILE_MODULE_ID) {
-    return applyRcPeritoSections(filtered, periziaMetadata);
+    return applyRcPeritoSections(roleAdjusted, periziaMetadata);
   }
 
-  return filtered;
+  return roleAdjusted;
 }
 
 /**
@@ -1041,13 +1129,14 @@ export function getAllSectionIds(caseRole: CaseRole, moduleId?: string): string[
 
   switch (caseRole) {
     case 'ctu':
-      return CTU_SECTIONS.map((s) => s.id);
+      // considerazioni_penale: variante penale, swappata in resolveSectionPlan.
+      return [...CTU_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
     case 'ctp':
-      return CTP_SECTIONS.map((s) => s.id);
+      return [...CTP_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
     case 'stragiudiziale':
       return STRAGIUDIZIALE_SECTIONS.map((s) => s.id);
     default:
-      return CTU_SECTIONS.map((s) => s.id);
+      return [...CTU_SECTIONS.map((s) => s.id), CONSIDERAZIONI_PENALE_SECTION.id];
   }
 }
 

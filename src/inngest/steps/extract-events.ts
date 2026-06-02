@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { extractEventsFromChunk } from '@/services/extraction/extraction-service';
+import { verifySourceTexts } from '@/services/validation/source-text-verifier';
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
@@ -390,7 +391,11 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       });
       if (retryResult.events.length > 0) {
         logger.info('pipeline', ` Retry succeeded: ${retryResult.events.length} events recovered`);
-        const retryRows = retryResult.events.map((e, idx) => ({
+        // Verbatim safety net: flag events whose sourceText isn't found in the
+        // chunk OCR (deterministic cross-check, non-blocking → requiresVerification).
+        // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
+        const retryVerified = truncationWarning ? retryResult.events : verifySourceTexts(retryResult.events, chunkText).events;
+        const retryRows = retryVerified.map((e, idx) => ({
           case_id: caseId,
           document_id: ocrResult.documentId,
           order_number: (range.start - 1) * 100 + idx + 1,
@@ -446,8 +451,13 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       .gte('order_number', orderStart)
       .lte('order_number', orderEnd);
 
+    // Verbatim safety net: flag events whose sourceText isn't found in the chunk
+    // OCR (deterministic cross-check, non-blocking → requiresVerification + note).
+    // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
+    const verifiedEvents = truncationWarning ? result.events : verifySourceTexts(result.events, chunkText).events;
+
     // Save events directly to DB with enum normalization
-    const eventRows = result.events.map((e, idx) => ({
+    const eventRows = verifiedEvents.map((e, idx) => ({
       case_id: caseId,
       document_id: ocrResult.documentId,
       order_number: (range.start - 1) * 100 + idx + 1,

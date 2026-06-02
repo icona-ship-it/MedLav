@@ -91,9 +91,13 @@ export interface PeriziaMetadata {
   tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
   judgeName?: string;           // "Dott. Raffaele Del Porto"
   ctuName?: string;            // "Dott. Nicola Pigaiani"
-  ctuTitle?: string;           // "Specialista in Medicina Legale"
-  collaboratoreName?: string;  // "Dott. Franco Lavini"
-  collaboratoreTitle?: string; // "Specialista in Ortopedia e Traumatologia"
+  ctuTitle?: string;           // "medico legale presso..." (qualifica nel conferimento)
+  specialita?: string;         // specializzazioni per la carta intestata (una per riga / separate da ;)
+  alboNumber?: string;         // n. iscrizione Albo per la carta intestata
+  ctuEmail?: string;           // e-mail perito (carta intestata)
+  ctuPec?: string;             // PEC perito (carta intestata)
+  collaboratoreName?: string;  // ausiliario: "Dr. Luigi Giuseppe Bongiovanni"
+  collaboratoreTitle?: string; // ausiliario: "Specialista in Neurologia"
   ctpRicorrente?: string;      // "Dott.ssa Sarah Nalin"
   ctpResistente?: string;      // "Dott. Lorenzo Micheli"
   parteRicorrente?: string;    // nome parte ricorrente
@@ -118,6 +122,9 @@ export interface PeriziaMetadata {
   // Selettore sezioni report: id (canonici) delle sezioni OPZIONALI disattivate dal
   // perito. Assente/vuoto = tutte le sezioni. Le sezioni mandatory non sono mai escluse.
   excludedReportSections?: string[];
+  // Ambito penale (CTU/CTP): true = responsabilità penale (causa morte + colpa, niente
+  // ITT/ITP/SIMLA); false/undefined = civile (default).
+  ambitoPenale?: boolean;
 }
 
 // API Response

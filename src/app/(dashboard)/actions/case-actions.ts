@@ -36,6 +36,8 @@ const periziaMetadataSchema = z.object({
   patientPhone: z.string().max(40).optional(),
   specialita: z.string().max(200).optional(),
   alboNumber: z.string().max(80).optional(),
+  ctuEmail: z.string().max(200).optional(),
+  ctuPec: z.string().max(200).optional(),
   tribunale: z.string().max(200).optional(),
   sezione: z.string().max(200).optional(),
   rgNumber: z.string().max(50).optional(),
@@ -67,6 +69,7 @@ const periziaMetadataSchema = z.object({
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
+  ambitoPenale: z.boolean().optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({
@@ -480,15 +483,17 @@ export async function getReportSectionOptions(
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('case_role, module_id')
+    .select('case_role, module_id, perizia_metadata')
     .eq('id', caseId)
     .eq('user_id', user.id)
     .single();
   if (!caseRow) return { sections: [], error: 'Caso non trovato' };
 
+  const ambitoPenale = (caseRow.perizia_metadata as PeriziaMetadata | null)?.ambitoPenale ?? false;
   const sections = getSelectableSections(
     (caseRow.case_role as CaseRole) ?? 'ctu',
     (caseRow.module_id as string | null) ?? undefined,
+    ambitoPenale,
   );
   return { sections };
 }

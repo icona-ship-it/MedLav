@@ -361,9 +361,18 @@ import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/s
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { createEmptyUsage, mergeUsage } from '@/services/cost-tracking/cost-calculator';
 
-/** Escape special regex characters in a string. */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Assembla il blocco markdown di una sezione del report. Le sezioni intestazione
+ * portano già il proprio heading corretto dal template (## Intestazione per
+ * CTU/CTP; ## VALUTAZIONE…/## PARERE… per stragiudiziale/parere) → usate as-is,
+ * preservando il titolo benchmark senza doppione. Per le altre, strippa un
+ * eventuale heading ## iniziale (che l'LLM non dovrebbe emettere) e antepone il
+ * titolo canonico. Pura, esportata per i test.
+ */
+export function assembleSectionBlock(id: string, title: string, content: string): string {
+  if (id.startsWith('intestazione')) return content.trim();
+  const cleanContent = content.replace(/^##\s+[^\n]+\n+/, '').trim();
+  return `## ${title}\n\n${cleanContent}`;
 }
 
 /**
@@ -460,13 +469,12 @@ export async function assembleSectionsAndSaveReport(
   sections: GeneratedSection[],
   synthesisParams: SynthesisParams,
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
-  // Assemble full report markdown
-  // Strip any duplicate ## heading the LLM may have generated despite instructions
-  const reportParts = sections.map((s) => {
-    const headingPattern = new RegExp(`^##\\s+${escapeRegex(s.title)}\\s*\\n+`, 'i');
-    const cleanContent = s.content.replace(headingPattern, '').trim();
-    return `## ${s.title}\n\n${cleanContent}`;
-  });
+  // Assemble full report markdown.
+  // Strip ANY leading ## heading the content may already carry (the LLM despite
+  // instructions, o il template intestazione che emette il proprio titolo es.
+  // "## VALUTAZIONE..."), poi anteponi il titolo canonico della sezione. Evita il
+  // doppio heading "## Intestazione" + "## VALUTAZIONE..." nello stragiudiziale/parere.
+  const reportParts = sections.map((s) => assembleSectionBlock(s.id, s.title, s.content));
   let fullReport = reportParts.join('\n\n');
 
   // HARD FILTER: Strip hallucinated image references.

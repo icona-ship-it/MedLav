@@ -583,25 +583,17 @@ function checkUnverifiedCitations(
     });
   }
 
-  // Wave 2.3: dynamic severity. If MORE THAN HALF of the long quotes can't be
-  // verified against OCR, the report is structurally untrustworthy — promote
-  // ALL unverified-citation issues to 'error' so the save is blocked. Below
-  // 50% they remain warnings (OCR fuzzy-match has known false negatives on
-  // ligatures, accents and column wrapping).
-  if (totalQuoted >= 4) {
-    const unverifiedRatio = unverifiedCount / totalQuoted;
-    if (unverifiedRatio > 0.5) {
-      for (const issue of issues) {
-        if (issue.type === 'unverified_citation') {
-          issue.severity = 'error';
-        }
-      }
-      issues.push({
-        type: 'unverified_citation',
-        severity: 'error',
-        message: `Più del 50% delle citazioni virgolettate (${unverifiedCount}/${totalQuoted}) non è verificabile sul testo OCR. Possibile fabbricazione delle citazioni — report bloccato.`,
-      });
-    }
+  // Le citazioni non verificate sono SEMPRE warning visibili, MAI bloccanti
+  // (decisione perito 2026-06-02: "avviso visibile, fiducia di default, controllo
+  // a richiesta"). La modalità VERBATIM produce molte virgolettate: il fuzzy-match
+  // OCR ha falsi negativi noti (legature, accenti, a-capo di colonna) e bloccare
+  // fermerebbe casi legittimi. Sopra il 50% si rinforza solo il messaggio.
+  if (totalQuoted >= 4 && unverifiedCount / totalQuoted > 0.5) {
+    issues.push({
+      type: 'unverified_citation',
+      severity: 'warning',
+      message: `Oltre il 50% delle citazioni virgolettate (${unverifiedCount}/${totalQuoted}) non è stato ritrovato nel testo OCR: verificare manualmente che le citazioni riproducano fedelmente i documenti originali.`,
+    });
   }
 
   return issues;

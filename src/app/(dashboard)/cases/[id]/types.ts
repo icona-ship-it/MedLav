@@ -13,6 +13,10 @@ export interface PeriziaMetadataUI {
   ctuTitle?: string;
   specialita?: string;
   alboNumber?: string;
+  ctuEmail?: string;
+  ctuPec?: string;
+  collaboratoreName?: string;
+  collaboratoreTitle?: string;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;
@@ -35,6 +39,7 @@ export interface PeriziaMetadataUI {
   anamnesiFarmacologica?: string;
   anamnesiLavorativa?: string;
   excludedReportSections?: string[];
+  ambitoPenale?: boolean;
   esameObiettivoStrutturato?: {
     districts: Array<{ id: string; label: string; examined: boolean; findings: string }>;
     generalInfo?: { altezza?: string; peso?: string; deambulazione?: string; condizioni?: string };

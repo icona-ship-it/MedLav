@@ -8,7 +8,7 @@ import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels,
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
-import { assembleFullReport, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { assembleFullReport, synthesisHasOwnHeader, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { getAiActDisclosureDocxParagraphs } from './ai-act-disclosure';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -95,13 +95,32 @@ function getDocxWatermarkText(reportStatus?: string): string {
  */
 function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, caseRole?: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
-  const pm = periziaMetadata;
-
   result.push(new Paragraph({ text: '', spacing: { before: 600 } }));
+  // Firma DOPPIA datata (benchmark scuola veronese): sottoscrizione della bozza
+  // (ai CC.TT.PP.) e deposito definitivo — solo CTU/CTP (hanno l'iter bozza→deposito).
+  // Stragiudiziale/parere: firma singola. Collegiale se è nominato un ausiliario.
+  if (caseRole === 'ctu' || caseRole === 'ctp') {
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data (sottoscrizione della bozza): _________________________');
+    result.push(new Paragraph({ text: '', spacing: { before: 500 } }));
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data (deposito definitivo): _________________________');
+  } else {
+    pushDatedSignature(result, periziaMetadata, caseRole, 'Luogo e data: _________________________');
+  }
+  return result;
+}
+
+/** Renderizza un blocco firma datato (riga "Luogo e data" + firmatari). */
+function pushDatedSignature(
+  result: (Paragraph | Table)[],
+  periziaMetadata: PeriziaMetadataExport | null | undefined,
+  caseRole: string | undefined,
+  dateLabel: string,
+): void {
+  const pm = periziaMetadata;
 
   // Location and date line
   result.push(new Paragraph({
-    children: [new TextRun({ text: 'Luogo e data: _________________________', size: 24 })],
+    children: [new TextRun({ text: dateLabel, size: 24 })],
     spacing: { after: 400 },
   }));
 
@@ -198,8 +217,6 @@ function buildSignatureBlock(periziaMetadata?: PeriziaMetadataExport | null, cas
       spacing: { before: 200 },
     }));
   }
-
-  return result;
 }
 
 /**
@@ -213,8 +230,9 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   const children: (Paragraph | Table)[] = [];
 
-  // Formal perizia header (if metadata present)
-  if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName)) {
+  // Formal perizia header (if metadata present) — saltato se la sintesi contiene
+  // già la propria intestazione veronese (evita il doppione: ADR 2026-06-02).
+  if (periziaMetadata && (periziaMetadata.tribunale || periziaMetadata.ctuName) && !synthesisHasOwnHeader(synthesis)) {
     const roleTitle = caseRole === 'ctu' ? 'CONSULENZA TECNICA D\'UFFICIO'
       : caseRole === 'ctp' ? 'CONSULENZA TECNICA DI PARTE'
       : 'PERIZIA STRAGIUDIZIALE';
@@ -1019,6 +1037,9 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
 
   const children: (Paragraph | Table)[] = [];
 
+  // Cover/intestazione strutturata — soppressa se la sintesi contiene già la sua
+  // intestazione veronese (## Intestazione), per non duplicare il frontespizio.
+  if (!synthesisHasOwnHeader(synthesis)) {
   // Cover page
   if (pm.tribunale) {
     children.push(new Paragraph({
@@ -1073,6 +1094,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   }
 
   children.push(new Paragraph({ text: '', spacing: { after: 400 } }));
+  } // fine cover gateata (no doppione intestazione)
 
   // Table of Contents
   children.push(new Paragraph({

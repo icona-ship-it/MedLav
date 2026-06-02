@@ -19,112 +19,14 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+// Funzioni di scoring condivise (single source of truth, testate) — vedi
+// src/lib/eval-scoring.ts. Usate anche da scripts/eval-golden-harness.ts.
+import { normalize, tokenize, jaccardSimilarity, keywordCoverage, lineDiff } from '../src/lib/eval-scoring';
 
 const BENCHMARK_DIR = path.resolve(process.cwd(), 'benchmark');
 const GOLD_DIR = path.join(BENCHMARK_DIR, 'gold');
 const GENERATED_DIR = path.join(BENCHMARK_DIR, 'generated');
 const DIFFS_DIR = path.join(BENCHMARK_DIR, 'diffs');
-
-// ─────────────────────────────────────────────────────────────────────
-// Text normalization — strip noise that doesn't matter for comparison
-// ─────────────────────────────────────────────────────────────────────
-
-function normalize(text: string): string {
-  return text
-    // Strip frontmatter
-    .replace(/^---[\s\S]*?\n---\n/, '')
-    // Collapse whitespace
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    // Lowercase for comparison (preserve case in display)
-    .trim();
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Word-set similarity (Jaccard) — quick proxy for "how close are they"
-// ─────────────────────────────────────────────────────────────────────
-
-function tokenize(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length >= 3),
-  );
-}
-
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 1;
-  let intersection = 0;
-  for (const w of a) if (b.has(w)) intersection++;
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Per-line diff — identify missing or extra paragraphs
-// ─────────────────────────────────────────────────────────────────────
-
-interface LineDiff {
-  missingFromGenerated: string[]; // lines in gold but not in generated
-  extraInGenerated: string[];     // lines in generated but not in gold
-}
-
-function lineDiff(gold: string, generated: string): LineDiff {
-  const goldLines = new Set(gold.split('\n').map((l) => l.trim()).filter((l) => l.length > 20));
-  const generatedLines = new Set(generated.split('\n').map((l) => l.trim()).filter((l) => l.length > 20));
-
-  const missingFromGenerated: string[] = [];
-  for (const line of goldLines) {
-    if (!generatedLines.has(line)) missingFromGenerated.push(line);
-  }
-
-  const extraInGenerated: string[] = [];
-  for (const line of generatedLines) {
-    if (!goldLines.has(line)) extraInGenerated.push(line);
-  }
-
-  return { missingFromGenerated, extraInGenerated };
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Domain keywords — verify medical/legal terminology presence
-// ─────────────────────────────────────────────────────────────────────
-
-const DOMAIN_KEYWORDS = [
-  // Sezioni perizia
-  'anamnesi', 'diagnosi', 'terapia', 'prognosi', 'esito',
-  // Termini medico-legali
-  'invalidita', 'inabilita', 'menomazione', 'danno biologico',
-  'nesso causale', 'guarigione', 'esiti permanenti',
-  // ITT/ITP
-  'invalidita temporanea', 'totale', 'parziale', 'giorni',
-  // Strumenti
-  'visita', 'esame', 'referto', 'ricovero', 'intervento', 'cartella clinica',
-  // Quesiti
-  'quesiti', 'conclusioni', 'considerazioni',
-];
-
-function keywordCoverage(gold: string, generated: string): {
-  totalKeywords: number;
-  presentInGold: number;
-  presentInGenerated: number;
-  missingFromGenerated: string[];
-} {
-  const goldLower = gold.toLowerCase();
-  const genLower = generated.toLowerCase();
-  const goldPresent = DOMAIN_KEYWORDS.filter((k) => goldLower.includes(k));
-  const genPresent = DOMAIN_KEYWORDS.filter((k) => genLower.includes(k));
-  const missing = goldPresent.filter((k) => !genLower.includes(k));
-
-  return {
-    totalKeywords: DOMAIN_KEYWORDS.length,
-    presentInGold: goldPresent.length,
-    presentInGenerated: genPresent.length,
-    missingFromGenerated: missing,
-  };
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // Report

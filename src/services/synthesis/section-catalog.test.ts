@@ -168,12 +168,14 @@ describe('section-catalog', () => {
   // ── Role-specific section arrays ──────────────────────────────────
 
   describe('role-specific section arrays', () => {
-    it('should have 11 CTU sections (allineato benchmark Resch/Mao)', () => {
-      expect(CTU_SECTIONS).toHaveLength(11);
+    it('should have 13 CTU sections (benchmark scuola veronese + conciliazione 696-bis)', () => {
+      expect(CTU_SECTIONS).toHaveLength(13);
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('conciliazione_ante_bozza');
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('conciliazione_post_bozza');
     });
 
-    it('should have 10 CTP sections (CTU without osservazioni_bozza)', () => {
-      expect(CTP_SECTIONS).toHaveLength(10);
+    it('should have 12 CTP sections (CTU without osservazioni_bozza)', () => {
+      expect(CTP_SECTIONS).toHaveLength(12);
       expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('osservazioni_bozza');
     });
 
@@ -245,6 +247,27 @@ describe('section-catalog', () => {
       for (const s of allSections) {
         expect(s.promptDirective).not.toMatch(/\[Ev\.N\]/);
         expect(s.promptDirective).not.toMatch(/\[Ev\.\d+\]/);
+      }
+    });
+
+    it('documentazione_sanitaria must instruct VERBATIM reproduction (no synthesis of source content)', () => {
+      // Regression: benchmark scuola veronese (Lavini 2026-06-01) → la documentazione
+      // va TRASCRITTA fedelmente, non riassunta. Vietato re-introdurre la sintesi del
+      // contenuto-fonte (verbali operatori, lettere di dimissione).
+      const docSan = [
+        ...CTU_SECTIONS,
+        ...STRAGIUDIZIALE_SECTIONS,
+        ...PARERE_PRO_VERITATE_SECTIONS,
+        ...PARERE_SCOPO_RISERVA_SECTIONS,
+      ].filter((s) => s.id === 'documentazione_sanitaria');
+      expect(docSan.length).toBeGreaterThanOrEqual(4);
+      for (const s of docSan) {
+        expect(s.promptDirective).toMatch(/VERBATIM/);
+        expect(s.promptDirective).toMatch(/INTEGRALMENTE/);
+        expect(s.maxChars).toBe(60_000);
+        // must NOT re-introduce synthesis of source content
+        expect(s.promptDirective).not.toMatch(/Sintetizza le sezioni narrative accessorie/i);
+        expect(s.promptDirective).not.toMatch(/diagnosi pre\/post \+ tecnica \+ complicanze \+ esito/i);
       }
     });
 
@@ -400,6 +423,49 @@ describe('section-catalog', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
       const docSan = plan.find((s) => s.id === 'documentazione_sanitaria');
       expect(docSan?.needsOcr).toBe(true);
+    });
+
+    it('includes conciliazione sections only for ATP ex art. 696-bis procedures', () => {
+      const withConciliazione = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { tipoProcedimento: 'Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)' },
+      }).map((s) => s.id);
+      expect(withConciliazione).toContain('conciliazione_ante_bozza');
+      expect(withConciliazione).toContain('conciliazione_post_bozza');
+
+      const ordinario = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { tipoProcedimento: 'Consulenza Tecnica d\'Ufficio' },
+      }).map((s) => s.id);
+      expect(ordinario).not.toContain('conciliazione_ante_bozza');
+      expect(ordinario).not.toContain('conciliazione_post_bozza');
+    });
+
+    it('ambito penale: swaps considerazioni_ml → considerazioni_penale e droppa spese_mediche', () => {
+      const ids = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { ambitoPenale: true },
+        events: [makeEvent({ eventType: 'spesa_medica' }), makeEvent()],
+      }).map((s) => s.id);
+      expect(ids).toContain('considerazioni_penale');
+      expect(ids).not.toContain('considerazioni_ml');
+      expect(ids).not.toContain('spese_mediche');
+    });
+
+    it('ambito penale: il placeholder NON cita ITT/ITP/SIMLA (civilistici)', () => {
+      const pen = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { ambitoPenale: true } })
+        .find((s) => s.id === 'considerazioni_penale');
+      expect(pen?.isPlaceholder).toBe(true);
+      // Non deve ISTRUIRE la valutazione del danno biologico (civilistica)
+      expect(pen?.placeholderText).not.toMatch(/Valutazione del danno biologico/i);
+      expect(pen?.placeholderText).not.toMatch(/tabelle SIMLA per la valutazione/i);
+      expect(pen?.placeholderText).toMatch(/colpa|nesso|ragionevole dubbio/i);
+    });
+
+    it('civile (default): mantiene considerazioni_ml, niente penale', () => {
+      const ids = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: {} }).map((s) => s.id);
+      expect(ids).toContain('considerazioni_ml');
+      expect(ids).not.toContain('considerazioni_penale');
     });
 
     it('should have needsOcr=false for epicrisi (stragiudiziale)', () => {
@@ -588,6 +654,16 @@ describe('section-catalog', () => {
     });
     it('every section title is non-empty', () => {
       for (const s of getSelectableSections('ctu')) expect(s.title.length).toBeGreaterThan(0);
+    });
+    it('penale-aware: mostra considerazioni_penale e nasconde spese_mediche', () => {
+      const civile = getSelectableSections('ctu').map((s) => s.id);
+      expect(civile).toContain('considerazioni_ml');
+      expect(civile).toContain('spese_mediche');
+
+      const penale = getSelectableSections('ctu', undefined, true).map((s) => s.id);
+      expect(penale).toContain('considerazioni_penale');
+      expect(penale).not.toContain('considerazioni_ml');
+      expect(penale).not.toContain('spese_mediche');
     });
   });
 

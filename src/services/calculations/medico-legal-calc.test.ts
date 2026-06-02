@@ -180,6 +180,14 @@ describe('A2 — graduated ITT/ITP segments', () => {
     // The literal pipe in the label must be escaped so columns don't shift.
     expect(table).toContain('ITT \\| 100');
   });
+
+  it('formatITTITPTable usa la notazione formale cifra + lettere (benchmark)', () => {
+    const table = formatITTITPTable([
+      { label: 'ITP', percentage: 75, days: 90, startDate: '2024-01-10', endDate: '2024-04-09', estimated: false },
+    ]);
+    expect(table).toContain('90 (novanta)');
+    expect(table).toContain('75% (settantacinque per cento)');
+  });
 });
 
 // ── Ondata 1 (audit project-wide): correttezza calcoli ITT/ITP ──

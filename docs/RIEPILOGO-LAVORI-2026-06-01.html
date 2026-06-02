@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed — Riepilogo lavori (1 giugno 2026)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.6; color: #1e293b; background: #f1f5f9;
+    padding: 32px 16px;
+  }
+  .page {
+    max-width: 880px; margin: 0 auto; background: #fff;
+    border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    overflow: hidden;
+  }
+  header {
+    background: linear-gradient(135deg, #1b3a6b, #2563eb);
+    color: #fff; padding: 36px 40px;
+  }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: .2px; }
+  header p { opacity: .9; margin-top: 6px; font-size: 15px; }
+  .content { padding: 16px 40px 44px; }
+  section { padding: 22px 0; border-bottom: 1px solid #eef2f7; }
+  section:last-child { border-bottom: none; }
+  h2 {
+    font-size: 18px; color: #1b3a6b; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px;
+    background: #e0ecff; color: #1b3a6b; font-size: 16px; flex: none;
+  }
+  p.lead { color: #475569; margin-bottom: 10px; font-size: 15px; }
+  ul { list-style: none; }
+  li { padding: 5px 0 5px 26px; position: relative; font-size: 15px; }
+  li::before {
+    content: '✓'; position: absolute; left: 0; top: 5px;
+    color: #16a34a; font-weight: 700;
+  }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 600;
+    padding: 2px 10px; border-radius: 999px; margin-left: 8px;
+  }
+  .live { background: #dcfce7; color: #166534; }
+  .todo-box {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+    padding: 18px 22px; margin-top: 6px;
+  }
+  .todo-box h2 { color: #92400e; }
+  .todo-box .ico { background: #fef3c7; color: #92400e; }
+  .todo-box li::before { content: '→'; color: #d97706; }
+  footer {
+    background: #f8fafc; padding: 20px 40px; font-size: 13px;
+    color: #64748b; border-top: 1px solid #eef2f7;
+  }
+  strong { color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>LegMed — Riepilogo dei lavori</h1>
+    <p>Aggiornamento del 1 giugno 2026 · tutto rilasciato in produzione</p>
+  </header>
+
+  <div class="content">
+
+    <section>
+      <h2><span class="ico">📋</span> Dati richiesti nella "Info Perizia" <span class="tag live">LIVE</span></h2>
+      <p class="lead">Per le perizie di Responsabilità Civile, il medico inserisce nel form i dati che confluiscono nel report come testo suo, senza rielaborazione dell'AI.</p>
+      <ul>
+        <li>Dati anamnestici (familiare, fisiologica, patologica remota/prossima, farmacologica, lavorativa)</li>
+        <li>Peso e altezza con <strong>BMI calcolato automaticamente</strong></li>
+        <li>"Il Fatto e la Storia Clinica" scritto dal perito</li>
+        <li>Dati del paziente (nome, data di nascita, codice fiscale…) ora correttamente salvati e riportati nell'intestazione</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">🗂️</span> Cronologia (cronistoria) <span class="tag live">LIVE</span></h2>
+      <ul>
+        <li>Nuovo formato <strong>documento scritto</strong> (non più tabella): data — tipo evento — descrizione, in ordine</li>
+        <li>Le cronologie già esistenti si aggiornano da sole dopo le modifiche agli eventi</li>
+        <li>Documento scaricato <strong>pulito e professionale</strong>: rimossi i contrassegni interni "da verificare" e le note tecniche</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">✅</span> Includi / escludi eventi dalla cronologia <span class="tag live">LIVE</span></h2>
+      <p class="lead">Su ogni evento un interruttore "Includi nella cronologia" (acceso di default): il medico esclude i pochi non rilevanti. Nulla viene mai nascosto in automatico.</p>
+    </section>
+
+    <section>
+      <h2><span class="ico">🧩</span> Sezioni del report a scelta <span class="tag live">LIVE</span></h2>
+      <p class="lead">Prima di generare, il medico sceglie quali sezioni includere nel report. Vantaggio: report su misura e generazione più rapida ed economica.</p>
+      <ul>
+        <li>Tutte le sezioni attive di default; si spengono quelle non desiderate</li>
+        <li>Le sezioni strutturali (intestazione, conclusioni) restano sempre presenti</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">⚖️</span> Intestazioni allineate ai benchmark <span class="tag live">LIVE</span></h2>
+      <ul>
+        <li>CTU giudiziale: struttura formale tipo benchmark <strong>Del Porto</strong> (tribunale, R.G., conferimento, CC.TT.P., date, fondo spese)</li>
+        <li>Stragiudiziale: struttura tipo benchmark <strong>Antoniazzi</strong>, senza riferimenti al tribunale</li>
+        <li>Generata dai dati che il perito inserisce — niente dati inventati</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">🎤</span> Dettatura vocale <span class="tag live">LIVE</span></h2>
+      <ul>
+        <li>Risolto un blocco che impediva il microfono in tutti i browser</li>
+        <li>Avviso d'uso più chiaro, gestione errori e tempi migliorata</li>
+        <li>L'audio non viene mai conservato (privacy / GDPR)</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">🔒</span> Punti segnalati da Lavini — chiusi <span class="tag live">LIVE</span></h2>
+      <ul>
+        <li>Spese senza data: comunque presenti in tabella; imposta di bollo come voce separata; tutte le spese incluse</li>
+        <li>Soggettiva: compilata dal medico (non dall'AI)</li>
+        <li>Cronistoria 100% oggettiva e fedele ai documenti</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="ico">🛡️</span> Verifiche e robustezza</h2>
+      <ul>
+        <li>Audit approfondito prima del rilascio: trovati e corretti più problemi di integrazione</li>
+        <li>Report ridotti (poche sezioni) non più bloccati per errore</li>
+        <li>Oltre 1000 test automatici verdi a ogni rilascio</li>
+      </ul>
+    </section>
+
+    <div class="todo-box">
+      <h2><span class="ico">→</span> Cosa resta</h2>
+      <ul>
+        <li>Prova reale del medico (Dott. Lavini) su un caso vero → poi affiniamo sul suo feedback</li>
+        <li>Sezione "Cronologia" anche dentro i report completi (in lavorazione)</li>
+        <li>Rifiniture grafiche dei documenti esportati secondo il giudizio del perito</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <footer>
+    LegMed — applicazione per medici legali. Documento di sintesi interno, generato il 1 giugno 2026.
+    Versione avanzata in test: il feedback dell'esperto guida le rifiniture finali.
+  </footer>
+</div>
+</body>
+</html>
