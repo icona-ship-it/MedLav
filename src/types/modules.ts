@@ -23,14 +23,10 @@ export type PipelineMode =
 export type ModuleId =
   // Cat 1: Perizia medico legale (privato/studio legale/assicurazione/ag. infortunistiche)
   | 'perizia_ml_rc_civile'
-  | 'perizia_ml_stradale'
   | 'perizia_ml_infortuni'
   | 'perizia_ml_malattia'
-  | 'perizia_ml_resp_prof'
   // Cat 2: CTU/ATP in ambito civile
   | 'ctu_civile_rc_civile'
-  | 'ctu_civile_infortuni'
-  | 'ctu_civile_malattia'
   | 'ctu_civile_resp_prof'
   // Cat 3: CTU/ATP in ambito previdenziale
   | 'ctu_prev_dlgs62_accertamento'
@@ -113,16 +109,6 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     priority: true,
   },
   {
-    id: 'perizia_ml_stradale',
-    label: 'Sinistro stradale',
-    description: 'Perizia medico-legale per sinistro stradale e RC auto',
-    categoryId: 1,
-    impliedRole: 'stragiudiziale',
-    pipelineMode: 'full',
-    legacyCaseTypes: ['rc_auto'],
-    priority: true,
-  },
-  {
     id: 'perizia_ml_infortuni',
     label: 'Infortuni',
     description: 'Perizia medico-legale per infortuni',
@@ -142,16 +128,6 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     legacyCaseTypes: ['previdenziale'],
     priority: true,
   },
-  {
-    id: 'perizia_ml_resp_prof',
-    label: 'Responsabilità professionale',
-    description: 'Perizia medico-legale per responsabilità professionale medica',
-    categoryId: 1,
-    impliedRole: 'stragiudiziale',
-    pipelineMode: 'full',
-    legacyCaseTypes: ['generica'],
-    priority: true,
-  },
 
   // --- Cat 2: CTU/ATP civile ---
   {
@@ -162,26 +138,6 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     impliedRole: 'ctu',
     pipelineMode: 'full',
     legacyCaseTypes: ['rc_auto'],
-    priority: false,
-  },
-  {
-    id: 'ctu_civile_infortuni',
-    label: 'Infortuni',
-    description: 'CTU/ATP in ambito civile per infortuni',
-    categoryId: 2,
-    impliedRole: 'ctu',
-    pipelineMode: 'full',
-    legacyCaseTypes: ['infortuni'],
-    priority: false,
-  },
-  {
-    id: 'ctu_civile_malattia',
-    label: 'Malattia',
-    description: 'CTU/ATP in ambito civile per malattia',
-    categoryId: 2,
-    impliedRole: 'ctu',
-    pipelineMode: 'full',
-    legacyCaseTypes: ['previdenziale'],
     priority: false,
   },
   {
