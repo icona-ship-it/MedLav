@@ -141,6 +141,18 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
  * tables in the OCR must survive), and no rephrasing is possible. Returns '' when
  * there are no documents (caller substitutes the empty fallback).
  */
+/**
+ * Demote H1/H2 headings inside the verbatim OCR to H4, so an OCR line like
+ * "## REFERTO" can never collide with the report's own "## " SECTION delimiter
+ * (parseSections / the professional-export splitter would otherwise fragment the
+ * documentazione into spurious sections). H3+ are left as-is — they are NOT
+ * section boundaries (and our own per-document header is H3). The visible text is
+ * preserved — only the Markdown heading LEVEL changes (a rendering nuance).
+ */
+function demoteOcrHeadings(text: string): string {
+  return text.replace(/^(#{1,2})(\s)/gm, '####$2');
+}
+
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
   events: DeterministicTableEvent[],
@@ -184,7 +196,7 @@ export function formatDocumentazioneSanitaria(
     } else {
       for (const page of doc.pages) {
         const text = (page.ocrText ?? '').trim();
-        parts.push(text ? text : `*[Pagina ${page.pageNumber} — testo non disponibile o illeggibile; verificare sul documento originale.]*`);
+        parts.push(text ? demoteOcrHeadings(text) : `*[Pagina ${page.pageNumber} — testo non disponibile o illeggibile; verificare sul documento originale.]*`);
         parts.push('\n---\n');
       }
     }

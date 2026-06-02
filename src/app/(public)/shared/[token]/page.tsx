@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAccess } from '@/lib/audit';
-import { expandDeterministicBlocks, toDeterministicEvents, buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -49,25 +49,11 @@ export default async function SharedCasePage({
     return <ExpiredView />;
   }
 
-  // Load documents + OCR pages for the deterministic verbatim documentazione block.
-  const { data: sharedDocs } = await admin
-    .from('documents')
-    .select('id, file_name, document_type')
-    .eq('case_id', caseId);
-  const sharedDocIds = (sharedDocs ?? []).map((d) => d.id as string);
-  let sharedPages: Array<{ document_id: string; page_number: number; ocr_text: string | null }> = [];
-  if (sharedDocIds.length > 0) {
-    const { data } = await admin
-      .from('pages')
-      .select('document_id, page_number, ocr_text')
-      .in('document_id', sharedDocIds)
-      .order('page_number', { ascending: true });
-    sharedPages = (data ?? []) as typeof sharedPages;
-  }
-  const deterministicDocs = buildDeterministicDocs(
-    (sharedDocs ?? []) as Array<{ id: string; file_name: string; document_type: string | null }>,
-    sharedPages,
-  );
+  // GDPR Art. 9: a public, unauthenticated share link must NOT expose the raw
+  // verbatim clinical OCR (full patient/doctor names, diagnoses). So we DON'T pass
+  // the OCR docs here → the DOC_SANITARIA sentinel stays an invisible comment on
+  // the shared view (the section appears empty externally). The verbatim
+  // documentazione is available only in the owner's authenticated export.
 
   // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from the
   // current events at read time — same as the main viewer/export. Without this
@@ -80,7 +66,8 @@ export default async function SharedCasePage({
           ? expandDeterministicBlocks(
               reportResult.data.synthesis as string,
               toDeterministicEvents(eventsResult.data ?? []),
-              deterministicDocs,
+              // No docs on the public link → DOC_SANITARIA stays an invisible
+              // comment (no raw clinical OCR exposed externally). See above.
             )
           : reportResult.data.synthesis,
       }

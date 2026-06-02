@@ -190,9 +190,11 @@ export function ReportA4Viewer({
                         title: section.title,
                         // documentazione_sanitaria: open the MATERIALIZED verbatim
                         // (section.content = expanded), so saving replaces the
-                        // sentinel with the perito's editable text. Other
+                        // sentinel with the perito's editable text. Only when the
+                        // OCR docs are actually loaded — otherwise we'd capture the
+                        // empty fallback; fall back to the raw marker. Other
                         // deterministic sections keep the raw marker (stay auto).
-                        content: isDocSanitaria
+                        content: (isDocSanitaria && docs && docs.length > 0)
                           ? section.content
                           : (rawContentById.get(section.canonicalId) ?? section.content),
                       })}

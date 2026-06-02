@@ -222,6 +222,31 @@ describe('formatDocumentazioneSanitaria', () => {
   it('returns empty string when there are no documents', () => {
     expect(formatDocumentazioneSanitaria([], [])).toBe('');
   });
+
+  it('demotes H1/H2 headings inside the OCR so they never collide with the report "## " section delimiter', () => {
+    const ocr = '# DIAGNOSI\n## REFERTO\nTesto del referto.';
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: ocr }] })], []);
+    // No OCR body line may start with a report-level section heading (# or ##).
+    // Our own per-document header is H3 (### Tipo: file) which is NOT a boundary.
+    for (const line of out.split('\n')) {
+      expect(/^#{1,2}\s/.test(line)).toBe(false);
+    }
+    // The textual content is preserved (only the heading LEVEL changed).
+    expect(out).toContain('DIAGNOSI');
+    expect(out).toContain('REFERTO');
+    expect(out).toContain('Testo del referto.');
+    expect(out).toContain('#### REFERTO');
+  });
+
+  it('excludes non-clinical document types (atti / perizie / spese) from the documentazione', () => {
+    const docs = [
+      doc({ documentId: 'a', fileName: 'cartella.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'CLINICO' }] }),
+      doc({ documentId: 'b', fileName: 'memoria.pdf', documentType: 'memoria_difensiva', pages: [{ pageNumber: 1, ocrText: 'NON_CLINICO' }] }),
+    ];
+    const out = formatDocumentazioneSanitaria(docs, []);
+    expect(out).toContain('CLINICO');
+    expect(out).not.toContain('NON_CLINICO');
+  });
 });
 
 describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
