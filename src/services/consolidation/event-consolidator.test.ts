@@ -4,6 +4,7 @@ import {
   consolidateNewWithExisting,
   isSimilarEvent,
   isDuplicateOfExisting,
+  computeRelevanceTier,
 } from './event-consolidator';
 import type { ConsolidatedEvent } from './event-consolidator';
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
@@ -798,19 +799,68 @@ describe('consolidateEvents — Schönweger regression (CASO-2026-160)', () => {
     expect(result[0].confidence).toBe(95); // higher-confidence twin survives
   });
 
-  it('preserves cross-document duplicates (those go through markDiscrepancies, not dedup)', () => {
-    // Same event extracted from two different documents must NOT be merged —
-    // they're different sources and may have legitimate discrepancies.
+  it('MERGES concordant cross-document duplicates into one canonical multi-source event', () => {
+    // The same fact in two documents (concordant) is now collapsed into one
+    // event citing both sources — so duplicates don't flood the report.
     const result = consolidateEvents([
-      {
-        documentId: 'doc-A',
-        events: [makeEvent({ title: 'Visita ortopedica' })],
-      },
-      {
-        documentId: 'doc-B',
-        events: [makeEvent({ title: 'Visita ortopedica' })],
-      },
+      { documentId: 'doc-A', events: [makeEvent({ title: 'Visita ortopedica', sourcePages: [1] })] },
+      { documentId: 'doc-B', events: [makeEvent({ title: 'Visita ortopedica', sourcePages: [5] })] },
+    ]);
+    expect(result.length).toBe(1);
+    expect(result[0].discrepancyNote).toContain('2 atti');
+    expect(result[0].sourcePages).toEqual([1, 5]); // sources unioned, never lost
+  });
+
+  it('does NOT merge cross-document events with a DISCORDANT diagnosis (escalate to perito)', () => {
+    const result = consolidateEvents([
+      { documentId: 'doc-A', events: [makeEvent({ title: 'Visita', diagnosis: 'Frattura tibia' })] },
+      { documentId: 'doc-B', events: [makeEvent({ title: 'Visita', diagnosis: 'Frattura perone' })] },
+    ]);
+    expect(result.length).toBe(2); // kept separate, never auto-resolved
+    expect(result.some((e) => e.discrepancyNote?.includes('DISCORDANTE'))).toBe(true);
+  });
+
+  it('does NOT merge spesa_medica across documents (each is a distinct payment)', () => {
+    const result = consolidateEvents([
+      { documentId: 'doc-A', events: [makeEvent({ title: 'Fattura', eventType: 'spesa_medica' })] },
+      { documentId: 'doc-B', events: [makeEvent({ title: 'Fattura', eventType: 'spesa_medica' })] },
     ]);
     expect(result.length).toBe(2);
+  });
+});
+
+describe('computeRelevanceTier', () => {
+  it('rates diagnoses / surgeries / hospitalizations / complications as T1', () => {
+    expect(computeRelevanceTier({ eventType: 'diagnosi' })).toBe('T1');
+    expect(computeRelevanceTier({ eventType: 'intervento' })).toBe('T1');
+    expect(computeRelevanceTier({ eventType: 'ricovero' })).toBe('T1');
+    expect(computeRelevanceTier({ eventType: 'complicanza' })).toBe('T1');
+  });
+
+  it('bumps any event WITH a documented diagnosis to T1', () => {
+    expect(computeRelevanceTier({ eventType: 'visita', diagnosis: 'Frattura del radio' })).toBe('T1');
+  });
+
+  it('rates discordant (contested) events as T1', () => {
+    expect(computeRelevanceTier({ eventType: 'esame', discrepancyNote: '⚠ DIAGNOSI DISCORDANTE — ...' })).toBe('T1');
+  });
+
+  it('rates visits / referti / imaging as T2', () => {
+    expect(computeRelevanceTier({ eventType: 'visita' })).toBe('T2');
+    expect(computeRelevanceTier({ eventType: 'referto' })).toBe('T2');
+    expect(computeRelevanceTier({ eventType: 'esame', sourceType: 'esame_strumentale' })).toBe('T2');
+  });
+
+  it('rates routine labs / prescriptions / admin as T3 (context)', () => {
+    expect(computeRelevanceTier({ eventType: 'esame', sourceType: 'esame_ematochimico' })).toBe('T3');
+    expect(computeRelevanceTier({ eventType: 'prescrizione' })).toBe('T3');
+    expect(computeRelevanceTier({ eventType: 'spesa_medica' })).toBe('T3');
+  });
+
+  it('consolidateEvents attaches a relevanceTier to every event', () => {
+    const result = consolidateEvents([
+      { documentId: 'd1', events: [makeEvent({ eventType: 'intervento', title: 'Spondilodesi' })] },
+    ]);
+    expect(result[0].relevanceTier).toBe('T1');
   });
 });
