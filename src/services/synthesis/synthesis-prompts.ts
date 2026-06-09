@@ -7,6 +7,7 @@ import { calculationsToITTITPSegments, formatITTITPTable } from '../calculations
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { DocumentSummary } from './document-summarizer';
 import { formatDate } from '@/lib/format';
+import { computeRelevanceTier } from '@/lib/event-relevance';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
 import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
@@ -672,6 +673,20 @@ export function buildSummaryUserPrompt(params: {
 export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events.map((e) => {
     const date = formatDate(e.eventDate);
+    // RELEVANCE FILTER (deterministico): gli eventi T3 di routine (esami di
+    // laboratorio, prescrizioni, admin) sono resi in forma COMPATTA — presenti ma
+    // non verbosi, per non annegare il prompt. T1/T2 (diagnosi, interventi,
+    // referti, visite, imaging) mantengono il dettaglio completo. Nessun evento è
+    // nascosto. Il tier è ricalcolato deterministicamente dai campi dell'evento.
+    const tier = e.relevanceTier ?? computeRelevanceTier({
+      eventType: e.eventType,
+      diagnosis: e.diagnosis,
+      sourceType: e.sourceType,
+      discrepancyNote: e.discrepancyNote,
+    });
+    if (tier === 'T3') {
+      return `${e.orderNumber}. ${date} | ${e.eventType.toUpperCase()} | ${e.title}`;
+    }
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
     const reliabilityScore = getSourceReliabilityScore(e.sourceType);

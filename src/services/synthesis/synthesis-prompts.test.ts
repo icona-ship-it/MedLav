@@ -8,6 +8,7 @@ import {
   formatDocumentSummariesForPrompt,
   buildChronologyUserPrompt,
   formatAnomaliesForPrompt,
+  formatEventsForPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DocumentSummary } from './document-summarizer';
@@ -657,6 +658,35 @@ describe('synthesis-prompts', () => {
       // Second has no note, so only 2 NOTA DEL PERITO occurrences total
       const noteCount = (result.match(/NOTA DEL PERITO/g) ?? []).length;
       expect(noteCount).toBe(2);
+    });
+  });
+
+  describe('formatEventsForPrompt — relevance filter (Fase 3)', () => {
+    it('renders a T3 routine event COMPACTLY (no full detail / verbatim quote)', () => {
+      const out = formatEventsForPrompt([
+        makeEvent({ eventType: 'esame', sourceType: 'esame_ematochimico', title: 'Emocromo', description: 'Hb 9.7' }),
+      ]);
+      expect(out).toContain('Emocromo');
+      expect(out).not.toContain('DESCRIZIONE');
+      expect(out).not.toContain('CITAZIONE TESTUALE');
+    });
+
+    it('renders a T1 event in FULL detail (description + diagnosis + verbatim quote)', () => {
+      const out = formatEventsForPrompt([
+        makeEvent({ eventType: 'diagnosi', title: 'Diagnosi', diagnosis: 'Frattura del radio', sourceText: 'Frattura del radio distale.' }),
+      ]);
+      expect(out).toContain('DESCRIZIONE');
+      expect(out).toContain('Diagnosi: Frattura del radio');
+      expect(out).toContain('CITAZIONE TESTUALE');
+    });
+
+    it('keeps EVERY event present (T3 compact, never hidden)', () => {
+      const out = formatEventsForPrompt([
+        makeEvent({ orderNumber: 1, eventType: 'esame', sourceType: 'esame_ematochimico', title: 'Glicemia' }),
+        makeEvent({ orderNumber: 2, eventType: 'intervento', title: 'Osteosintesi' }),
+      ]);
+      expect(out).toContain('Glicemia');
+      expect(out).toContain('Osteosintesi');
     });
   });
 });
