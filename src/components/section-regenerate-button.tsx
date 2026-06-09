@@ -19,14 +19,17 @@ interface SectionRegenerateButtonProps {
   reportVersion?: number;
   disabled?: boolean;
   onRegenerated: () => void;
-  /** documentazione_sanitaria: generate the LLM-"elaborated" variant on demand. */
+  /** documentazione_sanitaria: generate the LLM-"elaborated" (integral) variant. */
   elaborated?: boolean;
+  /** documentazione_sanitaria: generate the LLM-"selective" variant — quote
+   * significant findings verbatim, paraphrase routine, hard-verify each quote. */
+  selective?: boolean;
   /** Custom trigger label (default "Rigenera Sezione"). */
   label?: string;
 }
 
 export function SectionRegenerateButton({
-  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated, elaborated, label,
+  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated, elaborated, selective, label,
 }: SectionRegenerateButtonProps) {
   const [open, setOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
@@ -48,6 +51,7 @@ export function SectionRegenerateButton({
           force,
           expectedVersion: reportVersion,
           elaborated: elaborated || undefined,
+          selective: selective || undefined,
         }),
       });
       const result = await response.json() as {
@@ -72,7 +76,7 @@ export function SectionRegenerateButton({
     } finally {
       setIsRegenerating(false);
     }
-  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated, elaborated]);
+  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated, elaborated, selective]);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
@@ -87,7 +91,13 @@ export function SectionRegenerateButton({
           size="sm"
           className="h-7 px-2 text-xs"
           disabled={disabled || isRegenerating}
-          title={elaborated ? `Genera la versione elaborata (AI) di "${sectionTitle}"` : `Rigenera "${sectionTitle}"`}
+          title={
+            selective
+              ? `Genera la versione sintetica (AI) di "${sectionTitle}": cita verbatim i reperti rilevanti, parafrasa la routine`
+              : elaborated
+                ? `Genera la versione elaborata (AI) di "${sectionTitle}"`
+                : `Rigenera "${sectionTitle}"`
+          }
         >
           {isRegenerating ? (
             <Loader2 className="mr-1 h-3 w-3 animate-spin" />

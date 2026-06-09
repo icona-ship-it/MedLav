@@ -30,6 +30,10 @@ const requestSchema = z.object({
   /** documentazione_sanitaria: generate the LLM-"elaborated" variant on demand
    * (default is the deterministic verbatim placeholder). */
   elaborated: z.boolean().optional(),
+  /** documentazione_sanitaria: generate the LLM-"selective" variant — narrative
+   * that quotes significant findings verbatim and paraphrases routine content,
+   * with each quote hard-verified against the OCR. */
+  selective: z.boolean().optional(),
   /** Optimistic concurrency: the report version the client is acting on. */
   expectedVersion: z.number().int().optional(),
 });
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Parametri non validi' }, { status: 400 });
     }
 
-    const { caseId, sectionId, instruction, force, expectedVersion, elaborated } = parsed.data;
+    const { caseId, sectionId, instruction, force, expectedVersion, elaborated, selective } = parsed.data;
 
     // Verify ownership + get case metadata
     const { data: caseRow } = await supabase
@@ -206,6 +210,7 @@ export async function POST(request: NextRequest) {
       moduleId: (caseRow.module_id ?? undefined) as string | undefined,
       patientInitials: (caseRow.patient_initials ?? null) as string | null,
       elaborated,
+      selective,
     });
 
     // Save as new version. Preserve the whole generation_metadata (per-section

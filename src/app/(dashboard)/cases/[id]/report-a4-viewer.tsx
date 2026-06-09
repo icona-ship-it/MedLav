@@ -223,20 +223,34 @@ export function ReportA4Viewer({
                         onRegenerated={() => handleSectionRegenerated(section.id)}
                       />
                     )}
-                    {/* documentazione_sanitaria: deterministic by default, but the
-                        perito can ask for the LLM-elaborated variant (translation,
-                        lab tables, grouping). */}
+                    {/* documentazione_sanitaria: deterministic by default. The
+                        perito can ask for either the integral LLM variant
+                        (translation, lab tables, grouping) or the SELECTIVE
+                        variant (quote significant findings verbatim, paraphrase
+                        routine, with each quote verified against the OCR). */}
                     {isDocSanitaria && (
-                      <SectionRegenerateButton
-                        caseId={caseId}
-                        sectionId={section.canonicalId}
-                        sectionTitle={section.title}
-                        reportVersion={report.version}
-                        disabled={regeneratingSection !== null}
-                        onRegenerated={() => handleSectionRegenerated(section.id)}
-                        elaborated
-                        label="Versione AI"
-                      />
+                      <>
+                        <SectionRegenerateButton
+                          caseId={caseId}
+                          sectionId={section.canonicalId}
+                          sectionTitle={section.title}
+                          reportVersion={report.version}
+                          disabled={regeneratingSection !== null}
+                          onRegenerated={() => handleSectionRegenerated(section.id)}
+                          selective
+                          label="Versione sintetica"
+                        />
+                        <SectionRegenerateButton
+                          caseId={caseId}
+                          sectionId={section.canonicalId}
+                          sectionTitle={section.title}
+                          reportVersion={report.version}
+                          disabled={regeneratingSection !== null}
+                          onRegenerated={() => handleSectionRegenerated(section.id)}
+                          elaborated
+                          label="Versione integrale AI"
+                        />
+                      </>
                     )}
                   </div>
                 </div>

@@ -6,10 +6,16 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionContext } from './section-generation-types';
-import { getSectionSpecById, buildDocSanitariaLlmSpec } from './section-catalog';
+import {
+  getSectionSpecById,
+  buildDocSanitariaLlmSpec,
+  buildDocSanitariaSelectiveSpec,
+} from './section-catalog';
 import { generateSingleSection, summarizeForContext } from './section-generator';
 import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
+import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
+import { logger } from '@/lib/logger';
 
 interface RegenerateSectionParams {
   sectionId: string;
@@ -31,6 +37,12 @@ interface RegenerateSectionParams {
    * the LLM reproduction (translation / lab tables / grouping) instead of the
    * deterministic verbatim default. */
   elaborated?: boolean;
+  /** On-demand "selective (AI)" variant of documentazione_sanitaria: a
+   * chronological narrative that quotes significant findings verbatim and
+   * paraphrases routine content. Verbatim quotes are hard-verified against the
+   * OCR; ungrounded ones are flagged "da verificare". Takes precedence over
+   * `elaborated` for documentazione_sanitaria. */
+  selective?: boolean;
 }
 
 /** Context length (chars) per prior-section summary fed back as rolling context. */
@@ -61,11 +73,17 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     throw new Error(`Sezione non riconosciuta per la rigenerazione: ${sectionId}`);
   }
 
-  // AI-on-demand: the perito asked for the LLM-elaborated documentazione sanitaria
+  // AI-on-demand: the perito asked for an LLM variant of documentazione sanitaria
   // (the default is the deterministic verbatim placeholder). Re-enable the LLM spec
   // so it goes through generateSingleSection instead of the placeholder short-circuit.
-  if (params.elaborated && sectionId === 'documentazione_sanitaria') {
-    spec = buildDocSanitariaLlmSpec(spec);
+  // `selective` (quote-verbatim-significant + paraphrase-routine) takes precedence
+  // over `elaborated` (integral readable reproduction).
+  if (sectionId === 'documentazione_sanitaria') {
+    if (params.selective) {
+      spec = buildDocSanitariaSelectiveSpec(spec);
+    } else if (params.elaborated) {
+      spec = buildDocSanitariaLlmSpec(spec);
+    }
   }
 
   // PLACEHOLDER GUARD (mirrors the main pipeline, generate-report.ts): placeholder
@@ -120,5 +138,22 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     documentsOcrText,
   });
 
-  return replaceSectionContent(currentSynthesis, sectionId, generated.content);
+  // SELECTIVE doc-sanitaria hard-check: every verbatim quote «...» the model
+  // produced must exist in the source OCR. Ungrounded quotes are kept verbatim
+  // (mai perdere un fatto) but annotated "da verificare" so a fabricated citation
+  // never reaches the perito unflagged.
+  let finalContent = generated.content;
+  if (params.selective && sectionId === 'documentazione_sanitaria') {
+    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
+    finalContent = checked.annotatedMarkdown;
+    if (checked.ungroundedCount > 0) {
+      logger.warn('section-regenerator', 'Selective doc-sanitaria: ungrounded quotes flagged', {
+        sectionId,
+        totalQuotes: checked.total,
+        ungroundedCount: checked.ungroundedCount,
+      });
+    }
+  }
+
+  return replaceSectionContent(currentSynthesis, sectionId, finalContent);
 }

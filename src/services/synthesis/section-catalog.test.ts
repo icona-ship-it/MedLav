@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSectionPlan, evaluateCondition, getAllSectionIds, getSelectableSections, MANDATORY_SECTION_IDS, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS, PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS } from './section-catalog';
+import { resolveSectionPlan, evaluateCondition, getAllSectionIds, getSelectableSections, MANDATORY_SECTION_IDS, CTU_SECTIONS, CTP_SECTIONS, STRAGIUDIZIALE_SECTIONS, PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS, getSectionSpecById, buildDocSanitariaLlmSpec, buildDocSanitariaSelectiveSpec } from './section-catalog';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { CaseType, PeriziaMetadata } from '@/types';
 
@@ -708,6 +708,38 @@ describe('section-catalog', () => {
         if (id.startsWith('intestazione')) continue; // intestazione varia per ruolo/modulo
         expect(allIds.has(id)).toBe(true);
       }
+    });
+  });
+
+  describe('buildDocSanitariaSelectiveSpec', () => {
+    const baseSpec = getSectionSpecById('documentazione_sanitaria', 'ctu');
+
+    it('the default doc-sanitaria spec is a deterministic placeholder', () => {
+      expect(baseSpec).toBeDefined();
+      expect(baseSpec?.isPlaceholder).toBe(true);
+    });
+
+    it('enables the LLM and swaps in the selective directive', () => {
+      const selective = buildDocSanitariaSelectiveSpec(baseSpec!);
+      expect(selective.isPlaceholder).toBe(false);
+      expect(selective.needsOcr).toBe(true);
+      expect(selective.maxTokens).toBeGreaterThan(0);
+      // Selective directive: verbatim quotes for significant findings only.
+      expect(selective.promptDirective).toContain('SELETTIVA');
+      expect(selective.promptDirective).toContain('«...»');
+      expect(selective.promptDirective).toContain('PARAFRASI');
+    });
+
+    it('produces a DIFFERENT directive than the integral LLM variant', () => {
+      const integral = buildDocSanitariaLlmSpec(baseSpec!);
+      const selective = buildDocSanitariaSelectiveSpec(baseSpec!);
+      expect(selective.promptDirective).not.toBe(integral.promptDirective);
+    });
+
+    it('is a no-op for non-placeholder / non-doc-sanitaria specs', () => {
+      const intestazione = getSectionSpecById('intestazione', 'ctu');
+      expect(intestazione).toBeDefined();
+      expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
     });
   });
 });

@@ -136,6 +136,50 @@ const DOC_SANITARIA_NEUTRALITY = `REGOLA DI NEUTRALITÀ ASSOLUTA — questa sezi
 - VIETATE formulazioni soggettive: "verosimile", "ritardo", "lacuna", "mancanza", "discrepanza", "criticità", "appare", "si ritiene".
 - Le anomalie e i giudizi vanno SOLO nelle sezioni dedicate. Qui SOLO fatti come riportati dai documenti, niente di più.`;
 
+/**
+ * Variante AI SELETTIVA della documentazione sanitaria (terza modalità, distinta
+ * dal default deterministico-integrale e dalla variante AI integrale-leggibile).
+ *
+ * Allinea la sezione alla dottrina medico-legale: una narrazione cronologica che
+ * cita VERBATIM solo i reperti clinicamente significativi (diagnosi, descrizioni
+ * di lesione, prognosi, reperti operatori, dichiarazioni rilevanti/contestate) e
+ * PARAFRASA il contenuto di routine, senza MAI perdere un fatto clinicamente
+ * rilevante.
+ *
+ * VINCOLO DI VERIFICABILITÀ: le virgolette caporali «...» sono riservate
+ * ESCLUSIVAMENTE alle citazioni verbatim, così che ogni citazione possa essere
+ * ancorata all'OCR a valle (verifyGeneratedQuotes). Una citazione non riscontrata
+ * nei documenti viene marcata "da verificare" — quindi inventarla è inutile e
+ * dannoso.
+ */
+const DOC_SANITARIA_SELECTIVE_DIRECTIVE = `Redigi la sezione "Documentazione Sanitaria" come NARRAZIONE CLINICA CRONOLOGICA SELETTIVA della documentazione in atti. NON è una trascrizione integrale: è una relazione che riporta fedelmente i fatti clinici, citando alla lettera ciò che è rilevante e parafrasando il resto.
+
+STRUTTURA:
+1) ELENCO ANALITICO degli atti sanitari esaminati (uno per riga, in ordine cronologico): tipo di documento, struttura/autore e data. Serve da indice di navigazione.
+2) NARRAZIONE cronologica per documento/episodio: per ciascuno, una breve prosa neutra di raccordo + le CITAZIONI VERBATIM dei reperti rilevanti.
+
+REGOLA DELLE CITAZIONI VERBATIM (caporali «...»):
+- USA «...» SOLO ed ESCLUSIVAMENTE per testo COPIATO ALLA LETTERA dal documento originale. Mai parafrasare dentro «...».
+- DEVI citare verbatim, perché sono il cuore probatorio della perizia:
+  • le DIAGNOSI (pre/post-operatorie, alla dimissione, istologiche);
+  • le DESCRIZIONI DI LESIONE / reperti patologici (referti radiologici, descrizioni operatorie dei reperti, reperti obiettivi rilevanti);
+  • la PROGNOSI e i giorni di guarigione/inabilità indicati dai sanitari;
+  • le DICHIARAZIONI rilevanti o contestate (consenso informato, rifiuti, anamnesi riferita dal paziente quando dirimente).
+- Riproduci la citazione ESATTAMENTE come nel documento (stesse parole, stessa punteggiatura essenziale). Se è lunga, citala per intero: la fedeltà batte la concisione.
+
+REGOLA DELLA PARAFRASI (contenuto di routine):
+- Parafrasa/sintetizza in prosa neutra il contenuto NON dirimente: andamento dei parametri vitali nella norma, note infermieristiche di routine, pannelli di laboratorio nella norma, terapie di supporto standard.
+- NON perdere MAI un fatto clinicamente rilevante: un valore alterato, una complicanza, una variazione di terapia rilevante vanno SEMPRE riportati (citati se è una frase diagnostica, altrimenti riferiti con precisione).
+- Per gli esami di laboratorio con valori ALTERATI, riportali in tabella markdown (data, esame, valore, range); i pannelli interamente nella norma possono essere riassunti ("esami ematochimici nei limiti di norma in data ...").
+
+REGOLA ASSOLUTA ANTI-INVENZIONE:
+- Cita SOLO testo realmente presente nei documenti forniti. Se un dato non c'è, NON inventarlo e NON dedurlo.
+- Le «...» che non corrispondono al testo-fonte verranno marcate automaticamente "da verificare": la fabbricazione è sempre controproducente.
+
+${DOC_SANITARIA_NEUTRALITY}
+
+${NO_EVN_RULE}`;
+
 // ── CTU Giudiziale sections (15) ────────────────────────────────────
 
 const CTU_SECTIONS: SectionSpec[] = [
@@ -1204,6 +1248,30 @@ export function buildDocSanitariaLlmSpec(spec: SectionSpec): SectionSpec {
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
+  };
+}
+
+/**
+ * On-demand "selective (AI)" variant of documentazione_sanitaria — the THIRD
+ * mode (alongside the deterministic-verbatim default and the integral-readable
+ * LLM variant). It produces a chronological clinical narrative that QUOTES the
+ * significant findings verbatim (diagnoses, lesion descriptions, prognosis,
+ * contested declarations) and PARAPHRASES routine content, never losing a
+ * clinically relevant fact. Reserves «...» for verbatim citation so every quote
+ * can be hard-verified against the OCR downstream (verifyGeneratedQuotes).
+ * No-op for non-placeholder specs.
+ */
+export function buildDocSanitariaSelectiveSpec(spec: SectionSpec): SectionSpec {
+  if (spec.id !== 'documentazione_sanitaria' || !spec.isPlaceholder) return spec;
+  return {
+    ...spec,
+    isPlaceholder: false,
+    maxTokens: TOKENS_HUGE,
+    maxChars: 60_000,
+    dataSources: ['events-medical', 'image-analysis'],
+    contextMaxChars: 1500,
+    needsOcr: true,
+    promptDirective: DOC_SANITARIA_SELECTIVE_DIRECTIVE,
   };
 }
 
