@@ -118,16 +118,12 @@ export function consolidateEvents(
   // never aggregated.
   const aggregated = aggregateIdenticalEventsPerDay(dedupedSameDoc);
 
-  // Detect duplicates/discrepancies across documents (annotates; never merges)
-  const marked = markDiscrepancies(aggregated);
-
-  // CROSS-DOCUMENT MERGE (conservative): the SAME clinical fact described in
-  // multiple documents (referto + dimissione + CTP) on the SAME date+type, with
-  // CONCORDANT content, is collapsed into ONE canonical multi-source event — so
-  // the report/analysis isn't flooded by duplicates. NEVER merges discordant
-  // events (different diagnosis/doctor) — those stay separate and escalate to the
-  // perito (forensic requirement). Undated events are never merged.
-  const consolidated = mergeCrossDocumentDuplicates(marked);
+  // Detect duplicates/discrepancies across documents (annotates; never merges).
+  // NB: il merge cross-documento è disattivato — rompeva la persistenza
+  // (consolidateEventsStep assume 1:1 tra output e righe DB per gli order_number).
+  // Va reintrodotto con soft-delete + rinumerazione nel passo Inngest (progetto
+  // selettivo sicuro). Il tier resta come fondamenta deterministiche.
+  const consolidated = markDiscrepancies(aggregated);
 
   // Assign sequential order numbers + deterministic relevance tier.
   return consolidated.map((event, index) => ({
@@ -426,95 +422,6 @@ function findDiscrepancyInGroup(
     discrepancy: discrepancies.length > 0 ? discrepancies.join('; ') : null,
     confidenceCap,
     requiresVerification,
-  };
-}
-
-/** Types never merged cross-document: each is a distinct record (expenses are
- * distinct payments; admin docs / certificates are distinct acts). */
-const NON_MERGEABLE_TYPES: ReadonlySet<string> = new Set([
-  'spesa_medica',
-  'documento_amministrativo',
-  'certificato',
-]);
-
-/** Two events describe the same fact ONLY if no conflicting diagnosis/doctor
- * (one side null/empty is fine). A conflict means they must stay separate. */
-function isConcordantForMerge(
-  a: ExtractedEvent,
-  b: ExtractedEvent,
-): boolean {
-  if (a.diagnosis && b.diagnosis && a.diagnosis !== b.diagnosis) return false;
-  if (a.doctor && b.doctor && a.doctor !== b.doctor) return false;
-  return true;
-}
-
-type MarkedEvent = ExtractedEvent & { documentId: string; discrepancyNote: string | null };
-
-/**
- * Merge the SAME clinical fact described across MULTIPLE documents into one
- * canonical multi-source event. CONSERVATIVE by design (medical-legal: a wrong
- * merge hides a fact):
- *  - only DATED, CLINICAL events (no expenses/admin/certificates, no sentinel date);
- *  - only within the SAME eventDate+eventType (no date window in this phase);
- *  - only across DIFFERENT documents, when isSimilarEvent AND concordant
- *    (no conflicting diagnosis/doctor) — discordant events stay separate and keep
- *    their escalation note (set by markDiscrepancies).
- * Prefers false-negatives (two separate events) to false-positives (wrong merge).
- */
-function mergeCrossDocumentDuplicates(events: MarkedEvent[]): MarkedEvent[] {
-  const mergeKey = (e: MarkedEvent): string | null => {
-    if (!e.eventDate || e.eventDate === SENTINEL_DATE || NON_MERGEABLE_TYPES.has(e.eventType)) return null;
-    return `${e.eventDate}|${e.eventType}`;
-  };
-
-  const groups = new Map<string, number[]>();
-  for (let i = 0; i < events.length; i++) {
-    const key = mergeKey(events[i]);
-    if (!key) continue;
-    const g = groups.get(key);
-    if (g) g.push(i); else groups.set(key, [i]);
-  }
-
-  const consumed = new Set<number>();
-  const out: MarkedEvent[] = [];
-  for (let i = 0; i < events.length; i++) {
-    if (consumed.has(i)) continue;
-    const base = events[i];
-    const key = mergeKey(base);
-    const group = key ? (groups.get(key) ?? []) : [];
-
-    const cluster: MarkedEvent[] = [base];
-    for (const j of group) {
-      if (j <= i || consumed.has(j)) continue;
-      const other = events[j];
-      if (
-        other.documentId !== base.documentId &&
-        isSimilarEvent(base, other) &&
-        isConcordantForMerge(base, other)
-      ) {
-        cluster.push(other);
-        consumed.add(j);
-      }
-    }
-
-    out.push(cluster.length >= 2 ? mergeEventCluster(cluster) : base);
-  }
-  return out;
-}
-
-/** Collapse a cluster of concordant same-fact events into one canonical event. */
-function mergeEventCluster(cluster: MarkedEvent[]): MarkedEvent {
-  const base = cluster.reduce((best, e) => ((e.confidence ?? 0) > (best.confidence ?? 0) ? e : best), cluster[0]);
-  const allPages = dedupSortPages(cluster.flatMap((e) => e.sourcePages ?? []));
-  // Never lose a diagnosis: if the base has none, take the first available.
-  const diagnosis = base.diagnosis ?? cluster.find((e) => e.diagnosis)?.diagnosis ?? null;
-  return {
-    ...base,
-    diagnosis,
-    sourcePages: allPages,
-    confidence: Math.max(...cluster.map((e) => e.confidence ?? 0)),
-    requiresVerification: cluster.some((e) => e.requiresVerification),
-    discrepancyNote: `Documentato in ${cluster.length} atti (fonti concordi)`,
   };
 }
 

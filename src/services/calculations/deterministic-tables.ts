@@ -12,7 +12,6 @@ import { formatDate } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
-import { computeRelevanceTier } from '@/lib/event-relevance';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
 
@@ -144,18 +143,14 @@ function demoteOcrHeadings(text: string): string {
 }
 
 /**
- * Render the "documentazione sanitaria" section SELECTIVELY and VERBATIM — NO LLM,
- * following medico-legal doctrine (the perizia does NOT reproduce the full record):
- *  (a) ELENCO ANALITICO COMPLETO degli atti esaminati (tipo, nome, data, pagine) —
- *      la tracciabilità di OGNI documento è preservata;
- *  (b) RIPRODUZIONE FEDELE VERBATIM (virgolettata) dei soli dati clinici RILEVANTI
- *      (eventi T1/T2: diagnosi, interventi, complicanze, ricoveri, referti, visite,
- *      imaging) tramite il loro sourceText esatto, in ordine cronologico, con
- *      citazione della fonte. Il rumore/boilerplate è omesso (l'OCR integrale resta
- *      consultabile nei documenti del caso).
- * Le virgolettate sono blockquote (`> ...`): preserva il testo e protegge dalla
- * collisione col delimitatore di sezione "## ". Returns '' when there are no
- * clinical documents (caller substitutes the empty fallback).
+ * Render the "documentazione sanitaria" section — NO LLM, COMPLETE (mai perdere un
+ * fatto): (a) un ELENCO ANALITICO degli atti esaminati (navigazione), poi (b) la
+ * RIPRODUZIONE INTEGRALE e VERBATIM dell'OCR di ogni documento clinico, pagina per
+ * pagina, in ordine cronologico. Le pagine illeggibili sono marcate, mai droppate.
+ *
+ * NB: la riproduzione è COMPLETA per costruzione (la selettività "cosa è
+ * importante vs rumore" richiede giudizio = LLM, fuori da questo renderer puro).
+ * Returns '' when there are no clinical documents (caller uses the empty fallback).
  */
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
@@ -175,7 +170,7 @@ export function formatDocumentazioneSanitaria(
     if (!prev || d < prev) docDate.set(id, d);
   }
 
-  // (a) ELENCO ANALITICO COMPLETO — chronological, dated first then input order.
+  // Chronological order: dated docs first (by date), undated last in input order.
   const orderedDocs = clinicalDocs
     .map((doc, index) => ({ doc, index }))
     .sort((a, b) => {
@@ -188,6 +183,7 @@ export function formatDocumentazioneSanitaria(
     })
     .map((x) => x.doc);
 
+  // (a) ELENCO ANALITICO degli atti — navigazione, tracciabilità completa.
   const parts: string[] = ['**Documenti sanitari esaminati:**', ''];
   for (const doc of orderedDocs) {
     const d = docDate.get(doc.documentId);
@@ -196,28 +192,19 @@ export function formatDocumentazioneSanitaria(
     parts.push(`- ${getDocumentTypeLabel(doc.documentType)} — *${doc.fileName}*${pageInfo}${dateInfo}`);
   }
 
-  // (b) RIPRODUZIONE FEDELE SELETTIVA — verbatim quotes of T1/T2 events that have a
-  // source span and come from a clinical document. Chronological. Never alters text.
-  const docById = new Map(clinicalDocs.map((d) => [d.documentId, d]));
-  const relevant = events
-    .filter((e) => {
-      if (!e.source_text || !e.source_text.trim()) return false;
-      if (!e.document_id || !docById.has(e.document_id)) return false;
-      const tier = computeRelevanceTier({ eventType: e.event_type, diagnosis: e.diagnosis, sourceType: e.source_type });
-      return tier === 'T1' || tier === 'T2';
-    })
-    .slice()
-    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
-
-  if (relevant.length > 0) {
-    parts.push('', '**Riproduzione fedele dei dati clinici rilevanti:**', '');
-    for (const e of relevant) {
-      const doc = docById.get(e.document_id as string);
-      const date = displayDate(e.event_date);
-      const cite = [doc ? getDocumentTypeLabel(doc.documentType) : '', date !== '—' ? date : ''].filter(Boolean).join(', ');
-      parts.push(`*${[e.title, cite].filter(Boolean).join(' — ')}:*`);
-      const quote = demoteOcrHeadings(e.source_text!.trim()).split('\n').map((l) => `> ${l}`).join('\n');
-      parts.push(quote, '');
+  // (b) RIPRODUZIONE INTEGRALE VERBATIM — per documento, pagina per pagina.
+  for (const doc of orderedDocs) {
+    const d = docDate.get(doc.documentId);
+    const dateSuffix = d ? ` — ${formatDate(d)}` : '';
+    parts.push('', `### ${getDocumentTypeLabel(doc.documentType)}: ${doc.fileName}${dateSuffix}`);
+    if (doc.pages.length === 0) {
+      parts.push('*[Testo non disponibile per questo documento.]*');
+    } else {
+      for (const page of doc.pages) {
+        const text = (page.ocrText ?? '').trim();
+        parts.push(text ? demoteOcrHeadings(text) : `*[Pagina ${page.pageNumber} — testo non disponibile o illeggibile; verificare sul documento originale.]*`);
+        parts.push('\n---\n');
+      }
     }
   }
 

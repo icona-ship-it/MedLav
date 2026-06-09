@@ -170,89 +170,72 @@ function doc(partial: Partial<DeterministicDoc>): DeterministicDoc {
   };
 }
 
-describe('formatDocumentazioneSanitaria (selective)', () => {
-  it('lists EVERY clinical document analytically (type, filename, pages, date)', () => {
+describe('formatDocumentazioneSanitaria (complete + analytical list)', () => {
+  it('lists docs analytically AND reproduces the full OCR verbatim per document', () => {
     const out = formatDocumentazioneSanitaria(
-      [doc({ documentId: 'd1', fileName: 'rx.pdf', documentType: 'referto_specialistico' })],
+      [doc({ documentId: 'd1', fileName: 'rx.pdf', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura del radio distale.' }] })],
       [ev({ document_id: 'd1', event_date: '2024-04-20' })],
     );
     expect(out).toContain('Documenti sanitari esaminati');
-    expect(out).toContain('Referto Specialistico');
-    expect(out).toContain('rx.pdf');
-    expect(out).toContain('1 pagina');
+    expect(out).toContain('### Referto Specialistico: rx.pdf');
+    expect(out).toContain('Diagnosi: frattura del radio distale.');
   });
 
-  it('quotes VERBATIM (blockquote) the sourceText of RELEVANT (T1/T2) events, with citation', () => {
-    const out = formatDocumentazioneSanitaria(
-      [doc({ documentId: 'd1', documentType: 'referto_specialistico' })],
-      [ev({ document_id: 'd1', event_type: 'diagnosi', title: 'Diagnosi', event_date: '2024-04-20', source_text: 'Frattura pluriframmentaria del piatto tibiale laterale.' })],
-    );
-    expect(out).toContain('Riproduzione fedele');
-    expect(out).toContain('> Frattura pluriframmentaria del piatto tibiale laterale.');
-    expect(out).toContain('Diagnosi');
-  });
-
-  it('does NOT quote routine (T3) events (e.g. lab values)', () => {
-    const out = formatDocumentazioneSanitaria(
-      [doc({ documentId: 'd1', documentType: 'cartella_clinica' })],
-      [ev({ document_id: 'd1', event_type: 'esame', source_type: 'esame_ematochimico', title: 'Emocromo', source_text: 'Hb 9.7 g/dL' })],
-    );
-    expect(out).not.toContain('Hb 9.7');
-  });
-
-  it('does NOT quote events without a source span', () => {
-    const out = formatDocumentazioneSanitaria(
-      [doc({ documentId: 'd1' })],
-      [ev({ document_id: 'd1', event_type: 'diagnosi', source_text: null })],
-    );
-    expect(out).not.toContain('Riproduzione fedele');
-  });
-
-  it('orders the analytical list chronologically by the earliest dated event', () => {
-    const docs = [doc({ documentId: 'late', fileName: 'b.pdf' }), doc({ documentId: 'early', fileName: 'a.pdf' })];
+  it('reproduces documents in chronological order (earliest dated event first)', () => {
+    const docs = [
+      doc({ documentId: 'late', fileName: 'b.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_LATE' }] }),
+      doc({ documentId: 'early', fileName: 'a.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_EARLY' }] }),
+    ];
     const events: DeterministicTableEvent[] = [
       ev({ document_id: 'late', event_date: '2024-06-01' }),
       ev({ document_id: 'early', event_date: '2024-01-01' }),
     ];
     const out = formatDocumentazioneSanitaria(docs, events);
-    expect(out.indexOf('a.pdf')).toBeLessThan(out.indexOf('b.pdf'));
+    expect(out.indexOf('CONTENUTO_EARLY')).toBeLessThan(out.indexOf('CONTENUTO_LATE'));
+  });
+
+  it('marks empty/illegible pages instead of dropping them (never lose a fact)', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ pages: [{ pageNumber: 1, ocrText: 'Pagina 1 ok.' }, { pageNumber: 2, ocrText: '   ' }] })],
+      [],
+    );
+    expect(out).toContain('Pagina 1 ok.');
+    expect(out).toContain('[Pagina 2 — testo non disponibile o illeggibile');
+  });
+
+  it('demotes H1/H2 headings in the OCR (no collision with "## " section delimiter)', () => {
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: '## REFERTO\nTesto.' }] })], []);
+    for (const line of out.split('\n')) expect(/^#{1,2}\s/.test(line)).toBe(false);
+    expect(out).toContain('REFERTO');
+    expect(out).toContain('#### REFERTO');
+  });
+
+  it('does NOT escape pipes (OCR tables survive)', () => {
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: '| Hb | 9.7 |' }] })], []);
+    expect(out).toContain('| Hb | 9.7 |');
+    expect(out).not.toContain('\\|');
   });
 
   it('excludes non-clinical document types (atti / perizie / spese)', () => {
     const docs = [
-      doc({ documentId: 'a', fileName: 'cartella.pdf', documentType: 'cartella_clinica' }),
-      doc({ documentId: 'b', fileName: 'memoria.pdf', documentType: 'memoria_difensiva' }),
+      doc({ documentId: 'a', fileName: 'cartella.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'CLINICO' }] }),
+      doc({ documentId: 'b', fileName: 'memoria.pdf', documentType: 'memoria_difensiva', pages: [{ pageNumber: 1, ocrText: 'NON_CLINICO' }] }),
     ];
     const out = formatDocumentazioneSanitaria(docs, []);
-    expect(out).toContain('cartella.pdf');
-    expect(out).not.toContain('memoria.pdf');
+    expect(out).toContain('CLINICO');
+    expect(out).not.toContain('NON_CLINICO');
   });
 
   it('returns empty string when there are no clinical documents', () => {
     expect(formatDocumentazioneSanitaria([], [])).toBe('');
     expect(formatDocumentazioneSanitaria([doc({ documentType: 'memoria_difensiva' })], [])).toBe('');
   });
-
-  it('a verbatim quote is blockquoted — pipes/headings inside survive without breaking sections', () => {
-    const out = formatDocumentazioneSanitaria(
-      [doc({ documentId: 'd1' })],
-      [ev({ document_id: 'd1', event_type: 'diagnosi', title: 'Esito', event_date: '2024-04-20', source_text: '## REFERTO\n| Hb | 9.7 |' })],
-    );
-    // Every line is either an analytical bullet or a '> ' quote — none starts with '## '.
-    for (const line of out.split('\n')) {
-      expect(/^#{1,2}\s/.test(line)).toBe(false);
-    }
-    expect(out).toContain('REFERTO');
-    expect(out).toContain('| Hb | 9.7 |');
-    expect(out).not.toContain('\\|');
-  });
 });
 
 describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
-  it('expands the DOC_SANITARIA marker with the selective documentation when docs are provided', () => {
-    const docs = [doc({ documentId: 'd1' })];
-    const events: DeterministicTableEvent[] = [ev({ document_id: 'd1', event_type: 'diagnosi', source_text: 'TESTO_MEDICO_VERBATIM' })];
-    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, events, docs);
+  it('expands the DOC_SANITARIA marker with the documentation when docs are provided', () => {
+    const docs = [doc({ pages: [{ pageNumber: 1, ocrText: 'TESTO_MEDICO_VERBATIM' }] })];
+    const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, [], docs);
     expect(out).toContain('TESTO_MEDICO_VERBATIM');
     expect(out).not.toContain('MEDLAV:DOC_SANITARIA');
   });
