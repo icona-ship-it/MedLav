@@ -68,6 +68,16 @@ const SECTION_ID_MAP: Array<{ pattern: RegExp; id: string }> = [
 ];
 
 /**
+ * Canonical section ids (the values in SECTION_ID_MAP). A heading whose
+ * identified id is in this set is a RECOGNIZED report section, not an arbitrary
+ * sub-heading. Used by the public-link redaction to find a REAL next-section
+ * boundary that survives stray `##` sub-titles inside a section body.
+ */
+export const CANONICAL_SECTION_IDS: ReadonlySet<string> = new Set(
+  SECTION_ID_MAP.map((m) => m.id),
+);
+
+/**
  * Identify a canonical section ID from heading text.
  * Falls back to a Unicode-aware slug when no mapping matches.
  */

@@ -165,9 +165,10 @@ export async function GET(
         toDeterministicDocs(data.documentsWithPages ?? []),
       );
       const images = await resolveOcrImages(synthesis, caseId);
-      if (images.size > 0) {
-        synthesis = replaceWithDataUris(synthesis, images);
-      }
+      // Sempre, anche con 0 immagini risolte (es. Storage down): replaceWithDataUris
+      // sostituisce i riferimenti `ocr-image:` non risolti con "[Immagine non
+      // disponibile]" invece di lasciare un <img> rotto nel documento. #11 (audit 2026-06-09).
+      synthesis = replaceWithDataUris(synthesis, images);
     }
 
     // Anonymize synthesis BEFORE assembly (consistent with DOCX path)

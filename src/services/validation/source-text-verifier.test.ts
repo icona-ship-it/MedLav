@@ -1,6 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { verifySourceTexts } from './source-text-verifier';
+import { verifySourceTexts, groundCitation } from './source-text-verifier';
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
+
+describe('groundCitation — marker markdown (audit 2026-06-09 #4: no fusione parole)', () => {
+  it('una citazione fedele combacia anche quando l\'OCR ha il grassetto', () => {
+    const ocr = 'Diagnosi: frattura **composta** del radio distale destro, conservativa.';
+    expect(groundCitation('frattura composta del radio distale destro', ocr)).not.toBe('absent');
+  });
+
+  it('i marker NON fondono parole adiacenti → niente falso match "normalized"', () => {
+    // Con strip→'' (bug) "**alfa**beta" diventerebbe "alfabeta" e "alfabeta"
+    // risulterebbe presente. Con strip→' ' resta "alfa beta": nessun match.
+    const ocr = 'Referto: **alfa**beta gamma delta.';
+    expect(groundCitation('alfabeta', ocr)).toBe('absent');
+  });
+});
 
 function makeEvent(overrides: Partial<ExtractedEvent> = {}): ExtractedEvent {
   return {

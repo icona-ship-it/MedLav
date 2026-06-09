@@ -548,7 +548,24 @@ export async function assembleSectionsAndSaveReport(
     }));
   }
   const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents, docsForValidation);
-  const validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
+  let validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
+  // #5 (audit 2026-06-09): quando la doc-sanitaria verbatim viene espansa nel testo
+  // validato, un documento-FONTE può legittimamente contenere "01/01/1900" o un
+  // artefatto "[object Object]"/": null" — che fa scattare FALSAMENTE
+  // sentinel_date_leak / broken_ocr_marker e BLOCCA il report in modo permanente
+  // (throw → retry Inngest → caso bloccato in "errore", nessun report). Quei due
+  // check devono vedere SOLO la prosa generata dall'LLM: li rivalutiamo sul report
+  // GREZZO (DOC_SANITARIA non espanso); coverage/word-count/sezioni restano sull'espanso.
+  if (docsForValidation) {
+    const ocrSensitive = new Set(['sentinel_date_leak', 'broken_ocr_marker']);
+    const rawSensitiveIssues = validateReport(fullReport, synthesisParams.events.length, validationContext)
+      .issues.filter((i) => ocrSensitive.has(i.type));
+    const mergedIssues = [
+      ...validation.issues.filter((i) => !ocrSensitive.has(i.type)),
+      ...rawSensitiveIssues,
+    ];
+    validation = { ...validation, issues: mergedIssues, valid: !mergedIssues.some((i) => i.severity === 'error') };
+  }
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');

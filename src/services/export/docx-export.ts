@@ -772,7 +772,9 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
             children: row.map((cell) =>
               new TableCell({
                 children: [new Paragraph({
-                  children: [new TextRun({ text: cell, bold: rowIdx === 0, size: 20 })],
+                  // #7 (audit 2026-06-09): parse inline **grassetto**/*corsivo* nelle
+                  // celle invece di stamparli letterali; size 20 + bold sull'header.
+                  children: parseInlineFormatting(cell, { size: 20, bold: rowIdx === 0 }),
                 })],
                 borders,
                 width: { size: Math.floor(9000 / row.length), type: WidthType.DXA },
@@ -873,6 +875,19 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
       continue;
     }
 
+    // Blockquote: line starting with `>` (OCR quoted passage). Indented paragraph
+    // invece del `>` letterale nel documento depositato. #10 (audit 2026-06-09).
+    const quoteMatch = line.match(/^\s*>\s?(.*)$/);
+    if (quoteMatch) {
+      result.push(new Paragraph({
+        children: parseInlineFormatting(quoteMatch[1]),
+        indent: { left: 720 },
+        alignment: AlignmentType.JUSTIFIED,
+      }));
+      i++;
+      continue;
+    }
+
     // Regular paragraph — JUSTIFIED by default to match benchmark
     // (Del Porto, Antoniazzi). Word renders justified paragraphs with
     // tracked word-spacing similar to legal/professional documents.
@@ -888,21 +903,25 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
 
 /**
  * Parse inline markdown formatting (bold, italic) into TextRun array.
+ * `opts.size` applies a font size to every run; `opts.bold` forces a bold base
+ * (e.g. a table header row) — `**...**` segments stay bold regardless. Both are
+ * optional and default to docx defaults, so existing callers are unchanged.
  */
-function parseInlineFormatting(text: string): TextRun[] {
+function parseInlineFormatting(text: string, opts?: { size?: number; bold?: boolean }): TextRun[] {
+  const { size, bold } = opts ?? {};
   const runs: TextRun[] = [];
   // Split on bold (**text**) and italic (*text*)
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   for (const part of parts) {
     if (part.startsWith('**') && part.endsWith('**')) {
-      runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
+      runs.push(new TextRun({ text: part.slice(2, -2), bold: true, size }));
     } else if (part.startsWith('*') && part.endsWith('*')) {
-      runs.push(new TextRun({ text: part.slice(1, -1), italics: true }));
+      runs.push(new TextRun({ text: part.slice(1, -1), italics: true, bold, size }));
     } else if (part.length > 0) {
-      runs.push(new TextRun({ text: part }));
+      runs.push(new TextRun({ text: part, bold, size }));
     }
   }
-  return runs.length > 0 ? runs : [new TextRun({ text })];
+  return runs.length > 0 ? runs : [new TextRun({ text, bold, size })];
 }
 
 /**

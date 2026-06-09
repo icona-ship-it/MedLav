@@ -31,7 +31,7 @@ function convertMarkdownTable(lines: string[]): string {
   const bodyRows = dataRows.slice(1);
 
   let html = '<table class="ocr-table">\n<thead>\n<tr>';
-  for (const cell of headerCells) html += `<th>${escapeHtml(cell)}</th>`;
+  for (const cell of headerCells) html += `<th>${convertInlineFormatting(cell)}</th>`;
   html += '</tr>\n</thead>\n';
 
   // Only emit <tbody> when there are body rows — a header-only table previously
@@ -40,7 +40,7 @@ function convertMarkdownTable(lines: string[]): string {
     html += '<tbody>\n';
     for (const row of bodyRows) {
       html += '<tr>';
-      for (const cell of splitTableRow(row)) html += `<td>${escapeHtml(cell)}</td>`;
+      for (const cell of splitTableRow(row)) html += `<td>${convertInlineFormatting(cell)}</td>`;
       html += '</tr>\n';
     }
     html += '</tbody>\n';
@@ -156,6 +156,20 @@ export function markdownToHtml(markdown: string): string {
       const src = isSafeUrl ? escapeHtml(rawSrc) : '#';
       output.push(`<figure class="report-image"><img src="${src}" alt="${alt}" style="max-width:100%;height:auto"><figcaption>${alt}</figcaption></figure>`);
       i++;
+      continue;
+    }
+
+    // Blockquote: consecutive lines starting with `>` (OCR can carry quoted
+    // passages). Rendered as <blockquote> to match the live preview, instead of
+    // leaving a literal `>` in the deposited document.
+    if (/^\s*>\s?/.test(line)) {
+      closeList();
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^\s*>\s?/, ''));
+        i++;
+      }
+      output.push(`<blockquote>${convertInlineFormatting(quoteLines.join(' '))}</blockquote>`);
       continue;
     }
 

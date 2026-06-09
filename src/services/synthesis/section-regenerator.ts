@@ -14,6 +14,7 @@ import {
 import { generateSingleSection, summarizeForContext } from './section-generator';
 import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
+import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
 import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
 import { checkSelectiveCoverage } from '../validation/selective-coverage';
 import { logger } from '@/lib/logger';
@@ -84,6 +85,24 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
       spec = buildDocSanitariaSelectiveSpec(spec);
     } else if (params.elaborated) {
       spec = buildDocSanitariaLlmSpec(spec);
+    } else {
+      // #2 (audit 2026-06-09): nessuna variante AI richiesta (es. rigenerazione
+      // generica dal pannello "scegli cosa rigenerare"). Se la doc-sanitaria
+      // corrente è una variante AI MATERIALIZZATA (niente sentinella deterministica),
+      // NON sovrascriverla col placeholder verbatim — sarebbe una perdita silenziosa
+      // del lavoro del perito. La si mantiene: per cambiarla serve scegliere
+      // esplicitamente una variante (selective/elaborated) o il deterministico.
+      const current = parseSynthesisSections(currentSynthesis).find(
+        (s) => s.id === 'documentazione_sanitaria',
+      );
+      const isMaterializedAiVariant =
+        !!current &&
+        current.content.trim().length > 0 &&
+        !current.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA);
+      if (isMaterializedAiVariant) {
+        logger.info('section-regenerator', 'doc-sanitaria materializzata (variante AI): rigenerazione generica ignorata per non sovrascriverla');
+        return currentSynthesis;
+      }
     }
   }
 

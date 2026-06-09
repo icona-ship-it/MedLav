@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAccess } from '@/lib/audit';
 import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
-import { redactMaterializedDocSanitariaForPublic } from '@/services/synthesis/shared-redaction';
+import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic } from '@/services/synthesis/shared-redaction';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -60,6 +60,12 @@ export default async function SharedCasePage({
   // current events at read time — same as the main viewer/export. Without this
   // the public shared link would show the raw <!--MEDLAV:*--> markers as
   // invisible HTML comments and the spese/ITT tables would be missing.
+  // GDPR Art. 9: redact the verbatim clinical fields of events (diagnosis, doctor,
+  // facility, free-text description) BEFORE they reach the public link — both the
+  // Events tab and the deterministic cronologia/spese tables built below. Keeps
+  // date/type/title/order so the timeline structure stays readable.
+  const publicEvents = redactEventsForPublic(eventsResult.data ?? []);
+
   const sharedReport = reportResult.data
     ? {
         ...reportResult.data,
@@ -71,7 +77,7 @@ export default async function SharedCasePage({
               // link. The deterministic placeholder (sentinel) is left for expand
               // to neutralize via the no-docs path below.
               redactMaterializedDocSanitariaForPublic(reportResult.data.synthesis as string),
-              toDeterministicEvents(eventsResult.data ?? []),
+              toDeterministicEvents(publicEvents),
               // No docs on the public link → DOC_SANITARIA stays an invisible
               // comment (no raw clinical OCR exposed externally). See above.
             )
@@ -91,7 +97,7 @@ export default async function SharedCasePage({
   return (
     <SharedCaseView
       caseData={caseResult.data}
-      events={eventsResult.data ?? []}
+      events={publicEvents}
       anomalies={anomaliesResult.data ?? []}
       missingDocs={missingDocsResult.data ?? []}
       report={sharedReport}

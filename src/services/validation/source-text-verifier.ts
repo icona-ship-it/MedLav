@@ -5,7 +5,7 @@
  * 3-level match per event:
  * 1. Exact: sourceText found verbatim in fullText
  * 2. Normalized: collapse whitespace, lowercase, strip page markers
- * 3. LCS word-level: sliding window, threshold >= 0.70
+ * 3. LCS word-level: sliding window, threshold >= 0.80
  *
  * Pure function — no LLM calls, no side effects.
  */
@@ -196,7 +196,11 @@ function normalizeText(text: string): string {
     .replace(/-{2,}\s*pagina\s+\d+\s*-{2,}/gi, '')
     // Strip markdown emphasis/heading/code markers — Mistral OCR returns markdown,
     // so a faithful quote (plain) must still match an OCR term wrapped in **bold**.
-    .replace(/[*_`#~]/g, '')
+    // Replace with a SPACE (not ''): a marker between two real tokens is a word
+    // boundary; collapsing to '' would FUSE adjacent words and let a DISTORTED
+    // citation match as "normalized" while the faithful one only reaches "near"
+    // (audit 2026-06-09). normalizeForWords already uses ' ' for the same reason.
+    .replace(/[*_`#~]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { csrfHeaders } from '@/lib/csrf-client';
@@ -39,11 +39,16 @@ export function RegeneratePanelDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [prevOpen, setPrevOpen] = useState(false);
 
-  // Pre-select all affected sections each time the dialog opens.
-  useEffect(() => {
+  // Pre-select all affected sections ONLY sulla transizione di apertura — NON a
+  // ogni cambio di riferimento di `sections` (il parent ri-renderizza sul polling
+  // router.refresh(), che altrimenti azzererebbe le checkbox scelte dal perito).
+  // #12 (audit 2026-06-09). Pattern render-phase come report-section-editor.tsx.
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) setSelected(new Set(sections.map((s) => s.canonicalId)));
-  }, [open, sections]);
+  }
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
