@@ -3,6 +3,7 @@ import { logAccess } from '@/lib/audit';
 import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
 import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic, redactAnomaliesForPublic } from '@/services/synthesis/shared-redaction';
 import { SharedCaseView } from './shared-case-view';
+import { PUBLIC_SHARING_ENABLED } from '@/lib/constants';
 
 export default async function SharedCasePage({
   params,
@@ -10,6 +11,14 @@ export default async function SharedCasePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  // GDPR: la condivisione via link pubblico è DISATTIVATA (PUBLIC_SHARING_ENABLED).
+  // Corto-circuito PRIMA di caricare qualunque dato del caso → nessun dato clinico/
+  // identificativo viene servito, nemmeno per i token già emessi e ancora validi.
+  if (!PUBLIC_SHARING_ENABLED) {
+    return <DisabledView />;
+  }
+
   const admin = createAdminClient();
 
   // Look up share by token
@@ -108,6 +117,20 @@ export default async function SharedCasePage({
       missingDocs={missingDocsResult.data ?? []}
       report={sharedReport}
     />
+  );
+}
+
+function DisabledView() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="text-center space-y-4 p-8">
+        <h1 className="text-2xl font-bold">Condivisione non disponibile</h1>
+        <p className="text-muted-foreground">
+          La condivisione dei casi tramite link pubblico è temporaneamente
+          disattivata. Per ricevere il referto, contatta direttamente il professionista.
+        </p>
+      </div>
+    </div>
   );
 }
 

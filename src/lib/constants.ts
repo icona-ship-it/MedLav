@@ -9,6 +9,17 @@ import type { ModuleId } from '@/types/modules';
 // Re-export module system for convenience
 export { MODULE_CATALOG, MODULE_CATEGORIES };
 
+/**
+ * Feature flag: condivisione di un caso via LINK PUBBLICO (token, /shared/[token]).
+ * DISATTIVATA (2026-06-10): la pagina pubblica serviva — nel payload serializzato
+ * del componente client — dati identificativi + clinici Art.9 (nome/CF/anamnesi via
+ * report e perizia_metadata) su un link non autenticato e inoltrabile. Resta OFF
+ * finché la feature non viene ridisegnata (es. accesso autenticato o report
+ * anonimizzato). Mettere a `true` per riabilitarla. La revoca dei link esistenti
+ * (DELETE) resta sempre attiva.
+ */
+export const PUBLIC_SHARING_ENABLED = false;
+
 /** Label lookup for module IDs */
 export const moduleLabels: Record<string, string> = Object.fromEntries(
   MODULE_CATALOG.map((m) => [m.id, m.label]),

@@ -21,6 +21,7 @@ import type { ModuleId } from '@/types/modules';
 import { formatDate } from '@/lib/format';
 import { EditCaseDialog } from './edit-case-dialog';
 import { ShareCaseDialog } from '@/components/share-case-dialog';
+import { PUBLIC_SHARING_ENABLED } from '@/lib/constants';
 import type { CaseData, EventRow, ReportRow } from './types';
 
 // --- Types ---
@@ -164,7 +165,9 @@ export function CaseHeader({
               >
                 <Search className="h-4 w-4" />
               </Button>
-              <ShareCaseDialog caseId={caseId} hasReport={!!report?.synthesis} />
+              {PUBLIC_SHARING_ENABLED && (
+                <ShareCaseDialog caseId={caseId} hasReport={!!report?.synthesis} />
+              )}
             </>
           )}
           <Button

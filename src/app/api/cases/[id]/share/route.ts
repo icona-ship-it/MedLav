@@ -5,6 +5,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { PUBLIC_SHARING_ENABLED } from '@/lib/constants';
 
 const createShareSchema = z.object({
   label: z.string().max(100).optional(),
@@ -21,6 +22,14 @@ export async function POST(
   try {
     const csrfError = validateCsrfToken(request);
     if (csrfError) return csrfError;
+
+    // GDPR: creazione di nuovi link pubblici disattivata (PUBLIC_SHARING_ENABLED).
+    if (!PUBLIC_SHARING_ENABLED) {
+      return NextResponse.json(
+        { success: false, error: 'La condivisione tramite link pubblico è temporaneamente disattivata.' },
+        { status: 403 },
+      );
+    }
 
     const { id: caseId } = await params;
     const supabase = await createClient();
