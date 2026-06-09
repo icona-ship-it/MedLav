@@ -60,10 +60,11 @@ export default async function SharedCasePage({
   // current events at read time — same as the main viewer/export. Without this
   // the public shared link would show the raw <!--MEDLAV:*--> markers as
   // invisible HTML comments and the spese/ITT tables would be missing.
-  // GDPR Art. 9: redact the verbatim clinical fields of events (diagnosis, doctor,
-  // facility, free-text description) BEFORE they reach the public link — both the
-  // Events tab and the deterministic cronologia/spese tables built below. Keeps
-  // date/type/title/order so the timeline structure stays readable.
+  // GDPR Art. 9: redact events to a NON-CLINICAL whitelist (date/type/order) BEFORE
+  // they reach the public link — both the Events tab and the deterministic
+  // cronologia/spese tables. Drops every clinical column (title/description/diagnosis/
+  // doctor/facility + source_text/notes) so nothing leaks via the serialized
+  // 'use client' payload, not just what is rendered on screen.
   const publicEvents = redactEventsForPublic(eventsResult.data ?? []);
 
   const sharedReport = reportResult.data

@@ -168,6 +168,16 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   //   2. omission net: every clinically-significant (T1) event must appear in
   //      the narrative, else a "possibile omissione" banner is prepended.
   let finalContent = generated.content;
+  // GDPR hardening (audit 2026-06-09): una doc-sanitaria AI materializzata non deve
+  // contenere heading H2 (## ) interni. Un sotto-titolo che collide con un pattern
+  // canonico (es. "## Complicanze", "## Nesso Causale") chiuderebbe la sezione nel
+  // parser e lascerebbe trapelare il testo clinico successivo sul link pubblico
+  // (redactMaterializedDocSanitariaForPublic redige fino al prossimo heading
+  // canonico). Demota ogni ## a #### nel corpo: le sotto-sezioni restano leggibili
+  // ma non sono più confini di sezione (### e #### non matchano la HEADING_REGEX).
+  if (sectionId === 'documentazione_sanitaria' && (params.selective || params.elaborated)) {
+    finalContent = finalContent.replace(/^##(\s+)/gm, '####$1');
+  }
   if (params.selective && sectionId === 'documentazione_sanitaria') {
     const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
     finalContent = checked.annotatedMarkdown;

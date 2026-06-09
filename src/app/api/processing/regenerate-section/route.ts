@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         unchanged: true,
-        error: 'La documentazione sanitaria in variante AI non si aggiorna con la rigenerazione generica. Aprila e usa le opzioni "Variante AI" (selettiva o integrale) per rigenerarla. Nessun credito è stato addebitato.',
+        error: 'Nessuna modifica applicata: la sezione è già aggiornata. Se è la documentazione sanitaria in variante AI, aprila e usa le opzioni "Variante AI" (selettiva o integrale) per rigenerarla. Nessun credito è stato addebitato.',
       });
     }
 

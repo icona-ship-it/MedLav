@@ -98,14 +98,27 @@ export function redactMaterializedDocSanitariaForPublic(synthesis: string): stri
  * authenticated view/export is unaffected. Returns NEW objects (immutable).
  */
 export function redactEventsForPublic<T>(events: readonly T[]): T[] {
-  return events.map((e) => ({
-    ...(e as Record<string, unknown>),
-    title: '',
-    description: '',
-    diagnosis: null,
-    doctor: null,
-    facility: null,
-  })) as T[];
+  // Construct from a WHITELIST (default-deny). NON usare spread `{...e}`: la pagina
+  // pubblica carica gli eventi con select('*') e Next.js serializza l'INTERO oggetto
+  // nel payload del componente 'use client' — quindi source_text (OCR clinico
+  // verbatim, Art.9), expert_notes, reliability_notes, source_pages raggiungerebbero
+  // il view-source anche se non renderizzati. Qui sopravvivono SOLO i campi
+  // strutturali non-clinici; i campi clinici di display restano come blank (per la
+  // compatibilità di tipo e le tabelle deterministiche).
+  return events.map((e) => {
+    const r = e as Record<string, unknown>;
+    return {
+      id: r.id,
+      order_number: r.order_number,
+      event_date: r.event_date,
+      event_type: r.event_type,
+      title: '',
+      description: '',
+      diagnosis: null,
+      doctor: null,
+      facility: null,
+    };
+  }) as T[];
 }
 
 /**
@@ -117,9 +130,18 @@ export function redactEventsForPublic<T>(events: readonly T[]): T[] {
  * Returns NEW objects (immutable).
  */
 export function redactAnomaliesForPublic<T>(anomalies: readonly T[]): T[] {
-  return anomalies.map((a) => ({
-    ...(a as Record<string, unknown>),
-    description: '',
-    suggestion: null,
-  })) as T[];
+  // Construct from a WHITELIST (default-deny), come per gli eventi: select('*') +
+  // serializzazione 'use client' farebbero trapelare involved_events (id + descrizioni
+  // cliniche degli eventi) e resolution_note (testo libero del perito). Sopravvivono
+  // solo tipo e severità; i testi clinici restano blank.
+  return anomalies.map((a) => {
+    const r = a as Record<string, unknown>;
+    return {
+      id: r.id,
+      anomaly_type: r.anomaly_type,
+      severity: r.severity,
+      description: '',
+      suggestion: null,
+    };
+  }) as T[];
 }

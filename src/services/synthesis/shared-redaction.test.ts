@@ -114,9 +114,13 @@ describe('redactEventsForPublic (GDPR Art.9 — tab Eventi/cronologia link pubbl
         id: '1', order_number: 1, title: 'Ricovero', event_date: '2024-03-12', event_type: 'ricovero',
         description: 'Paziente con frattura scomposta dell\'omero', diagnosis: 'Frattura omero dx',
         doctor: 'Dott. Rossi', facility: 'Ospedale San Luca',
+        // Colonne extra caricate da select('*') che NON devono trapelare (Art.9).
+        source_text: 'OCR: frattura scomposta III medio omero dx, Dott. Rossi',
+        expert_notes: 'nota perito riservata', reliability_notes: 'fonte incerta',
+        source_pages: [3, 4],
       },
     ];
-    const out = redactEventsForPublic(events);
+    const out = redactEventsForPublic(events) as Array<Record<string, unknown>>;
 
     expect(out[0].description).toBe('');
     expect(out[0].diagnosis).toBeNull();
@@ -124,6 +128,12 @@ describe('redactEventsForPublic (GDPR Art.9 — tab Eventi/cronologia link pubbl
     expect(out[0].facility).toBeNull();
     // title è clinico per costruzione → azzerato anch'esso (B2 audit 2026-06-09).
     expect(out[0].title).toBe('');
+    // WHITELIST default-deny: le colonne cliniche non-display sono ELIMINATE
+    // (non serializzate nel payload 'use client'), non solo svuotate.
+    expect(out[0].source_text).toBeUndefined();
+    expect(out[0].expert_notes).toBeUndefined();
+    expect(out[0].reliability_notes).toBeUndefined();
+    expect(out[0].source_pages).toBeUndefined();
     // Struttura non-clinica della timeline preservata.
     expect(out[0].event_date).toBe('2024-03-12');
     expect(out[0].event_type).toBe('ricovero');
@@ -131,6 +141,7 @@ describe('redactEventsForPublic (GDPR Art.9 — tab Eventi/cronologia link pubbl
     // Immutabilità: l'oggetto originale non viene mutato.
     expect(events[0].doctor).toBe('Dott. Rossi');
     expect(events[0].title).toBe('Ricovero');
+    expect(events[0].source_text).toContain('frattura scomposta');
   });
 
   it('gestisce un array vuoto', () => {
@@ -145,12 +156,18 @@ describe('redactAnomaliesForPublic (GDPR Art.9 — anomalie link pubblico)', () 
         id: 'a1', anomaly_type: 'diagnosi_discordante', severity: 'alta',
         description: 'La diagnosi formulata è "frattura composta" vs "frattura scomposta" (Dott. Rossi)',
         suggestion: 'Verificare con il radiologo Dott. Bianchi presso Ospedale San Luca',
+        // Colonne extra da select('*') che NON devono trapelare.
+        involved_events: [{ id: 'e1', description: 'Ricovero PS trauma ginocchio dx' }],
+        resolution_note: 'risolto dal perito: confermata frattura scomposta',
       },
     ];
-    const out = redactAnomaliesForPublic(anomalies);
+    const out = redactAnomaliesForPublic(anomalies) as Array<Record<string, unknown>>;
 
     expect(out[0].description).toBe('');
     expect(out[0].suggestion).toBeNull();
+    // WHITELIST default-deny: involved_events/resolution_note ELIMINATI.
+    expect(out[0].involved_events).toBeUndefined();
+    expect(out[0].resolution_note).toBeUndefined();
     // Struttura mantenuta.
     expect(out[0].anomaly_type).toBe('diagnosi_discordante');
     expect(out[0].severity).toBe('alta');
