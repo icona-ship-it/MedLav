@@ -194,6 +194,9 @@ function normalizeText(text: string): string {
     .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
     .replace(/\[TABLE_(?:START|END)\]/g, '')
     .replace(/-{2,}\s*pagina\s+\d+\s*-{2,}/gi, '')
+    // Strip markdown emphasis/heading/code markers — Mistral OCR returns markdown,
+    // so a faithful quote (plain) must still match an OCR term wrapped in **bold**.
+    .replace(/[*_`#~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -206,7 +209,8 @@ function normalizeForWords(text: string): string[] {
     .toLowerCase()
     .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
     .replace(/\[TABLE_(?:START|END)\]/g, '')
-    .replace(/[.,;:!?()[\]{}"'«»\-–—/\\]/g, ' ')
+    // Markdown emphasis/heading/code markers → split boundary (OCR is markdown).
+    .replace(/[.,;:!?()[\]{}"'«»\-–—/\\*_`#~]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 0);
 }

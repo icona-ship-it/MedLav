@@ -44,6 +44,19 @@ describe('computeStaleSections', () => {
     expect(ids).not.toContain('documentazione_atti');
   });
 
+  it('flags a MATERIALIZED doc-sanitaria (AI variant) as stale after a clinical edit', () => {
+    const withMaterialized: SectionStalenessInput[] = [
+      { canonicalId: 'documentazione_sanitaria', status: 'auto', materialized: true },
+    ];
+    const stale = computeStaleSections(withMaterialized, new Set(['diagnosi']));
+    expect(stale.map((s) => s.canonicalId)).toContain('documentazione_sanitaria');
+  });
+
+  it('still never-flags the DETERMINISTIC doc-sanitaria (materialized absent)', () => {
+    const stale = computeStaleSections(sections, new Set(['diagnosi']));
+    expect(stale.map((s) => s.canonicalId)).not.toContain('documentazione_sanitaria');
+  });
+
   it('marks edited sections with the edited flag (warn before overwrite)', () => {
     const stale = computeStaleSections(sections, new Set(['diagnosi']));
     const fatto = stale.find((s) => s.canonicalId === 'il_fatto_e_storia_clinica');

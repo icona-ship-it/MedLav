@@ -42,13 +42,13 @@ export interface OrderUpdate {
   order_number: number;
 }
 
-function eventKey(
-  documentId: string,
-  eventDate: string,
-  eventType: string,
-  title: string,
-): string {
-  return `${documentId}||${eventDate}||${eventType}||${(title ?? '').trim()}`;
+// Coarse identity key — deliberately EXCLUDES title. aggregateIdenticalEventsPerDay
+// rewrites the title of an aggregated event (e.g. "Esami di laboratorio (3 referti
+// raggruppati)"), so keying on title would orphan the member raw rows. (document_id,
+// event_date, event_type) + positional assignment within the group handles dedup,
+// aggregation AND genuinely-distinct same-day events alike.
+function eventKey(documentId: string, eventDate: string, eventType: string): string {
+  return `${documentId}||${eventDate}||${eventType}`;
 }
 
 export function buildOrderUpdates(
@@ -58,19 +58,19 @@ export function buildOrderUpdates(
   // Per key, the ORDERED list of consolidated order numbers.
   const ordersByKey = new Map<string, number[]>();
   for (const e of allEvents) {
-    const key = eventKey(e.documentId, e.eventDate, e.eventType, e.title);
+    const key = eventKey(e.documentId, e.eventDate, e.eventType);
     const list = ordersByKey.get(key);
     if (list) list.push(e.orderNumber);
     else ordersByKey.set(key, [e.orderNumber]);
   }
 
   // Consume orders positionally as raw rows of the same key are encountered;
-  // once a key's distinct orders are exhausted, extra duplicate rows reuse the
-  // last one.
+  // once a key's distinct orders are exhausted, extra duplicate/aggregated rows
+  // reuse the last one (they collapsed into that consolidated event).
   const cursorByKey = new Map<string, number>();
   const updates: OrderUpdate[] = [];
   for (const row of existingRaw) {
-    const key = eventKey(row.document_id ?? '', row.event_date, row.event_type, row.title);
+    const key = eventKey(row.document_id ?? '', row.event_date, row.event_type);
     const orders = ordersByKey.get(key);
     if (!orders || orders.length === 0) continue;
     const cursor = cursorByKey.get(key) ?? 0;

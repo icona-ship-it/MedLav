@@ -17,6 +17,17 @@ describe('verifyGeneratedQuotes', () => {
     expect(res.annotatedMarkdown).toBe(md);
   });
 
+  it('should GROUND a faithful quote even when the OCR wraps terms in markdown (Mistral OCR returns markdown)', () => {
+    // Mistral OCR emits markdown: emphasis around clinical terms is common.
+    const ocrMd = 'Diagnosi: frattura **composta** del *radio distale* destro.';
+    const md = 'Il referto riporta «frattura composta del radio distale destro».';
+    const res = verifyGeneratedQuotes(md, ocrMd);
+
+    expect(res.groundedCount).toBe(1);
+    expect(res.ungroundedCount).toBe(0);
+    expect(res.annotatedMarkdown).toBe(md); // no spurious "da verificare"
+  });
+
   it('should FLAG a single-token clinical flip that LCS≥0.80 would falsely ground', () => {
     // composta → scomposta: opposite clinical meaning, but only 1 of 6 words
     // differs → LCS ratio ~0.83 would pass the lenient grounding. The strict
@@ -95,17 +106,24 @@ describe('verifyGeneratedQuotes', () => {
     expect(twice.match(/da verificare/g)?.length).toBe(1);
   });
 
-  it('should add a section note when verbatim quotes use straight/curly delimiters', () => {
-    const md = 'Il referto riporta "frattura composta del radio distale destro" senza caporali.';
+  it('should add a section note when a FABRICATED quote uses straight/curly delimiters', () => {
+    // Not present in the OCR → a fabricated citation that escaped the «...» check.
+    const md = 'Il medico annota "lesione del legamento crociato anteriore sinistro" senza caporali.';
     const res = verifyGeneratedQuotes(md, OCR);
 
     expect(res.nonGuillemetQuotesDetected).toBe(true);
     expect(res.annotatedMarkdown).toContain('non racchiuse tra «...»');
     // The note is appended once, even with multiple stray quotes.
-    const md2 = '"prima citazione lunga fuori formato" e "seconda citazione lunga fuori formato".';
+    const md2 = '"prima citazione lunga inventata fuori formato" e "seconda citazione lunga inventata".';
     expect(
       verifyGeneratedQuotes(md2, OCR).annotatedMarkdown.match(/non racchiuse tra/g)?.length,
     ).toBe(1);
+  });
+
+  it('should NOT flag a FAITHFUL straight-quoted span (present in OCR → harmless mis-delimiter)', () => {
+    const md = 'Il referto riporta "frattura composta del radio distale destro" senza caporali.';
+    const res = verifyGeneratedQuotes(md, OCR);
+    expect(res.nonGuillemetQuotesDetected).toBe(false);
   });
 
   it('should NOT flag guillemet quotes as non-format', () => {

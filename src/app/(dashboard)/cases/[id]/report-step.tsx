@@ -157,7 +157,12 @@ export function ReportStep({
   const staleForPanel = computeStaleSections(
     sections
       .filter((s) => s.id !== 'preamble' && s.id !== 'full_report')
-      .map((s) => ({ canonicalId: s.canonicalId, status: getSectionStatus(report?.generation_metadata, s.canonicalId) })),
+      .map((s) => ({
+        canonicalId: s.canonicalId,
+        status: getSectionStatus(report?.generation_metadata, s.canonicalId),
+        // doc-sanitaria materialized into an AI variant (no sentinel) → trackable.
+        materialized: s.canonicalId === 'documentazione_sanitaria' && !s.content.includes('MEDLAV:DOC_SANITARIA'),
+      })),
     mutatedEventTypes,
   ).map((st) => ({
     canonicalId: st.canonicalId,

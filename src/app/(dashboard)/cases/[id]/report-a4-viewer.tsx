@@ -150,10 +150,14 @@ export function ReportA4Viewer({
           // The factual table is always in sync; correct it by editing the events.
           const rawSectionContent = rawContentById.get(section.canonicalId) ?? '';
           const hasDeterministic = hasDeterministicMarkers(rawSectionContent);
-          // documentazione_sanitaria is a VERBATIM block (not an auto-table): the
-          // perito may MATERIALIZE it on edit (final-phase manual override). The
-          // ITT/ITP/spese/crono tables, instead, must stay auto (correct via events).
-          const isDocSanitaria = rawSectionContent.includes('MEDLAV:DOC_SANITARIA');
+          // documentazione_sanitaria controls are keyed on the SECTION ID, not on
+          // the sentinel: once the perito generates an AI variant (selective /
+          // integral) the section is materialized and the sentinel is gone, but the
+          // AI buttons + badge must persist (otherwise the only control would revert
+          // it to the deterministic placeholder). `docSanitariaHasSentinel` tracks
+          // the deterministic-placeholder state for the materialize-on-edit logic.
+          const isDocSanitaria = section.canonicalId === 'documentazione_sanitaria';
+          const docSanitariaHasSentinel = rawSectionContent.includes('MEDLAV:DOC_SANITARIA');
 
           return (
             <div
@@ -177,8 +181,11 @@ export function ReportA4Viewer({
                     {hasDeterministic && !isDocSanitaria && (
                       <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Timeline.">Tabella automatica</Badge>
                     )}
-                    {isDocSanitaria && (
+                    {isDocSanitaria && docSanitariaHasSentinel && (
                       <Badge variant="info" title="Documentazione riprodotta verbatim dall'OCR (nessuna modifica AI). Puoi modificarla a mano in fase finale: l'edit la rende testo tuo.">Trascrizione automatica</Badge>
+                    )}
+                    {isDocSanitaria && !docSanitariaHasSentinel && (
+                      <Badge variant="warning" title="Variante AI (sintetica o integrale): NON è la riproduzione verbatim. Le citazioni «...» sono verificate contro l'OCR; rigenerala dopo modifiche agli eventi.">Versione AI</Badge>
                     )}
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
@@ -197,7 +204,7 @@ export function ReportA4Viewer({
                         // OCR docs are actually loaded — otherwise we'd capture the
                         // empty fallback; fall back to the raw marker. Other
                         // deterministic sections keep the raw marker (stay auto).
-                        content: (isDocSanitaria && docs && docs.length > 0)
+                        content: (docSanitariaHasSentinel && docs && docs.length > 0)
                           ? section.content
                           : (rawContentById.get(section.canonicalId) ?? section.content),
                       })}
@@ -214,9 +221,12 @@ export function ReportA4Viewer({
                     >
                       {isLocked ? <Lock className="h-3.5 w-3.5 text-success" /> : <LockOpen className="h-3.5 w-3.5" />}
                     </Button>
-                    {/* No LLM regeneration for sections with a deterministic
-                        block — it would discard the live table. */}
-                    {!hasDeterministic && (
+                    {/* No generic LLM regeneration for sections with a deterministic
+                        block (would discard the live table) NOR for doc-sanitaria
+                        (its dedicated AI-variant buttons below handle it — the
+                        generic button would revert a materialized variant to the
+                        deterministic placeholder). */}
+                    {!hasDeterministic && !isDocSanitaria && (
                       <SectionRegenerateButton
                         caseId={caseId}
                         sectionId={section.canonicalId}

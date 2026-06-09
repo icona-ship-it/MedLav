@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAccess } from '@/lib/audit';
 import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
+import { redactMaterializedDocSanitariaForPublic } from '@/services/synthesis/shared-redaction';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -64,7 +65,12 @@ export default async function SharedCasePage({
         ...reportResult.data,
         synthesis: reportResult.data.synthesis
           ? expandDeterministicBlocks(
-              reportResult.data.synthesis as string,
+              // GDPR: strip a MATERIALIZED (AI-variant) documentazione sanitaria
+              // BEFORE expanding — once materialized it has no sentinel left, so
+              // its verbatim clinical content would otherwise reach the public
+              // link. The deterministic placeholder (sentinel) is left for expand
+              // to neutralize via the no-docs path below.
+              redactMaterializedDocSanitariaForPublic(reportResult.data.synthesis as string),
               toDeterministicEvents(eventsResult.data ?? []),
               // No docs on the public link → DOC_SANITARIA stays an invisible
               // comment (no raw clinical OCR exposed externally). See above.

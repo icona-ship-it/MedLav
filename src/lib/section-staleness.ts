@@ -56,6 +56,10 @@ function sectionDomains(canonicalId: string): EventDomain[] {
 export interface SectionStalenessInput {
   canonicalId: string;
   status: SectionStatus;
+  /** A normally never-stale section that has been MATERIALIZED into a frozen LLM
+   * narrative (doc-sanitaria AI variant: the deterministic sentinel is gone, so it
+   * no longer auto-updates at read time) → it CAN drift and must be tracked. */
+  materialized?: boolean;
 }
 
 export interface StaleSection {
@@ -81,7 +85,9 @@ export function computeStaleSections(
 
   const stale: StaleSection[] = [];
   for (const section of sections) {
-    if (NEVER_STALE_SECTIONS.has(section.canonicalId)) continue;
+    // Never-stale sections are excluded UNLESS materialized (a frozen LLM variant
+    // that no longer auto-updates → it can drift like any narrative).
+    if (NEVER_STALE_SECTIONS.has(section.canonicalId) && !section.materialized) continue;
     if (section.status === 'locked') continue;
     const domains = sectionDomains(section.canonicalId);
     if (domains.some((d) => mutatedDomains.has(d))) {

@@ -239,7 +239,7 @@ const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
  * invisible marker so the section intro isn't left orphaned, without exposing the
  * documents or implying — misleadingly — that none exist.
  */
-const DOC_SANITARIA_OMITTED =
+export const DOC_SANITARIA_OMITTED =
   '_La documentazione sanitaria integrale è consultabile nella perizia completa._';
 
 /** True if the synthesis contains at least one deterministic marker. */

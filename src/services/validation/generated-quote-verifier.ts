@@ -55,20 +55,27 @@ export const NON_GUILLEMET_QUOTES_NOTE =
 
 /**
  * Detect verbatim-looking quoted spans the model emitted with the WRONG
- * delimiters (straight "..." or curly "..."/'...'), which bypass the «...»
- * grounding entirely. Operates on the guillemet-stripped text so legitimate
- * quotes are not double-counted. Length floor avoids matching apostrophes /
- * short emphasis.
+ * delimiters (straight "..." or curly "..."), which bypass the «...» grounding.
+ * Operates on the guillemet-stripped text so legitimate «...» are ignored.
+ *
+ * Fires ONLY for a substantial span that is NOT grounded in the OCR (`absent`):
+ * a faithful-but-mis-delimited quote (present in the OCR) is harmless and a short
+ * straight-quoted document title is not flagged — so the note signals the genuine
+ * concern (a fabricated citation that escaped the «...» check) without crying wolf
+ * on the deposited document.
  */
-const STRAIGHT_DOUBLE_QUOTE = /"[^"\n]{15,}"/;
-const CURLY_DOUBLE_QUOTE = /“[^”\n]{15,}”/;
+const STRAIGHT_DOUBLE_QUOTE_G = /"([^"\n]{20,})"/g;
+const CURLY_DOUBLE_QUOTE_G = /“([^”\n]{20,})”/g;
 
-function hasNonGuillemetQuotes(markdown: string): boolean {
+function hasUnverifiedNonGuillemetQuotes(markdown: string, fullOcrText: string): boolean {
   const withoutGuillemets = markdown.replace(/«[^«»]*»/g, '');
-  return (
-    STRAIGHT_DOUBLE_QUOTE.test(withoutGuillemets) ||
-    CURLY_DOUBLE_QUOTE.test(withoutGuillemets)
-  );
+  const spans: string[] = [];
+  for (const re of [STRAIGHT_DOUBLE_QUOTE_G, CURLY_DOUBLE_QUOTE_G]) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(withoutGuillemets)) !== null) spans.push(m[1].trim());
+  }
+  return spans.some((s) => s.length >= 20 && groundCitation(s, fullOcrText) === 'absent');
 }
 
 /**
@@ -120,9 +127,9 @@ export function verifyGeneratedQuotes(
 
   const groundedCount = verifications.filter((v) => v.grounded).length;
 
-  // Catch verbatim quotes emitted with the wrong delimiters (they skipped the
-  // grounding above). Idempotent: the note is appended at most once.
-  const nonGuillemetQuotesDetected = hasNonGuillemetQuotes(markdown);
+  // Catch FABRICATED verbatim quotes emitted with the wrong delimiters (they
+  // skipped the grounding above). Idempotent: the note is appended at most once.
+  const nonGuillemetQuotesDetected = hasUnverifiedNonGuillemetQuotes(markdown, fullOcrText);
   const withSectionNote =
     nonGuillemetQuotesDetected && !annotatedMarkdown.includes(NON_GUILLEMET_QUOTES_NOTE)
       ? `${annotatedMarkdown}${NON_GUILLEMET_QUOTES_NOTE}`

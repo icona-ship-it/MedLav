@@ -81,6 +81,31 @@ describe('buildOrderUpdates', () => {
     expect(new Set(orders).size).toBe(orders.length);
   });
 
+  it('maps aggregated rows whose title was rewritten (aggregateIdenticalEventsPerDay)', () => {
+    // 3 lab referti on the same day collapse into ONE consolidated event whose
+    // title is rewritten ("Esami di laboratorio (3 referti raggruppati)"). The
+    // member raw rows keep their original titles — coarse-key mapping still
+    // assigns them the aggregate's order_number (no stale order).
+    const allEvents = [
+      { documentId: 'd1', eventDate: '2024-03-12', eventType: 'esame_strumentale', title: 'Esami di laboratorio (3 referti raggruppati)', orderNumber: 1 },
+      { documentId: 'd1', eventDate: '2024-03-20', eventType: 'visita', title: 'Visita', orderNumber: 2 },
+    ];
+    const existingRaw = [
+      { id: 'r1', document_id: 'd1', event_date: '2024-03-12', event_type: 'esame_strumentale', title: 'Emocromo' },
+      { id: 'r2', document_id: 'd1', event_date: '2024-03-12', event_type: 'esame_strumentale', title: 'Glicemia' },
+      { id: 'r3', document_id: 'd1', event_date: '2024-03-12', event_type: 'esame_strumentale', title: 'Creatinina' },
+      { id: 'r4', document_id: 'd1', event_date: '2024-03-20', event_type: 'visita', title: 'Visita' },
+    ];
+
+    const updates = buildOrderUpdates(allEvents, existingRaw);
+
+    // All three lab rows map to the aggregate's order 1 (none orphaned/stale).
+    expect(updates).toContainEqual({ id: 'r1', order_number: 1 });
+    expect(updates).toContainEqual({ id: 'r2', order_number: 1 });
+    expect(updates).toContainEqual({ id: 'r3', order_number: 1 });
+    expect(updates).toContainEqual({ id: 'r4', order_number: 2 });
+  });
+
   it('handles null document_id and empty title without throwing', () => {
     const allEvents = [
       { documentId: '', eventDate: '2024-03-12', eventType: 'altro', title: '', orderNumber: 1 },

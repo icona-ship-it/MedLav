@@ -421,6 +421,10 @@ export function eventDateAppearsInReport(isoDate: string, synthesisLower: string
   if (synthesisLower.includes(`${dd}/${mm}/${yyyy}`)) return true;
   if (synthesisLower.includes(`${dd}.${mm}.${yyyy}`)) return true;
   if (synthesisLower.includes(`${dd}-${mm}-${yyyy}`)) return true;
+  // Non-zero-padded numeric forms, e.g. "12/3/2024" or "5.3.2024".
+  if (synthesisLower.includes(`${day}/${monthIdx}/${yyyy}`)) return true;
+  if (synthesisLower.includes(`${day}.${monthIdx}.${yyyy}`)) return true;
+  if (synthesisLower.includes(`${day}-${monthIdx}-${yyyy}`)) return true;
 
   // Extended prose: "15 marzo 2024" or non-zero-padded "5 marzo 2024", and the
   // year-less "15 marzo" form. Require the day number to avoid matching a bare
@@ -430,9 +434,9 @@ export function eventDateAppearsInReport(isoDate: string, synthesisLower: string
     if (synthesisLower.includes(`${day} ${monthName} ${yyyy}`)) return true;
     if (synthesisLower.includes(`${day} ${monthName}`)) return true;
     // Date ranges, e.g. a ricovero "dal 12 al 20 marzo 2024": the start day and
-    // the month co-occur with a few words between. Anchor on the day as a whole
-    // word so "12" does not match inside "120".
-    const rangeRe = new RegExp(`\\b${day}\\b[^.\\n]{0,15}\\b${monthName}\\b`);
+    // the month bridged ONLY by a range connective (al / - / – / e il) + the end
+    // day, so an unrelated "12 esami a marzo" does not falsely match.
+    const rangeRe = new RegExp(`\\b${day}\\b\\s*(?:al|-|–|/|e il)\\s*\\d{1,2}\\s+${monthName}\\b`);
     if (rangeRe.test(synthesisLower)) return true;
   }
   return false;
