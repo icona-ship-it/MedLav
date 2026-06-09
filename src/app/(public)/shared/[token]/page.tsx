@@ -39,10 +39,15 @@ export default async function SharedCasePage({
 
   // Load case data using admin client (no auth required)
   const [caseResult, eventsResult, anomaliesResult, missingDocsResult, reportResult] = await Promise.all([
-    admin.from('cases').select('id, code, case_type, case_role, patient_initials, status, perizia_metadata').eq('id', caseId).single(),
+    // GDPR Art.9: whitelist delle colonne sul link pubblico (default-deny). NON
+    // caricare perizia_metadata (contiene nome/CF/indirizzo/telefono del paziente +
+    // anamnesi clinica verbatim) né `*` su missing_documents (related_event = titolo
+    // evento clinico): tutto ciò che si carica finisce nel payload serializzato del
+    // componente 'use client', leggibile via view-source su link non autenticato.
+    admin.from('cases').select('id, code, case_type, case_role, patient_initials, status').eq('id', caseId).single(),
     admin.from('events').select('*').eq('case_id', caseId).eq('is_deleted', false).order('order_number', { ascending: true }),
     admin.from('anomalies').select('*').eq('case_id', caseId),
-    admin.from('missing_documents').select('*').eq('case_id', caseId),
+    admin.from('missing_documents').select('id, document_name, reason').eq('case_id', caseId),
     admin.from('reports').select('id, version, report_status, synthesis').eq('case_id', caseId).order('version', { ascending: false }).limit(1).single(),
   ]);
 
