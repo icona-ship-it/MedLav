@@ -213,6 +213,27 @@ export async function POST(request: NextRequest) {
       selective,
     });
 
+    // #2/B3 (audit 2026-06-09): regenerateSection ritorna il synthesis INVARIATO
+    // quando una doc-sanitaria in variante AI materializzata viene rigenerata in
+    // modo GENERICO (dal pannello "scegli cosa rigenerare", senza flag selective/
+    // elaborated) — per non sovrascriverla col verbatim deterministico. Ma il
+    // credito è già stato detratto: senza questo guard salveremmo una versione
+    // byte-identica, azzereremmo il banner "da aggiornare" e diremmo "fatto",
+    // ingannando il perito e addebitando un no-op. Quindi: rimborsa, NON inserire
+    // / NON resettare lo stato, e spiega come aggiornarla davvero.
+    if (updatedSynthesis === (currentReport.synthesis as string)) {
+      if (authenticatedUserId && creditsDeducted) {
+        await refundCredits(authenticatedUserId, CREDIT_COSTS.rigenerazione_sezione, 'rigenerazione_sezione', undefined, {
+          reason: 'regeneration_noop',
+        });
+      }
+      return NextResponse.json({
+        success: false,
+        unchanged: true,
+        error: 'La documentazione sanitaria in variante AI non si aggiorna con la rigenerazione generica. Aprila e usa le opzioni "Variante AI" (selettiva o integrale) per rigenerarla. Nessun credito è stato addebitato.',
+      });
+    }
+
     // Save as new version. Preserve the whole generation_metadata (per-section
     // state, promptVersion, HRS, …) — previously this was dropped on every
     // regeneration — and reset ONLY the regenerated section to 'auto'.

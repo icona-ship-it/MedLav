@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAccess } from '@/lib/audit';
 import { expandDeterministicBlocks, toDeterministicEvents } from '@/services/calculations/deterministic-tables';
-import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic } from '@/services/synthesis/shared-redaction';
+import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic, redactAnomaliesForPublic } from '@/services/synthesis/shared-redaction';
 import { SharedCaseView } from './shared-case-view';
 
 export default async function SharedCasePage({
@@ -98,7 +98,7 @@ export default async function SharedCasePage({
     <SharedCaseView
       caseData={caseResult.data}
       events={publicEvents}
-      anomalies={anomaliesResult.data ?? []}
+      anomalies={redactAnomaliesForPublic(anomaliesResult.data ?? [])}
       missingDocs={missingDocsResult.data ?? []}
       report={sharedReport}
     />

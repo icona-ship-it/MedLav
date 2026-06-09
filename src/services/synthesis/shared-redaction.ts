@@ -34,6 +34,16 @@ import { DETERMINISTIC_MARKERS, DOC_SANITARIA_OMITTED } from '../calculations/de
 const DOC_SANITARIA_ID = 'documentazione_sanitaria';
 const HEADING_REGEX = /^##\s+(.+)$/gm;
 
+// Section ids that mark a REAL section boundary but are NOT in SECTION_ID_MAP
+// (placeholder sections the perito fills). Without these, excluding a section
+// before them via the report selector could let the redaction swallow them on the
+// public link (over-redaction). Kept conservative: only the perito placeholders.
+const ADDITIONAL_BOUNDARY_IDS: ReadonlySet<string> = new Set([
+  'visita_clinica',
+  'quesiti',
+  'esame_obiettivo',
+]);
+
 export function redactMaterializedDocSanitariaForPublic(synthesis: string): string {
   if (!synthesis) return synthesis;
 
@@ -56,7 +66,7 @@ export function redactMaterializedDocSanitariaForPublic(synthesis: string): stri
   let endIndex = synthesis.length;
   for (let i = startIdx + 1; i < headings.length; i++) {
     const id = identifySectionId(headings[i].title);
-    if (id !== DOC_SANITARIA_ID && CANONICAL_SECTION_IDS.has(id)) {
+    if (id !== DOC_SANITARIA_ID && (CANONICAL_SECTION_IDS.has(id) || ADDITIONAL_BOUNDARY_IDS.has(id))) {
       endIndex = headings[i].index;
       break;
     }
@@ -80,17 +90,36 @@ export function redactMaterializedDocSanitariaForPublic(synthesis: string): stri
  * GDPR Art. 9: blank the verbatim clinical fields of events BEFORE they reach the
  * PUBLIC shared link — both the Events tab (SharedCaseView) and the deterministic
  * cronologia/spese tables (toDeterministicEvents → expandDeterministicBlocks).
- * Keeps the timeline STRUCTURE (date, type, title, order_number) but removes the
- * special-category data: free-text description, diagnosis, and doctor/facility
- * names. The owner's authenticated view/export is unaffected. Returns NEW objects
- * (immutable); the element shape is preserved.
+ * Keeps the timeline STRUCTURE (date, event_type, order_number) but removes the
+ * special-category data. NB: `title` is ALSO blanked — it is clinical by
+ * construction (e.g. "Osteosintesi piatto tibiale destro con placca e viti") and
+ * is rendered raw on the public surface (events tab + cronologia/spese tables);
+ * the non-clinical `event_type` badge/column remains as the label. The owner's
+ * authenticated view/export is unaffected. Returns NEW objects (immutable).
  */
 export function redactEventsForPublic<T>(events: readonly T[]): T[] {
   return events.map((e) => ({
     ...(e as Record<string, unknown>),
+    title: '',
     description: '',
     diagnosis: null,
     doctor: null,
     facility: null,
+  })) as T[];
+}
+
+/**
+ * GDPR Art. 9: blank the free-text clinical fields of anomalies before the PUBLIC
+ * shared link. Anomaly `description`/`suggestion` embed verbatim clinical data —
+ * discordant diagnoses, procedure names, free clinical text (anomaly-detector.ts)
+ * — otherwise served raw next to patient_initials on an unauthenticated link. The
+ * structural fields (anomaly_type, severity) are kept so the flag still shows.
+ * Returns NEW objects (immutable).
+ */
+export function redactAnomaliesForPublic<T>(anomalies: readonly T[]): T[] {
+  return anomalies.map((a) => ({
+    ...(a as Record<string, unknown>),
+    description: '',
+    suggestion: null,
   })) as T[];
 }

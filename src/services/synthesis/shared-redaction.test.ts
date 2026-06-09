@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic } from './shared-redaction';
+import { redactMaterializedDocSanitariaForPublic, redactEventsForPublic, redactAnomaliesForPublic } from './shared-redaction';
 import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
 
 describe('redactMaterializedDocSanitariaForPublic (GDPR)', () => {
@@ -122,16 +122,43 @@ describe('redactEventsForPublic (GDPR Art.9 — tab Eventi/cronologia link pubbl
     expect(out[0].diagnosis).toBeNull();
     expect(out[0].doctor).toBeNull();
     expect(out[0].facility).toBeNull();
-    // Struttura della timeline preservata.
-    expect(out[0].title).toBe('Ricovero');
+    // title è clinico per costruzione → azzerato anch'esso (B2 audit 2026-06-09).
+    expect(out[0].title).toBe('');
+    // Struttura non-clinica della timeline preservata.
     expect(out[0].event_date).toBe('2024-03-12');
     expect(out[0].event_type).toBe('ricovero');
     expect(out[0].order_number).toBe(1);
     // Immutabilità: l'oggetto originale non viene mutato.
     expect(events[0].doctor).toBe('Dott. Rossi');
+    expect(events[0].title).toBe('Ricovero');
   });
 
   it('gestisce un array vuoto', () => {
     expect(redactEventsForPublic([])).toEqual([]);
+  });
+});
+
+describe('redactAnomaliesForPublic (GDPR Art.9 — anomalie link pubblico)', () => {
+  it('azzera description/suggestion (testo clinico), mantiene tipo/severità', () => {
+    const anomalies = [
+      {
+        id: 'a1', anomaly_type: 'diagnosi_discordante', severity: 'alta',
+        description: 'La diagnosi formulata è "frattura composta" vs "frattura scomposta" (Dott. Rossi)',
+        suggestion: 'Verificare con il radiologo Dott. Bianchi presso Ospedale San Luca',
+      },
+    ];
+    const out = redactAnomaliesForPublic(anomalies);
+
+    expect(out[0].description).toBe('');
+    expect(out[0].suggestion).toBeNull();
+    // Struttura mantenuta.
+    expect(out[0].anomaly_type).toBe('diagnosi_discordante');
+    expect(out[0].severity).toBe('alta');
+    // Immutabilità.
+    expect(anomalies[0].description).toContain('frattura composta');
+  });
+
+  it('gestisce un array vuoto', () => {
+    expect(redactAnomaliesForPublic([])).toEqual([]);
   });
 });
