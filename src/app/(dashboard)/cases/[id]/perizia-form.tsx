@@ -15,6 +15,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { updateCase, getReportSectionOptions } from '../../actions';
+import { ReportSectionsPicker } from './report-sections-picker';
 import { getQuestiTemplates } from '@/lib/domain-knowledge';
 import { CASE_TYPES } from '@/lib/constants';
 import type { CaseType } from '@/types';
@@ -747,38 +748,15 @@ export function PeriziaMetadataForm({
                     <p className="text-xs text-muted-foreground">
                       Scegli quali sezioni includere nel report. Quelle obbligatorie ci sono sempre. Le altre puoi spegnerle se non ti servono: il report risulta più mirato e si genera più in fretta.
                     </p>
-                    {sectionOptions.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Caricamento sezioni…</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {sectionOptions.map((opt) => {
-                          const enabled = opt.mandatory || !excludedSections.includes(opt.id);
-                          return (
-                            <label
-                              key={opt.id}
-                              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${opt.mandatory ? 'opacity-70' : 'cursor-pointer hover:bg-muted/50'}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={enabled}
-                                disabled={opt.mandatory}
-                                onChange={(e) => {
-                                  if (opt.mandatory) return;
-                                  setExcludedSections((prev) =>
-                                    e.target.checked ? prev.filter((id) => id !== opt.id) : [...prev, opt.id],
-                                  );
-                                }}
-                                className="h-4 w-4 rounded border-input accent-primary shrink-0"
-                              />
-                              <span className="flex-1">{opt.title}</span>
-                              {opt.mandatory && (
-                                <span className="text-[11px] text-muted-foreground">obbligatoria</span>
-                              )}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <ReportSectionsPicker
+                      options={sectionOptions}
+                      excluded={excludedSections}
+                      onToggle={(id, include) =>
+                        setExcludedSections((prev) =>
+                          include ? prev.filter((x) => x !== id) : [...prev, id],
+                        )
+                      }
+                    />
                   </div>
                 )}
               </div>

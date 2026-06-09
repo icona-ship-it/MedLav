@@ -135,6 +135,8 @@ export function CaseDetailClient({
 
   // Determine pipeline mode for UI adaptation
   const pipelineMode = caseData.pipeline_mode ?? 'full';
+  const reportSectionExclusions = (caseData.perizia_metadata as Record<string, unknown> | null)
+    ?.excludedReportSections as string[] | undefined;
   const isExtractionOnly = pipelineMode === 'extraction_only';
   const isExpensesOnly = pipelineMode === 'expenses_only';
   const isAnonymizeOnly = pipelineMode === 'anonymize_only';
@@ -363,6 +365,7 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
+                initialExcludedSections={reportSectionExclusions}
               />
             </div>
           )}
@@ -433,6 +436,7 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
+                initialExcludedSections={reportSectionExclusions}
               />
             </div>
           )}
@@ -500,6 +504,7 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
+                initialExcludedSections={reportSectionExclusions}
               />
             </div>
           )}

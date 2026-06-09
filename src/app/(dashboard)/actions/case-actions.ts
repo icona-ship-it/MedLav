@@ -497,3 +497,48 @@ export async function getReportSectionOptions(
   );
   return { sections };
 }
+
+/**
+ * Salva SOLO le sezioni del report da escludere (selettore "Sezioni del report"),
+ * con merge sicuro nel perizia_metadata esistente. Usato dal pannello nello step
+ * Elaborazione, dove il resto del form perizia potrebbe non essere mai stato aperto:
+ * legge il metadata corrente e sovrascrive il solo campo excludedReportSections.
+ */
+export async function updateReportSectionExclusions(
+  caseId: string,
+  excludedSectionIds: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = z
+    .object({
+      caseId: z.string().min(1),
+      excludedSectionIds: z.array(z.string().max(80)).max(50),
+    })
+    .safeParse({ caseId, excludedSectionIds });
+  if (!parsed.success) return { success: false, error: 'Dati non validi' };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Non autenticato' };
+
+  // Read-modify-write con verifica ownership: non sovrascrivere il resto del metadata.
+  const { data: caseRow } = await supabase
+    .from('cases')
+    .select('perizia_metadata')
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseRow) return { success: false, error: 'Caso non trovato' };
+
+  const current = (caseRow.perizia_metadata as Record<string, unknown> | null) ?? {};
+  const merged = { ...current, excludedReportSections: parsed.data.excludedSectionIds };
+
+  const { error } = await supabase
+    .from('cases')
+    .update({ perizia_metadata: merged, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id);
+  if (error) return { success: false, error: 'Errore salvataggio sezioni' };
+
+  revalidateCase(parsed.data.caseId);
+  return { success: true };
+}

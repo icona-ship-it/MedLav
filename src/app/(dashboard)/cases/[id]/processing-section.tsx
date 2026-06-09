@@ -19,6 +19,8 @@ import { ProcessingProgress } from '@/components/processing-progress';
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
+import { getReportSectionOptions, updateReportSectionExclusions } from '../../actions';
+import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
 
 // --- Types ---
@@ -31,6 +33,7 @@ interface ProcessingSectionProps {
   processingStage?: string;
   lastError?: string;
   pipelineMode?: string;
+  initialExcludedSections?: string[];
 }
 
 // --- Pipeline steps preview ---
@@ -52,6 +55,7 @@ export function ProcessingSection({
   processingStage,
   lastError,
   pipelineMode = 'full',
+  initialExcludedSections = [],
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
@@ -62,6 +66,51 @@ export function ProcessingSection({
   const [isRetrying, setIsRetrying] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const processingStartRef = useRef<number | null>(null);
+
+  // Selettore "Sezioni del report" — solo per le analisi che producono un report
+  // completo (non cronistoria/spese/anonimizzazione). Reso visibile QUI, sopra il
+  // pulsante di avvio, perche' lo step "Info Perizia" e' facoltativo e veniva saltato.
+  const showSectionPicker = pipelineMode === 'full';
+  const [sectionOptions, setSectionOptions] = useState<ReportSectionOption[]>([]);
+  const [excludedSections, setExcludedSections] = useState<string[]>(initialExcludedSections);
+  const sectionsHydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!showSectionPicker) return;
+    let active = true;
+    void getReportSectionOptions(caseId).then((res) => {
+      if (active && res.sections) setSectionOptions(res.sections);
+    });
+    return () => {
+      active = false;
+    };
+  }, [caseId, showSectionPicker]);
+
+  // Persiste la scelta (merge server-side) a ogni modifica, dopo l'idratazione iniziale.
+  useEffect(() => {
+    if (!showSectionPicker) return;
+    if (!sectionsHydratedRef.current) {
+      sectionsHydratedRef.current = true;
+      return;
+    }
+    let active = true;
+    void updateReportSectionExclusions(caseId, excludedSections).then((res) => {
+      if (active && !res.success) toast.error(res.error ?? 'Errore nel salvataggio delle sezioni');
+    });
+    return () => {
+      active = false;
+    };
+  }, [excludedSections, caseId, showSectionPicker]);
+
+  const enabledSectionCount = sectionOptions.filter(
+    (o) => o.mandatory || !excludedSections.includes(o.id),
+  ).length;
+
+  const handleToggleSection = useCallback((sectionId: string, include: boolean) => {
+    setExcludedSections((prev) =>
+      include ? prev.filter((x) => x !== sectionId) : [...prev, sectionId],
+    );
+  }, []);
 
   // Count failed documents (excluding warning-only)
   const failedDocs = documents.filter((d) => {
@@ -267,6 +316,27 @@ export function ProcessingSection({
                     </div>
                   </div>
 
+                  {/* Selettore sezioni del report — evidente, subito sopra il pulsante */}
+                  {showSectionPicker && sectionOptions.length > 0 && (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold">Quali sezioni vuoi nel report?</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Le obbligatorie ci sono sempre. Spegni quelle che non ti servono: il report risulta più mirato.
+                        </p>
+                      </div>
+                      <ReportSectionsPicker
+                        options={sectionOptions}
+                        excluded={excludedSections}
+                        onToggle={handleToggleSection}
+                        disabled={isStartingProcessing}
+                      />
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {enabledSectionCount} {enabledSectionCount === 1 ? 'sezione verrà generata' : 'sezioni verranno generate'}.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Sticky action bar */}
                   <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
                     <Button
@@ -282,6 +352,11 @@ export function ProcessingSection({
                         <>
                           <Play className="mr-2 h-5 w-5" />
                           Avvia Elaborazione
+                          {showSectionPicker && sectionOptions.length > 0 && (
+                            <span className="ml-2 text-sm font-normal opacity-90">
+                              · {enabledSectionCount} {enabledSectionCount === 1 ? 'sezione' : 'sezioni'}
+                            </span>
+                          )}
                           <Badge variant="secondary" className="ml-2 text-sm px-2 py-0.5 bg-white/20 text-white border-0">
                             {creditCost} crediti
                           </Badge>
