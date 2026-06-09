@@ -1,7 +1,10 @@
 import type { DocumentWithPages } from './load-case-data';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import { anomalyTypeLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
-import { getDocumentTypeLabel } from '@/lib/document-type-labels';
+import {
+  getDocumentTypeLabel,
+  EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA,
+} from '@/lib/document-type-labels';
 import { formatDate } from '@/lib/format';
 
 export interface PeriziaMetadataExport {
@@ -58,22 +61,33 @@ interface ExportMissingDoc {
  * Each document gets a heading, then full OCR text page by page.
  */
 function buildDocumentazioneSanitaria(docs: DocumentWithPages[]): string {
-  if (docs.length === 0) return 'Nessun documento disponibile.';
+  // Allineato al renderer sicuro (formatDocumentazioneSanitaria): esclude i
+  // documenti non clinici e MAI droppa una pagina — quelle illeggibili sono
+  // marcate, così il perito sa che esistevano. Percorso di fallback (usato solo
+  // quando non c'è ancora alcuna sintesi), ma comunque "mai perdere un fatto".
+  const clinicalDocs = docs.filter(
+    (doc) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(doc.documentType),
+  );
+  if (clinicalDocs.length === 0) return 'Nessun documento disponibile.';
 
   const parts: string[] = [];
-  for (const doc of docs) {
+  for (const doc of clinicalDocs) {
     const typeLabel = getDocumentTypeLabel(doc.documentType);
     parts.push(`### ${doc.fileName} (${typeLabel})`);
 
     if (doc.pages.length === 0) {
       parts.push('*Testo non disponibile per questo documento.*');
     } else {
-      for (const page of doc.pages) {
+      doc.pages.forEach((page, index) => {
         if (page.ocrText.trim()) {
           parts.push(page.ocrText.trim());
-          parts.push('\n---\n');
+        } else {
+          parts.push(
+            `*[Pagina ${index + 1} — testo non disponibile o illeggibile; verificare sul documento originale.]*`,
+          );
         }
-      }
+        parts.push('\n---\n');
+      });
     }
     parts.push('');
   }
