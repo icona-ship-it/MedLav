@@ -3,6 +3,7 @@ import type { ConsolidatedEvent } from '@/services/consolidation/event-consolida
 import { consolidateEvents, type DocumentEvents } from '@/services/consolidation/event-consolidator';
 import { safeJsonParse } from '@/lib/format';
 import type { ExtractionResult, ConsolidationStepResult } from './types';
+import { buildOrderUpdates } from './order-mapping';
 import { logger } from '@/lib/logger';
 
 /**
@@ -105,14 +106,26 @@ export async function consolidateEventsStep(
     ? consolidateEvents([...docEventsMap.values()])
     : [];
 
-  // Update order numbers in DB (batched for scalability)
+  // Update order numbers in DB (batched for scalability). Map consolidated
+  // events back to raw rows by STABLE IDENTITY — consolidateEvents() dedups and
+  // aggregates, so a positional (index) mapping would mis-assign order_number.
   const BATCH_SIZE = 500;
-  const orderUpdates = allEvents
-    .map((event) => {
-      const dbRow = (existingRaw ?? [])[event.orderNumber - 1];
-      return dbRow ? { id: dbRow.id as string, order_number: event.orderNumber } : null;
-    })
-    .filter((u): u is { id: string; order_number: number } => u !== null);
+  const orderUpdates = buildOrderUpdates(
+    allEvents.map((event) => ({
+      documentId: event.documentId,
+      eventDate: event.eventDate,
+      eventType: event.eventType,
+      title: event.title,
+      orderNumber: event.orderNumber,
+    })),
+    (existingRaw ?? []).map((e) => ({
+      id: e.id as string,
+      document_id: (e.document_id ?? null) as string | null,
+      event_date: e.event_date as string,
+      event_type: e.event_type as string,
+      title: e.title as string,
+    })),
+  );
 
   for (let i = 0; i < orderUpdates.length; i += BATCH_SIZE) {
     const batch = orderUpdates.slice(i, i + BATCH_SIZE);

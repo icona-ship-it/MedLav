@@ -53,6 +53,9 @@ export function ReportA4Viewer({
   versions,
 }: ReportA4ViewerProps) {
   const router = useRouter();
+  // Disable the sibling documentazione-sanitaria AI buttons while one of them is
+  // regenerating (they manage their own in-flight state; this coordinates them).
+  const [docSanitariaBusy, setDocSanitariaBusy] = useState(false);
   // Expand deterministic factual blocks (ITT/ITP, spese, cronologia) from the
   // CURRENT events at read time → always in sync, no LLM, no regeneration.
   // No-op on legacy reports (no sentinel markers).
@@ -235,8 +238,9 @@ export function ReportA4Viewer({
                           sectionId={section.canonicalId}
                           sectionTitle={section.title}
                           reportVersion={report.version}
-                          disabled={regeneratingSection !== null}
+                          disabled={regeneratingSection !== null || docSanitariaBusy}
                           onRegenerated={() => handleSectionRegenerated(section.id)}
+                          onRegeneratingChange={setDocSanitariaBusy}
                           selective
                           label="Versione sintetica"
                         />
@@ -245,8 +249,9 @@ export function ReportA4Viewer({
                           sectionId={section.canonicalId}
                           sectionTitle={section.title}
                           reportVersion={report.version}
-                          disabled={regeneratingSection !== null}
+                          disabled={regeneratingSection !== null || docSanitariaBusy}
                           onRegenerated={() => handleSectionRegenerated(section.id)}
+                          onRegeneratingChange={setDocSanitariaBusy}
                           elaborated
                           label="Versione integrale AI"
                         />

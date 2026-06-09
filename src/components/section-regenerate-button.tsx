@@ -26,10 +26,13 @@ interface SectionRegenerateButtonProps {
   selective?: boolean;
   /** Custom trigger label (default "Rigenera Sezione"). */
   label?: string;
+  /** Fired with the in-flight state (true on start, false on finish) so a parent
+   * can disable sibling actions during a regeneration. */
+  onRegeneratingChange?: (active: boolean) => void;
 }
 
 export function SectionRegenerateButton({
-  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated, elaborated, selective, label,
+  caseId, sectionId, sectionTitle, reportVersion, disabled, onRegenerated, elaborated, selective, label, onRegeneratingChange,
 }: SectionRegenerateButtonProps) {
   const [open, setOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
@@ -40,6 +43,7 @@ export function SectionRegenerateButton({
 
   const handleRegenerate = useCallback(async (force = false) => {
     setIsRegenerating(true);
+    onRegeneratingChange?.(true);
     try {
       const response = await fetch('/api/processing/regenerate-section', {
         method: 'POST',
@@ -75,8 +79,9 @@ export function SectionRegenerateButton({
       toast.error('Errore di rete. Verifica la connessione.');
     } finally {
       setIsRegenerating(false);
+      onRegeneratingChange?.(false);
     }
-  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated, elaborated, selective]);
+  }, [caseId, sectionId, sectionTitle, instruction, reportVersion, onRegenerated, elaborated, selective, onRegeneratingChange]);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);

@@ -233,6 +233,15 @@ const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
   DOC_SANITARIA: '_Nessun documento sanitario disponibile._',
 };
 
+/**
+ * Note used when DOC_SANITARIA is expanded WITHOUT docs (the public shared link
+ * deliberately omits the raw clinical OCR for GDPR). Replaces the otherwise
+ * invisible marker so the section intro isn't left orphaned, without exposing the
+ * documents or implying — misleadingly — that none exist.
+ */
+const DOC_SANITARIA_OMITTED =
+  '_La documentazione sanitaria integrale è consultabile nella perizia completa._';
+
 /** True if the synthesis contains at least one deterministic marker. */
 export function hasDeterministicMarkers(synthesis: string): boolean {
   return Object.values(DETERMINISTIC_MARKERS).some((m) => synthesis.includes(m));
@@ -297,9 +306,11 @@ export function toDeterministicDocs(
  * rendered from the CURRENT events/documents. Pure, no LLM. Idempotent and a
  * no-op on legacy reports (no markers).
  *
- * `docs` is optional: when omitted (a surface that hasn't wired the OCR yet) the
- * DOC_SANITARIA marker is LEFT IN PLACE as an invisible HTML comment — never
- * replaced with a misleading "no documents" message.
+ * `docs` is optional: when omitted (the public shared link, which deliberately
+ * withholds the raw clinical OCR) the DOC_SANITARIA marker is replaced with a
+ * neutral "consultabile nella perizia completa" note — so the section intro is
+ * not orphaned above an invisible comment, and without exposing the documents or
+ * misleadingly implying that none exist.
  */
 export function expandDeterministicBlocks(
   synthesis: string,
@@ -313,12 +324,12 @@ export function expandDeterministicBlocks(
     [DETERMINISTIC_MARKERS.SPESE, formatExpenseTable(events) || EMPTY_FALLBACK.SPESE],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
   ];
-  if (docs !== undefined) {
-    replacements.push([
-      DETERMINISTIC_MARKERS.DOC_SANITARIA,
-      formatDocumentazioneSanitaria(docs, events) || EMPTY_FALLBACK.DOC_SANITARIA,
-    ]);
-  }
+  replacements.push([
+    DETERMINISTIC_MARKERS.DOC_SANITARIA,
+    docs !== undefined
+      ? formatDocumentazioneSanitaria(docs, events) || EMPTY_FALLBACK.DOC_SANITARIA
+      : DOC_SANITARIA_OMITTED,
+  ]);
 
   let out = synthesis;
   for (const [marker, rendered] of replacements) {

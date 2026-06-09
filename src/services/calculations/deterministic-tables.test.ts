@@ -240,9 +240,12 @@ describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
     expect(out).not.toContain('MEDLAV:DOC_SANITARIA');
   });
 
-  it('LEAVES the marker untouched (invisible comment) when docs are NOT provided', () => {
+  it('replaces the marker with a neutral note (no orphan, no raw OCR) when docs are NOT provided', () => {
     const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, []);
-    expect(out).toBe(DETERMINISTIC_MARKERS.DOC_SANITARIA);
+    // The invisible marker must NOT survive (it would orphan the section intro),
+    // but no documents are exposed either — a neutral "perizia completa" note.
+    expect(out).not.toContain('MEDLAV:DOC_SANITARIA');
+    expect(out).toContain('consultabile nella perizia completa');
   });
 
   it('shows the empty fallback when docs are provided but empty', () => {
