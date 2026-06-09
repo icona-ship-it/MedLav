@@ -1,5 +1,5 @@
 /**
- * Extract plain text from the benchmark perizie in Example/ and save as .md
+ * Extract plain text from the benchmark perizie in benchmark/ and save as .md
  * files in benchmark/gold/.
  *
  * These extracted texts are the "gold standard" — the perizie that Lavini
@@ -9,8 +9,9 @@
  * USAGE:
  *   pnpm tsx scripts/extract-gold-standards.ts
  *
- * Output: benchmark/gold/<slug>.md for each Example file.
- * Both Example/ and benchmark/ are gitignored (sensitive patient data).
+ * Output: benchmark/gold/<slug>.md for each source file.
+ * benchmark/ è gitignored (dati sanitari). La vecchia cartella Example/ (perizie
+ * REALI non anonimizzate) è stata rimossa per GDPR; i suoi gold restano in gold/.
  */
 
 import { promises as fs } from 'node:fs';
@@ -21,15 +22,14 @@ import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 
 const execFileAsync = promisify(execFile);
-const EXAMPLE_DIR = path.resolve(process.cwd(), 'Example');
 const BENCHMARK_DIR = path.resolve(process.cwd(), 'benchmark');
 const GOLD_DIR = path.resolve(process.cwd(), 'benchmark', 'gold');
 
 interface BenchmarkSource {
-  /** Path relativo alla baseDir (default Example/) */
+  /** Path relativo a benchmark/ */
   source: string;
-  /** Cartella base: 'Example' (default) o 'benchmark' */
-  baseDir?: 'Example' | 'benchmark';
+  /** Cartella base (sempre 'benchmark'; Example/ rimossa per GDPR — dati reali). */
+  baseDir?: 'benchmark';
   /** Output slug (becomes benchmark/gold/<slug>.md) */
   slug: string;
   /** Free-form description for the README */
@@ -38,37 +38,11 @@ interface BenchmarkSource {
 
 // Curated list of benchmark sources to extract. Add new ones here.
 const SOURCES: BenchmarkSource[] = [
-  {
-    source: 'DEL PORTO - Mao CTU Responsabilità civile.docx',
-    slug: 'del-porto-ctu-resp-civile',
-    description: 'Gold standard CTU responsabilita civile (Lavini, deposita Tribunale)',
-  },
-  {
-    source: 'Antoniazzi Bianca benchmark per Perizia medico legale — Responsabilità civile.docx',
-    slug: 'antoniazzi-stragiudiziale',
-    description: 'Gold standard stragiudiziale responsabilita civile (Antoniazzi)',
-  },
-  {
-    source: 'bechmark giudiziale per CTU responsabilità civile.pdf',
-    slug: 'benchmark-giudiziale-ctu',
-    description: 'Gold standard CTU giudiziale resp. civile (extra reference)',
-  },
-  {
-    source: 'cronistoriapassaniti/cronistoria-PASSANITI rivista lavini.pdf',
-    slug: 'passaniti-cronistoria-rivista-lavini',
-    description: 'Cronistoria PASSANITI rivista da Lavini (gold per cronistoria flow)',
-  },
-  {
-    source: 'cronistoriapassaniti/cronistoria-PASSANITI da legmed.pdf',
-    slug: 'passaniti-cronistoria-da-legmed',
-    description: 'Cronistoria PASSANITI generata da LegMed (pre-revisione, snapshot)',
-  },
-  {
-    source: 'Regnoto/Esempio conistoria solo modulo cdoc medica prodotta. e tutto il file come perizia medico legare resp. civile Regnoto Valeria.pdf',
-    slug: 'regnoto-perizia-completa',
-    description: 'Perizia completa Regnoto Valeria (CTU resp. civile, output di riferimento)',
-  },
-  // ── Benchmark 2026-06-01 (cartelle in benchmark/, nome = tipo analisi) ──
+  // NB: le fonti storiche da Example/ (Del Porto, Antoniazzi, benchmark giudiziale,
+  // Passaniti, Regnoto) sono state rimosse: la cartella Example/ conteneva perizie
+  // REALI non anonimizzate ed è stata eliminata (GDPR). I loro gold standard restano
+  // estratti in benchmark/gold/ (del-porto-*, antoniazzi-*, passaniti-*, regnoto-*).
+  // ── Benchmark (cartelle in benchmark/, nome = tipo analisi) ──
   {
     source: 'CTU - Responsabilità civile - LIVIA REICHEGGER Singolo incarico dal TAR/CTU - Responsabilità civile - LIVIA REICHEGGER Singolo incarico dal TAR.doc',
     baseDir: 'benchmark',
@@ -160,7 +134,7 @@ lineCount: ${lines.length}
 
 # ${source.description}
 
-> Estratto da \`${source.baseDir ?? 'Example'}/${source.source}\` il ${new Date().toLocaleDateString('it-IT')}.
+> Estratto da \`benchmark/${source.source}\` il ${new Date().toLocaleDateString('it-IT')}.
 > Questo è il **gold standard**: la generazione di LegMed deve avvicinarsi a questo testo come giudicato da Lavini.
 
 ---
@@ -172,15 +146,15 @@ ${text.trim()}
 async function main(): Promise<void> {
   await fs.mkdir(GOLD_DIR, { recursive: true });
 
-  console.log(`📂 Source dir: ${EXAMPLE_DIR}`);
+  console.log(`📂 Source dir: ${BENCHMARK_DIR}`);
   console.log(`📂 Output dir: ${GOLD_DIR}\n`);
 
   let okCount = 0;
   let failCount = 0;
 
   for (const source of SOURCES) {
-    const baseDir = source.baseDir === 'benchmark' ? BENCHMARK_DIR : EXAMPLE_DIR;
-    const baseLabel = source.baseDir === 'benchmark' ? 'benchmark' : 'Example';
+    const baseDir = BENCHMARK_DIR;
+    const baseLabel = 'benchmark';
     const inputPath = path.join(baseDir, source.source);
     const outputPath = path.join(GOLD_DIR, `${source.slug}.md`);
 
