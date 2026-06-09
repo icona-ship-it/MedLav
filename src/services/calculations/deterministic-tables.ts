@@ -26,8 +26,12 @@ export interface DeterministicTableEvent {
   doctor?: string | null;
   source_type?: string | null;
   order_number?: number | null;
-  /** Source document id — used to order the verbatim documentation chronologically. */
+  /** Source document id — used to order/cite the verbatim documentation. */
   document_id?: string | null;
+  /** Verbatim OCR span the event was extracted from (the selective quote). */
+  source_text?: string | null;
+  /** Documented diagnosis (drives the relevance tier). */
+  diagnosis?: string | null;
 }
 
 /** A single OCR page of a document (verbatim text). */
@@ -130,37 +134,31 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
 }
 
 /**
- * Render the "documentazione sanitaria" section VERBATIM from the OCR text —
- * NO LLM. Each document becomes a heading (type + file name + derived date)
- * followed by its OCR text, page by page, exactly as extracted. Documents are
- * ordered chronologically using the earliest dated event that references them
- * (undated documents go last, keeping their input order). Empty/illegible pages
- * are marked explicitly instead of being dropped silently.
- *
- * The doctor's text is reproduced as-is: pipes are NOT escaped (valid Markdown
- * tables in the OCR must survive), and no rephrasing is possible. Returns '' when
- * there are no documents (caller substitutes the empty fallback).
- */
-/**
  * Demote H1/H2 headings inside the verbatim OCR to H4, so an OCR line like
- * "## REFERTO" can never collide with the report's own "## " SECTION delimiter
- * (parseSections / the professional-export splitter would otherwise fragment the
- * documentazione into spurious sections). H3+ are left as-is — they are NOT
- * section boundaries (and our own per-document header is H3). The visible text is
- * preserved — only the Markdown heading LEVEL changes (a rendering nuance).
+ * "## REFERTO" can never collide with the report's own "## " SECTION delimiter.
+ * The visible text is preserved — only the Markdown heading LEVEL changes.
  */
 function demoteOcrHeadings(text: string): string {
   return text.replace(/^(#{1,2})(\s)/gm, '####$2');
 }
 
+/**
+ * Render the "documentazione sanitaria" section — NO LLM, COMPLETE (mai perdere un
+ * fatto): (a) un ELENCO ANALITICO degli atti esaminati (navigazione), poi (b) la
+ * RIPRODUZIONE INTEGRALE e VERBATIM dell'OCR di ogni documento clinico, pagina per
+ * pagina, in ordine cronologico. Le pagine illeggibili sono marcate, mai droppate.
+ *
+ * NB: la riproduzione è COMPLETA per costruzione (la selettività "cosa è
+ * importante vs rumore" richiede giudizio = LLM, fuori da questo renderer puro).
+ * Returns '' when there are no clinical documents (caller uses the empty fallback).
+ */
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
   events: DeterministicTableEvent[],
 ): string {
-  // Only CLINICAL documents: atti/perizie/spese are reproduced in their own
-  // sections (same partition as the LLM path's EXCLUDED_FROM_MEDICAL).
-  docs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
-  if (docs.length === 0) return '';
+  // Only CLINICAL documents (atti/perizie/spese live in their own sections).
+  const clinicalDocs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
+  if (clinicalDocs.length === 0) return '';
 
   // Earliest dated event per document → the document's chronological position.
   const docDate = new Map<string, string>();
@@ -172,8 +170,8 @@ export function formatDocumentazioneSanitaria(
     if (!prev || d < prev) docDate.set(id, d);
   }
 
-  // Stable chronological sort: dated docs by date, undated docs last in input order.
-  const ordered = docs
+  // Chronological order: dated docs first (by date), undated last in input order.
+  const orderedDocs = clinicalDocs
     .map((doc, index) => ({ doc, index }))
     .sort((a, b) => {
       const da = docDate.get(a.doc.documentId);
@@ -185,12 +183,20 @@ export function formatDocumentazioneSanitaria(
     })
     .map((x) => x.doc);
 
-  const parts: string[] = [];
-  for (const doc of ordered) {
+  // (a) ELENCO ANALITICO degli atti — navigazione, tracciabilità completa.
+  const parts: string[] = ['**Documenti sanitari esaminati:**', ''];
+  for (const doc of orderedDocs) {
+    const d = docDate.get(doc.documentId);
+    const pageInfo = doc.pages.length ? ` (${doc.pages.length} ${doc.pages.length === 1 ? 'pagina' : 'pagine'})` : '';
+    const dateInfo = d ? `, ${formatDate(d)}` : '';
+    parts.push(`- ${getDocumentTypeLabel(doc.documentType)} — *${doc.fileName}*${pageInfo}${dateInfo}`);
+  }
+
+  // (b) RIPRODUZIONE INTEGRALE VERBATIM — per documento, pagina per pagina.
+  for (const doc of orderedDocs) {
     const d = docDate.get(doc.documentId);
     const dateSuffix = d ? ` — ${formatDate(d)}` : '';
-    parts.push(`### ${getDocumentTypeLabel(doc.documentType)}: ${doc.fileName}${dateSuffix}`);
-
+    parts.push('', `### ${getDocumentTypeLabel(doc.documentType)}: ${doc.fileName}${dateSuffix}`);
     if (doc.pages.length === 0) {
       parts.push('*[Testo non disponibile per questo documento.]*');
     } else {
@@ -200,7 +206,6 @@ export function formatDocumentazioneSanitaria(
         parts.push('\n---\n');
       }
     }
-    parts.push('');
   }
 
   return parts.join('\n').trim();
@@ -247,6 +252,8 @@ export function toDeterministicEvents(
     source_type: (e.source_type as string | null) ?? null,
     order_number: (e.order_number as number | null) ?? null,
     document_id: (e.document_id as string | null) ?? null,
+    source_text: (e.source_text as string | null) ?? null,
+    diagnosis: (e.diagnosis as string | null) ?? null,
   }));
 }
 

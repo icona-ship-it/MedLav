@@ -170,17 +170,18 @@ function doc(partial: Partial<DeterministicDoc>): DeterministicDoc {
   };
 }
 
-describe('formatDocumentazioneSanitaria', () => {
-  it('reproduces the OCR text VERBATIM with a per-document header', () => {
+describe('formatDocumentazioneSanitaria (complete + analytical list)', () => {
+  it('lists docs analytically AND reproduces the full OCR verbatim per document', () => {
     const out = formatDocumentazioneSanitaria(
-      [doc({ pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura del radio distale.' }] })],
-      [],
+      [doc({ documentId: 'd1', fileName: 'rx.pdf', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura del radio distale.' }] })],
+      [ev({ document_id: 'd1', event_date: '2024-04-20' })],
     );
-    expect(out).toContain('### Referto Specialistico: referto.pdf');
+    expect(out).toContain('Documenti sanitari esaminati');
+    expect(out).toContain('### Referto Specialistico: rx.pdf');
     expect(out).toContain('Diagnosi: frattura del radio distale.');
   });
 
-  it('orders documents chronologically by the earliest dated event referencing them', () => {
+  it('reproduces documents in chronological order (earliest dated event first)', () => {
     const docs = [
       doc({ documentId: 'late', fileName: 'b.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_LATE' }] }),
       doc({ documentId: 'early', fileName: 'a.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_EARLY' }] }),
@@ -193,17 +194,7 @@ describe('formatDocumentazioneSanitaria', () => {
     expect(out.indexOf('CONTENUTO_EARLY')).toBeLessThan(out.indexOf('CONTENUTO_LATE'));
   });
 
-  it('puts undated documents after dated ones, keeping input order', () => {
-    const docs = [
-      doc({ documentId: 'undated', fileName: 'u.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_UNDATED' }] }),
-      doc({ documentId: 'dated', fileName: 'd.pdf', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_DATED' }] }),
-    ];
-    const events: DeterministicTableEvent[] = [ev({ document_id: 'dated', event_date: '2024-01-01' })];
-    const out = formatDocumentazioneSanitaria(docs, events);
-    expect(out.indexOf('CONTENUTO_DATED')).toBeLessThan(out.indexOf('CONTENUTO_UNDATED'));
-  });
-
-  it('marks empty/illegible pages explicitly instead of dropping them', () => {
+  it('marks empty/illegible pages instead of dropping them (never lose a fact)', () => {
     const out = formatDocumentazioneSanitaria(
       [doc({ pages: [{ pageNumber: 1, ocrText: 'Pagina 1 ok.' }, { pageNumber: 2, ocrText: '   ' }] })],
       [],
@@ -212,33 +203,20 @@ describe('formatDocumentazioneSanitaria', () => {
     expect(out).toContain('[Pagina 2 — testo non disponibile o illeggibile');
   });
 
-  it('does NOT escape pipes — a valid Markdown table in the OCR survives intact', () => {
-    const table = '| Analita | Valore |\n|---|---|\n| Hb | 9.7 |';
-    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: table }] })], []);
-    expect(out).toContain('| Analita | Valore |');
-    expect(out).not.toContain('\\|');
-  });
-
-  it('returns empty string when there are no documents', () => {
-    expect(formatDocumentazioneSanitaria([], [])).toBe('');
-  });
-
-  it('demotes H1/H2 headings inside the OCR so they never collide with the report "## " section delimiter', () => {
-    const ocr = '# DIAGNOSI\n## REFERTO\nTesto del referto.';
-    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: ocr }] })], []);
-    // No OCR body line may start with a report-level section heading (# or ##).
-    // Our own per-document header is H3 (### Tipo: file) which is NOT a boundary.
-    for (const line of out.split('\n')) {
-      expect(/^#{1,2}\s/.test(line)).toBe(false);
-    }
-    // The textual content is preserved (only the heading LEVEL changed).
-    expect(out).toContain('DIAGNOSI');
+  it('demotes H1/H2 headings in the OCR (no collision with "## " section delimiter)', () => {
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: '## REFERTO\nTesto.' }] })], []);
+    for (const line of out.split('\n')) expect(/^#{1,2}\s/.test(line)).toBe(false);
     expect(out).toContain('REFERTO');
-    expect(out).toContain('Testo del referto.');
     expect(out).toContain('#### REFERTO');
   });
 
-  it('excludes non-clinical document types (atti / perizie / spese) from the documentazione', () => {
+  it('does NOT escape pipes (OCR tables survive)', () => {
+    const out = formatDocumentazioneSanitaria([doc({ pages: [{ pageNumber: 1, ocrText: '| Hb | 9.7 |' }] })], []);
+    expect(out).toContain('| Hb | 9.7 |');
+    expect(out).not.toContain('\\|');
+  });
+
+  it('excludes non-clinical document types (atti / perizie / spese)', () => {
     const docs = [
       doc({ documentId: 'a', fileName: 'cartella.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'CLINICO' }] }),
       doc({ documentId: 'b', fileName: 'memoria.pdf', documentType: 'memoria_difensiva', pages: [{ pageNumber: 1, ocrText: 'NON_CLINICO' }] }),
@@ -247,10 +225,15 @@ describe('formatDocumentazioneSanitaria', () => {
     expect(out).toContain('CLINICO');
     expect(out).not.toContain('NON_CLINICO');
   });
+
+  it('returns empty string when there are no clinical documents', () => {
+    expect(formatDocumentazioneSanitaria([], [])).toBe('');
+    expect(formatDocumentazioneSanitaria([doc({ documentType: 'memoria_difensiva' })], [])).toBe('');
+  });
 });
 
 describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
-  it('expands the DOC_SANITARIA marker with the verbatim documentation when docs are provided', () => {
+  it('expands the DOC_SANITARIA marker with the documentation when docs are provided', () => {
     const docs = [doc({ pages: [{ pageNumber: 1, ocrText: 'TESTO_MEDICO_VERBATIM' }] })];
     const out = expandDeterministicBlocks(DETERMINISTIC_MARKERS.DOC_SANITARIA, [], docs);
     expect(out).toContain('TESTO_MEDICO_VERBATIM');

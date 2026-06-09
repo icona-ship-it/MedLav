@@ -1,9 +1,14 @@
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
+import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance';
+
+export { computeRelevanceTier, type RelevanceTier };
 
 export interface ConsolidatedEvent extends ExtractedEvent {
   orderNumber: number;
   documentId: string;
   discrepancyNote: string | null;
+  /** Deterministic clinical-relevance tier (T1/T2/T3). */
+  relevanceTier?: RelevanceTier;
 }
 
 export interface DocumentEvents {
@@ -113,13 +118,18 @@ export function consolidateEvents(
   // never aggregated.
   const aggregated = aggregateIdenticalEventsPerDay(dedupedSameDoc);
 
-  // Detect duplicates/discrepancies across documents (existing behavior)
+  // Detect duplicates/discrepancies across documents (annotates; never merges).
+  // NB: il merge cross-documento è disattivato — rompeva la persistenza
+  // (consolidateEventsStep assume 1:1 tra output e righe DB per gli order_number).
+  // Va reintrodotto con soft-delete + rinumerazione nel passo Inngest (progetto
+  // selettivo sicuro). Il tier resta come fondamenta deterministiche.
   const consolidated = markDiscrepancies(aggregated);
 
-  // Assign sequential order numbers
+  // Assign sequential order numbers + deterministic relevance tier.
   return consolidated.map((event, index) => ({
     ...event,
     orderNumber: index + 1,
+    relevanceTier: computeRelevanceTier(event),
   }));
 }
 
