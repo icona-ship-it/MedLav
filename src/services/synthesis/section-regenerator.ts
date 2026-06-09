@@ -15,6 +15,7 @@ import { generateSingleSection, summarizeForContext } from './section-generator'
 import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
+import { checkSelectiveCoverage } from '../validation/selective-coverage';
 import { logger } from '@/lib/logger';
 
 interface RegenerateSectionParams {
@@ -138,22 +139,45 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     documentsOcrText,
   });
 
-  // SELECTIVE doc-sanitaria hard-check: every verbatim quote «...» the model
-  // produced must exist in the source OCR. Ungrounded quotes are kept verbatim
-  // (mai perdere un fatto) but annotated "da verificare" so a fabricated citation
-  // never reaches the perito unflagged.
+  // SELECTIVE doc-sanitaria safety nets: the selective narrative quotes
+  // significant findings verbatim and paraphrases routine content. Two guards
+  // run before the section is saved (both NON-BLOCKING — they annotate, never
+  // discard: mai perdere un fatto):
+  //   1. quote hard-check: every «...» must exist verbatim in the OCR, else it
+  //      is flagged "da verificare" (a fabricated/distorted citation never
+  //      reaches the perito unflagged);
+  //   2. omission net: every clinically-significant (T1) event must appear in
+  //      the narrative, else a "possibile omissione" banner is prepended.
   let finalContent = generated.content;
   if (params.selective && sectionId === 'documentazione_sanitaria') {
     const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
     finalContent = checked.annotatedMarkdown;
-    if (checked.ungroundedCount > 0) {
-      logger.warn('section-regenerator', 'Selective doc-sanitaria: ungrounded quotes flagged', {
+
+    const coverage = checkSelectiveCoverage(finalContent, events);
+    if (coverage.missing.length > 0) {
+      finalContent = `${buildOmissionBanner(coverage.missing.length)}\n\n${finalContent}`;
+    }
+
+    if (checked.ungroundedCount > 0 || checked.nonGuillemetQuotesDetected || coverage.missing.length > 0) {
+      logger.warn('section-regenerator', 'Selective doc-sanitaria: review flags raised', {
         sectionId,
         totalQuotes: checked.total,
         ungroundedCount: checked.ungroundedCount,
+        nonGuillemetQuotesDetected: checked.nonGuillemetQuotesDetected,
+        t1Missing: coverage.missing.length,
+        t1Total: coverage.t1Total,
       });
     }
   }
 
   return replaceSectionContent(currentSynthesis, sectionId, finalContent);
+}
+
+/**
+ * Non-blocking banner prepended to the selective documentazione sanitaria when
+ * one or more clinically-significant (T1) events are not found in the narrative.
+ */
+function buildOmissionBanner(missingCount: number): string {
+  const plural = missingCount === 1 ? 'un evento clinicamente rilevante non risulta' : `${missingCount} eventi clinicamente rilevanti non risultano`;
+  return `> ⚠️ **Possibile omissione** — ${plural} riportati nel testo selettivo. Verificare la documentazione completa prima del deposito.`;
 }

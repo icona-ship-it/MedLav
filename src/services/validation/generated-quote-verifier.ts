@@ -15,12 +15,17 @@
  * - Only `«...»` guillemets count as verbatim quotes — the selective prompt
  *   instructs the model to reserve them exclusively for verbatim citation, so
  *   ordinary prose and `"..."` are never touched.
- * - Grounding reuses isCitationGrounded (exact → normalized → LCS ≥ 0.80).
+ * - Grounding is STRICT (groundCitation): a quote is clean ONLY on an exact or
+ *   normalized (whitespace/case) substring match. A `near` match (LCS ≥ 0.80 but
+ *   not a verbatim substring — a single altered word: laterality, severity, a
+ *   number, a dropped negation) is FLAGGED, not trusted: that is exactly where a
+ *   clinically-decisive distortion hides. (The lenient isCitationGrounded used by
+ *   the anomaly-resolver still accepts near-matches; here we deliberately don't.)
  *
  * Pure function — no LLM calls, no side effects.
  */
 
-import { isCitationGrounded } from './source-text-verifier';
+import { groundCitation } from './source-text-verifier';
 
 export interface QuoteVerification {
   quote: string;
@@ -32,6 +37,9 @@ export interface GeneratedQuotesResult {
   total: number;
   groundedCount: number;
   ungroundedCount: number;
+  /** True when verbatim-looking quotes were emitted with non-«...» delimiters
+   * (straight/curly quotes) — they bypass grounding, so a section note is added. */
+  nonGuillemetQuotesDetected: boolean;
   verifications: QuoteVerification[];
   /** Markdown with a visible marker appended after each ungrounded quote. */
   annotatedMarkdown: string;
@@ -41,12 +49,36 @@ export interface GeneratedQuotesResult {
 export const UNVERIFIED_QUOTE_MARKER =
   ' ⚠️ *[citazione da verificare sul documento originale]*';
 
+/** One-time section note when non-«...» quoted spans (unverified) are present. */
+export const NON_GUILLEMET_QUOTES_NOTE =
+  '\n\n⚠️ *[Attenzione: il testo contiene citazioni non racchiuse tra «...» (virgolette dritte o curve). Queste NON sono state verificate automaticamente contro i documenti: controllarne la fedeltà sull\'originale.]*';
+
 /**
- * Quotes shorter than this are not examined: single terms / abbreviations
- * («dx», «sì») are too short for reliable grounding and not the substantial
- * clinical citations the guard targets.
+ * Detect verbatim-looking quoted spans the model emitted with the WRONG
+ * delimiters (straight "..." or curly "..."/'...'), which bypass the «...»
+ * grounding entirely. Operates on the guillemet-stripped text so legitimate
+ * quotes are not double-counted. Length floor avoids matching apostrophes /
+ * short emphasis.
  */
-const MIN_QUOTE_LEN = 8;
+const STRAIGHT_DOUBLE_QUOTE = /"[^"\n]{15,}"/;
+const CURLY_DOUBLE_QUOTE = /“[^”\n]{15,}”/;
+
+function hasNonGuillemetQuotes(markdown: string): boolean {
+  const withoutGuillemets = markdown.replace(/«[^«»]*»/g, '');
+  return (
+    STRAIGHT_DOUBLE_QUOTE.test(withoutGuillemets) ||
+    CURLY_DOUBLE_QUOTE.test(withoutGuillemets)
+  );
+}
+
+/**
+ * Quotes shorter than this are not examined: 1-3 char fragments («dx», «sì»)
+ * appear all over any OCR, so grounding them is meaningless. From 4 chars up a
+ * genuine quote still grounds trivially via exact/normalized match, while a
+ * fabricated short term gets flagged — so the floor stays low to catch
+ * short-but-decisive citations (a misread laterality, a wrong abbreviation).
+ */
+const MIN_QUOTE_LEN = 4;
 
 // Guillemet quote, non-greedy, no nested guillemets, bounded length.
 const GUILLEMET_QUOTE = /«([^«»]{1,2000})»/g;
@@ -69,7 +101,11 @@ export function verifyGeneratedQuotes(
       // Skip trivially short fragments — not meaningful clinical citations.
       if (quote.length < MIN_QUOTE_LEN) return match;
 
-      const grounded = isCitationGrounded(quote, fullOcrText);
+      // STRICT: clean only on a verbatim (exact/normalized) substring match. A
+      // `near` LCS match — where a single clinically-decisive word was altered —
+      // is flagged, never trusted.
+      const level = groundCitation(quote, fullOcrText);
+      const grounded = level === 'exact' || level === 'normalized';
       verifications.push({ quote, grounded });
 
       if (grounded) return match;
@@ -84,11 +120,20 @@ export function verifyGeneratedQuotes(
 
   const groundedCount = verifications.filter((v) => v.grounded).length;
 
+  // Catch verbatim quotes emitted with the wrong delimiters (they skipped the
+  // grounding above). Idempotent: the note is appended at most once.
+  const nonGuillemetQuotesDetected = hasNonGuillemetQuotes(markdown);
+  const withSectionNote =
+    nonGuillemetQuotesDetected && !annotatedMarkdown.includes(NON_GUILLEMET_QUOTES_NOTE)
+      ? `${annotatedMarkdown}${NON_GUILLEMET_QUOTES_NOTE}`
+      : annotatedMarkdown;
+
   return {
     total: verifications.length,
     groundedCount,
     ungroundedCount: verifications.length - groundedCount,
+    nonGuillemetQuotesDetected,
     verifications,
-    annotatedMarkdown,
+    annotatedMarkdown: withSectionNote,
   };
 }

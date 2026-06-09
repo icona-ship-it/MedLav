@@ -174,7 +174,12 @@ REGOLA DELLA PARAFRASI (contenuto di routine):
 
 REGOLA ASSOLUTA ANTI-INVENZIONE:
 - Cita SOLO testo realmente presente nei documenti forniti. Se un dato non c'è, NON inventarlo e NON dedurlo.
-- Le «...» che non corrispondono al testo-fonte verranno marcate automaticamente "da verificare": la fabbricazione è sempre controproducente.
+- Le «...» che non corrispondono ESATTAMENTE al testo-fonte verranno marcate automaticamente "da verificare": la fabbricazione e l'approssimazione sono sempre controproducenti.
+
+REGOLA DEL FORMATO DELLE CITAZIONI (obbligatoria per la verifica automatica):
+- USA ESCLUSIVAMENTE le caporali «...» per le citazioni verbatim. È VIETATO usare virgolette dritte ("..."), curve ("..." / '...') o singole per citare il documento: qualsiasi citazione fuori dalle «...» NON viene verificata e va evitata.
+- Dentro «...» copia il testo CARATTERE PER CARATTERE. Sono CRITICI e vanno riprodotti SENZA ALCUNA modifica: i NUMERI (giorni di prognosi/ITT/ITP, percentuali di invalidità, dosaggi, misure), le DATE, la LATERALITÀ (destro/sinistro, dx/sx), la GRAVITÀ (composta/scomposta, completa/parziale, totale/parziale) e le NEGAZIONI (non, senza, assenza di, nega). Cambiare anche un solo di questi token inverte il significato clinico-legale.
+- Cita FRASI CLINICHE COMPLETE: includi sempre la negazione e la lateralità DENTRO la citazione (es. «non si rilevano segni di lesione al ginocchio destro», non «si rilevano segni di lesione»). Non troncare una proposizione a metà in modo da alterarne il senso.
 
 ${DOC_SANITARIA_NEUTRALITY}
 

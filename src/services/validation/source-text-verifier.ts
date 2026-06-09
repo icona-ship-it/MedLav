@@ -99,18 +99,47 @@ export function verifySourceTexts(
 }
 
 /**
- * Public single-string grounding check: is `citation` actually present in
- * `fullText` (exact → normalized → LCS ≥ 0.80)? Reuses the same matching logic
- * as verifySourceTexts. Used to hard-verify LLM-produced verbatim citations
- * (e.g. the anomaly resolver's `evidence`) against the source OCR before trusting
- * them. Empty/whitespace citations are never grounded.
+ * 4-state grounding of a single citation against `fullText`:
+ * - `exact`: verbatim substring present
+ * - `normalized`: present modulo whitespace/case/markers
+ * - `near`: LCS word-ratio ≥ 0.80 but NOT a verbatim substring — a SINGLE
+ *   altered word lands here (laterality destro/sinistro, severity composta/
+ *   scomposta, a number/percentage/duration swap, a dropped negation). For
+ *   lenient consumers (anomaly-resolver evidence) this counts as grounded; for
+ *   the verbatim-quote check it MUST be treated as "to verify", because a
+ *   near-match is exactly where a clinically-decisive distortion hides.
+ * - `absent`: not found.
  */
-export function isCitationGrounded(citation: string, fullText: string): boolean {
-  if (!citation || citation.trim().length === 0) return false;
+export type GroundingLevel = 'exact' | 'normalized' | 'near' | 'absent';
+
+export function groundCitation(citation: string, fullText: string): GroundingLevel {
+  if (!citation || citation.trim().length === 0) return 'absent';
   const cleanFullText = stripPageMarkers(fullText);
   const normalizedFullText = normalizeText(cleanFullText);
   const fullTextWords = normalizeForWords(fullText);
-  return verifyOneSourceText(citation, cleanFullText, normalizedFullText, fullTextWords, 0).verified;
+  const v = verifyOneSourceText(citation, cleanFullText, normalizedFullText, fullTextWords, 0);
+  switch (v.matchLevel) {
+    case 'exact':
+      return 'exact';
+    case 'normalized':
+      return 'normalized';
+    case 'lcs':
+      return 'near';
+    default:
+      return 'absent';
+  }
+}
+
+/**
+ * Public single-string grounding check: is `citation` actually present in
+ * `fullText` (exact → normalized → LCS ≥ 0.80)? Used to hard-verify LLM-produced
+ * citations (e.g. the anomaly resolver's `evidence`). LENIENT: a near-match
+ * (LCS) counts as grounded. For verbatim-quote fidelity use `groundCitation` and
+ * reject anything below `normalized`. Empty/whitespace citations are never
+ * grounded.
+ */
+export function isCitationGrounded(citation: string, fullText: string): boolean {
+  return groundCitation(citation, fullText) !== 'absent';
 }
 
 /**
@@ -164,6 +193,7 @@ function normalizeText(text: string): string {
     .toLowerCase()
     .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
     .replace(/\[TABLE_(?:START|END)\]/g, '')
+    .replace(/-{2,}\s*pagina\s+\d+\s*-{2,}/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

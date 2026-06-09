@@ -410,7 +410,7 @@ const ITALIAN_MONTHS = [
  * narrative reports (stragiudiziale) that rarely write numeric dates — without
  * them the coverage proxy under-counts and can falsely block a sound report.
  */
-function eventDateAppearsInReport(isoDate: string, synthesisLower: string): boolean {
+export function eventDateAppearsInReport(isoDate: string, synthesisLower: string): boolean {
   const parts = isoDate.split('-');
   if (parts.length !== 3) return true; // malformed → don't penalise
   const [yyyy, mm, dd] = parts;
