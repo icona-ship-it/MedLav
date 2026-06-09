@@ -429,6 +429,11 @@ export function eventDateAppearsInReport(isoDate: string, synthesisLower: string
   if (monthName) {
     if (synthesisLower.includes(`${day} ${monthName} ${yyyy}`)) return true;
     if (synthesisLower.includes(`${day} ${monthName}`)) return true;
+    // Date ranges, e.g. a ricovero "dal 12 al 20 marzo 2024": the start day and
+    // the month co-occur with a few words between. Anchor on the day as a whole
+    // word so "12" does not match inside "120".
+    const rangeRe = new RegExp(`\\b${day}\\b[^.\\n]{0,15}\\b${monthName}\\b`);
+    if (rangeRe.test(synthesisLower)) return true;
   }
   return false;
 }

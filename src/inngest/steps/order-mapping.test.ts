@@ -55,6 +55,32 @@ describe('buildOrderUpdates', () => {
     expect(updates).toEqual([{ id: 'r1', order_number: 1 }]);
   });
 
+  it('keeps DISTINCT same-key events on distinct order_numbers (A5/A6: same title, different hour)', () => {
+    // The consolidator deliberately keeps two same-day, same-type, same-title
+    // acts separate (conflicting time-of-day). They share the identity key, so a
+    // naive "first write wins" would give both the FIRST order → duplicate + gap.
+    // Positional assignment within the key group must keep them 1 and 2.
+    const allEvents = [
+      { documentId: 'd1', eventDate: '2024-03-12', eventType: 'visita', title: 'Visita controllo', orderNumber: 1 },
+      { documentId: 'd1', eventDate: '2024-03-12', eventType: 'visita', title: 'Visita controllo', orderNumber: 2 },
+      { documentId: 'd1', eventDate: '2024-03-13', eventType: 'ricovero', title: 'Ricovero', orderNumber: 3 },
+    ];
+    const existingRaw = [
+      { id: 'r1', document_id: 'd1', event_date: '2024-03-12', event_type: 'visita', title: 'Visita controllo' },
+      { id: 'r2', document_id: 'd1', event_date: '2024-03-12', event_type: 'visita', title: 'Visita controllo' },
+      { id: 'r3', document_id: 'd1', event_date: '2024-03-13', event_type: 'ricovero', title: 'Ricovero' },
+    ];
+
+    const updates = buildOrderUpdates(allEvents, existingRaw);
+
+    expect(updates).toContainEqual({ id: 'r1', order_number: 1 });
+    expect(updates).toContainEqual({ id: 'r2', order_number: 2 });
+    expect(updates).toContainEqual({ id: 'r3', order_number: 3 });
+    // No duplicate order_number across the updates.
+    const orders = updates.map((u) => u.order_number);
+    expect(new Set(orders).size).toBe(orders.length);
+  });
+
   it('handles null document_id and empty title without throwing', () => {
     const allEvents = [
       { documentId: '', eventDate: '2024-03-12', eventType: 'altro', title: '', orderNumber: 1 },

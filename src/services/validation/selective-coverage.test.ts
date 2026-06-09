@@ -5,7 +5,7 @@ import { checkSelectiveCoverage } from './selective-coverage';
 function ev(partial: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   return {
     eventDate: '2024-03-12',
-    datePrecision: 'full',
+    datePrecision: 'giorno',
     eventType: 'visita',
     title: 'Evento',
     description: '',
@@ -63,6 +63,23 @@ describe('checkSelectiveCoverage', () => {
   it('does not flag sentinel-dated events (no real date to look for)', () => {
     const events = [ev({ eventType: 'diagnosi', eventDate: '1900-01-01' })];
     const content = 'Narrazione senza quella data.';
+    const res = checkSelectiveCoverage(content, events);
+    expect(res.missing).toHaveLength(0);
+  });
+
+  it('does NOT flag a month-precision T1 event narrated imprecisely (no fabricated day to match)', () => {
+    // Stored as 2024-03-01 with datePrecision 'mese'; the narrative writes
+    // "nel marzo 2024" (no day "1") — must not raise a spurious omission banner.
+    const events = [ev({ eventType: 'diagnosi', eventDate: '2024-03-01', datePrecision: 'mese', diagnosis: 'frattura' })];
+    const content = 'Nel marzo 2024 viene posta la diagnosi di frattura.';
+    const res = checkSelectiveCoverage(content, events);
+    expect(res.missing).toHaveLength(0);
+  });
+
+  it('does NOT flag a giorno-precision ricovero narrated as a date range', () => {
+    // Ricovero (T1) stored 2024-03-12, narrated "dal 12 al 20 marzo 2024".
+    const events = [ev({ eventType: 'ricovero', eventDate: '2024-03-12', datePrecision: 'giorno' })];
+    const content = 'Ricovero in chirurgia dal 12 al 20 marzo 2024.';
     const res = checkSelectiveCoverage(content, events);
     expect(res.missing).toHaveLength(0);
   });
