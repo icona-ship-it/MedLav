@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isValidCodiceFiscale } from './codice-fiscale';
-import { isValidItalianDate, normalizeItalianDateToIso } from './date-format';
+import { isValidItalianDate, isEmptyOrValidItalianDate, normalizeItalianDateToIso } from './date-format';
 
 describe('isValidCodiceFiscale', () => {
   it('accepts well-formed CFs with valid checksum', () => {
@@ -75,6 +75,29 @@ describe('isValidItalianDate', () => {
     expect(isValidItalianDate('')).toBe(false);
     expect(isValidItalianDate('non una data')).toBe(false);
     expect(isValidItalianDate('13/2025')).toBe(false);
+  });
+});
+
+describe('isEmptyOrValidItalianDate (optional perizia header dates)', () => {
+  it('accepts empty/absent values (form fields are optional)', () => {
+    expect(isEmptyOrValidItalianDate('')).toBe(true);
+    expect(isEmptyOrValidItalianDate('   ')).toBe(true);
+    expect(isEmptyOrValidItalianDate(null)).toBe(true);
+    expect(isEmptyOrValidItalianDate(undefined)).toBe(true);
+  });
+
+  it('accepts valid DD/MM/YYYY and DD.MM.YYYY dates', () => {
+    expect(isEmptyOrValidItalianDate('15/01/2025')).toBe(true);
+    expect(isEmptyOrValidItalianDate('15.01.2025')).toBe(true);
+    expect(isEmptyOrValidItalianDate('29/02/2024')).toBe(true); // leap year
+  });
+
+  it('rejects non-existent dates and malformed input', () => {
+    expect(isEmptyOrValidItalianDate('15/13/2025')).toBe(false); // month 13
+    expect(isEmptyOrValidItalianDate('31/02/2025')).toBe(false);
+    expect(isEmptyOrValidItalianDate('29/02/2025')).toBe(false); // not leap
+    expect(isEmptyOrValidItalianDate('domani')).toBe(false);
+    expect(isEmptyOrValidItalianDate('15/01/25')).toBe(false); // 2-digit year
   });
 });
 

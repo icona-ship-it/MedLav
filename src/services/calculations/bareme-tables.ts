@@ -5,12 +5,27 @@
  * 1. Micropermanenti (1-9%) — Art. 139 Codice delle Assicurazioni Private
  * 2. Macropermanenti (10-100%) — Tabella Unica Nazionale (DPR 12/2025)
  *
- * Values: base 2024, updated yearly via ISTAT.
+ * Valori aggiornati ai decreti MIMIT vigenti (adeguamento ISTAT annuale).
+ * Registro fonti e date di verifica: docs/NORMATIVE-REGISTRY.md.
  */
 
 // --- Micropermanenti (1-9%) ---
 
-const MICROPERMANENTI_BASE_POINT_VALUE = 947.30; // EUR per point (2024)
+/**
+ * Punto base micropermanenti art. 139, c.1, lett. a) CAP.
+ * FONTE: D.M. MIMIT 18 luglio 2025 (GU Serie Generale n. 176 del 31/07/2025,
+ * cod. 25A04218) — adeguamento ISTAT +1,7% (FOI apr2024→apr2025), decorrenza
+ * aprile 2025. Verificato su GU il 2026-06-10. Il decreto 2026 (FOI aprile
+ * 2026) NON risulta pubblicato al 10/06/2026 — atteso in estate.
+ */
+const MICROPERMANENTI_BASE_POINT_VALUE = 963.40; // EUR per point (D.M. 18/07/2025)
+
+/**
+ * Diaria di inabilità temporanea assoluta art. 139, c.1, lett. b) CAP.
+ * FONTE: D.M. MIMIT 18 luglio 2025 (GU n. 176 del 31/07/2025). Esportata per
+ * la monetizzazione dell'ITT negli export/considerazioni.
+ */
+export const ITT_DAILY_RATE_ART139 = 56.18; // EUR/die (D.M. 18/07/2025)
 
 /**
  * Multiplier coefficient per invalidation percentage (Art. 139 comma 6).
@@ -30,7 +45,42 @@ const MICRO_COEFFICIENTS: Record<number, number> = {
 
 // --- Macropermanenti (10-100%) — TUN DPR 12/2025 ---
 
-const TUN_BASE_POINT_VALUE = 947.30; // EUR (same base, 2024)
+/**
+ * Punto base TUN, agganciato ex art. 2 DPR 12/2025 al valore art. 139 CAP.
+ * FONTE: D.M. MIMIT 10 dicembre 2025 (GU n. 299 del 27/12/2025, S.O. n. 41,
+ * cod. 25A06873) — primo adeguamento ISTAT della TUN (+1,7%): aggiorna la
+ * tavola 1.B (Allegato I) e le tabelle 1-2 (Allegato II) del DPR 12/2025,
+ * decorrenza aprile 2025. I valori del software sono il prodotto
+ * base × coefficienti (approssimazione delle tabelle ministeriali aggiornate).
+ * Verificato su GU il 2026-06-10.
+ */
+const TUN_BASE_POINT_VALUE = 963.40; // EUR (D.M. 10/12/2025)
+
+/**
+ * Data dell'ultima verifica dei valori normativi hardcoded in questo modulo
+ * (decreti MIMIT, edizioni tabelle). Prossimo adeguamento ISTAT (FOI aprile
+ * 2026) atteso nell'estate 2026: aggiornare i valori e questa data.
+ * Registro completo: docs/NORMATIVE-REGISTRY.md.
+ */
+export const NORMATIVE_DATA_VERIFIED_ON = '2026-06-10';
+
+/** Mesi oltre i quali i valori normativi vanno ri-verificati (decreti annuali). */
+const NORMATIVE_STALENESS_MONTHS = 8;
+
+/**
+ * Nota di staleness per i valori normativi: null finché i dati sono "freschi",
+ * altrimenti un avviso da appendere alle note di calcolo, così il perito sa
+ * che potrebbero esistere decreti di adeguamento più recenti. Pura (data
+ * iniettabile per i test).
+ */
+export function normativeStalenessNote(todayIso?: string): string | null {
+  const today = todayIso ?? new Date().toISOString().slice(0, 10);
+  const limit = new Date(`${NORMATIVE_DATA_VERIFIED_ON}T00:00:00Z`);
+  limit.setUTCMonth(limit.getUTCMonth() + NORMATIVE_STALENESS_MONTHS);
+  if (today <= limit.toISOString().slice(0, 10)) return null;
+  return `ATTENZIONE: i valori tabellari sono stati verificati l'ultima volta il ${NORMATIVE_DATA_VERIFIED_ON}; ` +
+    'verificare l\'eventuale pubblicazione di decreti ministeriali di adeguamento più recenti (MIMIT, adeguamento ISTAT annuale).';
+}
 
 /**
  * Tavola 1.A — Coefficiente moltiplicatore biologico per punto (10-100%).
@@ -150,7 +200,7 @@ function calculateMicropermanenti(
 
   return {
     percentage,
-    tableUsed: 'Art. 139 CdA — Micropermanenti (2024)',
+    tableUsed: 'Art. 139 CAP — Micropermanenti (D.M. 18/07/2025)',
     pointValue: baseValue * coefficient,
     estimatedAmount: Math.round(amount * 100) / 100,
     ageAtEvent: ageAtEvent ?? null,
@@ -192,7 +242,7 @@ function calculateMacropermanenti(
 
   return {
     percentage,
-    tableUsed: 'TUN DPR 12/2025 — Macropermanenti',
+    tableUsed: 'TUN DPR 12/2025 (agg. D.M. 10/12/2025) — Macropermanenti',
     pointValue: baseValue * invalidityCoeff,
     estimatedAmount: Math.round(amount * 100) / 100,
     ageAtEvent: ageAtEvent ?? null,

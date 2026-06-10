@@ -23,8 +23,11 @@ export const CAUSAL_NEXUS_CRITERIA: readonly CausalNexusCriteria[] = [
     name: 'Causalità proporzionale ("più probabile che non")',
     description: 'In ambito civilistico il nesso causale si accerta con il criterio del "più probabile che non" (> 50% di probabilità), diversamente dal penale che richiede la certezza "oltre ogni ragionevole dubbio".',
     legalReferences: [
-      'Cass. civ. SU n. 30328/2002 (criterio probabilistico in ambito civile)',
-      'Cass. civ. SU n. 582/2008 (conferma criterio "più probabile che non")',
+      // Citazione corretta (scorecard 2026-06-10): la 30328/2002 è Cass. PENALE
+      // SS.UU. (sent. Franzese, standard "oltre ogni ragionevole dubbio") — il
+      // criterio civilistico del "più probabile che non" è delle SS.UU. civili 2008.
+      'Cass. civ. SU n. 576/2008 e n. 581/2008 (criterio civilistico del "più probabile che non")',
+      'Cass. pen. SU n. 30328/2002 (sent. Franzese — standard PENALE "oltre ogni ragionevole dubbio", richiamata a contrasto)',
     ],
     whenToApply: 'Standard probatorio da applicare in tutte le valutazioni civilistiche. In sede penale il criterio è più rigoroso.',
   },

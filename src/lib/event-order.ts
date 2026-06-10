@@ -29,7 +29,7 @@ function dateKey(e: OrderableEvent): string {
 }
 
 /**
- * Rank intra-giornata (benchmark gold passaniti 2026-06-10): l'evento di
+ * Rank intra-giornata (benchmark gold 2026-06-10): l'evento di
  * ACCESSO/ammissione apre la giornata nella cronistoria — il perito sposta
  * sempre in testa l'accesso in PS rispetto agli esami della stessa data.
  * Rank 0 = ammissione, 1 = tutto il resto (l'ordine LegMed è già accettato).

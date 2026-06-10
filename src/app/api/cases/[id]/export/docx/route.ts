@@ -69,7 +69,7 @@ export async function GET(
       // Cronistoria DOCUMENTALE: solo eventi CLINICI. Ticket SSN, avvisi di
       // pagamento, certificati amministrativi, costi procedure — tutti
       // bureaucratico/finanziari — NON appartengono alla cronistoria medica
-      // (feedback perito Lavini, caso Passaniti CASO-2026-154).
+      // (feedback perito Lavini, caso CASO-2026-154).
       // Le voci di spesa effettivamente sostenute dal paziente vanno gestite
       // nella sezione dedicata "Spese Mediche" via expenses_only pipeline.
       const timelineEvents = data.events

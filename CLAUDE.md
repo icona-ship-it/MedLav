@@ -70,7 +70,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `db/schema/` | Schema Drizzle (11 tabelle, reports ha `generation_metadata` JSONB) | `cases.ts`, `events.ts`, `documents.ts`, `reports.ts`, `anomalies.ts`, `guidelines.ts`, `profiles.ts`, `audit.ts`, `event-images.ts`, `case-shares.ts`, `report-ratings.ts` |
 | `lib/user-error-messages.ts` | Messaggi errore user-friendly (13 pattern → italiano) | |
 | `components/` | UI components (shadcn + custom) | `error-boundary.tsx`, `cookie-consent.tsx`, `onboarding-dialog.tsx`, `markdown-preview.tsx` (con supporto immagini OCR), `linked-report-viewer.tsx` |
-| `app/(dashboard)/cases/[id]/` | UI caso: report editor, skeleton, classification review | `report-tab.tsx`, `report-skeleton.tsx`, `classification-review.tsx`, `perizia-form.tsx` |
+| `app/(dashboard)/cases/[id]/` | UI caso: report editor, skeleton, form perizia (con bozza locale) | `report-step.tsx`, `report-skeleton.tsx`, `perizia-form.tsx`, `use-perizia-draft.ts` |
 
 ### Pipeline elaborazione (`process-case.ts` — 13 step logici Inngest)
 

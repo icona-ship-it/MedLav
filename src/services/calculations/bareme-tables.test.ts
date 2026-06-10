@@ -126,3 +126,30 @@ describe('Audit Ondata 1b — bareme invariants', () => {
     expect(calculateDannoBiologico(NaN).estimatedAmount).toBeNull();
   });
 });
+
+// ── Valori normativi verificati su GU (2026-06-10) ──────────────────
+import { normativeStalenessNote, ITT_DAILY_RATE_ART139 } from './bareme-tables';
+
+describe('valori normativi vigenti (D.M. 18/07/2025 + D.M. 10/12/2025)', () => {
+  it('punto micropermanenti base 963,40 € (D.M. 18/07/2025) con etichetta tabella aggiornata', () => {
+    const r = calculateDannoBiologico(5, 30);
+    expect(r.notes).toContain('963.4'); // base per punto nelle note
+    expect(r.tableUsed).toContain('D.M. 18/07/2025');
+  });
+
+  it('TUN macropermanenti usa il punto aggiornato dal D.M. 10/12/2025', () => {
+    const r = calculateDannoBiologico(20, 30);
+    expect(r.tableUsed).toContain('agg. D.M. 10/12/2025');
+    expect(r.notes).toContain('963.4'); // base per punto nelle note
+  });
+
+  it('diaria ITT art. 139 = 56,18 €/die', () => {
+    expect(ITT_DAILY_RATE_ART139).toBe(56.18);
+  });
+
+  it('normativeStalenessNote: null entro 8 mesi dalla verifica, avviso dopo', () => {
+    expect(normativeStalenessNote('2026-08-01')).toBeNull();
+    expect(normativeStalenessNote('2027-04-01')).toContain('ATTENZIONE');
+  });
+});
+

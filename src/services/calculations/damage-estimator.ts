@@ -7,7 +7,7 @@
  */
 
 import type { CaseType } from '@/types';
-import { calculateDannoBiologico, type DannoBiologicoResult } from './bareme-tables';
+import { calculateDannoBiologico, normativeStalenessNote, type DannoBiologicoResult } from './bareme-tables';
 import { calculateMilano, type MilanoResult } from './tabelle-milano';
 
 interface CalcEvent {
@@ -80,24 +80,32 @@ export interface DamageEstimate {
 }
 
 /**
- * TUN (DPR 12/2025) applies to incidents from 2025-03-25 onwards.
- * For earlier incidents, Tabelle Milano 2024 are the primary reference.
+ * Data di entrata in vigore della TUN (DPR 13 gennaio 2025, n. 12).
+ * FONTE: GU Serie Generale n. 40 del 18/02/2025, S.O. n. 4 — «Entrata in
+ * vigore del provvedimento: 05/03/2025» (verificato su GU il 2026-06-10;
+ * confermato testualmente da Cass. civ., Sez. III, 07/04/2026, n. 8630).
+ * NB: la precedente costante '2025-03-25' era ERRATA di 20 giorni.
  */
-const TUN_EFFECTIVE_DATE = '2025-03-25';
+const TUN_EFFECTIVE_DATE = '2025-03-05';
 
 /**
  * Estimate biological damage based on case type and events.
  * Returns an indicative range and a table lookup on the midpoint.
  *
- * Table selection logic based on incident date:
- * - incidentDate >= 2025-03-25 → TUN primary (DPR 12/2025)
- * - incidentDate < 2025-03-25 → Milano primary, TUN as secondary comparison
- * - no incidentDate → TUN primary with Milano comparison (default)
+ * Routing tabellare (Cass. civ., Sez. III, 07/04/2026, n. 8630 — principio di
+ * diritto su rinvio pregiudiziale ex art. 363-bis c.p.c.):
+ * - fatti ≥ 05/03/2025 in RCA/sanitaria → TUN ad applicazione DIRETTA
+ * - fatti anteriori o illeciti fuori ambito → TUN comunque parametro
+ *   privilegiato della valutazione equitativa (applicazione INDIRETTA ex
+ *   artt. 1226/2056 c.c.); le tabelle pretorie (Milano ed. 2024) restano
+ *   applicabili solo con motivazione puntuale su circostanze del tutto peculiari
+ * - in ogni caso il confronto Milano è fornito a supporto della motivazione
  */
 export function estimateBiologicalDamage(
   events: CalcEvent[],
   caseType: CaseType,
   incidentDate?: string,
+  todayIso?: string,
 ): DamageEstimate {
   const range = CASE_TYPE_RANGES[caseType];
 
@@ -118,21 +126,12 @@ export function estimateBiologicalDamage(
 
   const midpoint = Math.round((refinedRange.min + refinedRange.max) / 2);
 
-  // Determine table selection based on incident date
-  const { useTunAsPrimary, tableSelectionNote } = resolveTableSelection(incidentDate);
+  // Determine table-selection note based on incident date (TUN is always the
+  // primary lookup after Cass. 8630/2026 — diretta o indiretta che sia).
+  const tableSelectionNote = buildTableSelectionNote(incidentDate, todayIso);
 
-  let lookupResult: DannoBiologicoResult | null;
-  let milanoComparison: MilanoResult | null;
-
-  if (useTunAsPrimary) {
-    // TUN as primary, Milano as secondary comparison for macropermanenti
-    lookupResult = calculateDannoBiologico(midpoint);
-    milanoComparison = buildMilanoComparison(midpoint);
-  } else {
-    // Milano as primary, TUN as secondary comparison
-    milanoComparison = buildMilanoComparison(midpoint);
-    lookupResult = calculateDannoBiologico(midpoint);
-  }
+  const lookupResult: DannoBiologicoResult | null = calculateDannoBiologico(midpoint);
+  const milanoComparison: MilanoResult | null = buildMilanoComparison(midpoint);
 
   // Balthazard note when multiple surgeries suggest concurrent injuries
   const balthazardNote = buildBalthazardNote(events);
@@ -149,36 +148,35 @@ export function estimateBiologicalDamage(
 }
 
 /**
- * Resolve which table to use as primary based on incident date.
+ * Nota sul routing tabellare per il perito, allineata a Cass. civ., Sez. III,
+ * 07/04/2026, n. 8630: TUN sempre parametro privilegiato (diretta per fatti
+ * ≥ 05/03/2025 in RCA/sanitaria, indiretta negli altri casi); Milano residuale
+ * con motivazione puntuale. Appende l'avviso di staleness dei valori normativi
+ * quando i dati hardcoded non vengono ri-verificati da troppo tempo.
  */
-function resolveTableSelection(incidentDate?: string): {
-  useTunAsPrimary: boolean;
-  tableSelectionNote: string;
-} {
+function buildTableSelectionNote(incidentDate?: string, todayIso?: string): string {
+  const staleness = normativeStalenessNote(todayIso);
+  const stalenessSuffix = staleness ? ` ${staleness}` : '';
+
   if (!incidentDate) {
-    return {
-      useTunAsPrimary: true,
-      tableSelectionNote: 'Data sinistro non disponibile. '
-        + 'Utilizzata TUN (DPR 12/2025) come tabella primaria con confronto Tabelle Milano 2024. '
-        + 'Il perito deve verificare la data del sinistro per determinare la tabella applicabile.',
-    };
+    return 'Data sinistro non disponibile. '
+      + 'Utilizzata TUN (DPR 12/2025, agg. D.M. 10/12/2025) come tabella primaria con confronto Tabelle Milano 2024. '
+      + 'Il perito deve verificare la data del sinistro: per fatti anteriori al 05/03/2025 la TUN si applica in via indiretta (Cass. 8630/2026).'
+      + stalenessSuffix;
   }
 
   if (incidentDate >= TUN_EFFECTIVE_DATE) {
-    return {
-      useTunAsPrimary: true,
-      tableSelectionNote: `Sinistro del ${incidentDate} (>= ${TUN_EFFECTIVE_DATE}): `
-        + 'si applica la Tabella Unica Nazionale (DPR 12/2025) come tabella primaria. '
-        + 'Confronto con Tabelle Milano 2024 fornito a titolo indicativo.',
-    };
+    return `Sinistro del ${incidentDate} (≥ ${TUN_EFFECTIVE_DATE}): `
+      + 'negli ambiti RC auto/natanti e responsabilità sanitaria si applica la Tabella Unica Nazionale '
+      + '(DPR 12/2025, agg. D.M. 10/12/2025) in via DIRETTA. Confronto con Tabelle Milano 2024 fornito a titolo indicativo.'
+      + stalenessSuffix;
   }
 
-  return {
-    useTunAsPrimary: false,
-    tableSelectionNote: `Sinistro del ${incidentDate} (< ${TUN_EFFECTIVE_DATE}): `
-      + 'si applicano le Tabelle Milano 2024 come tabella primaria. '
-      + 'Confronto con TUN (DPR 12/2025) fornito a titolo indicativo.',
-  };
+  return `Sinistro del ${incidentDate} (anteriore al ${TUN_EFFECTIVE_DATE}): `
+    + 'per Cass. civ., Sez. III, 07/04/2026, n. 8630 la TUN trova comunque applicazione generalizzata in via INDIRETTA, '
+    + 'quale parametro privilegiato della valutazione equitativa (artt. 1226 e 2056 c.c.); il giudice può applicare una '
+    + 'tabella pretoria (es. Milano ed. 2024, qui fornita a confronto) solo con motivazione puntuale su circostanze del tutto peculiari.'
+    + stalenessSuffix;
 }
 
 /**

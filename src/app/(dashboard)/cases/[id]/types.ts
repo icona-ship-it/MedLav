@@ -65,6 +65,8 @@ export interface CaseData {
   notes: string | null;
   status: string;
   processing_stage: string;
+  /** Last server save — used to decide if a localStorage draft is newer. */
+  updated_at?: string | null;
   perizia_metadata?: PeriziaMetadataUI | null;
   module_id?: string | null;
   module_category?: number | null;

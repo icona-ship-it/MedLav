@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useState, useTransition, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info, FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,8 +15,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { updateCase, getReportSectionOptions } from '../../actions';
+import { updateCase, getReportSectionOptions, getLastPeritoDefaults } from '../../actions';
 import { ReportSectionsPicker } from './report-sections-picker';
+import { usePeriziaDraft } from './use-perizia-draft';
+import { mergeDraftForm, formatDraftAge, type PeriziaDraft } from '@/lib/perizia-draft-storage';
+import { isValidItalianDate } from '@/lib/validators/date-format';
 import { getQuestiTemplates } from '@/lib/domain-knowledge';
 import { CASE_TYPES } from '@/lib/constants';
 import type { CaseType } from '@/types';
@@ -64,10 +68,49 @@ const RC_PERITO_SECTIONS: SectionDef[] = [
 /** Sezione speciale (sempre presente): selettore delle sezioni del report. */
 const SEZIONI_REPORT_SECTION: SectionDef = { id: 'sezioniReport', title: 'Sezioni del report', fields: [] };
 
+/** Campi data dell'intestazione: testo libero, validati come date reali (1.4). */
+const HEADER_DATE_FIELDS = [
+  'dataIncarico', 'dataOperazioni', 'dataDeposito', 'termineBozza', 'termineOsservazioni',
+] as const;
+
+const DATE_FORMAT_HINT = 'Data non valida — usa il formato GG/MM/AAAA (es. 15/01/2025)';
+
+/** I 6 campi del professionista prefillabili dall'ultimo caso (1.5). */
+const PERITO_FIELDS = ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec'] as const;
+
 /** Parsa un input numerico (accetta virgola IT) → numero positivo o undefined. */
 function parseOptionalPositive(value: string): number | undefined {
   const n = Number(value.trim().replace(',', '.'));
   return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Input data intestazione: bordo rosso + messaggio se la data non esiste (1.4). */
+function HeaderDateInput({
+  label, value, hint, onChange,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  onChange: (text: string) => void;
+}) {
+  const invalid = value.trim() !== '' && !isValidItalianDate(value);
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="es. 15/01/2025"
+        aria-invalid={invalid || undefined}
+        className={invalid ? 'border-destructive focus-visible:ring-destructive' : undefined}
+      />
+      {invalid ? (
+        <p className="text-xs text-destructive mt-1" role="alert">{DATE_FORMAT_HINT}</p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+      ) : null}
+    </div>
+  );
 }
 
 /** Campo textarea con dettatura vocale, riusato per le sottosezioni anamnesi. */
@@ -110,15 +153,17 @@ function AnamnesiTextarea({
 // --- Component ---
 
 export function PeriziaMetadataForm({
-  caseId, caseData, onSaved, onProceedToNext,
+  caseId, caseData, onSaved, onProceedToNext, onDirtyChange,
 }: {
   caseId: string;
   caseData: CaseData;
   onSaved: () => void;
   onProceedToNext?: () => void;
+  /** Notifica il wizard quando il form ha modifiche non salvate (blocca l'auto-advance). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [isPending, startTransition] = useTransition();
-  const existing = caseData.perizia_metadata ?? {};
+  const existing = useMemo(() => caseData.perizia_metadata ?? {}, [caseData.perizia_metadata]);
   const isRC = caseData.module_id === RC_CIVILE_MODULE_ID;
   // RC perizie collect anamnesi + "Il Fatto" from the perito; other case types don't.
   const sections = useMemo(
@@ -187,6 +232,67 @@ export function PeriziaMetadataForm({
     return () => { active = false; };
   }, [caseId]);
 
+  // Latest form state for async callbacks (prefill) without stale closures.
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; });
+
+  // --- 1.2: bozza automatica + dirty tracking + beforeunload (use-perizia-draft) ---
+  const draftPayload = useMemo(
+    () => ({ form, quesiti, excludedSections }),
+    [form, quesiti, excludedSections],
+  );
+
+  const handleRestoreDraft = useCallback((draft: PeriziaDraft) => {
+    setForm((prev) => mergeDraftForm(prev, draft.form));
+    setQuesiti(draft.quesiti);
+    setExcludedSections(draft.excludedSections);
+    toast.success('Bozza ripristinata');
+  }, []);
+
+  const {
+    isDirty, draftBanner, restoreDraft, discardDraft, markSaved, absorbIntoBaseline,
+  } = usePeriziaDraft({
+    caseId,
+    payload: draftPayload,
+    savedUpdatedAt: caseData.updated_at ?? null,
+    onDirtyChange,
+    onRestore: handleRestoreDraft,
+  });
+
+  // --- 1.5: prefill dati del perito dall'ultimo caso (solo campi vuoti) ---
+  const [peritoPrefilled, setPeritoPrefilled] = useState(false);
+  const prefillAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (prefillAttemptedRef.current) return;
+    prefillAttemptedRef.current = true;
+    // Solo se il caso non ha già dati del perito salvati.
+    const hasSavedPeritoData = PERITO_FIELDS.some((f) => (existing[f] ?? '').trim().length > 0);
+    if (hasSavedPeritoData) return;
+    let active = true;
+    void getLastPeritoDefaults().then(({ defaults }) => {
+      if (!active || !defaults) return;
+      // Riempi SOLO i campi ancora vuoti al momento della risposta.
+      const patch: Partial<Record<(typeof PERITO_FIELDS)[number], string>> = {};
+      for (const field of PERITO_FIELDS) {
+        const value = defaults[field];
+        if (value && formRef.current[field].trim() === '') patch[field] = value;
+      }
+      if (Object.keys(patch).length === 0) return;
+      setForm((prev) => ({ ...prev, ...patch }));
+      // Il prefill non è una modifica dell'utente: non deve marcare il form
+      // come sporco né far scattare autosave/guard (viene salvato col Prosegui).
+      absorbIntoBaseline(patch as Record<string, string>);
+      setPeritoPrefilled(true);
+    });
+    return () => { active = false; };
+  }, [existing, absorbIntoBaseline]);
+
+  // --- 1.4: date intestazione non valide (blocca il Prosegui finché corrette) ---
+  const invalidDateFields = useMemo(
+    () => HEADER_DATE_FIELDS.filter((f) => form[f].trim() !== '' && !isValidItalianDate(form[f])),
+    [form],
+  );
+
   // Track which sections are open — first incomplete one starts open
   const sectionFilled = useMemo(() => {
     const filled: Record<string, boolean> = {};
@@ -230,6 +336,12 @@ export function PeriziaMetadataForm({
   };
 
   const handleProceed = () => {
+    // 1.4: una data malformata non deve mai finire nell'intestazione depositata.
+    if (invalidDateFields.length > 0) {
+      setOpenSections((prev) => ({ ...prev, date: true }));
+      toast.error('Controlla le date: formato non valido. Usa GG/MM/AAAA (es. 15/01/2025).');
+      return;
+    }
     startTransition(async () => {
       const pesoKg = parseOptionalPositive(form.pesoKg);
       const altezzaCm = parseOptionalPositive(form.altezzaCm);
@@ -297,6 +409,8 @@ export function PeriziaMetadataForm({
           toast.error(result.error);
           return;
         }
+        // 1.2: salvataggio riuscito → la bozza locale non serve più.
+        markSaved();
         toast.success('Dati perizia salvati');
         onSaved();
       }
@@ -309,6 +423,24 @@ export function PeriziaMetadataForm({
 
   return (
     <div className="space-y-3">
+      {/* 1.2: banner di ripristino bozza non salvata */}
+      {draftBanner && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-sm flex-1 min-w-[200px]">
+            Trovata una bozza non salvata ({formatDraftAge(draftBanner.savedAt)}). Vuoi ripristinarla?
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={discardDraft}>
+              Scarta
+            </Button>
+            <Button size="sm" onClick={restoreDraft}>
+              Ripristina
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Info banner */}
       <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
         <CardContent className="py-3 px-4">
@@ -363,7 +495,7 @@ export function PeriziaMetadataForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Nome e Cognome</Label>
-                        <Input value={form.patientFullName} onChange={(e) => setForm({ ...form, patientFullName: e.target.value })} placeholder="es. Massarenti Daniela" />
+                        <Input value={form.patientFullName} onChange={(e) => setForm({ ...form, patientFullName: e.target.value })} placeholder="es. Mario Esempi" />
                         <p className="text-xs text-muted-foreground mt-1">Apparirà nell&apos;intestazione della perizia</p>
                       </div>
                       <div>
@@ -373,16 +505,16 @@ export function PeriziaMetadataForm({
                     </div>
                     <div>
                       <Label>Indirizzo di residenza</Label>
-                      <Input value={form.patientAddress} onChange={(e) => setForm({ ...form, patientAddress: e.target.value })} placeholder="es. Via Todeschini 37, 37126 Verona" />
+                      <Input value={form.patientAddress} onChange={(e) => setForm({ ...form, patientAddress: e.target.value })} placeholder="es. via degli Esempi 1, 00000 Città" />
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Codice Fiscale</Label>
-                        <Input value={form.patientFiscalCode} onChange={(e) => setForm({ ...form, patientFiscalCode: e.target.value.toUpperCase() })} placeholder="es. MSSDNL45B42A944J" maxLength={16} />
+                        <Input value={form.patientFiscalCode} onChange={(e) => setForm({ ...form, patientFiscalCode: e.target.value.toUpperCase() })} placeholder="es. XXXXXX00X00X000X" maxLength={16} />
                       </div>
                       <div>
                         <Label>Telefono</Label>
-                        <Input value={form.patientPhone} onChange={(e) => setForm({ ...form, patientPhone: e.target.value })} placeholder="es. 333 816 5222" />
+                        <Input value={form.patientPhone} onChange={(e) => setForm({ ...form, patientPhone: e.target.value })} placeholder="es. 000 0000000" />
                       </div>
                     </div>
                   </div>
@@ -401,7 +533,7 @@ export function PeriziaMetadataForm({
                       </div>
                       <div>
                         <Label>Numero RG</Label>
-                        <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 10965/2025" />
+                        <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 1234/2025" />
                         <p className="text-xs text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
                       </div>
                     </div>
@@ -444,7 +576,7 @@ export function PeriziaMetadataForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Giudice</Label>
-                        <Input value={form.judgeName} onChange={(e) => setForm({ ...form, judgeName: e.target.value })} placeholder="es. Dott. Raffaele Del Porto" />
+                        <Input value={form.judgeName} onChange={(e) => setForm({ ...form, judgeName: e.target.value })} placeholder="es. Dott. Mario Esempi" />
                       </div>
                       <div>
                         <Label>Qualifica giudice</Label>
@@ -464,10 +596,16 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'parti' && (
                   <div className="space-y-4">
+                    {peritoPrefilled && (
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Info className="h-3.5 w-3.5 shrink-0" />
+                        Dati professionista precompilati dall&apos;ultimo caso — modificali se serve.
+                      </p>
+                    )}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>CTU (nome)</Label>
-                        <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Nicola Pigaiani" />
+                        <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Mario Esempi" />
                         <p className="text-xs text-muted-foreground mt-1">Nome completo del Consulente Tecnico d&apos;Ufficio</p>
                       </div>
                       <div>
@@ -503,7 +641,7 @@ export function PeriziaMetadataForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Ausiliario (nome)</Label>
-                        <Input value={form.collaboratoreName ?? ''} onChange={(e) => setForm({ ...form, collaboratoreName: e.target.value })} placeholder="es. Dr. Luigi Bongiovanni" />
+                        <Input value={form.collaboratoreName ?? ''} onChange={(e) => setForm({ ...form, collaboratoreName: e.target.value })} placeholder="es. Dott.ssa Anna Esempi" />
                         <p className="text-xs text-muted-foreground mt-1">Specialista che assiste il CTU (se nominato)</p>
                       </div>
                       <div>
@@ -529,17 +667,17 @@ export function PeriziaMetadataForm({
                       </div>
                       <div>
                         <Label>Parte Resistente</Label>
-                        <Input value={form.parteResistente} onChange={(e) => setForm({ ...form, parteResistente: e.target.value })} placeholder="es. ASST Spedali Civili" />
+                        <Input value={form.parteResistente} onChange={(e) => setForm({ ...form, parteResistente: e.target.value })} placeholder="es. Azienda Ospedaliera di Esempio" />
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>CTP Ricorrente</Label>
-                        <Input value={form.ctpRicorrente} onChange={(e) => setForm({ ...form, ctpRicorrente: e.target.value })} placeholder="es. Dott.ssa Sarah Nalin" />
+                        <Input value={form.ctpRicorrente} onChange={(e) => setForm({ ...form, ctpRicorrente: e.target.value })} placeholder="es. Dott.ssa Anna Esempi" />
                       </div>
                       <div>
                         <Label>CTP Resistente</Label>
-                        <Input value={form.ctpResistente} onChange={(e) => setForm({ ...form, ctpResistente: e.target.value })} placeholder="es. Dott. Lorenzo Micheli" />
+                        <Input value={form.ctpResistente} onChange={(e) => setForm({ ...form, ctpResistente: e.target.value })} placeholder="es. Dott. Paolo Esempi" />
                       </div>
                     </div>
                   </div>
@@ -547,27 +685,32 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'date' && (
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <div>
-                      <Label>Data conferimento incarico</Label>
-                      <Input value={form.dataIncarico} onChange={(e) => setForm({ ...form, dataIncarico: e.target.value })} placeholder="es. 15/01/2025" />
-                    </div>
-                    <div>
-                      <Label>Data inizio operazioni</Label>
-                      <Input value={form.dataOperazioni} onChange={(e) => setForm({ ...form, dataOperazioni: e.target.value })} placeholder="es. 20/02/2025" />
-                    </div>
-                    <div>
-                      <Label>Termine bozza ai CC.TT.P.</Label>
-                      <Input value={form.termineBozza} onChange={(e) => setForm({ ...form, termineBozza: e.target.value })} placeholder="es. 30/04/2025" />
-                      <p className="text-xs text-muted-foreground mt-1">Termine per l&apos;inoltro della bozza ai consulenti di parte</p>
-                    </div>
-                    <div>
-                      <Label>Termine osservazioni CC.TT.P.</Label>
-                      <Input value={form.termineOsservazioni} onChange={(e) => setForm({ ...form, termineOsservazioni: e.target.value })} placeholder="es. 10/05/2025" />
-                    </div>
-                    <div>
-                      <Label>Termine deposito</Label>
-                      <Input value={form.dataDeposito} onChange={(e) => setForm({ ...form, dataDeposito: e.target.value })} placeholder="es. 20/05/2025" />
-                    </div>
+                    <HeaderDateInput
+                      label="Data conferimento incarico"
+                      value={form.dataIncarico}
+                      onChange={(t) => setForm({ ...form, dataIncarico: t })}
+                    />
+                    <HeaderDateInput
+                      label="Data inizio operazioni"
+                      value={form.dataOperazioni}
+                      onChange={(t) => setForm({ ...form, dataOperazioni: t })}
+                    />
+                    <HeaderDateInput
+                      label="Termine bozza ai CC.TT.P."
+                      hint="Termine per l'inoltro della bozza ai consulenti di parte"
+                      value={form.termineBozza}
+                      onChange={(t) => setForm({ ...form, termineBozza: t })}
+                    />
+                    <HeaderDateInput
+                      label="Termine osservazioni CC.TT.P."
+                      value={form.termineOsservazioni}
+                      onChange={(t) => setForm({ ...form, termineOsservazioni: t })}
+                    />
+                    <HeaderDateInput
+                      label="Termine deposito"
+                      value={form.dataDeposito}
+                      onChange={(t) => setForm({ ...form, dataDeposito: t })}
+                    />
                   </div>
                 )}
 
@@ -848,7 +991,9 @@ export function PeriziaMetadataForm({
           Prosegui
         </Button>
         <p className="text-xs text-muted-foreground text-center mt-1">
-          Puoi tornare a compilare in qualsiasi momento
+          {isDirty
+            ? 'Modifiche non salvate — premi Prosegui per salvarle (bozza locale attiva)'
+            : 'Puoi tornare a compilare in qualsiasi momento'}
         </p>
       </div>
     </div>

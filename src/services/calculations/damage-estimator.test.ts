@@ -191,4 +191,34 @@ describe('damage-estimator', () => {
       }
     });
   });
+
+  // ── Routing tabellare verificato su fonti ufficiali (2026-06-10) ──
+  // GU n. 40/2025 (entrata in vigore TUN: 05/03/2025) + Cass. Sez. III 8630/2026.
+
+  describe('routing tabellare TUN (vigenza 05/03/2025 + Cass. 8630/2026)', () => {
+    const events = [makeCalcEvent()];
+
+    it('sinistro tra il 5 e il 25 marzo 2025: TUN DIRETTA (la vecchia costante 2025-03-25 era errata di 20 giorni)', () => {
+      const r = estimateBiologicalDamage(events, 'ortopedica', '2025-03-10', '2026-06-10');
+      expect(r.tableSelectionNote).toContain('via DIRETTA');
+      expect(r.tableSelectionNote).toContain('2025-03-05');
+    });
+
+    it('fatti anteriori al 05/03/2025: TUN comunque primaria in via INDIRETTA ex Cass. 8630/2026, Milano residuale', () => {
+      const r = estimateBiologicalDamage(events, 'ortopedica', '2024-06-01', '2026-06-10');
+      expect(r.tableSelectionNote).toContain('8630');
+      expect(r.tableSelectionNote).toMatch(/INDIRETTA/);
+      expect(r.tableSelectionNote).toMatch(/motivazione puntuale/i);
+      expect(r.lookupResult).not.toBeNull(); // TUN sempre calcolata
+    });
+
+    it("staleness: oltre 8 mesi dall'ultima verifica normativa appare l'avviso, prima no", () => {
+      const fresh = estimateBiologicalDamage(events, 'ortopedica', '2025-06-01', '2026-07-01');
+      expect(fresh.tableSelectionNote).not.toContain('ATTENZIONE');
+
+      const stale = estimateBiologicalDamage(events, 'ortopedica', '2025-06-01', '2027-06-10');
+      expect(stale.tableSelectionNote).toContain('ATTENZIONE');
+      expect(stale.tableSelectionNote).toContain('2026-06-10'); // data ultima verifica
+    });
+  });
 });

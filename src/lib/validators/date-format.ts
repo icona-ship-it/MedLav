@@ -64,6 +64,21 @@ export function isValidItalianDate(s: string | null | undefined): boolean {
 }
 
 /**
+ * Lenient variant for OPTIONAL form fields (perizia header dates: dataIncarico,
+ * dataOperazioni, dataDeposito, termineBozza, termineOsservazioni).
+ *
+ * Empty/absent values are VALID (the form must stay fully optional); any
+ * non-empty value must be a real calendar date in DD/MM/YYYY, DD.MM.YYYY,
+ * DD-MM-YYYY or ISO format. Used by both the client (red border + message)
+ * and the server Zod refine, so a typo like "15/13/2025" can never reach the
+ * header of a deposited perizia.
+ */
+export function isEmptyOrValidItalianDate(s: string | null | undefined): boolean {
+  if (s == null || s.trim() === '') return true;
+  return isValidItalianDate(s);
+}
+
+/**
  * Normalize an Italian-style or ISO date string to ISO YYYY-MM-DD.
  * Returns null if the input is not a valid real calendar date — callers should
  * treat null as "reject" so a malformed/ambiguous date never reaches the DB.

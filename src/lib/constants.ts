@@ -118,7 +118,7 @@ export const EVENT_TYPES = [
  * the clinical chronology. Used by exports, calculations, and anomaly
  * detectors so we don't mix patient ticket payments with medical events.
  *
- * Trigger: Passaniti regression (CASO-2026-154) — perito Lavini found that
+ * Trigger: regressione CASO-2026-154 — perito Lavini found that
  * SSN cost notices, ticket payments, and admin documents (avviso pagamento)
  * were appearing in the cronistoria medica. They don't belong there: any
  * patient-paid expense goes in the dedicated "Spese Mediche" section via

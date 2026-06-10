@@ -9,6 +9,7 @@ import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
 import { getSelectableSections } from '@/services/synthesis/section-catalog';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
+import { isEmptyOrValidItalianDate } from '@/lib/validators/date-format';
 import { z } from 'zod';
 import {
   ALL_MODULE_IDS,
@@ -27,6 +28,16 @@ const caseTypeSchema = z.enum(validCaseTypes as [string, ...string[]]);
 const caseRoleSchema = z.enum(['ctu', 'ctp', 'stragiudiziale']);
 const caseStatusSchema = z.enum(['bozza', 'in_revisione', 'definitivo', 'archiviato']);
 const moduleIdSchema = z.enum(ALL_MODULE_IDS as unknown as [string, ...string[]]);
+
+/**
+ * Date destinate all'intestazione formale della perizia (dataIncarico, termini...).
+ * Vuoto/assente = valido (il form resta facoltativo); se valorizzata deve essere
+ * una data reale in formato GG/MM/AAAA o GG.MM.AAAA — un refuso tipo "15/13/2025"
+ * non deve mai finire in una perizia depositata in tribunale.
+ */
+const DATE_FORMAT_ERROR = 'Data non valida: usa il formato GG/MM/AAAA (es. 15/01/2025)';
+const headerDateSchema = z.string().max(20)
+  .refine((s) => isEmptyOrValidItalianDate(s), { message: DATE_FORMAT_ERROR });
 
 const periziaMetadataSchema = z.object({
   patientFullName: z.string().max(200).optional(),
@@ -55,11 +66,11 @@ const periziaMetadataSchema = z.object({
   ctpResistente: z.string().max(100).optional(),
   parteRicorrente: z.string().max(200).optional(),
   parteResistente: z.string().max(200).optional(),
-  dataIncarico: z.string().max(20).optional(),
-  dataOperazioni: z.string().max(20).optional(),
-  dataDeposito: z.string().max(20).optional(),
-  termineBozza: z.string().max(20).optional(),
-  termineOsservazioni: z.string().max(20).optional(),
+  dataIncarico: headerDateSchema.optional(),
+  dataOperazioni: headerDateSchema.optional(),
+  dataDeposito: headerDateSchema.optional(),
+  termineBozza: headerDateSchema.optional(),
+  termineOsservazioni: headerDateSchema.optional(),
   provvedimentiOrdinanza: z.string().max(3000).optional(),
   quesiti: z.array(z.string().max(2000)).max(20).optional(),
   speseMediche: z.string().max(5000).optional(),
@@ -109,6 +120,15 @@ const updateCaseStatusSchema = z.object({
 
 const deleteCaseSchema = z.string().uuid();
 
+/**
+ * Se la validazione fallisce per una data di intestazione malformata, restituisce
+ * il messaggio italiano specifico (user-friendly); altrimenti null → messaggio generico.
+ */
+function firstDateIssueMessage(error: z.ZodError): string | null {
+  const issue = error.issues.find((i) => i.message === DATE_FORMAT_ERROR);
+  return issue ? issue.message : null;
+}
+
 export async function createCase(formData: FormData) {
   const supabase = await createClient();
 
@@ -151,7 +171,10 @@ export async function createCase(formData: FormData) {
   });
 
   if (!validated.success) {
-    return { error: 'Dati non validi. Verifica tipo caso e tipo incarico.' };
+    return {
+      error: firstDateIssueMessage(validated.error)
+        ?? 'Dati non validi. Verifica tipo caso e tipo incarico.',
+    };
   }
 
   const { patientInitials, practiceReference, notes, periziaMetadata } = validated.data;
@@ -306,7 +329,9 @@ export async function updateCase(params: {
   periziaMetadata?: PeriziaMetadata | null;
 }) {
   const validated = updateCaseSchema.safeParse(params);
-  if (!validated.success) return { error: 'Dati non validi' };
+  if (!validated.success) {
+    return { error: firstDateIssueMessage(validated.error) ?? 'Dati non validi' };
+  }
 
   const supabase = await createClient();
 
@@ -475,6 +500,57 @@ export async function deleteCase(caseId: string) {
 
   revalidateCases(user.id);
   return { success: true };
+}
+
+/** I 6 campi del professionista prefillabili dall'ultimo caso. MAI dati del paziente. */
+const PERITO_DEFAULT_FIELDS = [
+  'ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec',
+] as const;
+
+export type PeritoDefaults = Partial<Record<(typeof PERITO_DEFAULT_FIELDS)[number], string>>;
+
+/**
+ * Dati del professionista (nome, qualifica, specialità, albo, email, PEC) presi
+ * dall'ULTIMO caso dell'utente che li ha valorizzati, per prefillare il form
+ * perizia di un nuovo caso (oggi il perito li ricompila a mano a ogni caso).
+ *
+ * Senza migration (debt journal Drizzle): legge `cases.perizia_metadata` con
+ * whitelist rigorosa dei SOLI 6 campi del perito — MAI dati del paziente
+ * (GDPR Art. 9). Ownership garantita da filtro user_id + RLS.
+ */
+export async function getLastPeritoDefaults(): Promise<{ defaults: PeritoDefaults | null }> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { defaults: null };
+
+  const { data, error } = await supabase
+    .from('cases')
+    .select('perizia_metadata')
+    .eq('user_id', user.id)
+    .not('perizia_metadata->>ctuName', 'is', null)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('getLastPeritoDefaults', 'Query failed', { userId: user.id, code: error.code });
+    return { defaults: null };
+  }
+
+  const metadata = (data?.perizia_metadata ?? null) as Record<string, unknown> | null;
+  if (!metadata) return { defaults: null };
+
+  // Whitelist default-deny: only the 6 professional fields, strings only.
+  const defaults: PeritoDefaults = {};
+  for (const field of PERITO_DEFAULT_FIELDS) {
+    const value = metadata[field];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      defaults[field] = value.slice(0, 200);
+    }
+  }
+
+  return { defaults: Object.keys(defaults).length > 0 ? defaults : null };
 }
 
 /**

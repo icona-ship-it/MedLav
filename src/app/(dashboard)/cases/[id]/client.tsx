@@ -93,7 +93,6 @@ function computeAnonymizeAutoStep(
 function computeAutoStep(
   processingStage: string,
   hasProcessingDocs: boolean,
-  _hasClassificationReview: boolean,
   hasReport: boolean,
   hasEvents: boolean,
 ): number {
@@ -159,7 +158,6 @@ export function CaseDetailClient({
 
   // Wizard step
   const hasProcessingDocs = localDocuments.some((d) => isDocProcessing(d.processing_status));
-  const hasClassificationReview = localDocuments.some((d) => d.processing_status === 'classificazione_completata');
   const hasUploadedDocs = localDocuments.some((d) => d.processing_status === 'caricato');
   const hasReport = !!report;
   const hasEvents = events.length > 0;
@@ -212,14 +210,21 @@ export function CaseDetailClient({
     ? computeAnonymizeAutoStep(localDocuments)
     : (isExtractionOnly || isExpensesOnly)
       ? computeExtractionAutoStep(processingStage, hasProcessingDocs, hasEvents)
-      : computeAutoStep(processingStage, hasProcessingDocs, hasClassificationReview, hasReport, hasEvents);
+      : computeAutoStep(processingStage, hasProcessingDocs, hasReport, hasEvents);
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
+  // Set by PeriziaMetadataForm while it has unsaved edits (dictation, anamnesi...).
+  // Ref (not state): read inside the auto-advance effect without re-triggering it.
+  const periziaFormDirtyRef = useRef(false);
 
   const handleSetStep = useCallback((step: number) => {
     userNavigatedRef.current = true;
     setActiveStep(step);
+  }, []);
+
+  const handlePeriziaDirtyChange = useCallback((dirty: boolean) => {
+    periziaFormDirtyRef.current = dirty;
   }, []);
 
   // Auto-advance only on meaningful state transitions.
@@ -227,6 +232,11 @@ export function CaseDetailClient({
   useEffect(() => {
     const prev = prevAutoStepRef.current;
     prevAutoStepRef.current = autoStep;
+
+    // NEVER auto-navigate while the perizia form has unsaved changes: switching
+    // step unmounts the form and would silently discard the perito's work
+    // (scorecard 2026-06-10 fix 1.2). Manual navigation stays possible.
+    if (periziaFormDirtyRef.current) return;
 
     // Major transition detected (e.g. processing started or results arrived)
     if (prev !== autoStep) {
@@ -489,6 +499,7 @@ export function CaseDetailClient({
                 caseData={caseData}
                 onSaved={() => router.refresh()}
                 onProceedToNext={() => handleSetStep(3)}
+                onDirtyChange={handlePeriziaDirtyChange}
               />
             </div>
           )}

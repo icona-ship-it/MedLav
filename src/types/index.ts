@@ -78,29 +78,30 @@ export type ProcessingStatus =
 
 // Perizia metadata (formal court expert report data)
 export interface PeriziaMetadata {
-  // Patient data (optional — for formal perizia header. GDPR: never log these fields)
-  patientFullName?: string;    // "Massarenti Daniela"
-  patientDateOfBirth?: string; // "1945-02-02"
-  patientAddress?: string;     // "Via Todeschini 37, 37126 Verona"
-  patientFiscalCode?: string;  // "MSSDNL45B42A944J"
+  // Patient data (optional — for formal perizia header. GDPR: never log these fields,
+  // and use ONLY obviously-fictitious examples in comments/placeholders)
+  patientFullName?: string;    // es. "Mario Esempi" (dato fittizio)
+  patientDateOfBirth?: string; // es. "1980-01-01"
+  patientAddress?: string;     // es. "via degli Esempi 1, 00000 Città"
+  patientFiscalCode?: string;  // es. "XXXXXX00X00X000X" (formato 16 caratteri)
   patientPhone?: string;       // telefono paziente
   // Court/proceeding data
   tribunale?: string;          // "Tribunale Ordinario di Brescia"
   sezione?: string;            // "Sezione Centrale Civile"
-  rgNumber?: string;           // "10965/2025"
+  rgNumber?: string;           // es. "1234/2025"
   tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
-  judgeName?: string;           // "Dott. Raffaele Del Porto"
+  judgeName?: string;           // es. "Dott. Mario Esempi" (dato fittizio)
   // Qualifica del giudice nel destinatario ("Giudice Delegato"/"Giudice Istruttore"/
   // "Giudice Onorario"...). I gold ATP confliggono → campo del perito; fallback:
   // euristica (Delegato per ATP, Istruttore altrimenti).
   giudiceQualifica?: string;
-  ctuName?: string;            // "Dott. Nicola Pigaiani"
+  ctuName?: string;            // es. "Dott. Mario Esempi" (dato fittizio)
   ctuTitle?: string;           // "medico legale presso..." (qualifica nel conferimento)
   specialita?: string;         // specializzazioni per la carta intestata (una per riga / separate da ;)
   alboNumber?: string;         // n. iscrizione Albo per la carta intestata
   ctuEmail?: string;           // e-mail perito (carta intestata)
   ctuPec?: string;             // PEC perito (carta intestata)
-  collaboratoreName?: string;  // ausiliario: "Dr. Luigi Giuseppe Bongiovanni"
+  collaboratoreName?: string;  // ausiliario: es. "Dott.ssa Anna Esempi" (dato fittizio)
   collaboratoreTitle?: string; // ausiliario: "Specialista in Neurologia"
   // Collegio di CC.TT.U. / co-perito PARITETICO (benchmark gold 2026-06-10): distinto
   // dall'ausiliario (subordinato). Attiva conferimento plurale "conferiva ai sottoscritti",
@@ -111,8 +112,8 @@ export interface PeriziaMetadata {
   // es. "alla vicenda clinica e alle cause del decesso" (decesso) o "alla natura delle
   // prestazioni erogate" (casi qualificatori RSA/LEA). Deve iniziare con la preposizione.
   oggettoIncarico?: string;
-  ctpRicorrente?: string;      // "Dott.ssa Sarah Nalin"
-  ctpResistente?: string;      // "Dott. Lorenzo Micheli"
+  ctpRicorrente?: string;      // es. "Dott.ssa Anna Esempi" (dato fittizio)
+  ctpResistente?: string;      // es. "Dott. Paolo Esempi" (dato fittizio)
   parteRicorrente?: string;    // nome parte ricorrente
   parteResistente?: string;    // nome parte resistente (ASST, ospedale, etc.)
   dataIncarico?: string;       // data conferimento incarico

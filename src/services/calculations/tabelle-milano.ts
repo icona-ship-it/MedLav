@@ -1,6 +1,14 @@
 /**
  * Tabelle Milano 2024 — Biological damage calculation.
  *
+ * Edizione VIGENTE al 2026-06-10 (verificato sulla pagina ufficiale del
+ * Tribunale di Milano: nessuna edizione 2025/2026 pubblicata; confermato da
+ * Cass. 8630/2026). Ruolo dopo il DPR 12/2025 + Cass. civ. Sez. III 8630/2026:
+ * per il danno biologico >=10% le tabelle pretorie sono RESIDUALI (applicabili
+ * solo con motivazione puntuale su circostanze del tutto peculiari); Milano
+ * resta il riferimento per le voci NON coperte dalla TUN (danno parentale,
+ * terminale, premorienza, capitalizzazione). Vedi docs/NORMATIVE-REGISTRY.md.
+ *
  * The Milan Court tables (Tabelle del Tribunale di Milano) are the
  * de facto standard for macropermanenti damage quantification in Italy,
  * used by most courts outside the TUN system.

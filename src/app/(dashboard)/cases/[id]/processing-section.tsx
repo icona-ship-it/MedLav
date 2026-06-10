@@ -121,6 +121,14 @@ export function ProcessingSection({
 
   const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
 
+  // Tutti i documenti senza categoria ("altro"/nessuna) al momento dell'avvio →
+  // l'estrazione userà istruzioni generiche invece dei suggerimenti per tipo.
+  // Avviso NON bloccante: la categorizzazione resta facoltativa.
+  const allDocsUncategorized =
+    (pipelineMode === 'full' || pipelineMode === 'extraction_only') &&
+    documents.length > 0 &&
+    documents.every((d) => (d.document_type ?? 'altro') === 'altro');
+
   // Track processing start time
   useEffect(() => {
     if (hasProcessingDocs) {
@@ -315,6 +323,17 @@ export function ProcessingSection({
                       </Badge>
                     </div>
                   </div>
+
+                  {/* Avviso documenti senza categoria — non bloccante */}
+                  {allDocsUncategorized && (
+                    <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-800 dark:text-amber-300">
+                        Tutti i documenti sono senza categoria: l&apos;estrazione userà istruzioni generiche.
+                        Puoi categorizzarli dalla sezione Documenti per risultati più precisi.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Selettore sezioni del report — evidente, subito sopra il pulsante */}
                   {showSectionPicker && sectionOptions.length > 0 && (

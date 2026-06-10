@@ -577,7 +577,7 @@ const STRAGIUDIZIALE_SECTIONS: SectionSpec[] = [
 STRUTTURA OBBLIGATORIA (in quest'ordine):
 
 1) RIGA 1 — NOME E TITOLO DEL PERITO (in alto, in grassetto, font grande):
-   Esempio: "**Lavini dott. Franco**"
+   Esempio (FITTIZIO): "**Esempi dott. Mario**"
 
 2) RIGHE SUCCESSIVE — SPECIALIZZAZIONI (una per riga, in grassetto corsivo):
    Esempi: "*Specialista in Ortopedia e Traumatologia*"
