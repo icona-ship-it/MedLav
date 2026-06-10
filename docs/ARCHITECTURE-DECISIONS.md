@@ -169,6 +169,7 @@
 - **Costo & rate limiting**: Voxtral Mini batch = $0.003/min. Flat 1 credito per dettatura (clip cappata a 5 min server-side → worst case $0.015 = ~1.5 crediti). Rate limit Upstash 30 trascrizioni/ora/utente per protezione cost runaway.
 - **Multilingua**: una sola implementazione, auto-detect lingua (IT/DE/EN coperti — Voxtral supporta 13 lingue). Override possibile dall'UI futura.
 - **Conseguenze**: Riduce tempo di compilazione campi testo lunghi. Aggiunge un nuovo flusso dati (audio) verso Mistral EU. Nessuna migration DB. Nessun nuovo env var.
+- **SUPERATA il 2026-06-10**: funzionalità rimossa su decisione di prodotto (ridondante rispetto alla dettatura nativa OS; eliminato il flusso audio verso Mistral). Rimossi endpoint `/api/transcribe`, `services/transcription/`, `DictationButton`/`useDictation`, credito `dettatura`, rate limit `DICTATION`, modello `voxtral-mini-latest`; `Permissions-Policy: microphone` riportata a deny. I record storici in audit log e transazioni crediti restano in DB.
 
 ---
 

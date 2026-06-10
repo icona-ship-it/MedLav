@@ -135,14 +135,6 @@ export const INAIL_INFORTUNIO_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Inabilità temporanea assoluta (ITA)', definition: 'Periodo durante il quale l\'infortunato è totalmente impossibilitato a svolgere l\'attività lavorativa. Indennizzata dall\'INAIL: 60% della retribuzione media dal 4° al 90° giorno, 75% dal 91° giorno. I primi 3 giorni (periodo di carenza) sono a carico del datore.' },
     { term: 'D.Lgs. 81/2008 (TU Sicurezza)', definition: 'Testo Unico sulla salute e sicurezza nei luoghi di lavoro. Obblighi del datore: valutazione dei rischi (DVR), nomina RSPP e medico competente, formazione e informazione, fornitura DPI, sorveglianza sanitaria. La violazione fonda la responsabilità civile (art. 2087 c.c.) e penale.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU la dinamica dell\'infortunio e la sussistenza del nesso causale tra l\'evento traumatico e le lesioni documentate, specificando se l\'infortunio sia avvenuto in occasione di lavoro.',
-    'Quantifichi il CTU il danno biologico permanente secondo le tabelle allegate al D.Lgs. 38/2000, specificando i periodi di inabilità temporanea assoluta e relativa.',
-    'Valuti il CTU se la percentuale di danno biologico attribuita dall\'INAIL sia congrua rispetto ai postumi effettivamente accertati.',
-    'Calcoli il CTU l\'eventuale danno differenziale tra la menomazione complessiva valutata secondo il barème civilistico e l\'indennizzo INAIL.',
-    'Accerti il CTU se il datore di lavoro abbia adempiuto agli obblighi di sicurezza previsti dal D.Lgs. 81/2008, con particolare riferimento alla valutazione dei rischi, alla formazione e alla fornitura dei DPI.',
-    'Valuti il CTU la capacità lavorativa specifica e generica residua del periziando, tenuto conto dei postumi permanenti accertati.',
-  ],
   synthesisGuidance: `Nell'analisi dell'infortunio sul lavoro in ambito INAIL, verificare in primo luogo
 la sussistenza dei tre requisiti: causa violenta, occasione di lavoro, lesione.
 Per l'infortunio in itinere, verificare i requisiti specifici: percorso normale, assenza

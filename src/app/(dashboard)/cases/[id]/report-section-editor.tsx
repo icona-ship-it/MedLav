@@ -110,7 +110,6 @@ export function ReportSectionEditor({
             caseId={caseId}
             className="h-full"
             allowedHeadingLevels={[3]}
-            dictationContext={`perizia medico-legale, sezione "${sectionTitle}"`}
           />
         </div>
       </DialogContent>

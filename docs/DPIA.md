@@ -79,9 +79,11 @@ Il trattamento si articola in 8 fasi sequenziali, ciascuna eseguita come step at
 | 6. Rilevamento anomalie | Analisi automatica di 9 tipologie di criticita | Eventi, soglie temporali | Algoritmo deterministico (no LLM) |
 | 7. Generazione sintesi | Produzione del report medico-legale strutturato | Eventi, anomalie, linee guida RAG | Mistral Large (EU), RAG |
 | 8. Finalizzazione | Marcatura completamento, audit log | Metadati caso, log | Supabase (EU) |
-| 9. Dettatura vocale (on-demand, fuori pipeline) | Trascrizione automatica clip audio del perito (≤5 min) per facilitare la compilazione dei campi testuali | Blob audio in transito (no retention), testo trascritto restituito al campo dell'utente | Mistral Voxtral Mini (EU), API sincrona `/v1/audio/transcriptions` |
+| 9. ~~Dettatura vocale (on-demand, fuori pipeline)~~ **CESSATO il 2026-06-10** | Trascrizione automatica clip audio del perito (≤5 min) per facilitare la compilazione dei campi testuali | Blob audio in transito (no retention), testo trascritto restituito al campo dell'utente | Mistral Voxtral Mini (EU), API sincrona `/v1/audio/transcriptions` |
 
 **Nota rilevante**: il rilevamento anomalie (fase 6) e **puramente algoritmico** e basato su soglie temporali configurabili, senza utilizzo di modelli di intelligenza artificiale. Questo garantisce determinismo, verificabilita e trasparenza delle anomalie rilevate.
+
+**Cessazione dettatura vocale (2026-06-10)**: la fase 9 (dettatura vocale Voxtral) e' stata **rimossa dal prodotto** per decisione di prodotto (funzionalita ridondante rispetto alla dettatura nativa dei sistemi operativi). Dal 2026-06-10 **nessun dato audio viene piu trattato ne trasmesso a Mistral**. Poiche l'audio non veniva mai persistito, non esistono dati audio da cancellare; restano in audit log esclusivamente i metadati tecnici storici (durata, lingua, costo) delle dettature effettuate prima della cessazione. Le righe relative alla dettatura nelle sezioni seguenti sono conservate come storia del trattamento e marcate CESSATO.
 
 ### 2.3 Ambito del trattamento
 
@@ -102,7 +104,7 @@ Il trattamento si articola in 8 fasi sequenziali, ciascuna eseguita come step at
 | Dati professionali medici | Art. 4(1) — Dati personali | Nomi dei medici curanti, specializzazioni, strutture sanitarie |
 | Dati utenti piattaforma | Art. 4(1) — Dati personali | Email, nome completo, nome dello studio, indirizzo IP |
 | Dati tecnici | Art. 4(1) — Dati personali | Log di accesso, azioni eseguite, timestamp, indirizzi IP |
-| Dati audio del perito (dettatura) | Art. 4(1) — Dati personali (voce del perito); potenziale Art. 9 se il perito pronuncia dati clinici | Clip audio temporanee (≤5 min) della voce del medico legale, inoltrate a Mistral Voxtral per trascrizione. Mai persistite da LegMed né da Mistral. |
+| ~~Dati audio del perito (dettatura)~~ **CESSATO il 2026-06-10** | Art. 4(1) — Dati personali (voce del perito); potenziale Art. 9 se il perito pronuncia dati clinici | Clip audio temporanee (≤5 min) della voce del medico legale, inoltrate a Mistral Voxtral per trascrizione. Mai persistite da LegMed né da Mistral. Trattamento cessato con la rimozione della funzione. |
 
 #### Volume stimato
 
@@ -136,7 +138,7 @@ I dati sanitari trattati sono per loro natura estremamente sensibili e il report
 | Audit e tracciabilita | Art. 6(1)(c) GDPR | Obbligo legale di garantire accountability e tracciabilita per dati sanitari |
 | Sicurezza del servizio | Art. 6(1)(f) GDPR | Legittimo interesse alla sicurezza informatica e all'integrita dei sistemi |
 | Fatturazione | Art. 6(1)(b) e Art. 6(1)(c) GDPR | Esecuzione contratto e obblighi fiscali |
-| Trascrizione dettatura vocale | Art. 6(1)(b) GDPR | Esecuzione del contratto di servizio: funzione di Speech-to-Text che facilita al perito la compilazione dei campi testuali della perizia |
+| ~~Trascrizione dettatura vocale~~ **CESSATO il 2026-06-10** | Art. 6(1)(b) GDPR | Esecuzione del contratto di servizio: funzione di Speech-to-Text che facilitava al perito la compilazione dei campi testuali della perizia. Funzione rimossa. |
 
 **Finalita espressamente escluse:**
 - Profilazione degli interessati (pazienti);
@@ -152,7 +154,7 @@ I dati sanitari trattati sono per loro natura estremamente sensibili e il report
 | Fornitore | Ruolo | Sede | Data center | DPA | Dati trattati |
 |-----------|-------|------|-------------|-----|---------------|
 | **Supabase Inc.** | Database, storage, autenticazione | USA (sede legale) | **Francoforte, Germania (EU)** | Si (richiesto) | Tutti i dati persistiti |
-| **Mistral AI SAS** | Elaborazione AI (OCR, estrazione, sintesi, dettatura vocale Voxtral) | **Parigi, Francia (EU)** | **EU** | Si (richiesto) | Testo documenti, immagini pagine, clip audio dettatura (in transito, no retention) |
+| **Mistral AI SAS** | Elaborazione AI (OCR, estrazione, sintesi; ~~dettatura vocale Voxtral~~ CESSATA il 2026-06-10) | **Parigi, Francia (EU)** | **EU** | Si (richiesto) | Testo documenti, immagini pagine (in transito, no retention). Clip audio dettatura: flusso cessato il 2026-06-10. |
 | **Vercel Inc.** | Hosting applicazione web | USA (sede legale) | **Francoforte, Germania (EU) — regione fra1** | Si (richiesto) | Codice applicativo, richieste HTTP, log di accesso |
 | **Inngest Inc.** | Orchestrazione job asincroni | USA (sede legale) | Integrato con Vercel EU | Si (richiesto) | Metadati job (ID caso, stato elaborazione; NO dati clinici) |
 | **Stripe Inc.** | Gestione pagamenti | USA/Irlanda | **EU (certificato)** | Si (richiesto) | Dati di fatturazione (NO dati clinici) |
@@ -355,7 +357,7 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | **Probabilita (post misure)** | 1 — Trascurabile |
 | **Rischio residuo** | **2 — TRASCURABILE** |
 
-#### R9 — Trascrizione inesatta o cattura accidentale di dati identificativi nella dettatura vocale
+#### R9 — Trascrizione inesatta o cattura accidentale di dati identificativi nella dettatura vocale — **RISCHIO CESSATO il 2026-06-10** (funzione dettatura vocale rimossa dal prodotto; il flusso audio verso Mistral non esiste piu)
 
 | Parametro | Valore |
 |-----------|--------|
@@ -381,7 +383,7 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | R6 | Data breach | MEDIO-ALTO (8) | BASSO (4) |
 | R7 | Addestramento AI non autorizzato | BASSO (4) | BASSO (4) |
 | R8 | Indisponibilita servizio | BASSO (4) | TRASCURABILE (2) |
-| R9 | Dettatura vocale (trascrizione errata / dati identificativi pronunciati) | MEDIO (6) | BASSO (4) |
+| R9 | Dettatura vocale (trascrizione errata / dati identificativi pronunciati) — CESSATO il 2026-06-10 | MEDIO (6) | CESSATO (0) |
 
 ---
 
@@ -489,10 +491,10 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | Doppio passaggio di estrazione | L'estrazione eventi avviene con chunking intelligente e consolidamento successivo per minimizzare le omissioni | Implementata |
 | Prompt specializzati per ruolo | I prompt variano in base al ruolo del medico legale (CTU: neutrale; CTP: assertivo pro-paziente; stragiudiziale: pragmatico), garantendo output appropriato al contesto | Implementata |
 | Template per tipo di caso | Template specializzati per 7+ tipologie di caso (ortopedica, oncologica, ostetrica, ecc.) che guidano l'estrazione verso le informazioni piu rilevanti | Implementata |
-| Disclaimer dettatura vocale (first-use) | Dialog modale `DictationDisclaimer` mostrato al primo click sul microfono in ciascun browser. Avvisa il perito che l'audio viene trasmesso a Mistral EU senza retention e lo invita a evitare di pronunciare ad alta voce nome/cognome/CF del paziente. Accettazione persistita in localStorage. | Implementata |
-| Cap tecnico clip dettatura | Clip audio limitata a 5 min soft / 10 min hard lato server. Cap di dimensione 5 MB con whitelist MIME e verifica magic-byte. Rate limit Upstash 30 trascrizioni/ora/utente per prevenire abuso e cost runaway. | Implementata |
-| Zero retention audio | Il file audio NON viene salvato da LegMed (nessuna scrittura su Storage o database) e viene processato in memoria server. L'audit log registra solo metadata tecnici (durata, lingua, costo, modello) — MAI il testo trascritto. | Implementata |
-| Supervisione umana trascrizione | Il testo trascritto compare nel campo aperto dall'utente. Il perito deve confermare il salvataggio del campo: nessun testo viene salvato automaticamente. La verifica della trascrizione e in carico al perito. | Design del workflow |
+| Disclaimer dettatura vocale (first-use) | Dialog modale `DictationDisclaimer` mostrato al primo click sul microfono in ciascun browser. Avvisava il perito che l'audio veniva trasmesso a Mistral EU senza retention e lo invitava a evitare di pronunciare ad alta voce nome/cognome/CF del paziente. | CESSATA il 2026-06-10 (funzione rimossa) |
+| Cap tecnico clip dettatura | Clip audio limitata a 5 min soft / 10 min hard lato server. Cap di dimensione 5 MB con whitelist MIME e verifica magic-byte. Rate limit Upstash 30 trascrizioni/ora/utente. | CESSATA il 2026-06-10 (funzione rimossa) |
+| Zero retention audio | Il file audio NON veniva mai salvato da LegMed (nessuna scrittura su Storage o database) e veniva processato in memoria server. L'audit log registrava solo metadata tecnici (durata, lingua, costo, modello) — MAI il testo trascritto. | CESSATA il 2026-06-10 (funzione rimossa; nessun dato audio da cancellare) |
+| Supervisione umana trascrizione | Il testo trascritto compariva nel campo aperto dall'utente, salvato solo su conferma del perito. | CESSATA il 2026-06-10 (funzione rimossa) |
 
 ### 5.8 Misure organizzative — Gestione data breach
 
@@ -632,6 +634,7 @@ La presente DPIA sara **riesaminata e aggiornata**:
 | 1.0 | 11/03/2026 | DPO | Prima redazione completa |
 | 1.1 | 22/05/2026 | DPO | Introduzione dettatura vocale Voxtral (Fase 9 pipeline, rischio R9, misure 5.7) |
 | 1.2 | 10/06/2026 | DPO | Formalizzazione misure 5.8: `docs/PROCEDURA-DATA-BREACH.md` (notifica 72h + incident response plan), `docs/REGISTRO-DATA-BREACH.md` (registro violazioni Art. 33(5), pre-popolato con evento apr 2026); redatta bozza DPA cliente ex Art. 28(3) (`docs/DPA-CLIENTE-TEMPLATE.md`, in attesa di validazione legale) |
+| 1.3 | 10/06/2026 | DPO | **Cessazione dettatura vocale Voxtral** (rimozione funzione su decisione di prodotto): Fase 9 pipeline, categoria dati audio, finalita trascrizione, rischio R9 e misure 5.7 dettatura marcati CESSATO. Nessun dato audio da cancellare (mai persistito); restano in audit log i soli metadati storici. |
 
 ---
 

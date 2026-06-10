@@ -29,13 +29,11 @@ const nextConfig: NextConfig = {
             value: 'strict-origin-when-cross-origin',
           },
           {
-            // microphone=(self): la dettatura vocale (Voxtral) usa getUserMedia
-            // dalle pagine del nostro stesso origin. Con microphone=() il browser
-            // bloccava il microfono a livello di pagina (NotAllowedError, senza
-            // prompt) → la dettatura non funzionava su NESSUN browser. camera e
-            // geolocation restano disabilitati (non usati).
+            // Nessuna feature browser sensibile è usata dall'app: camera,
+            // microfono e geolocalizzazione sono negati a livello di pagina.
+            // (microphone era (self) per la dettatura vocale, rimossa il 2026-06-10.)
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(self), geolocation=()',
+            value: 'camera=(), microphone=(), geolocation=()',
           },
           {
             key: 'Strict-Transport-Security',

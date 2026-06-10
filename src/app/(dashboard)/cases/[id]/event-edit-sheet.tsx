@@ -24,7 +24,6 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { DictationButton } from '@/components/dictation-button';
 import { updateEvent, deleteEvent } from '../../actions';
 import { EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
@@ -215,20 +214,7 @@ function EventEditForm({ event, caseId, onClose, onSaved, onDeleted }: EventEdit
           </div>
 
           <div>
-            <div className="flex items-center justify-between">
-              <Label>Descrizione</Label>
-              <DictationButton
-                size="icon"
-                variant="icon-only"
-                caseId={caseId}
-                contextHint={`evento clinico ${event.event_type ?? ''}, ${form.diagnosis ?? ''}`}
-                onTranscript={(text) => {
-                  const sep = form.description.length > 0 && !form.description.endsWith(' ') ? ' ' : '';
-                  setForm({ ...form, description: `${form.description}${sep}${text}` });
-                }}
-                className="h-7 w-7"
-              />
-            </div>
+            <Label>Descrizione</Label>
             <Textarea
               rows={5}
               value={form.description}
@@ -237,20 +223,7 @@ function EventEditForm({ event, caseId, onClose, onSaved, onDeleted }: EventEdit
           </div>
 
           <div>
-            <div className="flex items-center justify-between">
-              <Label>Note perito</Label>
-              <DictationButton
-                size="icon"
-                variant="icon-only"
-                caseId={caseId}
-                contextHint="annotazione perito medico-legale"
-                onTranscript={(text) => {
-                  const sep = form.expertNotes.length > 0 && !form.expertNotes.endsWith(' ') ? ' ' : '';
-                  setForm({ ...form, expertNotes: `${form.expertNotes}${sep}${text}` });
-                }}
-                className="h-7 w-7"
-              />
-            </div>
+            <Label>Note perito</Label>
             <Textarea
               rows={3}
               value={form.expertNotes}

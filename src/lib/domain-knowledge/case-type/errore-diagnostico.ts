@@ -74,12 +74,6 @@ export const ERRORE_DIAGNOSTICO_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Errore di tipo I e tipo II', definition: 'Errore di tipo I (falso positivo): diagnosi di malattia in soggetto sano. Errore di tipo II (falso negativo): mancata diagnosi in soggetto malato. In ambito medico-legale, l\'errore di tipo II e generalmente piu rilevante per le sue conseguenze.' },
     { term: 'Gold standard diagnostico', definition: 'L\'esame o la procedura di riferimento considerata la piu accurata per confermare o escludere una diagnosi. La mancata esecuzione del gold standard quando indicato puo configurare un errore diagnostico.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se vi sia stato un errore nella diagnosi della patologia in oggetto e, in caso affermativo, se tale errore sia riconducibile a negligenza, imprudenza o imperizia.',
-    'Indichi se gli accertamenti diagnostici eseguiti siano stati adeguati e tempestivi rispetto al quadro clinico presentato dal paziente.',
-    'Valuti quale sarebbe stato l\'iter diagnostico-terapeutico corretto e se una diagnosi tempestiva avrebbe modificato l\'esito clinico.',
-    'Quantifichi il danno biologico permanente e temporaneo derivante dal ritardo o errore diagnostico.',
-  ],
   synthesisGuidance: `Nell'analisi dell'errore diagnostico, ricostruire meticolosamente il percorso diagnostico effettivamente
 seguito, confrontandolo con quello che sarebbe stato indicato sulla base delle linee guida e delle buone
 pratiche cliniche. Classificare l'errore in una delle categorie: errore di omissione (esame non prescritto),

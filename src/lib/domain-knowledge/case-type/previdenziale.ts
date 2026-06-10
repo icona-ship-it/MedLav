@@ -78,12 +78,6 @@ export const PREVIDENZIALE_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Formula di Balthazard', definition: 'Formula matematica per il calcolo dell\'invalidita complessiva in caso di pluripatologia: IV = IV1 + IV2 - (IV1 x IV2). Evita la somma aritmetica che porterebbe a percentuali irrealistiche e tiene conto della residua integrita.' },
     { term: 'Indennita di accompagnamento', definition: 'Provvidenza economica riconosciuta agli invalidi civili totali (100%) che necessitano di assistenza continua per il compimento degli atti quotidiani della vita o che non sono in grado di deambulare senza l\'aiuto permanente di un accompagnatore.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se il periziando sia affetto da infermità tali da determinare una riduzione della capacità lavorativa in occupazioni confacenti alle sue attitudini.',
-    'Quantifichi la percentuale di riduzione della capacità lavorativa, specificando se questa sia superiore ai due terzi (requisito per pensione di inabilità) o al terzo (requisito per assegno ordinario di invalidità).',
-    'Indichi la data di insorgenza dell\'invalidità e se le infermità riscontrate siano suscettibili di miglioramento.',
-    'Valuti la sussistenza dei requisiti sanitari per il riconoscimento della Legge 104/1992 e relativa gravità.',
-  ],
   synthesisGuidance: `Nell'analisi del caso previdenziale, procedere con una valutazione sistematica del quadro
 clinico complessivo del periziando. Documentare ogni patologia con i relativi riscontri
 diagnostici strumentali e la risposta alle terapie in corso. Valutare le limitazioni funzionali

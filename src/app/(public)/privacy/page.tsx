@@ -53,29 +53,12 @@ export default function PrivacyPage() {
 
             <h3 className="text-lg font-medium mt-4">2.3 Dati Tecnici</h3>
             <p>Log di accesso, indirizzi IP (anonimizzati), dati di utilizzo aggregati. Base giuridica: legittimo interesse (Art. 6.1.f GDPR).</p>
-
-            <h3 className="text-lg font-medium mt-4">2.4 Dati Audio (Dettatura Vocale)</h3>
-            <p>
-              Quando l&apos;Utente utilizza la funzione di dettatura vocale, l&apos;audio della
-              registrazione (massimo 5 minuti per clip) viene inoltrato a Mistral AI (servizio
-              Voxtral) per la trascrizione automatica. <strong>L&apos;audio NON viene conservato</strong>:
-              né da LegMed (nessun salvataggio su Storage o database), né da Mistral dopo
-              l&apos;elaborazione (zero retention contrattuale).
-            </p>
-            <p className="mt-2">
-              Base giuridica: esecuzione del contratto di servizio (Art. 6.1.b GDPR). Il perito
-              è invitato, tramite un avviso al primo utilizzo, a evitare di pronunciare ad alta
-              voce identificatori diretti del paziente (nome, codice fiscale). Nel registro
-              accessi (audit log) sono conservati esclusivamente metadati tecnici (durata,
-              lingua rilevata, costo); il testo trascritto NON viene mai loggato.
-            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold">3. Finalità del Trattamento</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li>Erogazione del Servizio (analisi documenti, generazione report)</li>
-              <li>Trascrizione automatica di dettatura vocale del perito (Mistral Voxtral)</li>
               <li>Gestione account e autenticazione</li>
               <li>Fatturazione e gestione abbonamenti</li>
               <li>Miglioramento del Servizio (dati aggregati e anonimizzati)</li>
@@ -92,7 +75,7 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Database:</strong> Supabase EU (Francoforte)</li>
-              <li><strong>AI Processing:</strong> Mistral AI (Parigi, Francia — server EU), incluso servizio Voxtral per la dettatura vocale</li>
+              <li><strong>AI Processing:</strong> Mistral AI (Parigi, Francia — server EU)</li>
               <li><strong>Hosting:</strong> Vercel (regione fra1, Francoforte)</li>
               <li><strong>Pagamenti:</strong> Stripe (certificato EU)</li>
             </ul>
@@ -141,17 +124,9 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold">8. Utilizzo di AI</h2>
             <p>
               Il Servizio utilizza modelli di intelligenza artificiale (Mistral AI) per
-              l&apos;analisi dei documenti e per la dettatura vocale del perito. I dati sono
-              elaborati in tempo reale e <strong>non vengono utilizzati per l&apos;addestramento
-              di modelli AI</strong>. L&apos;elaborazione avviene su server europei di Mistral AI
-              (Parigi).
-            </p>
-            <p className="mt-2">
-              Per la <strong>dettatura vocale (Voxtral)</strong> in particolare: l&apos;audio
-              viene trasmesso a Mistral solo per la trascrizione e non viene conservato; il
-              testo trascritto compare nel campo aperto dal perito e viene salvato solo se
-              l&apos;utente lo conferma. Il perito è responsabile della verifica della
-              trascrizione prima dell&apos;utilizzo, come per qualunque testo immesso nel report.
+              l&apos;analisi dei documenti. I dati sono elaborati in tempo reale e
+              <strong> non vengono utilizzati per l&apos;addestramento di modelli AI</strong>.
+              L&apos;elaborazione avviene su server europei di Mistral AI (Parigi).
             </p>
             <p className="mt-2">
               Per dettagli completi sull&apos;uso dell&apos;intelligenza artificiale (modelli, ruolo del

@@ -93,30 +93,6 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">5.A Dettatura Vocale</h2>
-            <p>
-              Il Servizio offre una funzione di dettatura vocale che inoltra l&apos;audio della
-              registrazione a Mistral AI (server in Unione Europea) tramite il modello Voxtral
-              esclusivamente per la trascrizione automatica. L&apos;audio non viene conservato dal
-              Fornitore (nessun salvataggio su storage o database) né, contrattualmente, da
-              Mistral dopo l&apos;elaborazione.
-            </p>
-            <p className="mt-2">
-              L&apos;Utente è invitato a non pronunciare ad alta voce dati identificativi diretti
-              del paziente (nome, cognome, codice fiscale) e si assume la responsabilità del
-              contenuto dettato. La trascrizione automatica può contenere errori: l&apos;Utente è
-              tenuto a verificarla prima di salvarla nel report, come per qualunque altro testo
-              immesso manualmente.
-            </p>
-            <p className="mt-2">
-              Per ridurre il rischio di abuso o costi imprevisti, il Servizio applica un limite
-              tecnico massimo di 5 minuti per singola clip e un limite di 30 trascrizioni per
-              ora per Utente. Maggiori dettagli su{' '}
-              <Link href="/info-ai" className="text-primary underline">Trasparenza AI</Link>.
-            </p>
-          </section>
-
-          <section>
             <h2 className="text-xl font-semibold">6. Piani e Pagamenti</h2>
             <p>
               Il Servizio offre diversi piani di abbonamento. I dettagli aggiornati sono disponibili

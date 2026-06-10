@@ -64,16 +64,6 @@ LegMed è una web application per **medici legali** (CTU, CTP, stragiudiziale) c
 - **Tab Report**: report medico-legale con export (HTML, CSV, DOCX) + avviso dati incompleti + checklist "Prossimi Passi"
 - **Tab Problemi**: anomalie rilevate + documentazione mancante (tab unificato)
 
-### 5. Dettatura vocale
-
-In tutti i campi testuali lunghi dell'app (editor del report, esame obiettivo + quesiti del giudice in perizia-form, descrizione + note evento, nota anomalia) e' disponibile un pulsante microfono per la dettatura vocale.
-
-- **Modello**: Mistral Voxtral Mini (server EU, multilingua auto-detect IT/DE/EN + altre 10 lingue).
-- **UX**: click per iniziare, click di nuovo per fermare. Auto-stop a 5 minuti. ESC durante registrazione = annulla senza inviare.
-- **Avviso GDPR**: al primo utilizzo viene mostrato un disclaimer che invita a evitare di pronunciare nome/cognome/codice fiscale del paziente.
-- **Privacy**: l'audio NON viene salvato (ne' da LegMed, ne' da Mistral). Solo metadati tecnici (durata/lingua/costo) finiscono nell'audit log.
-- **Costo**: 1 credito per clip (indipendente dalla durata, cap 5 minuti).
-
 ---
 
 # PARTE TECNICA — Backend di Analisi

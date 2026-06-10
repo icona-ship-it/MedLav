@@ -106,13 +106,6 @@ export const ORTOPEDICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Vizio di consolidazione', definition: 'Guarigione della frattura in posizione non anatomica (angolazione, rotazione, accorciamento) con possibili conseguenze funzionali permanenti.' },
     { term: 'ROM (Range of Motion)', definition: 'Ampiezza del movimento articolare, misurata in gradi. La limitazione del ROM e un parametro fondamentale per la quantificazione del danno biologico permanente.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU, visitato il periziando ed esaminata la documentazione in atti, la natura e l\'entità delle lesioni riportate, i postumi permanenti residuati e il nesso causale con l\'evento in oggetto.',
-    'Indichi se nella condotta dei sanitari che ebbero a prestare le cure al paziente vi siano stati profili di colpa professionale per negligenza, imprudenza, imperizia o inosservanza di linee guida e buone pratiche clinico-assistenziali.',
-    'Quantifichi il danno biologico permanente e temporaneo (ITT e ITP) patito dal periziando in conseguenza dei fatti per cui è causa.',
-    'Accerti se il periziando abbia subito un danno da invalidità temporanea, specificandone la durata e il grado.',
-    'Valuti la necessità di cure future e la relativa spesa prevedibile.',
-  ],
   synthesisGuidance: `Nell'analisi del caso ortopedico, focalizzare l'attenzione sulla conformita della tecnica chirurgica
 alle linee guida SIOT e alle buone pratiche cliniche consolidate. Verificare l'appropriatezza
 dell'indicazione chirurgica, la scelta dei materiali e delle protesi, e la corretta esecuzione tecnica.

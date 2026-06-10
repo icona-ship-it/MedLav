@@ -76,12 +76,6 @@ export default function InfoAiPage() {
                 <strong>Analisi immagini diagnostiche</strong>: descrizione automatica di referti
                 radiologici allegati (RX, TAC, RM).
               </li>
-              <li>
-                <strong>Dettatura vocale</strong>: trascrizione automatica di registrazioni audio
-                del perito (massimo 5 minuti per clip) tramite il modello Mistral Voxtral.
-                L&apos;audio NON viene conservato; il testo trascritto compare nel campo aperto
-                dal perito e viene salvato solo se l&apos;utente lo conferma.
-              </li>
             </ul>
           </section>
 
@@ -116,15 +110,10 @@ export default function InfoAiPage() {
                   <td className="px-3 py-2">Classificazione documentale</td>
                   <td className="px-3 py-2 text-muted-foreground">Mistral Small 4 (mar. 2026)</td>
                 </tr>
-                <tr className="border-b border-border">
+                <tr>
                   <td className="px-3 py-2"><code className="text-xs">mistral-embed</code></td>
                   <td className="px-3 py-2">Ricerca semantica linee guida</td>
                   <td className="px-3 py-2 text-muted-foreground">Mistral Embed</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-2"><code className="text-xs">voxtral-mini-latest</code></td>
-                  <td className="px-3 py-2">Dettatura vocale del perito (Speech-to-Text)</td>
-                  <td className="px-3 py-2 text-muted-foreground">Mistral Voxtral Mini (gen. 2026)</td>
                 </tr>
               </tbody>
             </table>
@@ -185,54 +174,6 @@ export default function InfoAiPage() {
             <p className="mt-3">
               Ogni report esportato da LegMed riporta un disclosure trasparenza in calce, conformemente
               all&apos;art. 50 del Regolamento UE 2024/1689 (AI Act).
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold">6A. Dettatura vocale — aspetti particolari</h2>
-            <p>
-              La funzione di dettatura vocale utilizza Mistral Voxtral per trasformare in testo
-              l&apos;audio registrato dal perito (tipicamente: SOGGETTIVO/OBIETTIVO della visita,
-              quesiti del giudice, considerazioni medico-legali, note libere).
-            </p>
-            <ul className="list-disc pl-6 space-y-1 mt-2">
-              <li>
-                <strong>Nessuna persistenza dell&apos;audio</strong>: il file audio viene inoltrato
-                a Mistral solo per la trascrizione e non viene mai salvato da LegMed (nessun
-                upload su Storage, nessuna riga in database). Mistral non conserva l&apos;audio
-                dopo l&apos;elaborazione (zero retention contrattuale).
-              </li>
-              <li>
-                <strong>Audit log metadata-only</strong>: nel registro accessi compaiono solo
-                durata della clip, lingua rilevata, costo e modello utilizzato. <strong>Il testo
-                trascritto NON viene mai loggato</strong> e vive solo nel campo testuale aperto
-                dall&apos;utente, finché non lo salva volontariamente nel report.
-              </li>
-              <li>
-                <strong>Avviso al primo utilizzo</strong>: al primo click sul microfono il perito
-                visualizza un disclaimer che lo invita a evitare di pronunciare ad alta voce dati
-                direttamente identificativi del paziente (nome, codice fiscale).
-              </li>
-              <li>
-                <strong>Limiti operativi</strong>: clip cappata a 5 minuti soft / 10 minuti hard
-                lato server; rate limit di 30 trascrizioni per ora per utente; whitelist di formati
-                audio accettati con verifica magic-byte server-side.
-              </li>
-              <li>
-                <strong>Multilingua</strong>: rilevamento automatico della lingua (italiano,
-                tedesco, inglese — Voxtral supporta 13 lingue), senza preferenze impostate
-                dall&apos;utente.
-              </li>
-              <li>
-                <strong>Responsabilità del perito</strong>: la trascrizione automatica può
-                contenere errori (omofonie, terminologia specialistica, accenti). Il perito è
-                tenuto a verificare il testo prima di salvarlo, come per qualunque altro contenuto
-                immesso manualmente.
-              </li>
-            </ul>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Base giuridica: esecuzione del contratto di servizio (Art. 6.1.b GDPR). Decisione
-              tecnica documentata in ADR-015 (Architecture Decisions).
             </p>
           </section>
 

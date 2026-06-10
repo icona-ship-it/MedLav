@@ -146,6 +146,4 @@ export const RATE_LIMITS = {
   PROCESSING: { limit: 20, windowMs: 60_000 },
   /** General API: 200 requests per minute (export, search, classify, regenerate) */
   API: { limit: 200, windowMs: 60_000 },
-  /** Voice dictation (Voxtral): 30 transcriptions per hour per user — protects against cost runaway */
-  DICTATION: { limit: 30, windowMs: 60 * 60_000 },
 } as const;

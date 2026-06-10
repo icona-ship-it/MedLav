@@ -214,7 +214,7 @@ export function CaseDetailClient({
   const [activeStep, setActiveStep] = useState(autoStep);
   const userNavigatedRef = useRef(false);
   const prevAutoStepRef = useRef(autoStep);
-  // Set by PeriziaMetadataForm while it has unsaved edits (dictation, anamnesi...).
+  // Set by PeriziaMetadataForm while it has unsaved edits (anamnesi, quesiti...).
   // Ref (not state): read inside the auto-advance effect without re-triggering it.
   const periziaFormDirtyRef = useRef(false);
 

@@ -83,12 +83,6 @@ export const ANESTESIOLOGICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'BIS (Bispectral Index)', definition: 'Indice derivato dall\'analisi dell\'elettroencefalogramma utilizzato per monitorare la profondita dell\'anestesia (0-100). Valori tra 40 e 60 indicano un\'adeguata profondita anestesiologica.' },
     { term: 'Capnografia', definition: 'Monitoraggio continuo della concentrazione di CO2 nell\'aria espirata (EtCO2). Parametro essenziale per verificare il corretto posizionamento del tubo endotracheale e l\'adeguatezza della ventilazione.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se la valutazione pre-operatoria anestesiologica sia stata adeguata e conforme alle linee guida SIAARTI.',
-    'Indichi se la tecnica anestesiologica adottata e il monitoraggio intra-operatorio siano stati appropriati al tipo di intervento e alle condizioni cliniche del paziente.',
-    'Valuti se le complicanze anestesiologiche verificatesi siano state gestite in modo tempestivo e conforme alle buone pratiche cliniche.',
-    'Quantifichi il danno biologico permanente e temporaneo patito dal periziando in conseguenza della condotta anestesiologica.',
-  ],
   synthesisGuidance: `Nell'analisi del caso anestesiologico, verificare innanzitutto l'adeguatezza della valutazione
 preoperatoria: classificazione ASA, valutazione delle vie aeree (Mallampati, distanza tiro-mentoniera,
 apertura buccale), identificazione di fattori di rischio specifici e completezza del consenso informato

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateTokenCost,
   calculateOcrCost,
-  calculateAudioCost,
   createEmptyUsage,
   mergeUsage,
   buildPipelineSummary,
@@ -30,27 +29,6 @@ describe('calculateOcrCost', () => {
   it('charges $0.001 per page', () => {
     expect(calculateOcrCost(1000)).toBeCloseTo(1, 6);
     expect(calculateOcrCost(0)).toBe(0);
-  });
-});
-
-describe('calculateAudioCost', () => {
-  it('computes Voxtral cost at $0.003 per minute', () => {
-    expect(calculateAudioCost('voxtral-mini-latest', 60)).toBeCloseTo(0.003, 6);
-    expect(calculateAudioCost('voxtral-mini-latest', 600)).toBeCloseTo(0.03, 6);
-  });
-
-  it('returns 0 for unknown audio model', () => {
-    expect(calculateAudioCost('not-a-model', 60)).toBe(0);
-  });
-
-  it('returns 0 for non-positive duration', () => {
-    expect(calculateAudioCost('voxtral-mini-latest', 0)).toBe(0);
-    expect(calculateAudioCost('voxtral-mini-latest', -5)).toBe(0);
-  });
-
-  it('rounds to 4 decimals so micro-costs stay readable', () => {
-    // 1 second = $0.00005 → rounded to $0.0001 (4 decimals)
-    expect(calculateAudioCost('voxtral-mini-latest', 1)).toBe(0.0001);
   });
 });
 

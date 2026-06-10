@@ -43,7 +43,7 @@ d) il presente Accordo ("**DPA**") e parte integrante del Contratto Principale e
 
 1.3. **Natura**: raccolta (upload), conservazione, organizzazione, strutturazione, estrazione, consultazione, elaborazione automatizzata (OCR e modelli linguistici), pseudonimizzazione, comunicazione al Titolare, cancellazione.
 
-1.4. **Finalita**: esclusivamente la fornitura al Titolare delle funzionalita della piattaforma (generazione di bozze di report medico-legali, cronologia eventi, rilevamento anomalie, calcoli, export, dettatura vocale), su istruzione del Titolare. Sono espressamente **escluse**: profilazione degli Interessati, analytics su dati clinici, addestramento di modelli di intelligenza artificiale con i dati del Titolare, cessione a terzi per qualunque finalita propria di LegMed o di terzi, marketing.
+1.4. **Finalita**: esclusivamente la fornitura al Titolare delle funzionalita della piattaforma (generazione di bozze di report medico-legali, cronologia eventi, rilevamento anomalie, calcoli, export), su istruzione del Titolare. Sono espressamente **escluse**: profilazione degli Interessati, analytics su dati clinici, addestramento di modelli di intelligenza artificiale con i dati del Titolare, cessione a terzi per qualunque finalita propria di LegMed o di terzi, marketing.
 
 1.5. **Processo decisionale automatizzato**: il trattamento non comporta decisioni basate unicamente sul trattamento automatizzato ai sensi dell'Art. 22 GDPR. Ogni output della piattaforma e materiale preparatorio soggetto a revisione, correzione e approvazione del Titolare.
 
@@ -59,7 +59,6 @@ d) il presente Accordo ("**DPA**") e parte integrante del Contratto Principale e
 | Dati identificativi dei pazienti | Art. 4(1) | Iniziali (pseudonimizzate come campo strutturato), date di nascita, codici fiscali e nominativi ove presenti nei documenti caricati |
 | Dati di terzi citati nella documentazione | Art. 4(1) | Nomi e qualifiche di medici curanti, strutture sanitarie, familiari, testimoni |
 | Dati giudiziari eventualmente presenti nei documenti caricati | Art. 10 (ove ricorrano) | Riferimenti a procedimenti penali contenuti nella documentazione di causa |
-| Dati audio del Titolare (dettatura vocale) | Art. 4(1); potenziale Art. 9 se pronunciati dati clinici | Clip audio temporanee (max 5 min), mai persistite |
 
 2.2. **Categorie di Interessati**: pazienti oggetto di perizia; terzi citati nella documentazione clinica e di causa (medici, familiari, testimoni, altre parti).
 
@@ -193,7 +192,6 @@ d) il presente Accordo ("**DPA**") e parte integrante del Contratto Principale e
 | Consolidamento e anomalie | Ordinamento, deduplicazione, rilevamento anomalie (algoritmico, senza AI) | Eventi strutturati | Infrastruttura LegMed (UE) |
 | Analisi immagini | Analisi di immagini diagnostiche | Immagini cliniche | Mistral Pixtral (UE) — zero retention |
 | Generazione report | Produzione della bozza di report medico-legale | Eventi, anomalie, calcoli, linee guida | Mistral Large (UE) — zero retention |
-| Dettatura vocale (opzionale) | Trascrizione di clip audio del Titolare (max 5 min) | Audio in transito, mai persistito | Mistral Voxtral (UE) — zero retention |
 | Conservazione | Persistenza di documenti, testi OCR, eventi, report | Tutti i dati del caso | Supabase PostgreSQL + Storage (Francoforte, UE) |
 | Export e cancellazione | Restituzione (HTML/DOCX/CSV/JSON) e cancellazione on-demand o automatica | Tutti i dati del caso | Infrastruttura LegMed (UE) |
 
@@ -228,7 +226,7 @@ Sintesi delle misure; il dettaglio completo e mantenuto nella DPIA di LegMed (di
 | Sub-responsabile | Servizio | Sede legale | Regione di trattamento dati | Dati trattati | DPA pubblico |
 |------------------|----------|-------------|------------------------------|---------------|--------------|
 | Supabase, Inc. | Database PostgreSQL, storage file, autenticazione | USA | **UE — Francoforte (Germania)** | Tutti i dati persistiti (documenti, testi OCR, eventi, report) | https://supabase.com/legal/dpa |
-| Mistral AI SAS | Elaborazione AI: OCR, estrazione, sintesi, analisi immagini, dettatura | **Francia (UE)** | **UE** | Testo e immagini dei documenti, audio dettatura — in transito, zero retention | https://mistral.ai/terms/#data-processing-agreement |
+| Mistral AI SAS | Elaborazione AI: OCR, estrazione, sintesi, analisi immagini | **Francia (UE)** | **UE** | Testo e immagini dei documenti — in transito, zero retention | https://mistral.ai/terms/#data-processing-agreement |
 | Vercel, Inc. | Hosting applicazione web | USA | **UE — Francoforte (regione fra1)** | Richieste HTTP, log di accesso | https://vercel.com/legal/dpa |
 | Inngest, Inc. | Orchestrazione job asincroni | USA | Integrato con hosting UE | **Solo metadati job** (ID caso, stato) — nessun dato clinico | DPA su richiesta (https://www.inngest.com/security) |
 | Upstash, Inc. | Rate limiting (Redis) | USA | **UE — eu-central-1 Francoforte** | Contatori tecnici di rate limiting — nessun dato clinico | https://upstash.com/trust |

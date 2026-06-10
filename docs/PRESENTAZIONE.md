@@ -54,7 +54,6 @@ Il medico legale riceve:
 | **Export multi-formato** | DOCX per le relazioni, CSV per analisi dati, HTML per consultazione rapida |
 | **Tracciamento elaborazione** | Barra di progresso che mostra in tempo reale lo stato dell'analisi |
 | **Annullamento** | Possibilita di annullare un'elaborazione in qualsiasi momento |
-| **Dettatura vocale** | Pulsante microfono in tutti i campi testo lunghi (esame obiettivo, considerazioni, quesiti, note). Trascrizione automatica multilingua via Mistral Voxtral, audio mai conservato |
 
 ---
 

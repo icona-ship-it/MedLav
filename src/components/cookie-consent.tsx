@@ -46,7 +46,7 @@ export function CookieConsent() {
         <p className="text-sm text-muted-foreground">
           Questo sito utilizza cookie tecnici necessari al funzionamento del servizio.
           Non utilizziamo cookie di profilazione. I dati sanitari sono trattati in conformità al GDPR (Art. 9).
-          Documenti e dettatura vocale sono elaborati da Mistral AI (server EU) e non sono conservati dopo l&apos;elaborazione.
+          I documenti sono elaborati da Mistral AI (server EU) e non sono conservati dopo l&apos;elaborazione.
           Dettagli su <a href="/privacy" className="underline hover:text-foreground">Privacy</a>{' '}
           e <a href="/info-ai" className="underline hover:text-foreground">Trasparenza AI</a>.
         </p>

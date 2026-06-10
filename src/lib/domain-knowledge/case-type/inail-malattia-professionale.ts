@@ -120,14 +120,6 @@ export const INAIL_MALATTIA_PROF_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Concause extraprofessionali', definition: 'Fattori non lavorativi che concorrono alla determinazione della patologia (predisposizione individuale, abitudini voluttuarie, patologie preesistenti). In ambito INAIL, la concausa non esclude il riconoscimento se l\'esposizione lavorativa ha avuto efficienza causale.' },
     { term: 'Sorveglianza sanitaria (D.Lgs. 81/2008)', definition: 'Attività del medico competente finalizzata alla tutela della salute dei lavoratori esposti a rischi professionali. Comprende visite preventive, periodiche, su richiesta e per cambio mansione. La cartella sanitaria e di rischio documenta l\'evoluzione dello stato di salute.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se la patologia riscontrata nel periziando sia riconducibile con ragionevole probabilità all\'esposizione lavorativa, specificando l\'agente patogeno, la durata e l\'intensità dell\'esposizione.',
-    'Indichi il CTU se la malattia sia tabellata o non tabellata ai sensi delle vigenti tabelle INAIL, e valuti la sussistenza del nesso causale con l\'attività lavorativa svolta.',
-    'Quantifichi il CTU il danno biologico permanente secondo le tabelle allegate al D.Lgs. 38/2000, specificando i periodi di inabilità temporanea assoluta e relativa.',
-    'Valuti il CTU l\'eventuale danno differenziale tra la menomazione complessiva (barème civilistico) e l\'indennizzo INAIL, ove venga in rilievo la responsabilità datoriale.',
-    'Accerti il CTU se il datore di lavoro abbia adempiuto agli obblighi di prevenzione e sorveglianza sanitaria previsti dal D.Lgs. 81/2008.',
-    'Indichi il CTU se la patologia sia suscettibile di aggravamento e se sussistano i presupposti per la revisione ai sensi dell\'art. 137 D.P.R. 1124/1965.',
-  ],
   synthesisGuidance: `Nell'analisi della malattia professionale, il nodo centrale è la dimostrazione del nesso
 di causalità tra l'esposizione lavorativa e la patologia diagnosticata.
 Per malattie tabellate: verificare che la patologia rientri nelle tabelle vigenti (D.M. 09/04/2008),

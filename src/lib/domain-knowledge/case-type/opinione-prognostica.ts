@@ -128,12 +128,6 @@ export const OPINIONE_PROGNOSTICA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Prognosi quoad valetudinem', definition: 'Previsione relativa al recupero funzionale del paziente e alla presenza di postumi permanenti. Si distingue dalla prognosi quoad vitam (relativa alla sopravvivenza).' },
     { term: 'Danno biologico provvisorio', definition: 'Stima del danno biologico permanente espressa come range percentuale in attesa della stabilizzazione dei postumi. Ha natura necessariamente approssimativa e deve essere accompagnata dal livello di confidenza.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU lo stato clinico attuale del periziando e la probabile evoluzione delle patologie riscontrate.',
-    'Indichi se le condizioni cliniche del periziando siano suscettibili di miglioramento, stabilizzazione o peggioramento.',
-    'Fornisca una prognosi quoad vitam e quoad valetudinem, indicando le basi scientifiche a supporto.',
-    'Valuti la necessità di trattamenti futuri e la loro incidenza sulla qualità di vita del periziando.',
-  ],
   synthesisGuidance: `Nell'opinione prognostica, l'obiettivo principale e fornire una previsione attendibile
 dell'evoluzione delle lesioni e del danno biologico atteso a stabilizzazione, utile alla
 compagnia assicurativa per la determinazione della riserva sinistri.

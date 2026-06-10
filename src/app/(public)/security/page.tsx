@@ -106,9 +106,8 @@ export default function SecurityPage() {
             <div className="rounded-xl border p-6 space-y-3">
               <p className="text-sm text-muted-foreground">
                 I documenti caricati sono elaborati da Mistral AI (Parigi, Francia) per l&apos;analisi OCR
-                e la generazione di report. La funzione di dettatura vocale utilizza Mistral Voxtral,
-                sempre su infrastruttura EU. I dati sono trasmessi in modo sicuro via TLS e vengono
-                elaborati in tempo reale senza conservazione permanente sui server di Mistral.
+                e la generazione di report, su infrastruttura EU. I dati sono trasmessi in modo sicuro
+                via TLS e vengono elaborati in tempo reale senza conservazione permanente sui server di Mistral.
               </p>
               <p className="text-sm text-muted-foreground">
                 <strong>I dati degli utenti non vengono mai utilizzati per l&apos;addestramento di modelli AI.</strong>

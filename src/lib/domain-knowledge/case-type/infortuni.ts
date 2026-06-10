@@ -100,12 +100,6 @@ export const INFORTUNI_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Infortunio in itinere', definition: 'Infortunio occorso durante il normale percorso di andata e ritorno dal luogo di lavoro (art. 12 D.Lgs. 38/2000). Tutelato dall\'INAIL salvo deviazioni non necessitate e interruzioni non dovute a esigenze essenziali.' },
     { term: 'D.Lgs. 81/2008 (TU Sicurezza)', definition: 'Testo Unico sulla salute e sicurezza nei luoghi di lavoro. Disciplina gli obblighi del datore di lavoro in materia di prevenzione, valutazione dei rischi, formazione, sorveglianza sanitaria e fornitura dei DPI. La sua violazione puo fondare la responsabilita datoriale.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se le patologie riscontrate nel periziando siano causalmente riconducibili all\'attività lavorativa svolta e/o alle condizioni dell\'ambiente di lavoro.',
-    'Indichi se il datore di lavoro abbia adempiuto agli obblighi di sicurezza previsti dal D.Lgs. 81/2008 e dalle normative specifiche di settore.',
-    'Quantifichi il danno biologico permanente e temporaneo, il danno differenziale rispetto a quanto indennizzato dall\'INAIL.',
-    'Valuti la riduzione della capacità lavorativa specifica e generica del periziando.',
-  ],
   synthesisGuidance: `Nell'analisi del caso di infortunio sul lavoro o malattia professionale, l'attenzione primaria
 va posta sul nesso causale tra l'attivita lavorativa e le lesioni o patologie documentate.
 Ricostruire dettagliatamente la dinamica dell'infortunio o le caratteristiche dell'esposizione

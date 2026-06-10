@@ -115,14 +115,6 @@ export const PREVIDENZIALE_INV_CIVILE_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Pensione di inabilità (L. 222/1984)', definition: 'Prestazione previdenziale INPS per lavoratori con assoluta e permanente impossibilità a svolgere qualsiasi attività lavorativa. Richiede stesso requisito contributivo dell\'assegno ordinario. Non compatibile con attività lavorativa.' },
     { term: 'Capacità lavorativa generica vs specifica', definition: 'Generica: idoneità a svolgere attività lavorative confacenti alle proprie attitudini (rilevante per invalidità civile e L. 222). Specifica: idoneità alla mansione lavorativa abituale (rilevante per inidoneità al lavoro). La valutazione previdenziale considera primariamente la generica.' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se il periziando sia affetto da infermità tali da determinare una riduzione della capacità lavorativa in misura superiore ai 2/3 (requisito pensione di inabilità L. 222/1984) ovvero a 1/3 (requisito assegno ordinario di invalidità).',
-    'Quantifichi il CTU la percentuale di invalidità civile del periziando, con riferimento alle tabelle del D.M. 05/02/1992, specificando le singole menomazioni e la percentuale complessiva calcolata con la formula di Balthazard.',
-    'Accerti il CTU se il periziando sia persona non in grado di deambulare senza l\'aiuto permanente di un accompagnatore, ovvero non in grado di compiere gli atti quotidiani della vita senza assistenza continua (L. 18/1980).',
-    'Valuti il CTU la sussistenza dei requisiti sanitari per il riconoscimento dell\'handicap grave ai sensi dell\'art. 3 comma 3 della L. 104/1992.',
-    'Indichi il CTU la data di insorgenza dell\'invalidità e se le infermità riscontrate siano suscettibili di miglioramento o di aggravamento.',
-    'Accerti il CTU se il periziando sia affetto da cecità totale o parziale ai sensi della L. 138/2001, ovvero da sordità ai sensi della L. 381/1970.',
-  ],
   synthesisGuidance: `Nell'analisi del caso previdenziale (invalidità civile, accompagnamento, L. 104, L. 222),
 procedere con una valutazione sistematica e rigorosa di ogni patologia documentata.
 Per ciascuna infermità: identificare la voce tabellare corrispondente nelle tabelle del

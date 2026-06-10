@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
-  Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info, FileText,
+  Loader2, ArrowRight, X, Plus, ChevronDown, ChevronRight, CheckCircle2, Info,
   AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,19 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { updateCase, getReportSectionOptions, getLastPeritoDefaults } from '../../actions';
 import { ReportSectionsPicker } from './report-sections-picker';
 import { usePeriziaDraft } from './use-perizia-draft';
 import { mergeDraftForm, formatDraftAge, type PeriziaDraft } from '@/lib/perizia-draft-storage';
 import { isValidItalianDate } from '@/lib/validators/date-format';
-import { getQuestiTemplates } from '@/lib/domain-knowledge';
-import { CASE_TYPES } from '@/lib/constants';
-import type { CaseType } from '@/types';
 import type { CaseData, PeriziaMetadataUI } from './types';
-import { DictationButton } from '@/components/dictation-button';
 import { computeBMI } from '@/services/synthesis/anamnesi-template';
 
 // --- Section config ---
@@ -113,33 +106,18 @@ function HeaderDateInput({
   );
 }
 
-/** Campo textarea con dettatura vocale, riusato per le sottosezioni anamnesi. */
+/** Campo textarea con label, riusato per le sottosezioni anamnesi. */
 function AnamnesiTextarea({
-  label, value, caseId, contextHint, placeholder, onChange,
+  label, value, placeholder, onChange,
 }: {
   label: string;
   value: string;
-  caseId: string;
-  contextHint: string;
   placeholder: string;
   onChange: (text: string) => void;
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between gap-2">
-        <Label>{label}</Label>
-        <DictationButton
-          size="icon"
-          variant="icon-only"
-          caseId={caseId}
-          contextHint={contextHint}
-          onTranscript={(text) => {
-            const sep = value.length > 0 && !value.endsWith('\n') ? '\n' : '';
-            onChange(`${value}${sep}${text}`);
-          }}
-          className="h-7 w-7"
-        />
-      </div>
+      <Label>{label}</Label>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -716,22 +694,9 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'esameObiettivo' && (
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-xs text-muted-foreground flex-1">
-                        Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
-                      </p>
-                      <DictationButton
-                        size="sm"
-                        variant="icon-label"
-                        caseId={caseId}
-                        contextHint="esame obiettivo medico-legale, soggettivo, obiettivo, periziando"
-                        onTranscript={(text) => {
-                          const prev = form.esameObiettivo ?? '';
-                          const sep = prev.length > 0 && !prev.endsWith('\n') ? '\n' : '';
-                          setForm({ ...form, esameObiettivo: `${prev}${sep}${text}` });
-                        }}
-                      />
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
+                    </p>
                     <Textarea
                       value={form.esameObiettivo ?? ''}
                       onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
@@ -761,96 +726,36 @@ export function PeriziaMetadataForm({
                       </div>
                     ))}
                     <div className="space-y-2">
-                      <div className="relative">
-                        <Textarea
-                          value={newQuesito}
-                          onChange={(e) => setNewQuesito(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey && newQuesito.trim()) {
-                              e.preventDefault();
-                              addQuesito();
-                            }
-                          }}
-                          placeholder={`Quesito ${quesiti.length + 1}: inserisci il testo del quesito...`}
-                          className="min-h-[80px] pr-12"
-                        />
-                        <div className="absolute right-2 top-2">
-                          <DictationButton
-                            size="icon"
-                            variant="icon-only"
-                            caseId={caseId}
-                            contextHint="quesito del giudice, perizia, responsabilita medica"
-                            onTranscript={(text) => {
-                              const sep = newQuesito.length > 0 && !newQuesito.endsWith(' ') ? ' ' : '';
-                              setNewQuesito(`${newQuesito}${sep}${text}`);
-                            }}
-                            className="h-7 w-7"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={addQuesito}
-                          disabled={!newQuesito.trim() || quesiti.length >= 20}
-                        >
-                          <Plus className="mr-1 h-3 w-3" />
-                          Aggiungi quesito
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" disabled={quesiti.length >= 20}>
-                              <FileText className="mr-1 h-3 w-3" />
-                              Carica template
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-72 max-h-64 overflow-y-auto">
-                            {CASE_TYPES.map((ct) => (
-                              <DropdownMenuItem
-                                key={ct.value}
-                                onClick={() => {
-                                  const templates = getQuestiTemplates(ct.value as CaseType);
-                                  if (templates.length === 0) return;
-                                  const newItems = [...templates].filter((t) => !quesiti.includes(t));
-                                  if (newItems.length === 0) {
-                                    toast.info('Questi quesiti sono già presenti');
-                                    return;
-                                  }
-                                  const remaining = 20 - quesiti.length;
-                                  const toAdd = newItems.slice(0, remaining);
-                                  setQuesiti([...quesiti, ...toAdd]);
-                                  toast.success(`${toAdd.length} quesiti caricati da "${ct.label}"`);
-                                }}
-                              >
-                                {ct.label}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      <Textarea
+                        value={newQuesito}
+                        onChange={(e) => setNewQuesito(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && newQuesito.trim()) {
+                            e.preventDefault();
+                            addQuesito();
+                          }
+                        }}
+                        placeholder={`Quesito ${quesiti.length + 1}: inserisci il testo del quesito...`}
+                        className="min-h-[80px]"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addQuesito}
+                        disabled={!newQuesito.trim() || quesiti.length >= 20}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Aggiungi quesito
+                      </Button>
                     </div>
                   </div>
                 )}
 
                 {section.id === 'ilFatto' && (
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-xs text-muted-foreground flex-1">
-                        Ricostruzione dell&apos;evento e dell&apos;iter clinico, scritta da te. Questo testo appare nel report nella sezione &quot;Il Fatto e la Storia Clinica&quot; senza essere rielaborato dall&apos;AI.
-                      </p>
-                      <DictationButton
-                        size="sm"
-                        variant="icon-label"
-                        caseId={caseId}
-                        contextHint="il fatto e la storia clinica, evento indice, iter diagnostico terapeutico, perizia medico-legale"
-                        onTranscript={(text) => {
-                          const prev = form.ilFattoEStoriaClinica;
-                          const sep = prev.length > 0 && !prev.endsWith('\n') ? '\n' : '';
-                          setForm({ ...form, ilFattoEStoriaClinica: `${prev}${sep}${text}` });
-                        }}
-                      />
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Ricostruzione dell&apos;evento e dell&apos;iter clinico, scritta da te. Questo testo appare nel report nella sezione &quot;Il Fatto e la Storia Clinica&quot; senza essere rielaborato dall&apos;AI.
+                    </p>
                     <Textarea
                       value={form.ilFattoEStoriaClinica}
                       onChange={(e) => setForm({ ...form, ilFattoEStoriaClinica: e.target.value })}
@@ -867,16 +772,12 @@ export function PeriziaMetadataForm({
                     </p>
                     <AnamnesiTextarea
                       label="Anamnesi familiare"
-                      caseId={caseId}
-                      contextHint="anamnesi familiare, perizia medico-legale"
                       placeholder="es. Nega familiarità per patologie di rilievo..."
                       value={form.anamnesiFamiliare}
                       onChange={(t) => setForm({ ...form, anamnesiFamiliare: t })}
                     />
                     <AnamnesiTextarea
                       label="Anamnesi fisiologica"
-                      caseId={caseId}
-                      contextHint="anamnesi fisiologica, perizia medico-legale"
                       placeholder="es. Nato/a a termine; alvo e diuresi regolari; non fumatore/trice..."
                       value={form.anamnesiFisiologica}
                       onChange={(t) => setForm({ ...form, anamnesiFisiologica: t })}
@@ -919,32 +820,24 @@ export function PeriziaMetadataForm({
                     })()}
                     <AnamnesiTextarea
                       label="Anamnesi patologica remota"
-                      caseId={caseId}
-                      contextHint="anamnesi patologica remota, patologie pregresse, perizia medico-legale"
                       placeholder="es. Pregressa frattura del polso sx (2015); ipertensione arteriosa in terapia..."
                       value={form.anamnesiPatologicaRemota}
                       onChange={(t) => setForm({ ...form, anamnesiPatologicaRemota: t })}
                     />
                     <AnamnesiTextarea
                       label="Anamnesi patologica prossima"
-                      caseId={caseId}
-                      contextHint="anamnesi patologica prossima, evento, perizia medico-legale"
                       placeholder="es. In data ... a seguito di ... lamenta..."
                       value={form.anamnesiPatologicaProssima}
                       onChange={(t) => setForm({ ...form, anamnesiPatologicaProssima: t })}
                     />
                     <AnamnesiTextarea
                       label="Anamnesi farmacologica"
-                      caseId={caseId}
-                      contextHint="anamnesi farmacologica, terapie, farmaci, perizia medico-legale"
                       placeholder="es. Assume ...; nega allergie note a farmaci"
                       value={form.anamnesiFarmacologica}
                       onChange={(t) => setForm({ ...form, anamnesiFarmacologica: t })}
                     />
                     <AnamnesiTextarea
                       label="Anamnesi lavorativa"
-                      caseId={caseId}
-                      contextHint="anamnesi lavorativa, occupazione, perizia medico-legale"
                       placeholder="es. Impiegato/a; attività che richiede..."
                       value={form.anamnesiLavorativa}
                       onChange={(t) => setForm({ ...form, anamnesiLavorativa: t })}

@@ -100,13 +100,6 @@ export const PREVIDENZIALE_DLGS62_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Commissione multidisciplinare', definition: 'Organismo previsto dal D.Lgs. 62/2024 (art. 5) per l\'accertamento della condizione di disabilità, composta da medico legale, medico specialista, professionista dell\'area sanitaria e assistente sociale. Deve effettuare la valutazione secondo il modello bio-psico-sociale.' },
     { term: 'Accomodamento ragionevole', definition: 'Modifiche e adattamenti necessari e appropriati che non impongano un onere sproporzionato o eccessivo, per assicurare alle persone con disabilità il godimento e l\'esercizio di tutti i diritti umani e delle libertà fondamentali su base di uguaglianza (art. 2 CRPD, recepito dal D.Lgs. 62/2024).' },
   ],
-  commonQuesiti: [
-    'Accerti il CTU se il periziando sia affetto da condizione di disabilità ai sensi del D.Lgs. 62/2024 e, in caso affermativo, ne descriva l\'entità secondo il modello ICF.',
-    'Valuti il CTU se la valutazione multidimensionale effettuata dalla commissione sia conforme ai criteri previsti dal D.Lgs. 62/2024 e dalla classificazione ICF.',
-    'Accerti il CTU se il progetto di vita individuale elaborato dalla commissione sia adeguato alle esigenze di sostegno del periziando, indicando eventuali integrazioni necessarie.',
-    'Valuti il CTU le limitazioni dell\'attività e le restrizioni alla partecipazione del periziando, specificando i fattori ambientali facilitanti e le barriere esistenti.',
-    'Indichi il CTU se sussistano i presupposti per il riconoscimento della necessità di sostegno intensivo ai sensi del D.Lgs. 62/2024.',
-  ],
   synthesisGuidance: `Nell'analisi del ricorso avverso verbale di accertamento ai sensi del D.Lgs. 62/2024,
 adottare rigorosamente il modello bio-psico-sociale previsto dalla classificazione ICF.
 La valutazione deve superare l'approccio puramente percentualistico dell'invalidità civile

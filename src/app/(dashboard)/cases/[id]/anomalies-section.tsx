@@ -13,7 +13,6 @@ import { revertAnomalyDecision } from '../../actions/anomaly-actions';
 import { createClient } from '@/lib/supabase/client';
 import { computeFileSha256 } from '@/lib/file-hash';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
-import { DictationButton } from '@/components/dictation-button';
 
 // --- Types ---
 
@@ -378,23 +377,10 @@ function ActionableAnomalyCard({
       {/* Note + actions */}
       <div className="mt-3 pt-3 border-t border-dashed border-orange-200 dark:border-orange-900/50 space-y-2.5">
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-xs font-medium text-foreground flex items-center gap-1">
-              <Pencil className="h-3 w-3" />
-              La tua nota nel report (opzionale)
-            </label>
-            <DictationButton
-              size="icon"
-              variant="icon-only"
-              caseId={caseId}
-              contextHint={`anomalia ${anomaly.anomaly_type ?? ''}, nota perito medico-legale`}
-              onTranscript={(text) => {
-                const sep = expertNote.length > 0 && !expertNote.endsWith(' ') ? ' ' : '';
-                setExpertNote(`${expertNote}${sep}${text}`);
-              }}
-              className="h-6 w-6"
-            />
-          </div>
+          <label className="text-xs font-medium text-foreground flex items-center gap-1">
+            <Pencil className="h-3 w-3" />
+            La tua nota nel report (opzionale)
+          </label>
           <textarea
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
             placeholder='Es: "Il trattamento risulta documentato in relazione successiva non inclusa nel fascicolo"'

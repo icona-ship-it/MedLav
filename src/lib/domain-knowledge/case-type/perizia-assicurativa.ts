@@ -130,12 +130,6 @@ export const PERIZIA_ASSICURATIVA_KNOWLEDGE: CaseTypeKnowledge = {
     { term: 'Micropermanente', definition: 'Danno biologico permanente di lieve entita (1-9%), disciplinato dall\'art. 139 CdA, che richiede accertamento clinico strumentale obiettivo.' },
     { term: 'Proposta risarcitoria', definition: 'Quantificazione economica del danno biologico e delle spese mediche che il medico legale suggerisce alla compagnia mandante come base per l\'offerta risarcitoria al danneggiato.' },
   ],
-  commonQuesiti: [
-    'Accerti il perito la natura e l\'entità delle lesioni riportate dall\'assicurato, verificandone la compatibilità con la dinamica dell\'evento denunciato.',
-    'Quantifichi i periodi di invalidità temporanea e il danno biologico permanente secondo le tabelle contrattuali applicabili.',
-    'Valuti la congruità delle spese mediche sostenute e la necessità di eventuali cure future.',
-    'Indichi se sussistano elementi di preesistenza che possano aver concorso alla determinazione del danno.',
-  ],
   synthesisGuidance: `Nella perizia assicurativa, adottare la prospettiva della compagnia mandante con rigore
 tecnico e imparzialita scientifica. L'analisi deve essere finalizzata alla quantificazione
 oggettiva del danno biologico e alla verifica della congruita della documentazione e delle

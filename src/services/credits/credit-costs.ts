@@ -31,12 +31,6 @@ export const CREDIT_COSTS = {
   quesito: 1,
   /** AI document organization/analysis (per document analyzed) */
   organizzazione_documenti: 1,
-  /**
-   * Voice dictation (Voxtral) — flat per clip, regardless of duration.
-   * The clip is capped to 5 min server-side, so worst-case Mistral cost is
-   * ~$0.015 (= 1.5 credit-equivalent), well within the 1-credit price.
-   */
-  dettatura: 1,
 } as const;
 
 export type CreditOperation = keyof typeof CREDIT_COSTS;

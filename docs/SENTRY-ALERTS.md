@@ -14,7 +14,7 @@ Il codice usa `withSentryTags` (`src/lib/sentry-context.ts`) per aggiungere tag 
 | `user_hash` | SHA-256[:8] dello userId | Filtrare errori per utente specifico |
 | `pipeline_mode` | `full` / `extraction_only` / `expenses_only` / `anonymize_only` | Errori per tipo elaborazione |
 | `step` | Nome step Inngest | Errori per fase pipeline |
-| `module` | `synthesis` / `extraction` / `ocr` / `transcription` / etc. | Errori per modulo |
+| `module` | `synthesis` / `extraction` / `ocr` / etc. | Errori per modulo |
 
 ## Alert rules da configurare
 
