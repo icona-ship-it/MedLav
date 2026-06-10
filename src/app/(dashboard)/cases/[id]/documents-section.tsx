@@ -474,7 +474,7 @@ export function DocumentsSection({
                                 )}
                                 Categorizza con AI
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  {CREDIT_COSTS.categorizzazione} cr
+                                  {CREDIT_COSTS.categorizzazione} crediti
                                 </span>
                               </DropdownMenuItem>
                             )}
@@ -490,7 +490,7 @@ export function DocumentsSection({
                                 )}
                                 {splittingDocId === doc.id ? 'Divisione in corso...' : 'Dividi PDF'}
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  {CREDIT_COSTS.split_pdf} cr/parte
+                                  {CREDIT_COSTS.split_pdf} crediti/parte
                                 </span>
                               </DropdownMenuItem>
                             )}
