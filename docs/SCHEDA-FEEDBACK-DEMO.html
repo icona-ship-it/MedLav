@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed · Scheda di valutazione del report</title>
+<style>
+  :root {
+    --inchiostro: oklch(0.26 0.012 70);
+    --tenue: oklch(0.45 0.012 70);
+    --linea: oklch(0.85 0.01 85);
+    --accento: oklch(0.42 0.115 25);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--inchiostro);
+    font-size: 15px;
+    line-height: 1.5;
+    background: white;
+  }
+  .foglio { max-width: 800px; margin: 0 auto; padding: 36px 28px; }
+  h1 {
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 1.7rem; line-height: 1.2;
+  }
+  .sotto { color: var(--tenue); margin-top: 4px; font-size: 0.92rem; }
+  .campi-caso { display: flex; gap: 24px; margin-top: 14px; font-size: 0.95rem; }
+  .campi-caso span { border-bottom: 1px solid var(--inchiostro); flex: 1; padding: 2px 4px; color: var(--tenue); }
+
+  h2 {
+    font-size: 1.05rem; margin-top: 26px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--inchiostro);
+  }
+  .vademecum { margin-top: 10px; font-size: 0.94rem; }
+  .vademecum li { margin: 5px 0 5px 22px; }
+  .principio {
+    margin-top: 12px; padding: 10px 14px;
+    border: 1.5px solid var(--accento); border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .principio b { color: var(--accento); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--linea); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: oklch(0.96 0.006 85); font-weight: 650; }
+  th.casella, td.casella { width: 68px; text-align: center; }
+  td.casella::before { content: "☐"; font-size: 1.25rem; color: var(--inchiostro); }
+  td.note { height: 40px; }
+  .sezione-nome { font-weight: 600; width: 220px; }
+  .sezione-tipo { display: block; font-weight: 400; font-size: 0.78rem; color: var(--tenue); }
+
+  .domande { margin-top: 14px; }
+  .domande p { font-weight: 600; margin-top: 14px; font-size: 0.95rem; }
+  .righe { border-bottom: 1px solid var(--linea); height: 26px; }
+  .righe + .righe { margin-top: 2px; }
+
+  footer { margin-top: 26px; color: var(--tenue); font-size: 0.82rem; display: flex; justify-content: space-between; }
+
+  @media print {
+    @page { margin: 1.4cm; size: A4; }
+    body { font-size: 11pt; }
+    .foglio { padding: 0; max-width: none; }
+    .no-stampa { display: none; }
+    h2 { break-after: avoid; }
+    table { break-inside: avoid; }
+  }
+  .no-stampa {
+    margin-top: 22px; text-align: center;
+  }
+  .no-stampa button {
+    font: inherit; font-weight: 600; font-size: 0.95rem;
+    padding: 10px 22px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--linea); background: oklch(0.96 0.006 85);
+  }
+</style>
+</head>
+<body>
+<div class="foglio">
+
+<header>
+  <h1>Scheda di valutazione del report</h1>
+  <p class="sotto">LegMed · per il medico legale · una scheda per ogni report esaminato</p>
+  <div class="campi-caso">
+    <div style="flex:2">Caso / tipo di perizia: <span>&nbsp;</span></div>
+    <div style="flex:1">Data: <span>&nbsp;</span></div>
+    <div style="flex:1">Valutatore: <span>&nbsp;</span></div>
+  </div>
+</header>
+
+<h2>Prima di leggere: come funziona</h2>
+<ul class="vademecum">
+  <li>Il sistema legge i documenti caricati ed estrae <strong>solo fatti documentati</strong>: nulla è inventato, e ciò che non trova resta segnato come "da compilare".</li>
+  <li>La <strong>documentazione sanitaria</strong> è riprodotta <strong>parola per parola</strong> dai documenti originali: la lunghezza è voluta (fedeltà da deposito).</li>
+  <li>Tabelle di calcolo (ITT/ITP, spese, stima tabellare del danno) sono <strong>proposte automatiche</strong>: il perito le verifica e le corregge.</li>
+</ul>
+<div class="principio">
+  <b>Il principio:</b> i <b>fatti</b> li scrive il sistema, i <b>giudizi</b> restano suoi. Le sezioni con il badge "Da compilare (a tua cura)" sono scalette-guida riservate alle sue valutazioni: il sistema non le compilerà mai, per scelta.
+</div>
+
+<h2>Valutazione per sezione</h2>
+<table>
+  <tr>
+    <th>Sezione</th>
+    <th class="casella">Va bene</th>
+    <th class="casella">Da ritoccare</th>
+    <th class="casella">Da rifare</th>
+    <th>Cosa cambierebbe (in concreto)</th>
+  </tr>
+  <tr><td class="sezione-nome">Intestazione <span class="sezione-tipo">conferimento, dati delle parti</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Quesiti <span class="sezione-tipo">fedeltà all'ordinanza</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Documentazione in atti <span class="sezione-tipo">atti, PEC, memorie</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Documentazione sanitaria <span class="sezione-tipo">riproduzione fedele</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Pareri tecnici precedenti</td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Spese mediche <span class="sezione-tipo">tabella automatica</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Calcoli ITT/ITP e stima danno <span class="sezione-tipo">proposte da verificare</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Scalette "a sua cura" <span class="sezione-tipo">operazioni, considerazioni, visita</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Cronistoria eventi <span class="sezione-tipo">ordine, completezza</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+  <tr><td class="sezione-nome">Export Word <span class="sezione-tipo">impaginazione, firma</span></td><td class="casella"></td><td class="casella"></td><td class="casella"></td><td class="note"></td></tr>
+</table>
+
+<h2>Tre domande che valgono oro</h2>
+<div class="domande">
+  <p>1. Manca qualcosa che in una sua perizia ci sarebbe sempre?</p>
+  <div class="righe"></div><div class="righe"></div>
+  <p>2. C'è qualcosa di troppo, che lei toglierebbe sempre?</p>
+  <div class="righe"></div><div class="righe"></div>
+  <p>3. Quanti minuti di ritocchi servirebbero per renderlo depositabile? <span style="font-weight:400">(cerchiare)</span>&nbsp;&nbsp; meno di 15 · 15-45 · 45-90 · oltre 90</p>
+</div>
+
+<footer>
+  <span>LegMed · giugno 2026</span>
+  <span>La scheda compilata diventa direttamente il piano di lavoro di chi sviluppa.</span>
+</footer>
+
+<div class="no-stampa">
+  <button type="button" onclick="window.print()">Stampa la scheda</button>
+</div>
+
+</div>
+</body>
+</html>
