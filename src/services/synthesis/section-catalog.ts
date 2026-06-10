@@ -88,6 +88,16 @@ const EXPENSE_EVENT_TYPES = new Set([
 
 const NO_EVN_RULE = 'Cita i documenti per tipo, autore e data. NON usare riferimenti numerati agli eventi.';
 
+/**
+ * Riga di esclusione della directive premesse quando coesiste (in linea di
+ * principio) con documentazione_atti; quando premesse resta SOLA nel piano
+ * (doc_atti esclusa dal selettore) viene sostituita dalla variante standalone
+ * in resolveSectionPlan, altrimenti gli stragiudiziali sparirebbero dal report.
+ */
+const PREMESSE_ATTI_EXCLUSION = '- NON riprodurre qui i documenti stragiudiziali (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze): sono oggetto della sezione "I Dati della Documentazione in Atti".';
+
+const PREMESSE_STANDALONE_NOTE = '- In questo report la sezione "I Dati della Documentazione in Atti" NON è presente: riproduci qui, oltre agli atti processuali, anche i documenti stragiudiziali e probatori (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze), in ordine cronologico, con le stesse formule di introduzione.';
+
 const CITATION_FORMAT = `FORMATO CITAZIONE per ogni documento:
 **Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."`;
 
@@ -343,7 +353,7 @@ Per ogni atto usa la formula di introduzione:
 **Ricorso per Consulenza Tecnica Preventiva redatto dall'Avv. [nome] per parte ricorrente in data DD.MM.YYYY:** "..."
 **Memoria difensiva di costituzione nell'interesse di [parte], redatta dall'Avv. [nome], in data DD.MM.YYYY:** "..."
 - Riproduci il contenuto VIRGOLETTATO mantenendo la NUMERAZIONE ORIGINALE dei punti dell'atto (1), 2), 3)...) e le CONCLUSIONI delle parti come nell'originale. NON riassumere il testo dell'atto.
-- NON riprodurre qui i documenti stragiudiziali (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze): sono oggetto della sezione "I Dati della Documentazione in Atti".
+${PREMESSE_ATTI_EXCLUSION}
 REGOLA DI NEUTRALITÀ: riproduci senza commentare, valutare o evidenziare criticità. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
 ${NO_EVN_RULE}`,
   },
@@ -602,18 +612,21 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'anamnesi',
-    title: 'Dati Anamnestici',
+    // Titolo con articolo come nei gold ("I DATI ANAMNESTICI").
+    title: 'I Dati Anamnestici',
     maxTokens: TOKENS_SMALL,
     dataSources: ['events-medical'],
     contextMaxChars: 400,
     needsOcr: false,
-    promptDirective: `Genera una breve anamnesi del periziando basata sulla documentazione.
-Includi:
-- Condizioni patologiche pregresse rilevanti
-- Anamnesi familiare se pertinente e documentata
-- Anamnesi farmacologica se documentata
-- Peso, altezza, condizioni generali se documentati
-Stile sintetico (1-3 paragrafi). Riporta SOLO fatti documentati.
+    // Formato gold (Antoniazzi/Regnoto): scheda a righe telegrafiche etichettate,
+    // non prosa. Dominanza e negazioni esplicite solo se documentate.
+    promptDirective: `Genera i dati anamnestici del periziando come SCHEDA a righe brevi etichettate (formato dei benchmark depositati), NON in prosa:
+"Paziente [destrimane/mancino/ambidestro]" (solo se documentato)
+"In passato: [patologie pregresse e interventi rilevanti, separati da virgola]"
+"Peso: Kg [N]" / "Altezza: [N]" (solo se documentati)
+"Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate)
+"Anamnesi familiare: [solo se pertinente e documentata]"
+Una voce per riga; ometti le righe senza dato documentato. Riporta SOLO fatti documentati.
 ${NO_EVN_RULE}`,
   },
   {
@@ -668,7 +681,8 @@ ${NO_EVN_RULE}`,
   },
   {
     id: 'visita_clinica',
-    title: 'Visita Clinica',
+    // Titolo con articolo come nei gold ("LA VISITA CLINICA").
+    title: 'La Visita Clinica',
     maxTokens: TOKENS_NONE,
     dataSources: [],
     contextMaxChars: 0,
@@ -1249,10 +1263,14 @@ export function resolveSectionPlan(params: {
   // esclusive — 5 gold su 6 riproducono ricorsi/memorie UNA sola volta dentro
   // "I Dati della Documentazione in Atti" (LEGAL_DOC_TYPES ⊂ NON_MEDICAL_DOC_TYPES
   // attiverebbe entrambe sugli stessi atti, duplicandoli). Premesse resta
-  // raggiungibile escludendo documentazione_atti dal selettore (profilo Del Porto).
+  // raggiungibile escludendo documentazione_atti dal selettore (profilo Del Porto);
+  // in quel caso la sua directive diventa STANDALONE (copre anche gli
+  // stragiudiziali, che altrimenti sparirebbero dal report).
   const filtered = selectorFiltered.some((s) => s.id === 'documentazione_atti')
     ? selectorFiltered.filter((s) => s.id !== 'premesse')
-    : selectorFiltered;
+    : selectorFiltered.map((s) => (s.id === 'premesse'
+      ? { ...s, promptDirective: s.promptDirective.replace(PREMESSE_ATTI_EXCLUSION, PREMESSE_STANDALONE_NOTE) }
+      : s));
 
   // Ambito penale (CTU/CTP role-based): considerazioni civilistiche → penali e
   // niente spese mediche. Non si applica ai moduli parere/RC (civilistici).

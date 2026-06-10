@@ -24,6 +24,9 @@ export interface ExpenseItem {
   amount: number | null;
   facility: string | null;
   documentSource: string;
+  /** Numero ricevuta/fattura estratto dal testo (best-effort, benchmark spese
+   * 2026-06-10: colonna "N. Ricevuta/Fattura"). Null se non riconoscibile. */
+  receiptRef?: string | null;
 }
 
 export interface CategoryTotal {
@@ -95,6 +98,33 @@ function parseItalianNumber(raw: string): number | null {
   const normalized = raw.replace(/\./g, '').replace(',', '.');
   const num = parseFloat(normalized);
   return isNaN(num) || num < 0 ? null : num;
+}
+
+/**
+ * Best-effort: numero di ricevuta/fattura dal testo (benchmark spese
+ * 2026-06-10, es. "Fattura n. 10/2026" → "10/2026", "ricevuta TC3630661" →
+ * "TC3630661"). Deterministico, MAI inventato: null se non riconoscibile.
+ * Il riferimento deve contenere almeno una cifra (evita falsi positivi tipo
+ * "fattura elettronica"); il gap fra parola-chiave e numero non può
+ * attraversare altre parole.
+ */
+export function extractReceiptRef(...texts: Array<string | null | undefined>): string | null {
+  // Pattern in ordine di affidabilità: keyword fattura/ricevuta + numero; poi i
+  // riferimenti di pagamento PagoPA presenti nel benchmark spese ("TC3630661",
+  // "EP.ADMID 3630661") che valorizzano la colonna senza keyword.
+  const PATTERNS: RegExp[] = [
+    /(?:fattura|ricevuta|scontrino|proforma)(?:\s+(?:fiscale|quietanzata))?\s*(?:n(?:\.|°|um\.?|umero)?)?\s*[:.]?\s*([A-Za-z]{0,4}\d[\dA-Za-z\/\-.]{0,18})/i,
+    /\b(TC\d{5,})\b/,
+    /EP\.?\s*ADM(?:ID|NO)\s*:?\s*(\d{5,})/i,
+  ];
+  for (const t of texts) {
+    if (!t) continue;
+    for (const re of PATTERNS) {
+      const m = t.match(re);
+      if (m?.[1]) return m[1].replace(/[.,;:]+$/, '');
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +277,7 @@ export function analyzeExpenses(
       amount,
       facility: ev.facility ?? null,
       documentSource: ev.source_type ?? 'altro',
+      receiptRef: extractReceiptRef(ev.title, ev.description),
     });
   }
 

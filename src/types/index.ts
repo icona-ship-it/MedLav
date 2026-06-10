@@ -90,6 +90,10 @@ export interface PeriziaMetadata {
   rgNumber?: string;           // "10965/2025"
   tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
   judgeName?: string;           // "Dott. Raffaele Del Porto"
+  // Qualifica del giudice nel destinatario ("Giudice Delegato"/"Giudice Istruttore"/
+  // "Giudice Onorario"...). I gold ATP confliggono → campo del perito; fallback:
+  // euristica (Delegato per ATP, Istruttore altrimenti).
+  giudiceQualifica?: string;
   ctuName?: string;            // "Dott. Nicola Pigaiani"
   ctuTitle?: string;           // "medico legale presso..." (qualifica nel conferimento)
   specialita?: string;         // specializzazioni per la carta intestata (una per riga / separate da ;)

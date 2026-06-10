@@ -777,6 +777,20 @@ describe('section-catalog', () => {
       expect(ids).not.toContain('documentazione_atti');
     });
 
+    it('premesse STANDALONE (doc_atti esclusa): la directive copre anche gli stragiudiziali, niente rinvio a sezione assente', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        documentTypes: ATTI_DOC_TYPES,
+        periziaMetadata: {
+          tribunale: 'Tribunale di Verona',
+          excludedReportSections: ['documentazione_atti'],
+        },
+      });
+      const premesse = plan.find((s) => s.id === 'premesse');
+      expect(premesse?.promptDirective).toContain('anche i documenti stragiudiziali');
+      expect(premesse?.promptDirective).not.toContain('NON riprodurre qui i documenti stragiudiziali');
+    });
+
     it('premesse: budget LARGE + maxChars, directive verbatim atti processuali con formule intro', () => {
       const premesse = CTU_SECTIONS.find((s) => s.id === 'premesse');
       expect(premesse?.maxTokens).toBe(10_000);

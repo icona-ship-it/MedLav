@@ -9,6 +9,7 @@ export interface PeriziaMetadataUI {
   rgNumber?: string;
   tipoProcedimento?: string;
   judgeName?: string;
+  giudiceQualifica?: string;
   ctuName?: string;
   ctuTitle?: string;
   specialita?: string;

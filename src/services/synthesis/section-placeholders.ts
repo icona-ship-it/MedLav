@@ -241,23 +241,18 @@ export const PREVENTIVI_SPESE_ML_PLACEHOLDER = `*[Inserire qui — se pervenute 
  * determinismo del decesso; ITT/ITP, IP% e tabelle SIMLA NON si applicano al
  * deceduto (gold: decesso ATP 696-bis). I giudizi restano al perito.
  */
-export const CONSIDERAZIONI_DECESSO_PLACEHOLDER = `*[Inserire qui le considerazioni medico-legali per il caso di DECESSO del periziando. Questa sezione contiene la valutazione conclusiva del CTU e le risposte ai quesiti del Giudice.*
+export const CONSIDERAZIONI_DECESSO_PLACEHOLDER = `*[Inserire qui le considerazioni medico-legali per il caso di DECESSO del periziando, organizzate PER QUESITO (struttura del benchmark depositato).*
 
-*1. CAUSA DEL DECESSO*
-*Identificazione della causa della morte e del substrato anatomo-patologico: causa iniziale, intermedia e terminale (scheda di morte), stati morbosi preesistenti, eventuale riscontro autoptico/istologico.*
+*APERTURA (inquadramento):*
+*"Il caso in oggetto riguarda lo studio della vicenda clinica e delle cause del decesso del Sig./della Sig.ra [PERIZIANDO], di anni [N], avvenuto presso [LUOGO] in data [DATA], nell'ottica di enucleare eventuali profili di responsabilità sanitaria nel determinismo del decesso."*
 
-*2. NESSO DI CAUSALITÀ*
-*- Nesso di causalità materiale e giuridica sul determinismo del decesso secondo il criterio civilistico del "più probabile che non"*
-*- Giudizio controfattuale riferito ESPRESSAMENTE all'evento morte: la condotta alternativa corretta avrebbe evitato (o significativamente posticipato) il decesso?*
-*- Ruolo concausale dell'illecito rispetto a preesistenze e comorbidità (stato anteriore): efficienza causale esclusiva, concorrente o assente*
+*RISPOSTA AI QUESITI PROPOSTI DAL GIUDICE:*
+*"Venendo dunque a rispondere ai quesiti proposti dal Giudice, si possono formulare le seguenti considerazioni tecniche, accorpando i quesiti laddove presentino profili di sovrapponibilità o spostandoli dall'ordine originario, per garantire una più chiara esposizione."*
+*Per ciascun quesito: ri-citazione testuale tra virgolette come intestazione + risposta motivata. Elementi da coprire DENTRO le risposte, dove pertinenti:*
+*- CAUSA DEL DECESSO e substrato anatomo-patologico: causa iniziale, intermedia e terminale (scheda di morte), stati morbosi preesistenti, eventuale riscontro autoptico/istologico*
+*- nesso di causalità materiale e giuridica sul determinismo del decesso secondo il criterio civilistico del "più probabile che non"; giudizio controfattuale riferito ESPRESSAMENTE all'evento morte (la condotta alternativa corretta avrebbe evitato o significativamente posticipato il decesso?)*
+*- ruolo concausale dell'illecito rispetto a preesistenze e comorbidità (stato anteriore): efficienza causale esclusiva, concorrente o assente*
+*- condotta sanitaria vs linee guida e buone pratiche cliniche vigenti ALL'EPOCA dei fatti (condotta esigibile)*
+*- voci di danno da decesso: danno iure proprio dei congiunti (perdita del rapporto parentale); danno iure hereditatis (danno biologico terminale e danno morale catastrofale, se vi fu un apprezzabile lasso di tempo tra lesione e decesso con lucida percezione)*
 
-*3. ANALISI DELLA CONDOTTA SANITARIA*
-*Confronto con le linee guida e le buone pratiche cliniche vigenti ALL'EPOCA dei fatti (condotta esigibile).*
-
-*4. VOCI DI DANNO DA DECESSO*
-*- Danno iure proprio dei congiunti (perdita del rapporto parentale)*
-*- Danno iure hereditatis: danno biologico terminale e danno morale catastrofale (se vi fu un apprezzabile lasso di tempo tra lesione e decesso, con lucida percezione)*
-*NOTA: ITT/ITP, percentuali di invalidità permanente e tabelle SIMLA NON si applicano al periziando deceduto.*
-
-*5. RISPOSTE AI QUESITI DEL GIUDICE*
-*Per ciascun quesito formulato dal Giudice, ri-citare testualmente il quesito tra virgolette come intestazione e articolare di seguito la risposta motivata, richiamando i fatti documentali e l'analisi sopra esposta.]*`;
+*NOTA: ITT/ITP, percentuali di invalidità permanente e tabelle SIMLA NON si applicano al periziando deceduto.]*`;

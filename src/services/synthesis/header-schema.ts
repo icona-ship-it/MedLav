@@ -96,6 +96,7 @@ export const HeaderDataSchema = z.object({
       // Benchmark Del Porto — popolati via overlay dai metadati perito (autoritativi),
       // non dall'LLM: optional così l'omissione del modello non rompe il parse.
       tipoProcedimento: z.string().nullable().optional(),
+      giudiceQualifica: z.string().nullable().optional(),
       dataInizioOperazioni: z.string().nullable().optional(),
       termineDeposito: z.string().nullable().optional(),
       termineBozza: z.string().nullable().optional(),
@@ -136,7 +137,8 @@ export const HEADER_JSON_SCHEMA_DESCRIPTION = `Genera un oggetto JSON con questa
     "dataDecesso": string | null,
     "luogoDecesso": string | null,
     "email": string | null,
-    "avvocato": string | null
+    "avvocato": string | null,
+    "accompagnatore": string | null
   },
   "oggetto": {
     "eventoIndice": string | null,
@@ -171,6 +173,7 @@ REGOLE:
 6. NESSUN campo deve essere "[da compilare dal perito]" — usa \`null\`. Il marker testuale viene aggiunto dal template di rendering.
 7. "dataDecesso"/"luogoDecesso": SOLO se il periziando è deceduto e il dato risulta dai documenti (scheda di morte, verbale di constatazione, lettera di dimissione con exitus). Periziando vivente → \`null\`.
 8. "email"/"avvocato": SOLO se documentati nei metadati o negli atti (es. "Avvocato di parte: ..."). MAI inventarli.
+9. "accompagnatore": SOLO se la visita risulta documentata in presenza di un accompagnatore (es. "in presenza della madre" per periziando minore). MAI inventarlo o dedurlo dall'età.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON, senza testo prima o dopo.`;
 

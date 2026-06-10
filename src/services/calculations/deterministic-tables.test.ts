@@ -34,13 +34,27 @@ describe('formatExpenseTable', () => {
       ev({ event_type: 'spesa_medica', event_date: '2024-02-10', title: 'Ricevuta RX', description: '€ 80,50', facility: 'Centro Radiologico' }),
       ev({ event_type: 'visita', title: 'NON una spesa' }),
     ]);
-    expect(out).toContain('| Data | Descrizione | Struttura | Importo |');
+    // Benchmark spese 2026-06-10: colonna "N. Ricevuta/Fattura" nella tabella.
+    expect(out).toContain('| Data | Descrizione | Struttura | N. Ricevuta/Fattura | Importo |');
     expect(out).toContain('Fattura visita ortopedica');
     expect(out).toContain('Studio Rossi');
     expect(out).not.toContain('NON una spesa'); // non-expense event excluded
     // Total = 150 + 80.50 = 230.50 → italian currency
     expect(out).toMatch(/Totale/);
     expect(out).toMatch(/230,50/);
+  });
+
+  it('estrae il numero ricevuta/fattura quando riconoscibile nel testo (mai inventato)', () => {
+    const out = formatExpenseTable([
+      ev({ event_type: 'spesa_medica', event_date: '2026-03-31', title: 'Dieci sedute di trattamento fisioterapico', description: 'Fattura n. 10/2026 del 31/03/2026, € 500,00' }),
+      ev({ event_type: 'spesa_medica', event_date: '2026-03-24', title: 'RX anca sx', description: 'ricevuta TC3630661, € 31,50' }),
+      ev({ event_type: 'spesa_medica', event_date: '2026-03-02', title: 'Ritiro cartella clinica', description: '€ 35,00 tramite PagoPA' }),
+    ]);
+    expect(out).toContain('| 10/2026 |');
+    expect(out).toContain('| TC3630661 |');
+    // nessun riferimento riconoscibile → '—', mai inventato
+    const ritiroRow = out.split('\n').find((l) => l.includes('Ritiro cartella'));
+    expect(ritiroRow).toContain('| — |');
   });
 
   it('shows — for sentinel/undated dates and for unparsable amounts (+ partial note)', () => {
@@ -81,7 +95,8 @@ describe('formatChronologyIndex', () => {
       ev({ event_type: 'esame', event_date: '2024-01-15', title: 'RX', facility: 'Centro B' }),
       ev({ event_type: 'visita', event_date: '1900-01-01', title: 'Visita senza data' }),
     ]);
-    expect(out).toContain('| Data | Tipo | Autore/Struttura | Titolo |');
+    // Niente colonna Tipo (benchmark gold passaniti: il perito la elimina sempre)
+    expect(out).toContain('| Data | Autore/Struttura | Titolo |');
     expect(out).not.toContain('Fattura'); // expense excluded
     const rxIdx = out.indexOf('RX');
     const controlloIdx = out.indexOf('Controllo');
@@ -91,11 +106,11 @@ describe('formatChronologyIndex', () => {
     expect(out).toContain('—'); // undated date cell
   });
 
-  it('prettifies the event type and escapes pipes', () => {
+  it('escapes pipes and omits the internal event type (benchmark gold passaniti)', () => {
     const out = formatChronologyIndex([
       ev({ event_type: 'esame_strumentale', event_date: '2024-01-15', title: 'TAC | torace', facility: 'X' }),
     ]);
-    expect(out).toContain('Esame strumentale');
+    expect(out).not.toContain('Esame strumentale'); // tipo = dicitura interna, eliminata dal perito
     expect(out).toContain('TAC \\| torace');
   });
 });
@@ -118,7 +133,7 @@ describe('expandDeterministicBlocks', () => {
     const md = `## Spese mediche\n\n${DETERMINISTIC_MARKERS.SPESE}`;
     const out = expandDeterministicBlocks(md, expenses);
     expect(out).not.toContain(DETERMINISTIC_MARKERS.SPESE);
-    expect(out).toContain('| Data | Descrizione | Struttura | Importo |');
+    expect(out).toContain('| Data | Descrizione | Struttura | N. Ricevuta/Fattura | Importo |');
     expect(out).toContain('Fattura');
   });
 

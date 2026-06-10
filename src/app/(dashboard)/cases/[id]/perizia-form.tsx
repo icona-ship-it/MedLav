@@ -139,6 +139,7 @@ export function PeriziaMetadataForm({
     decesso: existing.decesso ?? false,
     oggettoIncarico: existing.oggettoIncarico ?? '',
     judgeName: existing.judgeName ?? '',
+    giudiceQualifica: existing.giudiceQualifica ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
     specialita: existing.specialita ?? '',
@@ -247,6 +248,7 @@ export function PeriziaMetadataForm({
         ...(form.decesso ? { decesso: true } : {}),
         ...(form.oggettoIncarico ? { oggettoIncarico: form.oggettoIncarico } : {}),
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
+        ...(form.giudiceQualifica ? { giudiceQualifica: form.giudiceQualifica } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
         ...(form.specialita ? { specialita: form.specialita } : {}),
@@ -444,6 +446,13 @@ export function PeriziaMetadataForm({
                         <Label>Giudice</Label>
                         <Input value={form.judgeName} onChange={(e) => setForm({ ...form, judgeName: e.target.value })} placeholder="es. Dott. Raffaele Del Porto" />
                       </div>
+                      <div>
+                        <Label>Qualifica giudice</Label>
+                        <Input value={form.giudiceQualifica} onChange={(e) => setForm({ ...form, giudiceQualifica: e.target.value })} placeholder="es. Giudice Delegato / Giudice Istruttore" />
+                        <p className="text-xs text-muted-foreground mt-1">Se vuoto: &quot;Giudice Delegato&quot; per ATP, &quot;Giudice Istruttore&quot; altrimenti</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Fondo spese</Label>
                         <Input value={form.fondoSpese} onChange={(e) => setForm({ ...form, fondoSpese: e.target.value })} placeholder="es. Euro 1.800,00" />

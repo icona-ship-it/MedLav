@@ -43,6 +43,7 @@ const periziaMetadataSchema = z.object({
   rgNumber: z.string().max(50).optional(),
   tipoProcedimento: z.string().max(200).optional(),
   judgeName: z.string().max(100).optional(),
+  giudiceQualifica: z.string().max(60).optional(),
   ctuName: z.string().max(100).optional(),
   ctuTitle: z.string().max(200).optional(),
   collaboratoreName: z.string().max(100).optional(),

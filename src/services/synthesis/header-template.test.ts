@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHeaderMarkdown, overlayGiudizialeFromMetadata } from './header-template';
+import { renderHeaderMarkdown, overlayGiudizialeFromMetadata, buildOperativeCodaFromMetadata } from './header-template';
 import type { HeaderData } from './header-schema';
 import type { PeriziaMetadata } from '@/types';
 
@@ -322,6 +322,60 @@ describe('renderHeaderMarkdown — benchmark gold 2026-06-10 (collegio, decesso,
     expect(md).toContain('Il Giudice autorizza il CTU ad acquisire documentazione presso le strutture sanitarie.');
   });
 
+  // ── Verifica avversariale 2026-06-10: gap residui chiusi ──────────
+
+  it('quesiti nel piano: il blocco operativo (CC.TT.P./termini/fondo) ESCE dall\'intestazione e va in coda ai quesiti', () => {
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), DEL_PORTO_META), { variant: 'ctu', quesitiInPlan: true });
+    expect(md).not.toContain('CC.TT.P.');
+    expect(md).not.toContain('operazioni peritali');
+    expect(md).not.toContain('fondo spese');
+    expect(md).toContain('Lo scopo dell\'accertamento era indicato dai seguenti quesiti:');
+
+    const coda = buildOperativeCodaFromMetadata(DEL_PORTO_META);
+    expect(coda).toContain('CC.TT.P. Dott.ssa Sarah Nalin');
+    expect(coda).toContain('L\'inizio delle operazioni peritali era fissato per il giorno 13.01.2026');
+    expect(coda).toContain('Era stabilito un fondo spese di Euro 1.800,00');
+  });
+
+  it('buildOperativeCodaFromMetadata: vuota senza metadati operativi', () => {
+    expect(buildOperativeCodaFromMetadata(undefined)).toBe('');
+    expect(buildOperativeCodaFromMetadata({ tribunale: 'Tribunale di Verona' })).toBe('');
+  });
+
+  it('numero di ruolo: "Causa Civile N.R.G." per causa ordinaria, "Numero di Ruolo Generale" per ATP', () => {
+    const ordinaria = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), { ...DEL_PORTO_META, tipoProcedimento: 'Causa civile ordinaria' }),
+      { variant: 'ctu' },
+    );
+    expect(ordinaria).toContain('**Causa Civile N.R.G. 10965/2025**');
+
+    const atp = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), DEL_PORTO_META), { variant: 'ctu' });
+    expect(atp).toContain('**Numero di Ruolo Generale 10965/2025**');
+  });
+
+  it('qualifica giudice: il metadato del perito vince sull\'euristica ATP', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), { ...DEL_PORTO_META, giudiceQualifica: 'Giudice Istruttore' }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('Giudice Istruttore'); // override (DEL_PORTO è ATP → euristica direbbe Delegato)
+    expect(md).not.toContain('Giudice Delegato');
+  });
+
+  it('collegio: carta intestata del co-perito con specializzazioni multi-riga (simmetrica)', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), {
+        ...DEL_PORTO_META,
+        specialita: 'Specialista in Medicina Legale',
+        coCtuName: 'Dott. Carlo Albertini',
+        coCtuTitle: 'Specialista in Cardiologia; Direttore U.O.C. Cardiologia',
+      }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('*Specialista in Cardiologia*');
+    expect(md).toContain('*Direttore U.O.C. Cardiologia*');
+  });
+
   describe('ambito penale', () => {
     const PENALE_META: PeriziaMetadata = {
       tribunale: 'Corte d\'Appello di Brescia',
@@ -349,10 +403,10 @@ describe('renderHeaderMarkdown — benchmark gold 2026-06-10 (collegio, decesso,
       expect(md).not.toContain('Numero di Ruolo Generale');
     });
 
-    it('penale: parti come imputati/parte civile, mai CC.TT.P. ricorrente/resistente', () => {
+    it('penale: parti come imputati/parte civile con lessico "periti", mai CC.TT.P. ricorrente/resistente', () => {
       const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), PENALE_META), { variant: 'ctu', ambitoPenale: true });
-      expect(md).toContain('I difensori degli imputati nominavano quali propri consulenti Prof. Bruno Fittizio.');
-      expect(md).toContain('Il difensore della parte civile nominava quale proprio consulente Dott. Aldo Fittizio.');
+      expect(md).toContain('I difensori degli imputati nominavano quali propri periti Prof. Bruno Fittizio.');
+      expect(md).toContain('Il difensore della parte civile nominava quale proprio perito Dott. Aldo Fittizio.');
       expect(md).not.toContain('CC.TT.P.');
       expect(md).not.toContain('parte ricorrente');
     });

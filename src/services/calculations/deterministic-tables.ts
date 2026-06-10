@@ -68,12 +68,6 @@ function formatEuro(amount: number): string {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
 }
 
-/** 'spesa_medica' → 'Spesa medica' (light prettify for the type column). */
-function prettifyType(eventType: string): string {
-  const s = (eventType ?? '').replace(/_/g, ' ').trim();
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
-}
-
 /**
  * Render the medical-expense table from the case events. Only `spesa_medica`
  * events are listed (the documented expenses); amounts are extracted by the
@@ -97,18 +91,20 @@ export function formatExpenseTable(events: DeterministicTableEvent[]): string {
   );
   if (items.length === 0) return '';
 
+  // Colonna "N. Ricevuta/Fattura" (benchmark spese 2026-06-10 + gold CTU):
+  // best-effort dal testo dell'evento, '—' quando non riconoscibile.
   const rows = items.map((it) =>
-    `| ${displayDate(it.date)} | ${cell(it.description)} | ${cell(it.facility)} | ${it.amount !== null ? formatEuro(it.amount) : '—'} |`,
+    `| ${displayDate(it.date)} | ${cell(it.description)} | ${cell(it.facility)} | ${cell(it.receiptRef ?? null)} | ${it.amount !== null ? formatEuro(it.amount) : '—'} |`,
   );
   const someMissing = items.some((it) => it.amount === null);
   const totalCell = totalAmount !== null ? `**${formatEuro(totalAmount)}**` : '—';
   const totalNote = someMissing ? ' *(alcuni importi non rilevati — inserirli alla fonte)*' : '';
 
   return [
-    '| Data | Descrizione | Struttura | Importo |',
-    '|---|---|---|---|',
+    '| Data | Descrizione | Struttura | N. Ricevuta/Fattura | Importo |',
+    '|---|---|---|---|---|',
     ...rows,
-    `| **Totale** | | | ${totalCell}${totalNote} |`,
+    `| **Totale** | | | | ${totalCell}${totalNote} |`,
   ].join('\n');
 }
 
@@ -122,13 +118,15 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
   const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
   if (clinical.length === 0) return '';
 
+  // Niente colonna Tipo: dicitura interna dell'app che il perito elimina
+  // sempre dalla cronologia (benchmark gold passaniti 2026-06-10).
   const rows = sortEventsChrono(clinical).map((e) =>
-    `| ${displayDate(e.event_date)} | ${prettifyType(e.event_type)} | ${cell(e.facility ?? e.doctor)} | ${cell(e.title)} |`,
+    `| ${displayDate(e.event_date)} | ${cell(e.facility ?? e.doctor)} | ${cell(e.title)} |`,
   );
 
   return [
-    '| Data | Tipo | Autore/Struttura | Titolo |',
-    '|---|---|---|---|',
+    '| Data | Autore/Struttura | Titolo |',
+    '|---|---|---|',
     ...rows,
   ].join('\n');
 }

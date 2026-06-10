@@ -152,10 +152,15 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
   if (letterhead) {
     lines.push(letterhead, '');
     // Collegio: seconda carta intestata del co-perito PARITETICO (benchmark
-    // gold 2026-06-10 — due nominativi affiancati, mai "Ausiliario").
+    // gold 2026-06-10 — due nominativi affiancati, mai "Ausiliario"), con lo
+    // stesso split multi-riga delle specializzazioni del perito principale.
     if (data.perito?.coPeritoNome) {
       const co: string[] = [`**${data.perito.coPeritoNome}**`];
-      if (data.perito.coPeritoQualifica) co.push(`*${data.perito.coPeritoQualifica}*`);
+      if (data.perito.coPeritoQualifica) {
+        for (const spec of data.perito.coPeritoQualifica.split(/\n|;|\s\/\s/).map((s) => s.trim()).filter(Boolean)) {
+          co.push(`*${spec}*`);
+        }
+      }
       lines.push(co.join('\n'), '');
     }
   }
@@ -163,12 +168,16 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
   if (g?.tribunale) lines.push(`**${g.tribunale.toUpperCase()}**`, '');
   if (g?.sezione) lines.push(`**${g.sezione.toUpperCase()}**`, '');
   if (g?.numeroRG) {
-    // Penale (benchmark Vitali): "N. 15/2024 R.G. App." — mai "Numero di Ruolo
-    // Generale" (formula civilistica).
+    // Dicitura per ambito (benchmark gold 2026-06-10): penale "N. ... R.G. App.";
+    // causa civile ordinaria "Causa Civile N.R.G. ..."; ATP/696-bis "Numero di
+    // Ruolo Generale ..." (i gold ATP confliggono — scelta documentata in ADR-016).
+    const isAtpNum = /\b696[\s-]?bis\b|preventivo/i.test(g?.tipoProcedimento ?? '');
     lines.push(
       penale
         ? `**N. ${g.numeroRG} R.G.${/appello/i.test(g?.tribunale ?? '') ? ' App.' : ''}**`
-        : `**Numero di Ruolo Generale ${g.numeroRG}**`,
+        : isAtpNum
+          ? `**Numero di Ruolo Generale ${g.numeroRG}**`
+          : `**Causa Civile N.R.G. ${g.numeroRG}**`,
       '',
     );
   }
@@ -199,9 +208,11 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
   if (g?.giudice && !penale) {
     lines.push(isFemaleTitle(g.giudice) ? 'Ill.ma Signora' : 'Ill.mo Signore');
     lines.push(`**${g.giudice}**`);
-    // ATP/696-bis: la qualifica corretta è "Giudice Delegato" (gold Del Porto).
+    // Qualifica: campo del perito se compilato; fallback euristico "Giudice
+    // Delegato" per ATP (gold Del Porto), "Giudice Istruttore" altrimenti — i
+    // gold ATP confliggono fra loro (scelta documentata in ADR-016).
     const isAtpProcedimento = /\b696[\s-]?bis\b|preventivo/i.test(g?.tipoProcedimento ?? '');
-    lines.push(isAtpProcedimento ? 'Giudice Delegato' : 'Giudice Istruttore');
+    lines.push(g.giudiceQualifica || (isAtpProcedimento ? 'Giudice Delegato' : 'Giudice Istruttore'));
     const citta = tribunaleCitta(g.tribunale);
     if (citta) lines.push(`c/o il Tribunale di ${citta}`);
     lines.push('');
@@ -234,13 +245,57 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
     lines.push(`**${TBD}**`, '');
   }
 
+  // Blocco operativo (consulenti di parte, ausiliario, operazioni, termini,
+  // fondo spese, provvedimenti): nei gold SEGUE i quesiti. Quando la sezione
+  // Quesiti è nel piano viene appeso in coda a quella sezione
+  // (buildOperativeCodaFromMetadata, wiring in section-generator); resta qui
+  // solo quando i quesiti non sono nel piano.
+  if (!opts?.quesitiInPlan) {
+    const operative = renderOperativeBlock(data, penale);
+    if (operative.length > 0) lines.push(...operative);
+  }
+
+  // Formula di chiusura: con la sezione Quesiti nel piano usa la formula-ponte
+  // dei benchmark ("era precisato nei seguenti quesiti:"; ATP: "Lo scopo
+  // dell'accertamento era indicato dai seguenti quesiti:"); altrimenti il
+  // rinvio all'ordinanza (la sezione potrebbe essere assente/deselezionata).
+  if (g?.giudice || g?.tribunale || g?.numeroRG) {
+    if (lines[lines.length - 1] !== '') lines.push('');
+    const incaricato = penale
+      ? (collegiale ? 'ai Periti' : 'al Perito')
+      : (collegiale ? 'al Collegio di CC.TT.U.' : 'al Consulente Tecnico');
+    if (opts?.quesitiInPlan) {
+      const isAtp = /\b696[\s-]?bis\b|preventivo/i.test(g?.tipoProcedimento ?? '');
+      lines.push(isAtp
+        ? 'Lo scopo dell\'accertamento era indicato dai seguenti quesiti:'
+        : `Il compito affidato ${incaricato} era precisato nei seguenti quesiti:`);
+    } else {
+      lines.push(`Il compito affidato ${incaricato} era precisato nei quesiti formulati nell'ordinanza di conferimento.`);
+    }
+  }
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * Blocco operativo dell'incarico: consulenti di parte (CC.TT.P. / periti),
+ * nomina dell'Ausiliario, inizio operazioni, termini multi-fase, fondo spese e
+ * provvedimenti dell'ordinanza. Nei gold (3/3 CTU-RC) segue i QUESITI: è
+ * renderizzato in coda alla sezione Quesiti quando questa è nel piano,
+ * altrimenti dentro l'intestazione. Pura.
+ */
+function renderOperativeBlock(data: HeaderData, penale: boolean): string[] {
+  const lines: string[] = [];
+  const g = data.giudiziale;
+
   // Consulenti di parte: CC.TT.P. (civile) / periti di imputati e parte civile (penale).
   if (penale) {
+    // Lessico del gold penale: i nominati di parte sono "periti".
     if (g?.ctpResistente) {
-      lines.push(`I difensori degli imputati nominavano quali propri consulenti ${g.ctpResistente}.`);
+      lines.push(`I difensori degli imputati nominavano quali propri periti ${g.ctpResistente}.`);
     }
     if (g?.ctpRicorrente) {
-      lines.push(`Il difensore della parte civile nominava quale proprio consulente ${g.ctpRicorrente}.`);
+      lines.push(`Il difensore della parte civile nominava quale proprio perito ${g.ctpRicorrente}.`);
     }
   } else {
     if (g?.ctpRicorrente) {
@@ -250,11 +305,11 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
       lines.push(`La parte resistente${g.resistente ? ` ${g.resistente}` : ''} nominava quale/i proprio/i CC.TT.P. ${g.ctpResistente}.`);
     }
   }
-  // Nomina dell'Ausiliario (gold danno psichico): nel corpo dell'intestazione.
+  // Nomina dell'Ausiliario (gold danno psichico).
   if (data.perito?.ausiliario) {
     lines.push(`Era individuato in qualità di Ausiliario del C.T.U. ${data.perito.ausiliario.replace(' — ', ', ')}.`);
   }
-  if (g?.ctpRicorrente || g?.ctpResistente || data.perito?.ausiliario) lines.push('');
+  if (lines.length > 0) lines.push('');
 
   // Date operazioni / termini / fondo spese. Termini multi-fase (benchmark gold
   // 2026-06-10): bozza ai consulenti → osservazioni → deposito in unica formula.
@@ -273,26 +328,30 @@ function renderGiudizialeHeader(data: HeaderData, opts?: Pick<RenderOptions, 'am
   // istruzioni di liquidazione D.P.R. 115/2002...).
   if (g?.provvedimentiOrdinanza) lines.push('', g.provvedimentiOrdinanza);
 
-  // Formula di chiusura: con la sezione Quesiti nel piano usa la formula-ponte
-  // dei benchmark ("era precisato nei seguenti quesiti:"; ATP: "Lo scopo
-  // dell'accertamento era indicato dai seguenti quesiti:"); altrimenti il
-  // rinvio all'ordinanza (la sezione potrebbe essere assente/deselezionata).
-  if (g?.giudice || g?.tribunale || g?.numeroRG) {
-    if (g?.ctpRicorrente || g?.ctpResistente || g?.dataInizioOperazioni || g?.termineDeposito || g?.fondoSpese) lines.push('');
-    const incaricato = penale
-      ? (collegiale ? 'ai Periti' : 'al Perito')
-      : (collegiale ? 'al Collegio di CC.TT.U.' : 'al Consulente Tecnico');
-    if (opts?.quesitiInPlan) {
-      const isAtp = /\b696[\s-]?bis\b|preventivo/i.test(g?.tipoProcedimento ?? '');
-      lines.push(isAtp
-        ? 'Lo scopo dell\'accertamento era indicato dai seguenti quesiti:'
-        : `Il compito affidato ${incaricato} era precisato nei seguenti quesiti:`);
-    } else {
-      lines.push(`Il compito affidato ${incaricato} era precisato nei quesiti formulati nell'ordinanza di conferimento.`);
-    }
-  }
+  // Niente blank line in coda (la gestisce il chiamante).
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
 
-  return lines.join('\n').trim();
+/** HeaderData vuoto usato come base per l'overlay dei metadati nella coda operativa. */
+const EMPTY_HEADER_DATA: HeaderData = {
+  perito: null,
+  paziente: { nome: null, dataNascita: null, luogoNascita: null, residenza: null, codiceFiscale: null, telefono: null },
+  oggetto: { eventoIndice: null, dataEvento: null, lesione: null, struttura: null, ambito: null },
+  dataVisitaMedicoLegale: null,
+  soggettoRichiedente: null,
+  giudiziale: null,
+};
+
+/**
+ * Coda operativa della sezione Quesiti, costruita dai soli metadati perizia
+ * (autoritativi): nei gold CTU il blocco CC.TT.P./operazioni/termini/fondo segue
+ * i quesiti. Stringa vuota se non c'è nulla da rendere. Pura.
+ */
+export function buildOperativeCodaFromMetadata(pm: PeriziaMetadata | undefined): string {
+  if (!pm) return '';
+  const data = overlayGiudizialeFromMetadata(EMPTY_HEADER_DATA, pm);
+  return renderOperativeBlock(data, !!pm.ambitoPenale).join('\n').trim();
 }
 
 /**
@@ -490,6 +549,7 @@ export function overlayGiudizialeFromMetadata(
     sezione: pick(pm.sezione, g.sezione),
     numeroRG: pick(pm.rgNumber, g.numeroRG),
     giudice: pick(pm.judgeName, g.giudice),
+    giudiceQualifica: pick(pm.giudiceQualifica, g.giudiceQualifica),
     dataConferimento: pick(pm.dataIncarico, g.dataConferimento),
     ricorrente: pick(pm.parteRicorrente, g.ricorrente),
     resistente: pick(pm.parteResistente, g.resistente),

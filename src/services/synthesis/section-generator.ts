@@ -33,7 +33,7 @@ import {
   parseHeaderData,
   type HeaderData,
 } from './header-schema';
-import { renderHeaderMarkdown, variantForSectionId, overlayGiudizialeFromMetadata } from './header-template';
+import { renderHeaderMarkdown, variantForSectionId, overlayGiudizialeFromMetadata, buildOperativeCodaFromMetadata } from './header-template';
 import { buildTailPrioritizedOcrInput } from './document-summarizer';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
@@ -422,6 +422,16 @@ export async function generateSingleSection(params: {
     : '';
 
   if (fidelity.note) finalContent += fidelity.note;
+
+  // Benchmark gold 2026-06-10 (3/3 CTU-RC): il blocco operativo dell'incarico
+  // (CC.TT.P., ausiliario, inizio operazioni, termini, fondo spese,
+  // provvedimenti) SEGUE i quesiti — coda deterministica dai metadati
+  // autoritativi. L'intestazione lo omette quando la sezione Quesiti è nel
+  // piano (renderGiudizialeHeader, quesitiInPlan).
+  if (spec.id === 'quesiti') {
+    const coda = buildOperativeCodaFromMetadata(synthesisParams.periziaMetadata);
+    if (coda) finalContent += `\n\n${coda}`;
+  }
 
   const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
 
