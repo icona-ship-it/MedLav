@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegMed · Guida al collaudo</title>
+<style>
+  :root {
+    --carta: oklch(0.975 0.006 85);
+    --carta-scura: oklch(0.945 0.008 85);
+    --inchiostro: oklch(0.26 0.012 70);
+    --inchiostro-tenue: oklch(0.45 0.012 70);
+    --linea: oklch(0.88 0.01 85);
+    --accento: oklch(0.42 0.115 25);
+    --accento-fondo: oklch(0.95 0.018 25);
+    --verde: oklch(0.52 0.115 150);
+    --verde-fondo: oklch(0.95 0.025 150);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--carta);
+    color: var(--inchiostro);
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .pagina { max-width: 760px; margin: 0 auto; padding: 48px 24px 96px; }
+
+  /* ── Testata ── */
+  header h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 2.3rem;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+  header .sotto {
+    margin-top: 8px;
+    color: var(--inchiostro-tenue);
+    font-size: 0.95rem;
+  }
+  .avanzamento {
+    margin-top: 28px;
+    border: 1px solid var(--linea);
+    border-radius: 10px;
+    background: oklch(0.99 0.004 85);
+    padding: 14px 18px;
+  }
+  .avanzamento .testo { font-size: 0.95rem; font-weight: 600; }
+  .avanzamento .testo span { color: var(--verde); }
+  .barra {
+    margin-top: 10px; height: 8px; border-radius: 99px;
+    background: var(--carta-scura); overflow: hidden;
+  }
+  .barra > div {
+    height: 100%; width: 0%;
+    background: var(--verde);
+    border-radius: 99px;
+    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ── Indice ── */
+  nav.indice { margin-top: 36px; }
+  nav.indice ol { list-style: none; }
+  nav.indice li + li { border-top: 1px solid var(--linea); }
+  nav.indice a {
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 10px 6px;
+    color: var(--inchiostro); text-decoration: none;
+    border-radius: 6px;
+  }
+  nav.indice a:hover { background: var(--carta-scura); }
+  nav.indice .lettera {
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-weight: 700; color: var(--accento);
+    min-width: 1.2em;
+  }
+  nav.indice .tempo { margin-left: auto; color: var(--inchiostro-tenue); font-size: 0.85rem; white-space: nowrap; }
+  .consiglio {
+    margin-top: 20px;
+    background: var(--accento-fondo);
+    border: 1px solid oklch(0.85 0.05 25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 0.97rem;
+  }
+  .consiglio strong { color: var(--accento); }
+
+  /* ── Sezioni ── */
+  section { margin-top: 64px; }
+  section > h2 {
+    display: flex; align-items: baseline; gap: 16px;
+    font-size: 1.45rem; line-height: 1.25;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--inchiostro);
+  }
+  section > h2 .lettera {
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 2.2rem; font-weight: 700;
+    color: var(--accento);
+  }
+  section > h2 .tempo {
+    margin-left: auto; align-self: center;
+    font-size: 0.8rem; font-weight: 600;
+    color: var(--inchiostro-tenue);
+    border: 1px solid var(--linea); border-radius: 99px;
+    padding: 3px 12px; white-space: nowrap;
+  }
+  section > .premessa { margin-top: 16px; color: var(--inchiostro-tenue); max-width: 65ch; }
+
+  /* ── Passi con casella ── */
+  ol.passi { list-style: none; margin-top: 20px; }
+  ol.passi > li { border-bottom: 1px solid var(--linea); }
+  ol.passi > li:last-child { border-bottom: none; }
+  ol.passi label {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 14px;
+    padding: 16px 8px;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+  ol.passi label:hover { background: oklch(0.99 0.004 85); }
+  ol.passi input[type="checkbox"] {
+    appearance: none;
+    width: 24px; height: 24px; margin-top: 2px;
+    border: 2px solid var(--inchiostro-tenue);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    display: grid; place-content: center;
+    transition: background 0.15s ease-out, border-color 0.15s ease-out;
+  }
+  ol.passi input[type="checkbox"]:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+  ol.passi input[type="checkbox"]::before {
+    content: "";
+    width: 13px; height: 13px;
+    transform: scale(0);
+    transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    clip-path: polygon(14% 44%, 0 60%, 50% 100%, 100% 16%, 84% 4%, 43% 72%);
+    background: white;
+  }
+  ol.passi input[type="checkbox"]:checked { background: var(--verde); border-color: var(--verde); }
+  ol.passi input[type="checkbox"]:checked::before { transform: scale(1); }
+  ol.passi li:has(input:checked) .corpo { color: var(--inchiostro-tenue); }
+  ol.passi li:has(input:checked) .titolo-passo { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+  .titolo-passo { font-weight: 650; }
+  .corpo p { margin-top: 4px; font-size: 0.97rem; max-width: 65ch; }
+  .corpo .come {
+    margin-top: 8px;
+    background: var(--carta-scura);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.93rem;
+  }
+  .corpo .come b { font-weight: 650; }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--carta-scura);
+    border: 1px solid var(--linea);
+    border-radius: 5px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .esito { margin-top: 8px; font-size: 0.93rem; }
+  .esito b { color: var(--verde); }
+
+  /* ── Tabelle ── */
+  table {
+    width: 100%; margin-top: 12px;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    background: white;
+  }
+  th, td {
+    border: 1px solid var(--linea);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--carta-scura); font-weight: 650; }
+  td code { white-space: normal; }
+
+  .nota {
+    margin-top: 14px;
+    border: 1px solid var(--linea);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+    background: oklch(0.99 0.004 85);
+  }
+  .nota.verde { background: var(--verde-fondo); border-color: oklch(0.85 0.05 150); }
+
+  /* ── Piè di pagina ── */
+  footer {
+    margin-top: 72px; padding-top: 20px;
+    border-top: 1px solid var(--linea);
+    display: flex; align-items: center; gap: 16px;
+    color: var(--inchiostro-tenue); font-size: 0.9rem;
+  }
+  footer .azioni { margin-left: auto; display: flex; gap: 10px; }
+  footer button {
+    font: inherit; font-size: 0.88rem; font-weight: 600;
+    color: var(--inchiostro);
+    background: white;
+    border: 1px solid var(--linea);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  footer button:hover { background: var(--carta-scura); }
+  footer button:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+
+  /* ── Stampa ── */
+  @media print {
+    body { background: white; font-size: 12pt; color: black; }
+    .pagina { max-width: none; padding: 0; }
+    .avanzamento .barra, footer .azioni, nav.indice { display: none; }
+    section { break-inside: avoid-page; margin-top: 28pt; }
+    ol.passi label { padding: 8pt 0; }
+    ol.passi input[type="checkbox"] { border-color: black; }
+    a { color: black; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="pagina">
+
+<header>
+  <h1>Guida al collaudo di LegMed</h1>
+  <p class="sotto">Tutto quello che resta da fare a te. Aggiornata al 10 giugno 2026 · versione in produzione <code>e6da944</code></p>
+  <div class="avanzamento" role="status">
+    <div class="testo"><span id="fatti">0</span> passi completati su <span id="totale">0</span>. Le spunte si salvano da sole su questo computer.</div>
+    <div class="barra"><div id="barra"></div></div>
+  </div>
+</header>
+
+<nav class="indice" aria-label="Indice delle sezioni">
+  <ol>
+    <li><a href="#sez-a"><span class="lettera">A</span> Collaudo rapido in app <span class="tempo">10 min</span></a></li>
+    <li><a href="#sez-b"><span class="lettera">B</span> I tre report benchmark <span class="tempo">il più importante</span></a></li>
+    <li><a href="#sez-c"><span class="lettera">C</span> Chiavi segrete su GitHub <span class="tempo">15 min</span></a></li>
+    <li><a href="#sez-d"><span class="lettera">D</span> Tre comandi SQL su Supabase <span class="tempo">10 min, una volta sola</span></a></li>
+    <li><a href="#sez-e"><span class="lettera">E</span> Primo backup e prova di ripristino <span class="tempo">20 min, dopo la C</span></a></li>
+    <li><a href="#sez-f"><span class="lettera">F</span> Firme e avvocato <span class="tempo">senza fretta</span></a></li>
+  </ol>
+</nav>
+
+<div class="consiglio">
+  <strong>Se hai tempo per una cosa sola, fai la B.</strong> È quella che trasforma tutto il lavoro fatto in un risultato misurabile. Per ogni passo che non torna: screenshot e scrivimelo, sistemo subito.
+</div>
+
+<!-- ════════ A ════════ -->
+<section id="sez-a">
+  <h2><span class="lettera">A</span> Collaudo rapido in app <span class="tempo">10 minuti</span></h2>
+  <p class="premessa">Apri <code>legmed.vercel.app</code> e verifica tre cose con i tuoi occhi.</p>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="a1">
+      <span class="corpo"><span class="titolo-passo">La bozza automatica del form</span>
+        <p>Apri un caso, vai allo step "Info Perizia" e scrivi qualcosa in un campo qualsiasi. Poi ricarica la pagina (Cmd+R).</p>
+        <p class="esito"><b>Esito atteso:</b> compare il banner color ambra "Trovata una bozza non salvata: Ripristina / Scarta".</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="a2">
+      <span class="corpo"><span class="titolo-passo">La verifica in due passaggi (facoltativa)</span>
+        <p>Impostazioni, sezione "Verifica in due passaggi": attivala inquadrando il codice QR con Google Authenticator (o un'app simile), poi esci e rientra.</p>
+        <p class="esito"><b>Esito atteso:</b> dopo la password ti viene chiesto il codice a 6 cifre. Se non vuoi tenerla sul tuo account, puoi disattivarla subito dopo la prova: per gli altri utenti resta disponibile.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="a3">
+      <span class="corpo"><span class="titolo-passo">La stima del danno nel report</span>
+        <p>Apri un caso CTU o CTP civile già elaborato e vai alla sezione "Considerazioni Medico-Legali".</p>
+        <p class="esito"><b>Esito atteso:</b> sotto la tabella ITT/ITP trovi la "Stima tabellare del danno biologico (proposta automatica)" con gli importi in euro; vicino allo stato del report c'è l'indicatore "Affidabilità citazioni".</p>
+      </span></label></li>
+  </ol>
+</section>
+
+<!-- ════════ B ════════ -->
+<section id="sez-b">
+  <h2><span class="lettera">B</span> I tre report benchmark <span class="tempo">il passo che conta</span></h2>
+  <p class="premessa">L'obiettivo: far generare all'app un report sugli stessi casi delle perizie vere, e misurare quanto ci si avvicina. Servono i <strong>documenti clinici originali</strong> dei fascicoli, non le perizie finite.</p>
+  <div class="nota">Se non hai i fascicoli dei casi benchmark (puoi chiederli a Lavini), va bene <strong>qualsiasi caso reale</strong>, uno per tipo: una CTU civile, una penale, una stragiudiziale. Il confronto sarà sulla struttura e sulla forma.</div>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="b1">
+      <span class="corpo"><span class="titolo-passo">Crea i tre casi nell'app</span>
+        <p>Uno per tipo, con ruolo e ambito giusti (per il penale: Ambito → Penale). Compila i metadati che hai: tribunale, giudice, quesiti.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="b2">
+      <span class="corpo"><span class="titolo-passo">Carica i documenti e avvia l'elaborazione</span>
+        <p>Per ciascun caso: carica il fascicolo, avvia l'analisi e aspetta l'email di completamento. Puoi chiudere la pagina nel frattempo.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="b3">
+      <span class="corpo"><span class="titolo-passo">Copia il testo di ogni report</span>
+        <p>Apri il report, entra nell'editor (la vista con il testo), seleziona tutto e copia.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="b4">
+      <span class="corpo"><span class="titolo-passo">Salva i tre file con il nome giusto</span>
+        <p>Sul Mac, crea la cartella <code>MedLav/benchmark/generated/</code> e incolla ogni testo in un file chiamato esattamente come il riferimento corrispondente (i nomi sono i file dentro <code>benchmark/gold/</code>):</p>
+        <div class="come">
+          CTU civile → <code>caccialanza-ctu-rc.md</code> (o lo slug del caso usato)<br>
+          CTU penale → <code>vitali-ctu-penale.md</code><br>
+          Stragiudiziale → <code>antoniazzi-stragiudiziale.md</code>
+        </div>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="b5">
+      <span class="corpo"><span class="titolo-passo">Scrivimi "fatto"</span>
+        <p class="esito"><b>Cosa succede dopo:</b> lancio io la misurazione automatica (scorecard di somiglianza con le perizie vere) e correggo dove l'app si discosta. Si ripete finché il punteggio non converge.</p>
+      </span></label></li>
+  </ol>
+</section>
+
+<!-- ════════ C ════════ -->
+<section id="sez-c">
+  <h2><span class="lettera">C</span> Chiavi segrete su GitHub <span class="tempo">15 minuti</span></h2>
+  <p class="premessa">Servono per accendere i backup automatici e i test end-to-end. Percorso: <code>github.com/icona-ship-it/MedLav</code> → Settings → Secrets and variables → Actions → "New repository secret".</p>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="c1">
+      <span class="corpo"><span class="titolo-passo">Le 2 chiavi per i test automatici</span>
+        <table>
+          <tr><th>Nome</th><th>Valore</th></tr>
+          <tr><td><code>E2E_USER_EMAIL</code></td><td>email di un utente di prova dell'app</td></tr>
+          <tr><td><code>E2E_USER_PASSWORD</code></td><td>la sua password</td></tr>
+        </table>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="c2">
+      <span class="corpo"><span class="titolo-passo">Crea lo spazio per i backup su Cloudflare</span>
+        <p>Account gratuito su <code>cloudflare.com</code> → sezione R2 → crea un bucket (nome: <code>medlav-backup</code>, area UE) → "Manage R2 API Tokens" → crea un token.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="c3">
+      <span class="corpo"><span class="titolo-passo">Le 8 chiavi per i backup</span>
+        <table>
+          <tr><th>Nome</th><th>Dove trovi il valore</th></tr>
+          <tr><td><code>SUPABASE_DB_URL</code></td><td>Supabase → Project Settings → Database → Connection string (URI)</td></tr>
+          <tr><td><code>SUPABASE_URL</code></td><td>Supabase → Project Settings → API → Project URL</td></tr>
+          <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Supabase → Project Settings → API → service_role</td></tr>
+          <tr><td><code>R2_ACCESS_KEY</code> e <code>R2_SECRET_KEY</code></td><td>dal token R2 creato al passo precedente</td></tr>
+          <tr><td><code>R2_BUCKET</code></td><td>il nome del bucket (es. <code>medlav-backup</code>)</td></tr>
+          <tr><td><code>R2_ENDPOINT</code></td><td>Cloudflare R2 → dettagli del bucket → "S3 API" endpoint</td></tr>
+          <tr><td><code>BACKUP_PASSPHRASE</code></td><td>inventala robusta tu</td></tr>
+        </table>
+        <div class="nota"><strong>Importante:</strong> salva la <code>BACKUP_PASSPHRASE</code> anche in un posto sicuro fuori da GitHub (gestore di password). Senza di lei i backup sono illeggibili per chiunque, te compreso.</div>
+      </span></label></li>
+  </ol>
+</section>
+
+<!-- ════════ D ════════ -->
+<section id="sez-d">
+  <h2><span class="lettera">D</span> Tre comandi SQL su Supabase <span class="tempo">10 minuti, una volta sola</span></h2>
+  <p class="premessa">Mette in ordine il registro delle migrazioni del database: da qui in poi lo schema sarà ricostruibile dal codice. I file sono nella cartella <code>drizzle/</code> del progetto. Percorso: Supabase → SQL Editor → incolla → Run.</p>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="d1">
+      <span class="corpo"><span class="titolo-passo">Applica la migrazione 0025</span>
+        <p>Incolla ed esegui <code>0025_*.sql</code>, poi <code>verify_0025_*.sql</code>: la verifica deve dare esito positivo.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="d2">
+      <span class="corpo"><span class="titolo-passo">Applica la migrazione 0030</span>
+        <p>Stessa procedura: <code>0030_*.sql</code>, poi <code>verify_0030_*.sql</code>.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="d3">
+      <span class="corpo"><span class="titolo-passo">Riallinea il registro</span>
+        <p>Incolla ed esegui <code>resync_journal.sql</code>.</p>
+        <p class="esito"><b>Esito atteso:</b> il risultato mostra <code>total_rows</code> maggiore o uguale a 31.</p>
+      </span></label></li>
+  </ol>
+</section>
+
+<!-- ════════ E ════════ -->
+<section id="sez-e">
+  <h2><span class="lettera">E</span> Primo backup e prova di ripristino <span class="tempo">20 minuti, dopo la C</span></h2>
+  <p class="premessa">Un backup mai ripristinato non è un backup: è una speranza. Questa sezione lo rende reale.</p>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="e1">
+      <span class="corpo"><span class="titolo-passo">Lancia il primo backup a mano</span>
+        <p>GitHub → Actions → "Weekly Backup" → Run workflow.</p>
+        <p class="esito"><b>Esito atteso:</b> il run finisce verde. Da quel momento partirà da solo ogni domenica notte.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="e2">
+      <span class="corpo"><span class="titolo-passo">Controlla che i file esistano davvero</span>
+        <p>Su Cloudflare R2, dentro il bucket, devono esserci i file cifrati <code>.gpg</code> (database e documenti).</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="e3">
+      <span class="corpo"><span class="titolo-passo">Prova un ripristino</span>
+        <p>Segui la sezione "Restore" di <code>docs/BACKUP-STRATEGY.md</code> e annota com'è andata nel registro <code>scratchpad/backup-restore-tests.md</code> (c'è già il modulo pronto).</p>
+      </span></label></li>
+  </ol>
+</section>
+
+<!-- ════════ F ════════ -->
+<section id="sez-f">
+  <h2><span class="lettera">F</span> Firme e avvocato <span class="tempo">senza fretta, ma servono per vendere</span></h2>
+  <p class="premessa">Qui non c'è codice: solo carta. Tutti i documenti tecnici sono già pronti nella cartella <code>docs/</code>.</p>
+  <ol class="passi">
+    <li><label><input type="checkbox" data-passo="f1">
+      <span class="corpo"><span class="titolo-passo">Fai controfirmare il contratto con Mistral</span>
+        <p>Contatta il commerciale di Mistral e chiudi il DPA ufficiale (procedura in <code>docs/DPA-MISTRAL.md</code>). È il punto legale più importante della lista.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="f2">
+      <span class="corpo"><span class="titolo-passo">Porta tre documenti dall'avvocato</span>
+        <p>Termini di servizio, Privacy Policy, e la bozza di contratto per i tuoi futuri clienti già scritta in <code>docs/DPA-CLIENTE-TEMPLATE.md</code> (da validare prima dell'uso).</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="f3">
+      <span class="corpo"><span class="titolo-passo">Verifica i pagamenti</span>
+        <p>Controlla che la chiave Stripe di produzione sia configurata su Vercel e fai un pagamento di prova.</p>
+      </span></label></li>
+    <li><label><input type="checkbox" data-passo="f4">
+      <span class="corpo"><span class="titolo-passo">Trova 2 o 3 periti beta</span>
+        <p>Possibilmente non veronesi: serviranno a verificare che l'app funzioni anche con prassi diverse da quelle dei benchmark. Da fare quando la sezione B è chiusa.</p>
+      </span></label></li>
+  </ol>
+</section>
+
+<footer>
+  <span>LegMed · guida al collaudo · giugno 2026</span>
+  <span class="azioni">
+    <button type="button" onclick="window.print()">Stampa</button>
+    <button type="button" id="azzera">Azzera le spunte</button>
+  </span>
+</footer>
+
+</div>
+<script>
+(function () {
+  var CHIAVE = 'legmed-guida-collaudo-v1';
+  var caselle = Array.prototype.slice.call(document.querySelectorAll('input[data-passo]'));
+  var fatte = {};
+  try { fatte = JSON.parse(localStorage.getItem(CHIAVE) || '{}'); } catch (e) { fatte = {}; }
+
+  function aggiorna() {
+    var n = caselle.filter(function (c) { return c.checked; }).length;
+    document.getElementById('fatti').textContent = n;
+    document.getElementById('totale').textContent = caselle.length;
+    document.getElementById('barra').style.width = (caselle.length ? (n / caselle.length * 100) : 0) + '%';
+  }
+
+  caselle.forEach(function (c) {
+    c.checked = !!fatte[c.dataset.passo];
+    c.addEventListener('change', function () {
+      fatte[c.dataset.passo] = c.checked;
+      try { localStorage.setItem(CHIAVE, JSON.stringify(fatte)); } catch (e) { /* spazio esaurito: si continua senza salvataggio */ }
+      aggiorna();
+    });
+  });
+
+  document.getElementById('azzera').addEventListener('click', function () {
+    if (!confirm('Vuoi davvero azzerare tutte le spunte?')) return;
+    fatte = {};
+    try { localStorage.removeItem(CHIAVE); } catch (e) { /* niente */ }
+    caselle.forEach(function (c) { c.checked = false; });
+    aggiorna();
+  });
+
+  aggiorna();
+})();
+</script>
+</body>
+</html>
