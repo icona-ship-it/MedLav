@@ -151,6 +151,12 @@ export interface PeriziaMetadata {
   // deceduto) e operazioni peritali senza visita (riunione tecnica). In ambito penale la
   // morte è già il fulcro di considerazioni_penale, quindi il flag non vi si applica.
   decesso?: boolean;
+  // ── Tracking operativo retention (NON contenuto della perizia) ──
+  // Scritti dal cron data-retention quando invia l'email di preavviso 30 giorni
+  // prima dell'eliminazione automatica del caso archiviato (GDPR Art. 5(1)(e)).
+  // Se il caso viene toccato/riaperto dopo il preavviso, il cron li azzera.
+  retentionNoticeSentAt?: string;      // ISO timestamp invio preavviso
+  retentionNoticeDeleteAfter?: string; // data eliminazione comunicata all'utente (ISO)
 }
 
 // API Response

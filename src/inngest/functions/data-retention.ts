@@ -1,14 +1,30 @@
 import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { sendRetentionNoticeEmail } from '@/services/email/email-service';
+import { deleteCaseAndRelatedData } from '@/services/retention/delete-case-data';
+import {
+  resolveEffectiveRetentionDays,
+  planRetentionActions,
+  type RetentionCaseInput,
+} from '@/services/retention/retention-policy';
+import type { PeriziaMetadata } from '@/types';
 
 /**
- * Scheduled Inngest function: daily cleanup of archived cases
- * that exceed the user's configured data retention period.
+ * Scheduled Inngest function: daily retention cleanup of ARCHIVED cases.
+ * Runs at 3 AM UTC every day.
  *
- * Runs at 3 AM UTC every day. Only deletes cases with status 'archiviato'.
- * Removes all related data: documents (storage + DB), events, anomalies,
- * missing_documents, reports, pages, event_images.
+ * Policy (see src/services/retention/retention-policy.ts for the full
+ * rationale and DPIA.md §7):
+ * - Default 365 days for users who never configured anything (GDPR
+ *   Art. 5(1)(e) — the DPIA declares this default).
+ * - data_retention_days = 0 → "Mai": never auto-delete (explicit choice).
+ * - ONLY cases with status 'archiviato' are deleted. Active cases are
+ *   ongoing professional work — never touched.
+ * - NO surprise deletions: a notice email is sent ≥ 30 days before deletion
+ *   (tracked per-case in perizia_metadata.retentionNoticeSentAt); deletion
+ *   happens only after the notice has matured. If the notice email cannot
+ *   be sent, nothing is deleted (fail-safe).
  */
 export const dataRetentionCleanup = inngest.createFunction(
   {
@@ -19,153 +35,155 @@ export const dataRetentionCleanup = inngest.createFunction(
   async ({ step }) => {
     const supabase = createAdminClient();
 
-    // Step 1: Find all users with a retention policy set
-    const profiles = await step.run('fetch-profiles-with-retention', async () => {
+    // Step 1: all profiles — retention now applies by default (365gg) to
+    // users who never configured anything; 0 = explicit "Mai".
+    const profiles = await step.run('fetch-profiles', async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, data_retention_days')
-        .not('data_retention_days', 'is', null);
+        .select('id, data_retention_days');
 
       if (error) {
         throw new Error(`Failed to fetch profiles: ${error.message}`);
       }
 
-      return (data ?? []) as Array<{ id: string; data_retention_days: number }>;
+      return (data ?? []) as Array<{ id: string; data_retention_days: number | null }>;
     });
 
     let totalDeleted = 0;
+    let totalNotified = 0;
 
-    // Step 2: For each user, find and delete expired archived cases
+    // Step 2: per user — plan (pure) and execute notices + deletions
     for (const profile of profiles) {
-      const deletedCount = await step.run(
-        `cleanup-user-${profile.id}`,
-        async () => {
-          const cutoffDate = new Date();
-          cutoffDate.setDate(cutoffDate.getDate() - profile.data_retention_days);
-          const cutoffISO = cutoffDate.toISOString();
-
-          // Find archived cases older than retention period
-          const { data: expiredCases, error: fetchError } = await supabase
-            .from('cases')
-            .select('id, code')
-            .eq('user_id', profile.id)
-            .eq('status', 'archiviato')
-            .lt('updated_at', cutoffISO);
-
-          if (fetchError) {
-            logger.error('data-retention', `Failed to fetch cases for user ${profile.id}: ${fetchError.message}`);
-            return 0;
-          }
-
-          if (!expiredCases || expiredCases.length === 0) {
-            return 0;
-          }
-
-          const caseIds = expiredCases.map((c) => c.id as string);
-
-          for (const caseId of caseIds) {
-            await deleteCaseAndRelatedData(supabase, caseId);
-
-            // Audit log each deletion (no sensitive data)
-            await supabase.from('audit_log').insert({
-              user_id: profile.id,
-              action: 'case.auto_deleted',
-              entity_type: 'case',
-              entity_id: caseId,
-              metadata: {
-                reason: 'data_retention_policy',
-                retentionDays: profile.data_retention_days,
-              },
-            });
-          }
-
-          logger.info(
-            'data-retention',
-            `Deleted ${caseIds.length} expired case(s) for user ${profile.id}`,
-          );
-
-          return caseIds.length;
-        },
+      const result = await step.run(`retention-user-${profile.id}`, async () =>
+        processUserRetention(supabase, profile.id, profile.data_retention_days),
       );
-
-      totalDeleted += deletedCount;
+      totalDeleted += result.deleted;
+      totalNotified += result.notified;
     }
 
-    logger.info('data-retention', `Cleanup complete: ${totalDeleted} case(s) deleted across ${profiles.length} user(s)`);
+    logger.info(
+      'data-retention',
+      `Cleanup complete: ${totalDeleted} case(s) deleted, ${totalNotified} notice(s) sent across ${profiles.length} user(s)`,
+    );
 
     return {
       success: true,
       usersProcessed: profiles.length,
       casesDeleted: totalDeleted,
+      noticesSent: totalNotified,
     };
   },
 );
 
-/**
- * Delete a case and all related data in dependency order.
- * Also removes files from Supabase Storage.
- */
-async function deleteCaseAndRelatedData(
+interface ArchivedCaseRow {
+  id: string;
+  code: string;
+  updated_at: string;
+  perizia_metadata: PeriziaMetadata | null;
+}
+
+async function processUserRetention(
   supabase: ReturnType<typeof createAdminClient>,
-  caseId: string,
-): Promise<void> {
-  // 1. Get event IDs for event_images cleanup
-  const { data: eventRows } = await supabase
-    .from('events')
-    .select('id')
-    .eq('case_id', caseId);
+  userId: string,
+  dataRetentionDays: number | null,
+): Promise<{ deleted: number; notified: number }> {
+  const retentionDays = resolveEffectiveRetentionDays(dataRetentionDays);
 
-  if (eventRows && eventRows.length > 0) {
-    const eventIds = eventRows.map((e) => e.id as string);
-    await supabase.from('event_images').delete().in('event_id', eventIds);
+  const { data: archivedCases, error: fetchError } = await supabase
+    .from('cases')
+    .select('id, code, updated_at, perizia_metadata')
+    .eq('user_id', userId)
+    .eq('status', 'archiviato');
+
+  if (fetchError) {
+    logger.error('data-retention', `Failed to fetch cases for user ${userId}: ${fetchError.message}`);
+    return { deleted: 0, notified: 0 };
   }
 
-  // 2. Get document IDs for pages cleanup and storage deletion
-  const { data: docRows } = await supabase
-    .from('documents')
-    .select('id, storage_path')
-    .eq('case_id', caseId);
+  const rows = (archivedCases ?? []) as ArchivedCaseRow[];
+  if (rows.length === 0) return { deleted: 0, notified: 0 };
 
-  if (docRows && docRows.length > 0) {
-    const docIds = docRows.map((d) => d.id as string);
-    for (let i = 0; i < docIds.length; i += 200) {
-      const { error: delErr } = await supabase.from('pages').delete().in('document_id', docIds.slice(i, i + 200));
-      if (delErr) logger.warn('data-retention', `Failed to delete pages batch: ${delErr.message}`);
-    }
+  const inputs: RetentionCaseInput[] = rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    updatedAt: row.updated_at,
+    noticeSentAt: row.perizia_metadata?.retentionNoticeSentAt ?? null,
+  }));
 
-    // Remove document files from Supabase Storage
-    const storagePaths = docRows
-      .map((d) => d.storage_path as string)
-      .filter(Boolean);
+  const plan = planRetentionActions(inputs, retentionDays, new Date());
+  const metadataById = new Map(rows.map((row) => [row.id, row.perizia_metadata]));
 
-    if (storagePaths.length > 0) {
-      await supabase.storage.from('documents').remove(storagePaths);
-    }
+  // 1. Stale notices (case touched / retention extended): clear tracking so
+  //    a future expiry re-triggers a fresh notice. NB: does NOT bump
+  //    updated_at — the retention clock must stay on the user's last action.
+  for (const item of plan.toClearNotice) {
+    const metadata = metadataById.get(item.id) ?? {};
+    const cleared: PeriziaMetadata = { ...metadata };
+    delete cleared.retentionNoticeSentAt;
+    delete cleared.retentionNoticeDeleteAfter;
+    await supabase.from('cases').update({ perizia_metadata: cleared }).eq('id', item.id);
+  }
 
-    // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
-    const ocrImagePaths: string[] = [];
-    for (const docId of docIds) {
-      const { data: listed } = await supabase.storage
-        .from('documents')
-        .list(`ocr-images/${docId}`);
-      if (listed && listed.length > 0) {
-        ocrImagePaths.push(...listed.map((f) => `ocr-images/${docId}/${f.name}`));
+  // 2. Notices: ONE email per user listing all expiring cases. Cases are
+  //    marked as notified ONLY if the email was actually sent (fail-safe:
+  //    no notice → no future deletion).
+  let notified = 0;
+  if (plan.toNotify.length > 0 && retentionDays !== null) {
+    const emailSent = await sendRetentionNoticeEmail(
+      userId,
+      plan.toNotify.map((c) => ({ code: c.code, deleteAfterIso: c.deleteAfter.toISOString() })),
+      retentionDays,
+    );
+
+    if (emailSent) {
+      const sentAt = new Date().toISOString();
+      for (const item of plan.toNotify) {
+        const metadata = metadataById.get(item.id) ?? {};
+        const updated: PeriziaMetadata = {
+          ...metadata,
+          retentionNoticeSentAt: sentAt,
+          retentionNoticeDeleteAfter: item.deleteAfter.toISOString(),
+        };
+        await supabase.from('cases').update({ perizia_metadata: updated }).eq('id', item.id);
+
+        // Audit: compliance evidence of the advance notice (no patient data)
+        await supabase.from('audit_log').insert({
+          user_id: userId,
+          action: 'case.retention_notice_sent',
+          entity_type: 'case',
+          entity_id: item.id,
+          metadata: { retentionDays, deleteAfter: item.deleteAfter.toISOString() },
+        });
       }
-    }
-    if (ocrImagePaths.length > 0) {
-      for (let i = 0; i < ocrImagePaths.length; i += 1000) {
-        await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
-      }
+      notified = plan.toNotify.length;
+    } else {
+      logger.warn('data-retention', `Notice email failed for user ${userId} — ${plan.toNotify.length} case(s) NOT marked, deletion deferred`);
     }
   }
 
-  // 3. Delete remaining related tables
-  await supabase.from('events').delete().eq('case_id', caseId);
-  await supabase.from('anomalies').delete().eq('case_id', caseId);
-  await supabase.from('missing_documents').delete().eq('case_id', caseId);
-  await supabase.from('reports').delete().eq('case_id', caseId);
-  await supabase.from('documents').delete().eq('case_id', caseId);
+  // 3. Deletions: expired + notice matured (≥ 30 days ago)
+  for (const item of plan.toDelete) {
+    await deleteCaseAndRelatedData(supabase, item.id);
 
-  // 4. Delete the case itself
-  await supabase.from('cases').delete().eq('id', caseId);
+    await supabase.from('audit_log').insert({
+      user_id: userId,
+      action: 'case.auto_deleted',
+      entity_type: 'case',
+      entity_id: item.id,
+      metadata: {
+        reason: 'data_retention_policy',
+        retentionDays,
+        noticeSentAt: item.noticeSentAt,
+      },
+    });
+  }
+
+  if (plan.toDelete.length > 0 || notified > 0) {
+    logger.info(
+      'data-retention',
+      `User ${userId}: ${plan.toDelete.length} deleted, ${notified} notified, ${plan.toClearNotice.length} notices cleared`,
+    );
+  }
+
+  return { deleted: plan.toDelete.length, notified };
 }

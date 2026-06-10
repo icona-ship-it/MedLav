@@ -1,21 +1,68 @@
-# Manual Migrations — Drizzle Journal Disallineato
+# Manual Migrations — Stato journal Drizzle
 
-**Stato al 2026-05-11**: il journal `drizzle/meta/_journal.json` e' fermo a
-`0017_lying_sugar_man`. Le migration `0018` → `0023` sono state scritte a
-mano (non generate via `pnpm db:generate`) e applicate **manualmente** via
-Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
+**Stato al 2026-06-10**: il journal `drizzle/meta/_journal.json` include ORA
+tutte le migration `0000` → `0030` (incluse quelle scritte a mano). Lo snapshot
+`meta/0030_snapshot.json` riflette lo schema Drizzle TS corrente (verificato:
+`pnpm db:generate` → "No schema changes"). Resta UN passo manuale per chiudere
+il debt: eseguire `drizzle/resync_journal.sql` su Supabase (vedi sotto).
 
-## Conseguenze pratiche
+## Come completare il re-sync (azione utente, ~10 min)
 
-- `pnpm db:migrate` non applica e non riconosce queste migration. Lanciarlo
-  oggi non rompe nulla (le migration usano `IF [NOT] EXISTS` ovunque, quindi
-  sono idempotenti), ma non aggiorna nemmeno la `__drizzle_migrations` table.
-- `pnpm db:generate` confronta lo schema Drizzle attuale con l'ultimo
-  snapshot in `meta/0017_snapshot.json`. Se generi una nuova migration adesso
-  potrebbe ri-includere cambi gia' applicati a mano. **Verifica sempre il
-  diff prima di committare.**
+1. **Backup**: verificare che il PITR Supabase sia attivo (o fare un dump manuale)
+2. **Applicare le 2 migration ancora pendenti** via Supabase SQL editor
+   (entrambe idempotenti):
+   - `0025_perizie_benchmark.sql` → verificare con `verify_0025_perizie_benchmark.sql`
+   - `0030_storage_bucket_size_limit.sql` → verificare con `verify_0030.sql`
+3. **Eseguire `drizzle/resync_journal.sql`** via Supabase SQL editor
+   (idempotente, ri-eseguibile). Inserisce in `drizzle.__drizzle_migrations` le
+   righe mancanti 0018→0030 con `created_at` = `when` del journal e hash
+   sha256 dei file. Output atteso del check finale: `total_rows >= 31`,
+   `last_created_at = 1780394400000`
+4. **Aggiornare questa tabella** (segnare 0025 e 0030 come applicate) e MEMORY.md
 
-## Migration applicate manualmente
+Dopo il passo 3, `pnpm db:migrate` torna affidabile: applica solo migration con
+`when` maggiore dell'ultimo `created_at` registrato (algoritmo drizzle: confronta
+solo `MAX(created_at)`; l'hash e' informativo).
+
+## Cosa è stato fatto nel repo (2026-06-10)
+
+- `meta/_journal.json`: aggiunte le entry 0018→0030 (con `when` crescenti,
+  ~date di applicazione reali) e **corretto il tag 0014**: era
+  `0014_rich_nicolaos` ma il file su disco e' `0014_add_document_types.sql`
+  (senza fix, `pnpm db:migrate` falliva con ENOENT)
+- `meta/0030_snapshot.json`: snapshot dello schema TS corrente (generato in
+  sandbox con drizzle-kit, poi rinominato). I snapshot intermedi 0018-0029 non
+  esistono e NON servono: drizzle-kit usa solo l'ultimo snapshot per il diff
+  (verificato — il meta storico aveva gia' "buchi": mancano 0004-0012, 0015, 0016)
+- `resync_journal.sql`: INSERT idempotenti (guard `NOT EXISTS` su `created_at`)
+  per tutte le 31 entry — le righe 0000-0017 gia' presenti vengono saltate
+- Verificato in sandbox + sul repo reale: `pnpm db:generate` → "No schema
+  changes, nothing to migrate" (la prossima migration generata sara' `0031_*`)
+- **Fix `.gitignore`**: `drizzle/meta/` era ignorato — gli snapshot esistevano
+  SOLO su questa macchina (solo `_journal.json` era force-tracked). Rimossa la
+  regola: al prossimo commit vanno aggiunti tutti i file `drizzle/meta/*.json`
+  (senza gli snapshot lo schema non e' ricostruibile dal repo)
+
+## Limite NON verificato (serve un DB di staging)
+
+La **ricostruzione da zero** (`pnpm db:migrate` su un DB vuoto) non e' stata
+testata: richiede un database reale. Due caveat noti:
+
+1. Le migration manuali 0018-0030 non contengono `--> statement-breakpoint`:
+   drizzle le esegue come UNA singola query multi-statement. Con il driver
+   postgres-js dovrebbe funzionare (simple query protocol per query senza
+   parametri), ma va PROVATO su staging prima di fidarsi del rebuild
+2. Alcune migration assumono un progetto **Supabase** (schema `storage`,
+   ruolo `authenticated`, estensione pgvector): il rebuild target deve essere
+   un progetto Supabase, non un Postgres nudo
+
+→ Checklist rebuild staging: nuovo progetto Supabase → `DATABASE_URL` di
+staging in `.env` → `pnpm db:migrate` → confrontare lo schema con prod
+(`scripts/verify-db-schema.sql`). Se le multi-statement falliscono, aggiungere
+`--> statement-breakpoint` tra gli statement dei file 0018-0030 (NON dentro i
+blocchi `DO $$`) — innocuo per prod, la dedup usa solo `created_at`.
+
+## Migration applicate manualmente (storico)
 
 | File | Applicata il | Idempotente | Verifica |
 |------|--------------|-------------|----------|
@@ -25,45 +72,29 @@ Supabase SQL editor — NON sono nella table `__drizzle_migrations` di Drizzle.
 | `0021_add_credits.sql` | apr 2026 | si (`CREATE TABLE IF NOT EXISTS`) | controllare table `user_credits` esiste |
 | `0022_hybrid_rag_bm25.sql` | 2026-05-05 | parzialmente (DROP FUNCTION + CREATE) | verificato via 5 query SQL |
 | `0023_hybrid_rag_multilingua.sql` | 2026-05-11 | parzialmente (DROP COLUMN + ADD) | usare `verify_0023_hybrid_rag_multilingua.sql` |
-| `0024_add_document_content_hash.sql` | 2026-05-11 | si (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`) | usare `verify_0024_add_document_content_hash.sql` |
-| `0025_perizie_benchmark.sql` | **DA APPLICARE dopo Sprint 3 ingestion** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC `match_perizie_chunks_hybrid`) | usare `verify_0025_perizie_benchmark.sql` (7 check + sanity) |
-| `0026_rls_user_owned.sql` | **APPLICATA 2026-06-01** (testata in transazione BEGIN…ROLLBACK come ruolo `authenticated` prima del COMMIT). NB: il file conteneva 2 bug — colonne inesistenti `case_shares.shared_with_user_id` e `report_ratings.case_id` — **corretti** prima dell'applicazione. | si (`DROP POLICY IF EXISTS` + `CREATE POLICY`, ENABLE RLS idempotente) | verificata via `pg_policies`: ogni policy SELECT/ALL filtra per proprietario, nessun leak |
-| `0027_audit_archive.sql` | **APPLICATA 2026-06-01** | si (`CREATE TABLE IF NOT EXISTS`, RLS deny-by-default) | verificata: `to_regclass('public.audit_archive')` non-null, RLS=true |
-| `0028_stripe_event_idempotency.sql` | **APPLICATA 2026-06-01** (+ `ALTER TABLE … ENABLE ROW LEVEL SECURITY` aggiunta). Dedup anti-doppio-accredito ora ATTIVO. | si (`CREATE TABLE IF NOT EXISTS`) | verificata: tabella esiste, RLS=true |
-| `0029_add_event_chronology_relevance.sql` | **APPLICATA 2026-06-01** (utente, "sql fatto" via SQL editor). Colonna `events.is_relevant_for_chronology` (default true) per il toggle "Includi nella cronologia". | si (`ADD COLUMN IF NOT EXISTS … DEFAULT true`) | usare `verify_0029_event_chronology_relevance.sql` |
-| `0030_storage_bucket_size_limit.sql` | **DA APPLICARE** (security cost-hardening). Allinea `storage.buckets.file_size_limit` del bucket `documents` a 100 MB (= cap applicativo). Sposta il rifiuto file >100MB al confine di Storage. | si (`UPDATE` puntuale su `id='documents'`) | usare `verify_0030.sql` (atteso `file_size_limit = 104857600`) |
+| `0024_add_document_content_hash.sql` | 2026-05-11 | si | usare `verify_0024_add_document_content_hash.sql` |
+| `0025_perizie_benchmark.sql` | **DA APPLICARE — prerequisito del re-sync (passo 2)** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC) | usare `verify_0025_perizie_benchmark.sql` |
+| `0026_rls_user_owned.sql` | APPLICATA 2026-06-01 (testata in BEGIN…ROLLBACK; 2 bug colonne corretti pre-applicazione) | si | verificata via `pg_policies` |
+| `0027_audit_archive.sql` | APPLICATA 2026-06-01 | si | `to_regclass('public.audit_archive')` non-null, RLS=true |
+| `0028_stripe_event_idempotency.sql` | APPLICATA 2026-06-01 (+ ENABLE RLS) | si | tabella esiste, RLS=true |
+| `0029_add_event_chronology_relevance.sql` | APPLICATA 2026-06-01 | si | usare `verify_0029_event_chronology_relevance.sql` |
+| `0030_storage_bucket_size_limit.sql` | **DA APPLICARE — prerequisito del re-sync (passo 2)** | si (`UPDATE` puntuale) | usare `verify_0030.sql` (atteso `104857600`) |
+| `0031_*` (future) | — | vedi procedura sotto | — |
 
-## Procedura per future migration
+## Procedura per future migration (DOPO il re-sync)
 
-**Decisione**: continuare ad usare la procedura manuale finche' non si
-risincronizza il journal in modo controllato. Prima di scrivere una nuova
-migration:
+Una volta eseguito `resync_journal.sql` su Supabase:
 
-1. Scrivila a mano in `drizzle/00XX_descrittivo.sql` con `IF [NOT] EXISTS`
-   ovunque possibile (idempotente)
-2. Aggiungi un file `drizzle/verify_00XX_descrittivo.sql` con CASE WHEN
-   checks per ogni oggetto creato/modificato
-3. Applica via Supabase SQL editor
-4. Lancia il file di verifica e conferma OK su tutti i check
-5. Aggiorna **questa tabella** con data e link al verify
-6. Aggiorna `MEMORY.md` con stato
+1. Modificare lo schema TS in `src/db/schema/`
+2. `pnpm db:generate` → crea `drizzle/0031_<nome>.sql` + snapshot + journal entry
+3. Rivedere il SQL generato (drizzle non sa di RLS/policy/RPC: aggiungerle a
+   mano nel file se servono, PRIMA di applicare)
+4. `pnpm db:migrate` (con `DATABASE_URL` di produzione in `.env`) — oppure
+   incollare il file su Supabase SQL editor E POI registrare la riga in
+   `__drizzle_migrations` (hash sha256 del file, created_at = `when` del journal)
+5. Aggiornare questa tabella
 
-**NON lanciare** `pnpm db:migrate` finche' la `__drizzle_migrations` table
-non e' allineata. Per sincronizzare bisognerebbe:
-- Calcolare l'hash che Drizzle si aspetta per ogni file (algoritmo interno
-  drizzle-kit, non triviale da replicare)
-- INSERT manuale di 6 righe in `__drizzle_migrations` con quegli hash
-- Aggiornare `_journal.json` con le 6 entry mancanti
-
-Da fare in una sessione dedicata, separata, con backup completo del DB
-prima.
-
-## Quando rigenerare il journal
-
-Trigger ragionevoli:
-- Onboarding di un secondo developer sul progetto
-- Setup di un environment di staging che debba ripartire da zero
-- Migrazione del DB Supabase a una nuova istanza
-
-Finche' siamo single-user su una sola istanza Supabase production, il debt
-e' tollerabile. Documentato qui per visibilita'.
+**FINCHE' il re-sync non e' stato eseguito**: NON lanciare `pnpm db:migrate`
+(proverebbe ad applicare 0018→0030 in blocco perche' la tracking table e' ferma
+a 0017 — i file sono idempotenti ma e' un rischio inutile su prod). Continuare
+con la vecchia procedura manuale (SQL editor + verify file + tabella qui sopra).

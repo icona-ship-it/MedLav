@@ -55,8 +55,8 @@ benchmark/
 # Supabase
 supabase/.temp/
 
-# Drizzle
-drizzle/meta/
+# Drizzle — meta/ (journal + snapshots) DEVE essere versionato: senza gli
+# snapshot lo schema non e' ricostruibile dal repo (fix 2026-06-10, Sprint 3.3)
 
 # Misc
 *.tsbuildinfo

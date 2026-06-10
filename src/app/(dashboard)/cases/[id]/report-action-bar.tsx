@@ -20,10 +20,29 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { updateReportStatus, getCaseReportVersions, getLastExport } from '../../actions';
+import { getCitationReliabilityDisplay } from '@/lib/hrs-display';
 import { QualityGateDialog } from './quality-gate-dialog';
 import type { ReportRow } from './types';
 
 // --- Helpers ---
+
+/**
+ * 2.4-B: badge discreto "Affidabilità citazioni" (HRS reso visibile al perito).
+ * Tooltip nativo (title) con la spiegazione in italiano — niente jargon tecnico.
+ */
+function CitationReliabilityBadge({ hrs }: { hrs: number }) {
+  const display = getCitationReliabilityDisplay(hrs);
+  return (
+    <Badge
+      variant="outline"
+      className={`text-xs cursor-help ${display.colorClass}`}
+      title={display.description}
+      aria-label={display.description}
+    >
+      Affidabilità citazioni: {display.label}
+    </Badge>
+  );
+}
 
 function formatTimeAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -132,6 +151,11 @@ export function ReportActionBar({
               <Badge variant="secondary" className="text-xs">Bozza</Badge>
             )}
             <span className="text-xs text-muted-foreground">v{report.version}</span>
+            {/* 2.4-B: indice di affidabilità citazioni (HRS) — calcolato dalla
+                pipeline e salvato in generation_metadata, prima invisibile. */}
+            {typeof report.generation_metadata?.hrs === 'number' && (
+              <CitationReliabilityBadge hrs={report.generation_metadata.hrs} />
+            )}
             {lastExportInfo && (
               <span className="text-xs text-muted-foreground hidden sm:inline">
                 · Ultimo export: {lastExportInfo.format.toUpperCase()},{' '}

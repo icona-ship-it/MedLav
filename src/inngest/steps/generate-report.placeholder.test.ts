@@ -14,6 +14,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 import { buildPlaceholderContent, assembleSectionBlock } from './generate-report';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
+import { STIMA_DANNO_MARKER_PREFIX, buildStimaDannoMarker } from '@/services/calculations/stima-danno-block';
 import type { SectionSpec } from '@/services/synthesis/section-generation-types';
 
 function spec(id: string): SectionSpec {
@@ -44,6 +45,41 @@ describe('buildPlaceholderContent — B3 ITT/ITP deterministic sentinel', () => 
     const content = buildPlaceholderContent(spec('considerazioni_ml'), { decesso: true });
     expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
     expect(content).toContain('Inserire qui le considerazioni');
+  });
+});
+
+describe('buildPlaceholderContent — Sprint 4.3 stima tabellare del danno biologico', () => {
+  it('embeds the parameterized STIMA_DANNO sentinel (with case type) below the ITT/ITP block', () => {
+    const content = buildPlaceholderContent(spec('considerazioni_ml'), { caseType: 'rc_auto' });
+    expect(content).toContain(buildStimaDannoMarker('rc_auto'));
+    expect(content).toContain('Stima tabellare del danno biologico');
+    expect(content).toContain('proposta automatica');
+    // ITT/ITP block first, stima below it (segue il pattern dei benchmark)
+    expect(content.indexOf(DETERMINISTIC_MARKERS.ITT_ITP)).toBeLessThan(content.indexOf(buildStimaDannoMarker('rc_auto')));
+  });
+
+  it('without a caseType keeps the legacy behavior (ITT/ITP only, no stima)', () => {
+    const content = buildPlaceholderContent(spec('considerazioni_ml'));
+    expect(content).toContain(DETERMINISTIC_MARKERS.ITT_ITP);
+    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
+  });
+
+  it('decesso: NON inietta la stima del danno biologico (ITT/IP non si applicano al deceduto)', () => {
+    const content = buildPlaceholderContent(spec('considerazioni_ml'), { decesso: true, caseType: 'ortopedica' });
+    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
+    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
+  });
+
+  it('ambito penale: NON inietta né ITT/ITP né stima (in penale non si valuta il danno civilistico)', () => {
+    const content = buildPlaceholderContent(spec('considerazioni_ml'), { ambitoPenale: true, caseType: 'ortopedica' });
+    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
+    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
+    expect(content).toContain('Inserire qui le considerazioni');
+  });
+
+  it('non-target placeholder sections never receive the stima sentinel', () => {
+    const content = buildPlaceholderContent(spec('osservazioni_bozza'), { caseType: 'rc_auto' });
+    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
   });
 });
 

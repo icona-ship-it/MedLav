@@ -1,14 +1,79 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { Scale } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Scale, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { signIn } from '../actions';
+import { signIn, verifyMfa, signOut } from '../actions';
 
-export default function LoginPage() {
+function MfaChallengeForm() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const result = await verifyMfa(formData);
+
+    // If we get here, redirect didn't happen — there's an error
+    if (result?.error) {
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }
+
+  return (
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        <div className="space-y-2">
+          <label htmlFor="code" className="text-sm font-medium">
+            Codice a 6 cifre
+          </label>
+          <Input
+            id="code"
+            name="code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={7}
+            required
+            autoFocus
+            className="text-center font-mono text-lg tracking-widest"
+          />
+          <p className="text-xs text-muted-foreground">
+            Apri la tua app di autenticazione (es. Google Authenticator) e inserisci il codice mostrato per LegMed
+          </p>
+        </div>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? 'Verifica in corso...' : 'Verifica e accedi'}
+        </Button>
+      </form>
+      <div className="mt-3 text-center">
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="text-sm text-muted-foreground hover:text-primary hover:underline"
+        >
+          Annulla e torna al login
+        </button>
+      </div>
+    </>
+  );
+}
+
+function CredentialsForm({ onMfaRequired }: { onMfaRequired: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,74 +85,110 @@ export default function LoginPage() {
     const formData = new FormData(e.currentTarget);
     const result = await signIn(formData);
 
-    // If we get here, redirect didn't happen — there's an error
-    if (result?.error) {
+    // If we get here, redirect didn't happen — MFA step or error
+    if (result?.mfaRequired) {
+      onMfaRequired();
+    } else if (result?.error) {
       setError(result.error);
     }
     setIsLoading(false);
   }
 
   return (
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        <div className="space-y-2">
+          <label htmlFor="email" className="text-sm font-medium">
+            Email
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            placeholder="medico@studio.it"
+            required
+            autoComplete="email"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="password" className="text-sm font-medium">
+            Password
+          </label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? 'Accesso in corso...' : 'Accedi'}
+        </Button>
+      </form>
+      <div className="mt-3 text-center">
+        <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline">
+          Password dimenticata?
+        </Link>
+      </div>
+      <div className="mt-2 text-center text-sm text-muted-foreground">
+        Non hai un account?{' '}
+        <Link href="/register" className="text-primary hover:underline">
+          Registrati
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function LoginPageInner() {
+  // ?mfa=1 — set by the middleware when an aal1 session needs the TOTP step
+  const searchParams = useSearchParams();
+  const [step, setStep] = useState<'credentials' | 'mfa'>(
+    searchParams.get('mfa') === '1' ? 'mfa' : 'credentials',
+  );
+
+  const isMfaStep = step === 'mfa';
+
+  return (
     <div className="flex min-h-screen items-center justify-center bg-muted/50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <Scale className="h-6 w-6 text-primary" />
+            {isMfaStep ? (
+              <ShieldCheck className="h-6 w-6 text-primary" />
+            ) : (
+              <Scale className="h-6 w-6 text-primary" />
+            )}
           </div>
           <CardTitle className="text-2xl">LegMed</CardTitle>
           <CardDescription>
-            Accedi alla piattaforma di cronistoria medico-legale
+            {isMfaStep
+              ? 'Verifica in due passaggi'
+              : 'Accedi alla piattaforma di cronistoria medico-legale'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="medico@studio.it"
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Accesso in corso...' : 'Accedi'}
-            </Button>
-          </form>
-          <div className="mt-3 text-center">
-            <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline">
-              Password dimenticata?
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-sm text-muted-foreground">
-            Non hai un account?{' '}
-            <Link href="/register" className="text-primary hover:underline">
-              Registrati
-            </Link>
-          </div>
+          {isMfaStep ? (
+            <MfaChallengeForm />
+          ) : (
+            <CredentialsForm onMfaRequired={() => setStep('mfa')} />
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

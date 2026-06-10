@@ -20,7 +20,10 @@ const passwordSchema = z.object({
   path: ['confirmPassword'],
 });
 
-const VALID_RETENTION_DAYS = [90, 180, 365, 730] as const;
+// 0 = sentinel "Mai" (conserva per sempre, scelta esplicita dell'utente).
+// NULL in DB = mai configurato → il cron applica il default 365gg (DPIA §7).
+// 'null' resta accettato per retrocompatibilita' e viene mappato su 0.
+const VALID_RETENTION_DAYS = [0, 90, 180, 365, 730] as const;
 
 const retentionSchema = z.object({
   retentionDays: z.union([
@@ -147,7 +150,9 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
 
 /**
  * Update the user's data retention policy.
- * Accepts a number of days (90, 180, 365, 730) or null for indefinite retention.
+ * Accepts a number of days (90, 180, 365, 730) or 0 = "Mai" (keep forever,
+ * explicit choice). Stored as 0 — NOT as NULL — so the retention cron can
+ * distinguish the explicit opt-out from "never configured" (default 365).
  */
 export async function updateRetentionPolicy(
   formData: FormData,
@@ -169,7 +174,7 @@ export async function updateRetentionPolicy(
   }
 
   const retentionValue = parsed.data.retentionDays === 'null'
-    ? null
+    ? 0
     : Number(parsed.data.retentionDays);
 
   const { error } = await supabase

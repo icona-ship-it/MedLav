@@ -13,6 +13,7 @@ import { AlertTriangle, Download, CreditCard, Clock, Sparkles, Loader2, Mail, Pe
 import { csrfHeaders } from '@/lib/csrf-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { MfaSection } from './mfa-section';
 
 interface PortalResponse {
   success: boolean;
@@ -408,7 +409,7 @@ export default function SettingsPage() {
     } else {
       setProfile((prev) => prev ? {
         ...prev,
-        dataRetentionDays: value === 'null' ? null : Number(value),
+        dataRetentionDays: Number(value),
       } : prev);
       setRetentionMessage({ type: 'success', text: 'Policy di conservazione aggiornata' });
     }
@@ -570,6 +571,9 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Security: two-factor authentication (TOTP, opt-in) */}
+      <MfaSection />
+
       {/* Digital Signature */}
       <SignatureCard
         signaturePath={profile?.signatureImagePath ?? null}
@@ -653,7 +657,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Conservazione dati</CardTitle>
           <CardDescription>
-            Periodo di conservazione automatica dei casi archiviati. I casi archiviati oltre questo periodo verranno eliminati automaticamente.
+            Periodo di conservazione automatica dei casi archiviati (predefinito: 365 giorni). Riceverai un&apos;email di preavviso 30 giorni prima di ogni eliminazione, con la possibilità di estendere la conservazione.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -674,12 +678,12 @@ export default function SettingsPage() {
               <div>
                 <p className="text-sm font-medium">Periodo di conservazione</p>
                 <p className="text-xs text-muted-foreground">
-                  Solo i casi con stato &quot;archiviato&quot; verranno eliminati automaticamente
+                  Solo i casi con stato &quot;archiviato&quot; verranno eliminati automaticamente. I casi attivi non vengono mai toccati.
                 </p>
               </div>
             </div>
             <Select
-              value={profile?.dataRetentionDays?.toString() ?? 'null'}
+              value={(profile?.dataRetentionDays ?? 365).toString()}
               onValueChange={handleRetentionChange}
               disabled={retentionSaving}
             >
@@ -691,7 +695,7 @@ export default function SettingsPage() {
                 <SelectItem value="180">180 giorni</SelectItem>
                 <SelectItem value="365">365 giorni</SelectItem>
                 <SelectItem value="730">730 giorni</SelectItem>
-                <SelectItem value="null">Mai</SelectItem>
+                <SelectItem value="0">Mai (conserva per sempre)</SelectItem>
               </SelectContent>
             </Select>
           </div>

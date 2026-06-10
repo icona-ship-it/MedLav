@@ -14,6 +14,7 @@ import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
+import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
 
 /** Minimal event shape needed to render the deterministic tables. Compatible
  * with the DB row (snake_case) and easily mapped from ConsolidatedEvent. */
@@ -255,9 +256,12 @@ const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
 export const DOC_SANITARIA_OMITTED =
   '_La documentazione sanitaria integrale è consultabile nella perizia completa._';
 
-/** True if the synthesis contains at least one deterministic marker. */
+/** True if the synthesis contains at least one deterministic marker.
+ * Includes the parameterized STIMA_DANNO sentinel (prefix match — the case
+ * type is embedded in the marker, see stima-danno-block.ts). */
 export function hasDeterministicMarkers(synthesis: string): boolean {
-  return Object.values(DETERMINISTIC_MARKERS).some((m) => synthesis.includes(m));
+  return Object.values(DETERMINISTIC_MARKERS).some((m) => synthesis.includes(m))
+    || synthesis.includes(STIMA_DANNO_MARKER_PREFIX);
 }
 
 /** Map loosely-typed DB rows (export pipeline) to the renderer event shape. */
@@ -348,5 +352,7 @@ export function expandDeterministicBlocks(
   for (const [marker, rendered] of replacements) {
     if (out.includes(marker)) out = out.split(marker).join(rendered);
   }
-  return out;
+  // STIMA_DANNO is parameterized (case type embedded in the marker): expanded by
+  // its own module from the same CURRENT events, on every read surface.
+  return expandStimaDannoMarkers(out, events);
 }

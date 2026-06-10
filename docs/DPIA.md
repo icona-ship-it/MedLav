@@ -5,8 +5,8 @@
 **Titolare del Trattamento:** LegMed S.r.l.
 **Responsabile della Protezione dei Dati (DPO):** privacy@legmed.it
 **Data prima redazione:** 11 marzo 2026
-**Versione:** 1.1
-**Ultimo aggiornamento:** 22 maggio 2026 (introduzione dettatura vocale Voxtral — Fase 9 pipeline, rischio R9, misure 5.7)
+**Versione:** 1.2
+**Ultimo aggiornamento:** 10 giugno 2026 (formalizzazione misure organizzative 5.8: procedura data breach, registro violazioni Art. 33(5), incident response plan; bozza DPA cliente ex Art. 28(3))
 **Stato:** Approvata
 **Prossima revisione programmata:** 11 marzo 2027
 
@@ -194,14 +194,16 @@ Il trattamento di dati sanitari e **intrinsecamente necessario** per la finalita
 
 | Tipologia dato | Periodo di conservazione | Meccanismo |
 |----------------|------------------------|------------|
-| Documenti clinici e report | Fino a cancellazione da parte dell'utente o chiusura account | Cancellazione on-demand (GDPR Art. 17) |
+| Casi ARCHIVIATI (documenti clinici, eventi, report, immagini) | **365 giorni dall'ultima modifica (default)** — configurabile dall'utente: 90/180/365/730 giorni oppure "Mai" (scelta esplicita) | Cron giornaliero `data-retention/cleanup` (Inngest, 03:00 UTC): **email di preavviso 30 giorni prima** della cancellazione (con elenco casi e link per estendere), poi cancellazione definitiva DB + Storage. Nessuna cancellazione senza preavviso andato a buon fine (fail-safe) |
+| Casi ATTIVI (bozza, in revisione, definitivo) | Fino ad archiviazione o cancellazione da parte dell'utente | I casi attivi sono incarichi professionali in corso: la cancellazione automatica di lavoro in corso sarebbe perdita dati, non minimizzazione. Il conteggio retention parte dall'archiviazione |
+| Documenti clinici e report (on-demand) | — | Cancellazione on-demand sempre disponibile (GDPR Art. 17): singolo caso o intero account |
 | Dati account | Durata del rapporto contrattuale + 10 anni (obblighi fiscali ex D.P.R. 600/73) | Eliminazione automatica |
 | Log tecnici | 90 giorni | Cancellazione automatica |
 | Dati di fatturazione | 10 anni (obbligo fiscale) | Conservazione separata |
 | Audit log | Durata dell'account + 1 anno | Eliminazione con cancellazione account |
 | Dati su Mistral AI | **Zero retention** — elaborati in tempo reale senza conservazione | Garantito da DPA con Mistral AI |
 
-**Nota**: e prevista l'implementazione di una data retention policy con cancellazione automatica configurabile dall'utente (default: 365 giorni dall'ultimo accesso al caso).
+**Stato implementazione (aggiornato 2026-06-10)**: la retention automatica e' ATTIVA con default 365 giorni per i casi archiviati degli utenti che non configurano nulla (`profiles.data_retention_days IS NULL`). L'opzione "Mai" (valore 0) e' una scelta esplicita dell'utente, legittima in quanto il perito — titolare del trattamento sui propri fascicoli — puo' avere basi giuridiche per conservazione prolungata (es. difesa in giudizio, prescrizione decennale RC professionale). Il preavviso email e' un avviso di servizio: viene inviato anche con le notifiche email disattivate. Tracciamento preavvisi: `perizia_metadata.retentionNoticeSentAt` per caso + audit log `case.retention_notice_sent`.
 
 #### Limitazione delle finalita (Art. 5(1)(b) GDPR)
 
@@ -392,6 +394,7 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | Misura | Descrizione | Stato |
 |--------|-------------|-------|
 | Autenticazione email/password | Supabase Auth con verifica email obbligatoria prima dell'accesso | Implementata |
+| Autenticazione a due fattori (MFA TOTP) | Opt-in per tutti gli utenti: enrollment con QR code in Impostazioni → "Verifica in due passaggi", challenge a 6 cifre dopo la password, enforcement aal2 nel middleware su tutte le route protette. Pianificato: obbligo per gli account admin | Implementata (2026-06-10, opt-in) |
 | Password policy | Minimo 8 caratteri, hashing sicuro gestito da Supabase (bcrypt) | Implementata |
 | Sessioni sicure | Token JWT con scadenza, refresh automatico, invalidazione su logout | Implementata |
 | Middleware di autenticazione | Ogni route protetta richiede sessione valida tramite middleware Next.js | Implementata |
@@ -498,10 +501,12 @@ La valutazione dei rischi segue la metodologia raccomandata dal Garante Privacy 
 | Misura | Descrizione | Stato |
 |--------|-------------|-------|
 | Audit log completo | Ogni azione rilevante e registrata con: user_id, azione, tipo entita, ID entita, IP, timestamp. Il log e immutabile | Implementata |
-| Procedura di notifica | Procedura documentata per la notifica al Garante entro 72 ore (Art. 33 GDPR) e comunicazione agli interessati (Art. 34 GDPR) | Da formalizzare |
-| Registro data breach | Registro interno delle violazioni di dati personali, indipendentemente dall'obbligo di notifica | Da implementare |
+| Procedura di notifica | Procedura documentata per la notifica al Garante entro 72 ore (Art. 33 GDPR) e comunicazione agli interessati (Art. 34 GDPR), su doppio binario titolare/responsabile — vd. `docs/PROCEDURA-DATA-BREACH.md` | Formalizzata (10/06/2026) |
+| Registro data breach | Registro interno delle violazioni di dati personali ex Art. 33(5), indipendentemente dall'obbligo di notifica, pre-popolato con l'evento di sicurezza apr 2026 — vd. `docs/REGISTRO-DATA-BREACH.md` | Implementato (10/06/2026) |
 | Monitoraggio errori (Sentry) | Sistema di monitoraggio errori in tempo reale per rilevare anomalie applicative | Implementata |
-| Incident response plan | Piano di risposta agli incidenti con ruoli, responsabilita e tempi di intervento | Da formalizzare |
+| Incident response plan | Piano di risposta agli incidenti con ruoli, responsabilita, tempi di intervento e playbook di contenimento per lo stack (revoca chiavi Supabase/Mistral/Vercel/Inngest/Upstash/Stripe/Resend/Sentry, kill sessioni, feature flag condivisione) — integrato in `docs/PROCEDURA-DATA-BREACH.md` (Fasi 1-8 e Sez. 5) | Formalizzato (10/06/2026) |
+
+**Nota (10/06/2026)**: il "compliance pack" comprende anche la bozza di DPA verso i clienti-titolari (`docs/DPA-CLIENTE-TEMPLATE.md`, ex Art. 28(3)), formalizzata in pari data ma **in attesa di validazione legale** prima dell'uso contrattuale. Resta pendente la firma del DPA ufficiale con Mistral AI (`docs/DPA-MISTRAL.md`).
 
 ### 5.9 Misure contrattuali — AI e dati sanitari
 
@@ -543,8 +548,8 @@ Il Data Protection Officer, valutata la presente DPIA, rileva che:
 
 | Azione | Priorita | Scadenza |
 |--------|----------|----------|
-| Formalizzare la procedura di data breach notification | Alta | Q2 2026 |
-| Implementare data retention policy con cancellazione automatica | Alta | Q2 2026 |
+| Formalizzare la procedura di data breach notification — **completata il 10/06/2026** (`docs/PROCEDURA-DATA-BREACH.md` + `docs/REGISTRO-DATA-BREACH.md`) | Alta | Q2 2026 |
+| Implementare data retention policy con cancellazione automatica — **completata il 10/06/2026** (default 365gg casi archiviati + preavviso email 30gg, vedi §Limitazione della conservazione) | Alta | Q2 2026 |
 | Completare la protezione CSRF su tutte le route API | Alta | Q2 2026 |
 | Implementare rate limiting avanzato con Upstash Redis | Media | Q3 2026 |
 | Completare il modulo di anonimizzazione dedicato | Media | Q3 2026 |
@@ -625,6 +630,8 @@ La presente DPIA sara **riesaminata e aggiornata**:
 | Versione | Data | Autore | Modifiche |
 |----------|------|--------|-----------|
 | 1.0 | 11/03/2026 | DPO | Prima redazione completa |
+| 1.1 | 22/05/2026 | DPO | Introduzione dettatura vocale Voxtral (Fase 9 pipeline, rischio R9, misure 5.7) |
+| 1.2 | 10/06/2026 | DPO | Formalizzazione misure 5.8: `docs/PROCEDURA-DATA-BREACH.md` (notifica 72h + incident response plan), `docs/REGISTRO-DATA-BREACH.md` (registro violazioni Art. 33(5), pre-popolato con evento apr 2026); redatta bozza DPA cliente ex Art. 28(3) (`docs/DPA-CLIENTE-TEMPLATE.md`, in attesa di validazione legale) |
 
 ---
 

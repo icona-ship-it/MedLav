@@ -778,3 +778,37 @@ export function getBlockingIssues(validation: ReportValidation): ReportIssue[] {
     (i) => i.severity === 'error' && BLOCKING_ERROR_TYPES.has(i.type),
   );
 }
+
+// ── Sprint 2.4-A2: manual unlock (ignoreValidation) ──────────────────
+//
+// A validator false positive + deterministic generation can permanently kill a
+// case (every retry reproduces the same blocked report). The manual unlock lets
+// the perito regenerate ignoring QUALITY findings — but GDPR/fabrication leaks
+// must NEVER be overridable: a report that copies few-shot names or reproduces
+// the Regnoto fabrication signature cannot be saved under any circumstance.
+
+/**
+ * Explicit whitelist of issue types that remain blocking even when the perito
+ * requests `ignoreValidation` (privacy/fabrication leaks, not quality).
+ */
+export const NON_OVERRIDABLE_ERROR_TYPES: ReadonlySet<ReportIssue['type']> = new Set([
+  'sentinel_name_leak',
+  'header_fabrication_signature',
+]);
+
+/**
+ * Split the blocking issues of a validation into:
+ *  - `overridable`: quality findings the perito may consciously ignore
+ *    (the save then records validationOverridden + audit log);
+ *  - `nonOverridable`: GDPR/fabrication leaks that block the save ALWAYS.
+ */
+export function partitionBlockingIssues(validation: ReportValidation): {
+  overridable: ReportIssue[];
+  nonOverridable: ReportIssue[];
+} {
+  const blocking = getBlockingIssues(validation);
+  return {
+    overridable: blocking.filter((i) => !NON_OVERRIDABLE_ERROR_TYPES.has(i.type)),
+    nonOverridable: blocking.filter((i) => NON_OVERRIDABLE_ERROR_TYPES.has(i.type)),
+  };
+}

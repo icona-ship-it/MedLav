@@ -130,8 +130,14 @@ export const regenerateReport = inngest.createFunction(
     onFailure: async ({ event }) => restoreCompletatoOnFailure(event),
   },
   { event: 'case/report.regenerate' },
-  async ({ event, step }) => {
-    const { caseId, userId } = event.data as { caseId: string; userId: string };
+  async ({ event, step, attempt }) => {
+    const { caseId, userId, ignoreValidation } = event.data as {
+      caseId: string;
+      userId: string;
+      /** 2.4-A2 manual unlock: save even with QUALITY blocking findings
+       * (GDPR/fabrication leaks stay blocking — see report-validator.ts). */
+      ignoreValidation?: boolean;
+    };
 
     // ── Gather inputs from DB (the route already wrote fresh anomalies/missing-docs) ──
     const prep = await step.run('regen-fetch-inputs', async () => {
@@ -241,7 +247,8 @@ export const regenerateReport = inngest.createFunction(
               const allOcr = await fetchDocumentsOcrContext(caseId);
               const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
               const { generateSingleSection } = await import('@/services/synthesis/section-generator');
-              return generateSingleSection({ spec, synthesisParams, previousContext, documentsOcrText: batchOcr });
+              // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
+              return generateSingleSection({ spec, synthesisParams, previousContext, documentsOcrText: batchOcr, attempt });
             });
             if (batchResult.content) batchContents.push(batchResult.content);
             else logger.warn('regenerate-report', `Batch ${b + 1}/${totalBatches} documentazione_sanitaria: contenuto vuoto`, { caseId });
@@ -264,7 +271,7 @@ export const regenerateReport = inngest.createFunction(
         } else {
           const section = await step.run(`regen-section-${spec.id}`, async () => {
             await updateProgress(i, spec.title);
-            return generateSectionStep(caseId, spec, synthesisParams, previousContext);
+            return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
           accumulatedSections.push(section);
         }
@@ -278,8 +285,13 @@ export const regenerateReport = inngest.createFunction(
     }
 
     // Save the report (partial or complete) — new version, deterministic facts.
+    // sectionPlan → real-prompt version hash (2.3); ignoreValidation → manual
+    // unlock with audit trail (2.4-A2, GDPR leaks never overridable).
     await step.run('regen-assemble-and-save', () =>
-      assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams),
+      assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams, sectionPlan, {
+        ignoreValidation: ignoreValidation === true,
+        userId,
+      }),
     );
 
     // If a section failed: partial report is saved, but throw so Inngest retries

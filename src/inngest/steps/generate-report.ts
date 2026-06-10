@@ -9,6 +9,8 @@ import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import { DETERMINISTIC_MARKERS, expandDeterministicBlocks, type DeterministicDoc } from '@/services/calculations/deterministic-tables';
+import { buildStimaDannoMarker } from '@/services/calculations/stima-danno-block';
+import type { CaseType } from '@/types';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
@@ -354,7 +356,7 @@ export { insertReport as saveReportStep };
 import { resolveSectionPlan } from '@/services/synthesis/section-catalog';
 import { generateSingleSection } from '@/services/synthesis/section-generator';
 import { computeSectionalPromptVersion } from './prompt-version-sectional';
-import { validateReport, getBlockingIssues } from '@/services/synthesis/report-validator';
+import { validateReport, getBlockingIssues, partitionBlockingIssues } from '@/services/synthesis/report-validator';
 import type { ReportValidationContext } from '@/services/synthesis/report-validator';
 import { computeHrs, getHrsLevel } from '@/services/synthesis/hallucination-risk-scorer';
 import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
@@ -410,28 +412,50 @@ export function planReportSections(
  * would never reach the report body — only the events-tab UI. */
 const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
 
+/** Options for buildPlaceholderContent — suppression flags + case type. */
+export interface PlaceholderContentOptions {
+  /** Periziando deceduto: ITT/ITP e stima del danno biologico non si applicano. */
+  decesso?: boolean;
+  /** Ambito penale: non si valuta il danno civilistico (no ITT/ITP, no stima). */
+  ambitoPenale?: boolean;
+  /** Case type — embedded in the STIMA_DANNO sentinel (Sprint 4.3). */
+  caseType?: CaseType;
+}
+
 /**
- * A2 + B3: build placeholder content, embedding the ITT/ITP DETERMINISTIC
- * SENTINEL for sections where the perito assesses temporary disability. The
- * sentinel is expanded at read time (UI + export) from the CURRENT events, so
- * the table is ALWAYS in sync — if the perito later corrects an event, the
- * table updates by itself, no regeneration. The arithmetic is a proposal to
- * verify; the medico-legal judgment stays the perito's.
+ * A2 + B3 + Sprint 4.3: build placeholder content, embedding the DETERMINISTIC
+ * SENTINELS for sections where the perito assesses the damage: the graduated
+ * ITT/ITP table AND — for civil cases with a living periziando — the tabular
+ * biological-damage estimate (TUN/Milano lookup on the midpoint of the
+ * indicative range for the case type). Both sentinels are expanded at read time
+ * (UI + export) from the CURRENT events, so the figures are ALWAYS in sync —
+ * if the perito later corrects an event, the tables update by themselves, no
+ * regeneration. The arithmetic is a proposal to verify; the medico-legal
+ * judgment stays the perito's.
  */
-export function buildPlaceholderContent(spec: SectionSpec, opts?: { decesso?: boolean }): string {
+export function buildPlaceholderContent(spec: SectionSpec, opts?: PlaceholderContentOptions): string {
   const base = spec.placeholderText ?? '';
   if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id)) {
     return base;
   }
-  // Decesso: il deceduto non ha invalidità temporanea da graduare — la tabella
-  // ITT/ITP sarebbe fuorviante nelle considerazioni (benchmark gold 2026-06-10).
-  if (opts?.decesso) {
+  // Decesso: il deceduto non ha invalidità temporanea da graduare né danno
+  // biologico ITT/IP da stimare — le tabelle sarebbero fuorvianti (benchmark
+  // gold 2026-06-10). Ambito penale: il danno civilistico non si valuta (il
+  // piano penale usa già considerazioni_penale; guardia esplicita di difesa).
+  if (opts?.decesso || opts?.ambitoPenale) {
     return base;
   }
   // Guida di conversione (benchmark gold 2026-06-10): nei depositati i periodi
   // ITT/ITP compaiono come elenco in prosa motivato, non come tabella — la
   // tabella resta la fonte dei fatti, la formula guida la stesura del perito.
-  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}\n\n*[Il perito trasforma la proposta in elenco motivato secondo la formula: "va ragionevolmente riconosciuto un periodo di: invalidità temporanea totale pari a NN (lettere) giorni, corrispondenti a [motivazione clinica, es. periodo di ricovero in ambiente nosocomiale], ovvero dal DD.MM.YYYY al DD.MM.YYYY, come da documentazione sanitaria; invalidità temporanea parziale al NN% pari a NN (lettere) giorni, per [motivazione clinica del periodo]".]*`;
+  const ittBlock = `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}\n\n*[Il perito trasforma la proposta in elenco motivato secondo la formula: "va ragionevolmente riconosciuto un periodo di: invalidità temporanea totale pari a NN (lettere) giorni, corrispondenti a [motivazione clinica, es. periodo di ricovero in ambiente nosocomiale], ovvero dal DD.MM.YYYY al DD.MM.YYYY, come da documentazione sanitaria; invalidità temporanea parziale al NN% pari a NN (lettere) giorni, per [motivazione clinica del periodo]".]*`;
+  // Sprint 4.3: stima tabellare deterministica del danno biologico permanente
+  // (range indicativo per tipo caso + lookup TUN/Milano sul punto medio),
+  // sotto la tabella ITT/ITP. Solo CTU/CTP civile con periziando vivente.
+  if (!opts?.caseType) {
+    return ittBlock;
+  }
+  return `${ittBlock}\n\n**Stima tabellare del danno biologico (proposta automatica — il perito verifica, corregge e motiva):**\n\n${buildStimaDannoMarker(opts.caseType)}`;
 }
 
 export async function generateSectionStep(
@@ -439,13 +463,19 @@ export async function generateSectionStep(
   spec: SectionSpec,
   synthesisParams: SynthesisParams,
   previousContext: SectionContext[],
+  /** Inngest retry attempt (0-based) — varies the LLM seed so retries differ (2.4-A1). */
+  attempt?: number,
 ): Promise<GeneratedSection> {
   // Placeholder sections emit static text — no LLM call needed.
   if (spec.isPlaceholder) {
     return {
       id: spec.id,
       title: spec.title,
-      content: buildPlaceholderContent(spec, { decesso: synthesisParams.periziaMetadata?.decesso }),
+      content: buildPlaceholderContent(spec, {
+        decesso: synthesisParams.periziaMetadata?.decesso,
+        ambitoPenale: synthesisParams.periziaMetadata?.ambitoPenale,
+        caseType: synthesisParams.caseType,
+      }),
       contextSummary: '',
       wordCount: 0,
     };
@@ -465,17 +495,36 @@ export async function generateSectionStep(
     synthesisParams,
     previousContext,
     documentsOcrText,
+    attempt,
   });
+}
+
+/** Options for assembleSectionsAndSaveReport (Sprint 2.4-A2 manual unlock). */
+export interface AssembleReportOptions {
+  /**
+   * When true, QUALITY blocking findings do not prevent saving: the report is
+   * saved with `generation_metadata.validationOverridden=true` + the list of
+   * ignored findings, and an audit log row is written. GDPR/fabrication leaks
+   * (NON_OVERRIDABLE_ERROR_TYPES) remain blocking ALWAYS.
+   */
+  ignoreValidation?: boolean;
+  /** User requesting the override — recorded in the audit log. */
+  userId?: string;
 }
 
 /**
  * Assemble all generated sections into a final report and save to DB.
  * No LLM call — pure assembly + validation + DB insert.
+ *
+ * @param sectionPlan - resolved SectionSpec[] used for generation: the REAL
+ *   prompt material is hashed into promptVersion (Sprint 2.3, ADR-011).
  */
 export async function assembleSectionsAndSaveReport(
   caseId: string,
   sections: GeneratedSection[],
   synthesisParams: SynthesisParams,
+  sectionPlan: SectionSpec[],
+  options?: AssembleReportOptions,
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
   // Assemble full report markdown.
   // Strip ANY leading ## heading the content may already carry (the LLM despite
@@ -513,12 +562,16 @@ export async function assembleSectionsAndSaveReport(
 
   const totalWordCount = sections.reduce((sum, s) => sum + s.wordCount, 0);
 
-  // Compute prompt version from section system prompts
+  // Compute prompt version from the REAL section prompts (Sprint 2.3): hash the
+  // resolved plan specs of the sections actually generated, so any change to
+  // section-catalog directives / placeholders / role-prompts / peritale
+  // formulations changes generation_metadata.promptVersion.
+  const generatedIds = new Set(sections.map((s) => s.id));
   const promptVersion = computeSectionalPromptVersion({
     caseType: synthesisParams.caseType,
     caseRole: synthesisParams.caseRole,
     caseTypes: synthesisParams.caseTypes,
-    sectionIds: sections.map((s) => s.id),
+    sections: sectionPlan.filter((spec) => generatedIds.has(spec.id)),
   });
 
   // Validate assembled report. A3: pass the assembled section titles as
@@ -574,6 +627,9 @@ export async function assembleSectionsAndSaveReport(
     ];
     validation = { ...validation, issues: mergedIssues, valid: !mergedIssues.some((i) => i.severity === 'error') };
   }
+  // Sprint 2.4-A2: quality findings consciously ignored via the manual unlock
+  // (ignoreValidation). Recorded in generation_metadata + audit log below.
+  let overriddenIssues: Array<{ type: string; message: string }> = [];
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');
@@ -589,10 +645,27 @@ export async function assembleSectionsAndSaveReport(
     // sentinel dates, broken OCR markers, header mismatch/fabrication.
     const criticalErrors = getBlockingIssues(validation);
     if (criticalErrors.length > 0) {
-      throw new Error(
-        `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +
-        `Inngest riprovera la generazione.`,
-      );
+      if (options?.ignoreValidation) {
+        // Manual unlock: only QUALITY findings are ignorable. GDPR/fabrication
+        // leaks (explicit whitelist in report-validator.ts) block ALWAYS.
+        const { overridable, nonOverridable } = partitionBlockingIssues(validation);
+        if (nonOverridable.length > 0) {
+          throw new Error(
+            `Report bloccato (controllo NON ignorabile — possibile leak dati/fabbricazione): ` +
+            `${nonOverridable.map((e) => e.message).join('; ')}.`,
+          );
+        }
+        overriddenIssues = overridable.map((e) => ({ type: e.type, message: e.message }));
+        logger.warn('pipeline',
+          `Validation OVERRIDDEN for case ${caseId} (ignoreValidation): ` +
+          `${overriddenIssues.map((i) => i.type).join(', ')}. Report salvato su richiesta esplicita dell'utente.`,
+        );
+      } else {
+        throw new Error(
+          `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +
+          `Inngest riprovera la generazione.`,
+        );
+      }
     }
   }
 
@@ -633,6 +706,9 @@ export async function assembleSectionsAndSaveReport(
       ),
     ),
     ...(coveBypassed.length > 0 ? { coveBypassed } : {}),
+    ...(overriddenIssues.length > 0
+      ? { validationOverridden: true, validationOverriddenIssues: overriddenIssues }
+      : {}),
   };
 
   if (coveBypassed.length > 0) {
@@ -648,6 +724,30 @@ export async function assembleSectionsAndSaveReport(
   );
 
   const result = await insertReportWithMetadata(caseId, fullReport, totalWordCount, generationMetadata);
+
+  // A2: the override is a sensitive action — leave an audit trail (GDPR Art. 32).
+  // Metadata: only issue TYPES and counts (messages may quote report text).
+  if (overriddenIssues.length > 0) {
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('audit_log').insert({
+        user_id: options?.userId ?? null,
+        action: 'report.validation_overridden',
+        entity_type: 'report',
+        entity_id: result.reportId,
+        metadata: {
+          caseId,
+          issueTypes: overriddenIssues.map((i) => i.type),
+          issueCount: overriddenIssues.length,
+        },
+      });
+    } catch (auditErr) {
+      logger.error('pipeline', `Failed to write validation-override audit log for case ${caseId}`, {
+        error: auditErr instanceof Error ? auditErr.message : 'unknown',
+      });
+    }
+  }
+
   return { ...result, promptVersion, usage: totalUsage };
 }
 

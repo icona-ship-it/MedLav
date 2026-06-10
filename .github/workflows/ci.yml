@@ -40,36 +40,71 @@ jobs:
       - name: Build
         run: pnpm build
 
-  # E2E runs in a SEPARATE, NON-BLOCKING job. Today the credential-gated specs
-  # skip (no E2E_USER_EMAIL/PASSWORD secret), so this is informational only and
-  # must never red the PR / block the `ci` gate. To make it meaningful later:
-  # add E2E_BASE_URL/E2E_USER_EMAIL/E2E_USER_PASSWORD as GitHub secrets and
-  # remove the `continue-on-error` lines.
+  # E2E job — BLOCKING when the secrets are configured (Sprint 2.5).
+  #
+  # Required GitHub secrets (Settings → Secrets and variables → Actions):
+  #   E2E_USER_EMAIL     — account di test dedicato (mai quello di produzione)
+  #   E2E_USER_PASSWORD  — password dell'account di test
+  #   E2E_BASE_URL       — opzionale: URL del deployment da testare;
+  #                        default http://localhost:3000 (build locale del job)
+  #
+  # Behavior:
+  #   - secrets PRESENT → the smoke specs (auth/upload/export) RUN and any
+  #     failure REDS this job (no continue-on-error: a broken login can no
+  #     longer pass a green CI).
+  #   - secrets ABSENT  → all steps are SKIPPED and an explicit
+  #     "E2E SKIPPED: secrets non configurati" notice appears in the run
+  #     summary, so the skip is visible — never silent.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
+      - name: Check E2E secrets
+        id: gate
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: |
+          if [ -n "$E2E_USER_EMAIL" ] && [ -n "$E2E_USER_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "E2E secrets configurati: gli smoke test girano in modalita BLOCCANTE."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=E2E SKIPPED::Secrets non configurati (E2E_USER_EMAIL / E2E_USER_PASSWORD): smoke auth/upload/export NON eseguiti."
+            {
+              echo "## ⚠️ E2E SKIPPED: secrets non configurati"
+              echo ""
+              echo "Gli smoke test E2E (auth/upload/export) non sono stati eseguiti."
+              echo "Configurare i secrets \`E2E_USER_EMAIL\`, \`E2E_USER_PASSWORD\`"
+              echo "(e opzionalmente \`E2E_BASE_URL\`) per renderli bloccanti."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/checkout@v6
+        if: steps.gate.outputs.enabled == 'true'
       - uses: pnpm/action-setup@v6
+        if: steps.gate.outputs.enabled == 'true'
         with:
           version: 10
       - uses: actions/setup-node@v6
+        if: steps.gate.outputs.enabled == 'true'
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        if: steps.gate.outputs.enabled == 'true'
       - name: Build
+        if: steps.gate.outputs.enabled == 'true'
         run: pnpm build
       - name: Install Playwright browsers
+        if: steps.gate.outputs.enabled == 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - name: Run E2E tests
-        continue-on-error: true
+      - name: Run E2E tests (blocking)
+        if: steps.gate.outputs.enabled == 'true'
         run: |
           pnpm start &
           npx wait-on http://localhost:3000 --timeout 30000
           pnpm test:e2e
         env:
-          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL || 'http://localhost:3000' }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}

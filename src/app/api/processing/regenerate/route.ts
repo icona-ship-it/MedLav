@@ -21,6 +21,14 @@ export const maxDuration = 800; // synthesis can take several minutes (TIMEOUT_S
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
+  /**
+   * 2.4-A2 manual unlock: regenerate ignoring QUALITY validation blocks (a
+   * validator false positive + deterministic seed can otherwise kill a case
+   * permanently). GDPR/fabrication leak findings remain ALWAYS blocking —
+   * see NON_OVERRIDABLE_ERROR_TYPES in report-validator.ts. The override is
+   * recorded in generation_metadata + audit log.
+   */
+  ignoreValidation: z.boolean().optional().default(false),
 });
 
 /**
@@ -76,7 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID caso non valido' }, { status: 400 });
     }
 
-    const { caseId } = parsed.data;
+    const { caseId, ignoreValidation } = parsed.data;
 
     // Verify case ownership
     const { data: caseRow } = await supabase
@@ -308,7 +316,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id } });
+      await inngest.send({ name: 'case/report.regenerate', data: { caseId, userId: user.id, ignoreValidation } });
       regenDispatched = true;
     } catch (sendError) {
       // Dispatch failed → REVERT the stage so the case is never stuck in
@@ -337,6 +345,7 @@ export async function POST(request: NextRequest) {
         eventsCount: events.length,
         anomaliesCount: anomalies.length,
         missingDocsCount: missingDocs.length,
+        ...(ignoreValidation ? { ignoreValidation: true } : {}),
       },
     });
 

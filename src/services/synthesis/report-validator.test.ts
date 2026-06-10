@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { validateReport, getBlockingIssues } from './report-validator';
+import {
+  validateReport,
+  getBlockingIssues,
+  partitionBlockingIssues,
+  NON_OVERRIDABLE_ERROR_TYPES,
+} from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 
 function buildFullReport(overrides?: { events?: number }): string {
@@ -746,5 +751,46 @@ ${block}`;
       expect(dup.length).toBeGreaterThanOrEqual(1);
       expect(getBlockingIssues(validation).some((i) => i.type === 'duplicate_content')).toBe(false);
     });
+  });
+});
+
+describe('partitionBlockingIssues — manual unlock whitelist (Sprint 2.4-A2)', () => {
+  function validationWith(issues: ReportIssue[]) {
+    return { valid: false, issues, eventCoverage: 100 };
+  }
+
+  it('should classify quality blockers (sentinel_date_leak, header_mismatch) as overridable', () => {
+    const validation = validationWith([
+      { type: 'sentinel_date_leak', severity: 'error', message: 'sentinel 1900' },
+      { type: 'header_mismatch', severity: 'error', message: 'tribunale mismatch' },
+    ]);
+    const { overridable, nonOverridable } = partitionBlockingIssues(validation);
+    expect(overridable.map((i) => i.type).sort()).toEqual(['header_mismatch', 'sentinel_date_leak']);
+    expect(nonOverridable).toHaveLength(0);
+  });
+
+  it('should NEVER allow overriding header_fabrication_signature (GDPR/fabrication leak)', () => {
+    const validation = validationWith([
+      { type: 'header_fabrication_signature', severity: 'error', message: 'Regnoto regression' },
+      { type: 'low_event_coverage', severity: 'error', message: 'coverage 5%' },
+    ]);
+    const { overridable, nonOverridable } = partitionBlockingIssues(validation);
+    expect(nonOverridable.map((i) => i.type)).toEqual(['header_fabrication_signature']);
+    expect(overridable.map((i) => i.type)).toEqual(['low_event_coverage']);
+  });
+
+  it('should keep the non-overridable whitelist explicit (name leak + fabrication signature)', () => {
+    expect(NON_OVERRIDABLE_ERROR_TYPES.has('sentinel_name_leak')).toBe(true);
+    expect(NON_OVERRIDABLE_ERROR_TYPES.has('header_fabrication_signature')).toBe(true);
+    // Quality gates stay overridable — the unlock would be useless otherwise.
+    expect(NON_OVERRIDABLE_ERROR_TYPES.has('sentinel_date_leak')).toBe(false);
+    expect(NON_OVERRIDABLE_ERROR_TYPES.has('missing_section')).toBe(false);
+    expect(NON_OVERRIDABLE_ERROR_TYPES.has('too_short')).toBe(false);
+  });
+
+  it('should return empty partitions for a clean validation', () => {
+    const { overridable, nonOverridable } = partitionBlockingIssues(validationWith([]));
+    expect(overridable).toHaveLength(0);
+    expect(nonOverridable).toHaveLength(0);
   });
 });

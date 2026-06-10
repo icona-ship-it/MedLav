@@ -104,7 +104,7 @@
       "idx": 14,
       "version": "7",
       "when": 1773433279755,
-      "tag": "0014_rich_nicolaos",
+      "tag": "0014_add_document_types",
       "breakpoints": true
     },
     {
@@ -126,6 +126,97 @@
       "version": "7",
       "when": 1774899608654,
       "tag": "0017_lying_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1775815200000,
+      "tag": "0018_add_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1775815500000,
+      "tag": "0019_backfill_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1775988000000,
+      "tag": "0020_add_studio_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1776160800000,
+      "tag": "0021_add_credits",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1777975200000,
+      "tag": "0022_hybrid_rag_bm25",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778493600000,
+      "tag": "0023_hybrid_rag_multilingua",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778497200000,
+      "tag": "0024_add_document_content_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779271200000,
+      "tag": "0025_perizie_benchmark",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780308000000,
+      "tag": "0026_rls_user_owned",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780308600000,
+      "tag": "0027_audit_archive",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780309200000,
+      "tag": "0028_stripe_event_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780309800000,
+      "tag": "0029_add_event_chronology_relevance",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780394400000,
+      "tag": "0030_storage_bucket_size_limit",
       "breakpoints": true
     }
   ]

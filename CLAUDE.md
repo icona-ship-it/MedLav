@@ -19,11 +19,12 @@ Web app per medici legali: upload documentazione clinica → report medico-legal
 
 ## Database / Migration — IMPORTANTE
 
-**Drizzle journal disallineato (debt noto)**: il journal `drizzle/meta/_journal.json` e' fermo a `0017`. Le migration `0018`-`0023` sono state applicate **manualmente** via Supabase SQL editor e NON sono nella `__drizzle_migrations` table. Vedi `drizzle/MANUAL_MIGRATIONS.md` per stato completo, motivo, e procedura per nuove migration.
+**Re-sync journal Drizzle preparato (2026-06-10), in attesa di esecuzione su Supabase**: il journal `drizzle/meta/_journal.json` ora include tutte le migration `0000`→`0030` (snapshot `0030` allineato allo schema TS, `pnpm db:generate` verde). Per completare: applicare `0025` + `0030` (pendenti, idempotenti) e poi incollare `drizzle/resync_journal.sql` su Supabase. Procedura completa in `drizzle/MANUAL_MIGRATIONS.md`.
 
-- **NON lanciare** `pnpm db:migrate` finche' la table non e' allineata (oggi e' no-op innocuo perche' tutte le migration sono `IF [NOT] EXISTS`, ma non aggiorna il tracking)
-- **Per nuove migration**: scriverle a mano in `drizzle/00XX_*.sql` (idempotenti) + file `verify_00XX_*.sql` con check SQL + applicare via Supabase + aggiornare `MANUAL_MIGRATIONS.md`
-- **Verifica idempotente**: ogni migration manuale ha un file `verify_*.sql` da incollare nel SQL editor (es. `verify_0023_hybrid_rag_multilingua.sql`)
+- **FINCHE' il re-sync non e' eseguito su Supabase, NON lanciare `pnpm db:migrate`** (proverebbe ad applicare 0018→0030 in blocco; 0022/0023 sono solo parzialmente idempotenti — rischio inutile su prod)
+- **DOPO il re-sync**: workflow normale — modificare `src/db/schema/`, `pnpm db:generate` (rivedere il SQL generato: RLS/policy/RPC vanno aggiunte a mano nel file), applicare, aggiornare `MANUAL_MIGRATIONS.md`
+- **Rebuild da zero NON ancora testato** (serve staging): caveat multi-statement + dipendenze Supabase documentati in `MANUAL_MIGRATIONS.md`
+- **Verifica idempotente**: ogni migration manuale ha un file `verify_*.sql` da incollare nel SQL editor (es. `verify_0030.sql`)
 
 ## Architettura
 

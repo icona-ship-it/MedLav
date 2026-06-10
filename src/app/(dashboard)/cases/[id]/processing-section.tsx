@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Play, Loader2, XCircle, RotateCcw, AlertTriangle,
-  FileSearch, BrainCircuit, ShieldCheck, FileText, CheckCircle2, Clock,
+  FileSearch, BrainCircuit, ShieldCheck, ShieldOff, FileText, CheckCircle2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -65,7 +65,15 @@ export function ProcessingSection({
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  // 2.4-A2: sblocco manuale per i casi bloccati dal validatore di qualità
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const processingStartRef = useRef<number | null>(null);
+
+  // Il caso è morto su un blocco del VALIDATORE (non un errore tecnico): il
+  // messaggio salvato da assemble-and-save-report inizia con "Report non valido".
+  // Solo in questo caso offriamo lo sblocco "ignora i controlli di qualità".
+  const isValidationBlock = (lastError ?? '').includes('Report non valido');
 
   // Selettore "Sezioni del report" — solo per le analisi che producono un report
   // completo (non cronistoria/spese/anonimizzazione). Reso visibile QUI, sopra il
@@ -186,6 +194,31 @@ export function ProcessingSection({
       toast.error('Errore di rete. Verifica la connessione.');
     } finally {
       setIsCancelling(false);
+    }
+  }, [caseId, router]);
+
+  // 2.4-A2: rigenera il report ignorando i blocchi di QUALITÀ del validatore
+  // (i controlli di sicurezza/GDPR restano sempre bloccanti lato server).
+  const handleRegenerateIgnoringValidation = useCallback(async () => {
+    setIsUnlocking(true);
+    setShowUnlockDialog(false);
+    try {
+      const response = await fetch('/api/processing/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId, ignoreValidation: true }),
+      });
+      const result = await response.json() as { success: boolean; error?: string };
+      if (!result.success) {
+        toast.error(result.error ?? 'Errore avvio rigenerazione');
+      } else {
+        toast.success('Rigenerazione avviata: i controlli di qualità verranno ignorati. Verifica il report con attenzione.');
+      }
+      router.refresh();
+    } catch {
+      toast.error('Errore di rete. Verifica la connessione.');
+    } finally {
+      setIsUnlocking(false);
     }
   }, [caseId, router]);
 
@@ -406,6 +439,23 @@ export function ProcessingSection({
                           <p className="text-xs text-muted-foreground mt-2">
                             Se il problema persiste, prova a rimuovere eventuali documenti corrotti o protetti da password e riavvia l&apos;analisi.
                           </p>
+                          {/* 2.4-A2: sblocco manuale — solo per blocchi del validatore qualità */}
+                          {isValidationBlock && (
+                            <div className="pt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowUnlockDialog(true)}
+                                disabled={isUnlocking}
+                              >
+                                {isUnlocking ? (
+                                  <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Avvio in corso...</>
+                                ) : (
+                                  <><ShieldOff className="mr-1 h-3.5 w-3.5" />Rigenera ignorando i controlli di qualità</>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -441,6 +491,40 @@ export function ProcessingSection({
           )}
         </CardContent>
       </Card>
+
+      {/* 2.4-A2: conferma sblocco "ignora i controlli di qualità" */}
+      <AlertDialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rigenerare ignorando i controlli di qualità?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Il report è stato bloccato dai controlli automatici di qualità (es. sezioni
+                  ritenute incomplete o pochi eventi citati). Se ritieni che sia un falso allarme,
+                  puoi rigenerare salvando comunque il report.
+                </p>
+                <p className="font-medium text-destructive">
+                  Attenzione: il report potrebbe contenere difetti reali. Verificalo con
+                  particolare attenzione prima del deposito.
+                </p>
+                <p>
+                  I controlli di sicurezza sui dati (nomi copiati dagli esempi, dati fabbricati)
+                  restano sempre attivi e bloccanti. L&apos;operazione viene registrata nel registro
+                  attività e consuma i crediti di una rigenerazione report.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRegenerateIgnoringValidation}>
+              <ShieldOff className="mr-1 h-4 w-4" />
+              Rigenera comunque
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Cancel confirmation dialog */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>

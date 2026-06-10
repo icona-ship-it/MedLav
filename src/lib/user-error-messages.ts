@@ -4,6 +4,17 @@
  */
 
 const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  // NB: i due pattern del validatore report stanno PRIMA dei pattern generici —
+  // i messaggi dei finding possono contenere frasi come "non trovato" che
+  // altrimenti verrebbero mappate su "Risorsa non trovata".
+  {
+    pattern: /controllo NON ignorabile/i,
+    message: 'Il report è stato bloccato da un controllo di sicurezza non ignorabile (possibile dato copiato dagli esempi o fabbricato). Rigenera il report; se il problema persiste, contatta il supporto.',
+  },
+  {
+    pattern: /Report non valido/i,
+    message: 'Il report generato non ha superato i controlli di qualità automatici ed è stato bloccato per proteggerti da un report difettoso. Puoi riavviare l\'elaborazione oppure, se ritieni si tratti di un falso allarme, rigenerare ignorando i controlli di qualità.',
+  },
   {
     pattern: /All documents failed OCR/i,
     message: 'Impossibile leggere i documenti. Verifica che i file siano PDF, immagini (JPG, PNG) o Word validi e non corrotti.',

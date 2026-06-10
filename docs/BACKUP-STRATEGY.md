@@ -1,147 +1,162 @@
 # Backup Strategy
 
+> **Ultimo aggiornamento: 2026-06-10** — questa pagina riflette lo stato REALE.
+> Storia: il workflow off-site era stato spostato in `scripts/weekly-backup.yml.template`
+> (nessun cron attivo dal commit `4243ade` fino al 2026-06-10). Ora il workflow e' di nuovo
+> in `.github/workflows/weekly-backup.yml`, esteso con il backup dei file Storage.
+
+## Stato attuale (cosa e' attivo e cosa no)
+
+| Componente | Stato | Note |
+|------------|-------|------|
+| PITR Supabase (7 giorni, in-region) | **ATTIVO** | Gestito da Supabase Pro, nessuna azione |
+| Workflow `.github/workflows/weekly-backup.yml` | **PRESENTE nel repo** | Gira ogni domenica 03:00 UTC **solo se i secrets sono configurati** (vedi sotto). Senza secrets il run FALLISCE (fail-loud, per scelta) |
+| Backup DB off-site (pg_dump → R2) | RICHIEDE SECRETS | `scripts/backup-db.sh` — cifratura gpg opzionale ma raccomandata (`BACKUP_PASSPHRASE`) |
+| Backup Storage off-site (PDF, immagini OCR, firme) | RICHIEDE SECRETS | `scripts/backup-storage.sh` + `scripts/backup-storage.ts` — tar.gz **sempre cifrato** gpg AES256 |
+| Test di restore | **MAI ESEGUITO** | Log in `scratchpad/backup-restore-tests.md` — da compilare al primo test |
+
+### Azioni richieste per attivare il backup off-site (una tantum, ~30 min)
+
+1. Creare bucket R2 e API token (vedi "Setup Cloudflare R2" sotto)
+2. Configurare gli 8 GitHub Secrets (tabella sotto)
+3. Lanciare manualmente il workflow (Actions → "Weekly Off-site Backup" → Run workflow) e verificare il successo
+4. Eseguire un **test di restore** e loggarlo in `scratchpad/backup-restore-tests.md`
+
+---
+
 ## Strategia a 2 livelli
 
-LegMed combina due meccanismi complementari per la resilienza dei dati:
+1. **PITR Supabase** (in-region): backup continuo nei 7 giorni, granularita' al secondo. Protegge da bug applicativi, query errate, soft deletes.
+2. **Backup off-site weekly su Cloudflare R2** (out-of-region EU): dump completo del DB + archivio completo dei file Storage ogni domenica. Protegge da outage regionale Supabase, perdita catastrofica account, ransomware.
 
-1. **PITR Supabase** (in-region): backup continuo nei 7 giorni, granularità al secondo. Protegge da bug applicativi, query errate, soft deletes.
-2. **Backup off-site weekly su Cloudflare R2** (out-of-region EU): dump completo del DB ogni domenica. Protegge da outage regionale Supabase, perdita catastrofica account, ransomware Supabase.
-
-**Retention combinata**: ultimi 7 giorni granulari + ultime 12 settimane snapshot.
+**Retention combinata**: ultimi 7 giorni granulari (PITR) + ultime 12 settimane snapshot (R2).
 
 ---
 
 ## 1. Supabase Point-in-Time Recovery (PITR)
 
-LegMed utilizza Supabase PostgreSQL (EU, Francoforte) con PITR abilitato.
-
-### Configurazione
-
-- **Piano**: Supabase Pro
-- **Retention**: 7 giorni di backup continuo
-- **Granularita**: ripristino a qualsiasi secondo negli ultimi 7 giorni
-- **Regione**: eu-central-1 (Francoforte, Germania)
+- **Piano**: Supabase Pro — **Retention**: 7 giorni — **Regione**: eu-central-1 (Francoforte)
 
 ### Come Ripristinare
 
-1. Accedere alla [Supabase Dashboard](https://supabase.com/dashboard)
-2. Selezionare il progetto LegMed
-3. Navigare su **Settings > Database > Backups**
-4. Selezionare **Point in Time** e scegliere data/ora desiderata
-5. Confermare il ripristino — il database verra riportato allo stato selezionato
+1. Supabase Dashboard → progetto LegMed → **Settings > Database > Backups**
+2. **Point in Time** → scegliere data/ora → confermare
 
-> **Attenzione**: il ripristino PITR sovrascrive lo stato corrente del database. Eseguire solo in caso di necessita reale.
+> **Attenzione**: il ripristino PITR sovrascrive lo stato corrente del database.
 
-### Backup Manuale (Admin)
+### Cosa copre il PITR
 
-L'admin puo esportare dati tramite:
-
-- **JSON export**: dall'admin panel, sezione esportazione dati
-- **pg_dump**: accesso diretto alla connection string (solo da IP autorizzati)
-- **Supabase CLI**: `supabase db dump --project-ref <ref> > backup.sql`
-
-### Cosa e Coperto
-
-| Dato | Backup PITR | Export manuale |
-|------|:-----------:|:--------------:|
-| Casi e metadati | Si | Si |
-| Eventi clinici | Si | Si |
-| Report generati | Si | Si |
-| Documenti (metadata) | Si | Si |
-| File (Storage) | No* | No* |
-| Auth users | Si | No |
-
-\* I file su Supabase Storage hanno backup separato gestito da Supabase.
-
-### Frequenza Consigliata
-
-- **PITR**: automatico, continuo (nessuna azione richiesta)
-- **Export manuale**: settimanale o prima di operazioni critiche (migrazioni, aggiornamenti schema)
+| Dato | PITR |
+|------|:----:|
+| Casi, eventi, report, anomalie, metadata documenti | Si |
+| Auth users | Si |
+| File Storage (PDF, immagini OCR, firme) | No — coperti SOLO dal backup off-site R2 |
 
 ---
 
 ## 2. Backup off-site settimanale su Cloudflare R2
 
-Configurato 2026-05-27 (Sprint 1 Production-robust MVP).
+Workflow: `.github/workflows/weekly-backup.yml` — cron domenica 03:00 UTC + dispatch manuale.
 
-### Funzionamento
+### Cosa fa
 
-GitHub Actions schedulato (`weekly-backup.yml`) esegue ogni domenica alle 03:00 UTC:
+1. **DB**: `pg_dump --format=custom --compress=9` → (opzionale ma raccomandato) cifratura gpg AES256 → upload `db/<ISO_TIMESTAMP>.sql.gz[.gpg]`
+2. **Storage**: download completo dei bucket `documents` (incluse le immagini OCR in `documents/ocr-images/`) e `signatures` via service role key → `tar.gz` → cifratura gpg simmetrica AES256 (**obbligatoria**, dati GDPR Art. 9) → upload `storage/<ISO_TIMESTAMP>.tar.gz.gpg`
+3. **Retention**: cancellazione automatica degli archivi oltre 12 settimane (prefissi `db/` e `storage/`)
 
-1. `pg_dump --format=custom --compress=9` del DB Supabase via connection string
-2. Upload via S3-compatible API verso bucket Cloudflare R2 EU
-3. Cleanup automatico dei backup oltre 12 settimane (3 mesi retention)
+### Setup Cloudflare R2 (una tantum)
 
-**Output naming**: `db/<ISO_TIMESTAMP>.sql.gz` nel bucket R2.
+1. Cloudflare dashboard → R2 → Create bucket `legmed-backups` (location EU)
+2. R2 API Tokens → Create API Token — Permissions: Object Read & Write, scope: solo `legmed-backups`
+3. Salvare Access Key ID, Secret Access Key, S3 endpoint URL
 
-### Setup richiesto (una tantum)
+### GitHub Secrets richiesti
 
-#### Cloudflare R2
-
-1. Login Cloudflare dashboard → R2
-2. Create bucket `legmed-backups` (regione EU)
-3. Settings → R2 API Tokens → Create API Token
-   - Permissions: Object Read & Write
-   - TTL: 5 anni
-   - Scope: solo bucket `legmed-backups`
-4. Salvare: Access Key ID, Secret Access Key, S3 endpoint URL
-
-#### GitHub Secrets
-
-Repository Settings → Secrets and variables → Actions → New repository secret:
+Repository Settings → Secrets and variables → Actions:
 
 | Secret | Valore |
 |--------|--------|
-| `SUPABASE_DB_URL` | `postgresql://postgres:[PWD]@db.[PROJECT].supabase.co:5432/postgres` (vedi Supabase Settings → Database → Connection string) |
+| `SUPABASE_DB_URL` | `postgresql://postgres:[PWD]@db.[PROJECT].supabase.co:5432/postgres` (Supabase → Settings → Database → Connection string; usare il Session pooler se l'accesso diretto e' chiuso) |
+| `SUPABASE_URL` | `https://[project-ref].supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (Settings → API) — serve per scaricare i bucket privati |
 | `R2_ACCESS_KEY` | Access Key ID da Cloudflare R2 |
 | `R2_SECRET_KEY` | Secret Access Key da Cloudflare R2 |
 | `R2_BUCKET` | `legmed-backups` |
-| `R2_ENDPOINT` | URL endpoint visibile in R2 dashboard (es. `https://[account-id].r2.cloudflarestorage.com`) |
+| `R2_ENDPOINT` | `https://[account-id].r2.cloudflarestorage.com` |
+| `BACKUP_PASSPHRASE` | Passphrase gpg lunga e casuale. **Conservarla anche FUORI da GitHub** (password manager): senza passphrase i backup cifrati sono irrecuperabili |
 
-#### Test manuale
+### Primo test manuale
 
-GitHub UI → Actions → "Weekly DB Backup → R2" → Run workflow (dropdown destra).
-Verificare logs: deve completare in <5 min con messaggio "✅ Backup workflow complete".
-Verificare R2 dashboard: file `db/<oggi>.sql.gz` presente.
+GitHub UI → Actions → "Weekly Off-site Backup (DB + Storage)" → Run workflow.
+Verificare: job verde, su R2 presenti `db/<oggi>...` e `storage/<oggi>.tar.gz.gpg`.
 
-### Procedura di Restore
+---
 
-**Scenario 1: PITR fallisce (caso raro)**
+## 3. Procedura di Restore (passo-passo)
 
-1. Scaricare backup più recente da R2:
+### 3a. Restore del DATABASE da R2
+
+1. Scaricare il backup piu' recente:
    ```bash
-   aws s3 cp s3://legmed-backups/db/<latest>.sql.gz . \
-     --endpoint-url=https://[account-id].r2.cloudflarestorage.com
+   export AWS_ACCESS_KEY_ID=<R2_ACCESS_KEY> AWS_SECRET_ACCESS_KEY=<R2_SECRET_KEY>
+   aws s3 ls s3://legmed-backups/db/ --endpoint-url=https://<account-id>.r2.cloudflarestorage.com
+   aws s3 cp s3://legmed-backups/db/<latest> . --endpoint-url=https://<account-id>.r2.cloudflarestorage.com
    ```
-2. Restore su DB Supabase staging:
+2. Se cifrato (`.gpg`), decifrare:
    ```bash
-   pg_restore -d $SUPABASE_STAGING_URL --no-owner --no-privileges <latest>.sql.gz
+   gpg --batch --decrypt --pinentry-mode loopback \
+     --passphrase "<BACKUP_PASSPHRASE>" \
+     --output backup.dump <latest>.gpg
    ```
-3. Verifica integrità dati in staging
-4. Se OK, swap staging ↔ production (procedura Supabase dashboard)
+3. Restore su un DB Supabase di test/staging (MAI direttamente su production senza verifica):
+   ```bash
+   pg_restore -d "$SUPABASE_STAGING_URL" --no-owner --no-privileges backup.dump
+   ```
+4. Verifica integrita': `SELECT COUNT(*)` su `cases`, `events`, `reports`, `documents`; controllare il record piu' recente per `created_at`
+5. Solo se OK → ripetere su production (o swap del progetto)
 
-**Scenario 2: Outage totale Supabase EU**
+### 3b. Restore dei FILE STORAGE da R2
 
-1. Provisioning nuovo progetto Supabase EU (anche su region diversa: Stoccolma, Parigi)
-2. Update env vars `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` su Vercel
-3. Restore backup R2 sul nuovo progetto come Scenario 1
-4. RTO stimato: 2-4 ore
+1. Scaricare e decifrare:
+   ```bash
+   aws s3 cp s3://legmed-backups/storage/<latest>.tar.gz.gpg . --endpoint-url=...
+   gpg --batch --decrypt --pinentry-mode loopback \
+     --passphrase "<BACKUP_PASSPHRASE>" \
+     --output storage.tar.gz <latest>.tar.gz.gpg
+   mkdir restore && tar -xzf storage.tar.gz -C restore
+   ```
+2. La struttura e' `restore/<bucket>/<path>` (es. `restore/documents/ocr-images/...`)
+3. Ri-upload sul progetto Supabase di destinazione (script una-tantum con service role key, `supabase.storage.from(bucket).upload(path, file)` — rispettare gli stessi path, i record `documents.storage_path` e `pages.image_path` nel DB li referenziano)
 
-### Cosa NON è coperto
+### 3c. Scenario: outage totale Supabase EU
 
-- **Supabase Storage files** (PDF documenti, immagini OCR): NON inclusi nel pg_dump.
-  - Supabase Storage ha backup automatico interno separato.
-  - Per backup off-site dello Storage: richiede script aggiuntivo `rclone sync` dal bucket Storage a R2 (TODO Sprint 2).
-- **Auth users**: NON inclusi nel pg_dump (sono in auth.users schema separato).
-  - Per ripristino auth da scratch: necessario reset utenti + invio email.
+1. Provisioning nuovo progetto Supabase EU (regione diversa: Stoccolma, Parigi)
+2. Restore DB (3a) + Storage (3b) sul nuovo progetto
+3. Update env vars su Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
+4. Auth users: NON inclusi nel pg_dump (schema `auth` separato) → reset utenti + email di re-invito
+5. RTO stimato: 2-4 ore (**stima MAI verificata** — vedi test di restore)
 
-### Monthly restore test (raccomandato)
+### Limiti noti
 
-Per garantire che la procedura funzioni, eseguire ogni mese:
+- **Auth users** non inclusi nel dump (schema `auth.users` separato): dopo un disaster recovery completo serve il re-invito degli utenti
+- La cifratura e' simmetrica: la **passphrase e' un single point of failure** — conservarla in almeno 2 posti sicuri
+- Il backup Storage scarica tutti i file a ogni run (no incrementale): con molti GB il job si allunga — rivalutare `rclone sync` incrementale oltre ~10 GB
 
-1. Scaricare backup ultima settimana
-2. Restore su DB staging dedicato (es. Supabase free tier)
-3. Verifica query: COUNT(*) su tabelle principali, ultimo record per timestamp
-4. Documentare risultato in `scratchpad/backup-restore-tests.md`
+---
 
-> **Pratica**: scoprire al momento critico che il restore fallisce è troppo tardi. 5 minuti al mese di test valgono ore di disaster recovery.
+## 4. Test di restore (mensile, obbligatorio)
+
+Per garantire che la procedura funzioni, eseguire ogni mese un restore di prova:
+
+1. Scaricare il backup dell'ultima settimana (DB + storage)
+2. Restore su un DB di test (es. progetto Supabase free tier dedicato)
+3. Verifiche: `COUNT(*)` su tabelle principali; ultimo record per timestamp; aprire 1 PDF e 1 immagine OCR estratti dall'archivio storage
+4. **Documentare il risultato in `scratchpad/backup-restore-tests.md`** (template gia' pronto)
+
+> Scoprire al momento critico che il restore fallisce e' troppo tardi. 15 minuti al mese valgono ore di disaster recovery.
+
+### Restore test log
+
+| Data | Esito | Note |
+|------|-------|------|
+| _nessun test eseguito finora_ | — | compilare al primo test (vedi `scratchpad/backup-restore-tests.md`) |

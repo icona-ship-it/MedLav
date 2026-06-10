@@ -44,6 +44,22 @@ import { formatCausalNexusForPrompt } from '@/lib/domain-knowledge/causal-nexus'
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
 
+/**
+ * Random seed for a given Inngest retry attempt (Sprint 2.4-A1).
+ *
+ * Why vary the seed: generation is deterministic (temperature 0 + fixed seed)
+ * and the report validator BLOCKS saving on certain errors. With a fixed seed,
+ * a validator false positive reproduces the SAME blocked report on every
+ * Inngest retry — the 3 retries are burned on byte-identical output and the
+ * case dies permanently (report-validator.ts admits this risk). Adding the
+ * attempt number keeps the first run reproducible (seed 42) while making
+ * retry 2 and 3 produce real variants that can pass the gate.
+ */
+export function seedForAttempt(attempt?: number): number {
+  const extra = typeof attempt === 'number' && attempt > 0 ? Math.floor(attempt) : 0;
+  return DETERMINISTIC_SEED + extra;
+}
+
 // ── System prompt builder ───────────────────────────────────────────
 
 /**
@@ -236,8 +252,10 @@ export async function generateSingleSection(params: {
   synthesisParams: SynthesisParams;
   previousContext: SectionContext[];
   documentsOcrText?: DocumentOcrContext[];
+  /** Inngest retry attempt (0-based). Varies the seed so retries are real variants. */
+  attempt?: number;
 }): Promise<GeneratedSection> {
-  const { spec, synthesisParams, previousContext, documentsOcrText } = params;
+  const { spec, synthesisParams, previousContext, documentsOcrText, attempt } = params;
   const startMs = Date.now();
 
   // Bibliography: fall back to placeholder when no PubMed references available.
@@ -259,7 +277,7 @@ export async function generateSingleSection(params: {
   // Header sections use a structured JSON-mode generation pipeline to make
   // fabrication structurally impossible (Wave 2.1, fix Regnoto-style hallucination).
   if (spec.id.startsWith('intestazione')) {
-    return generateHeaderSection({ spec, synthesisParams });
+    return generateHeaderSection({ spec, synthesisParams, attempt });
   }
 
   const hasOcrText = !!(documentsOcrText && documentsOcrText.length > 0);
@@ -308,7 +326,7 @@ export async function generateSingleSection(params: {
     temperature: 0,
     maxTokens: spec.maxTokens,
     timeoutMs: SECTION_TIMEOUT_MS,
-    randomSeed: DETERMINISTIC_SEED,
+    randomSeed: seedForAttempt(attempt),
     label: `section:${spec.id}`,
   });
 
@@ -637,21 +655,18 @@ function formatPubMedReferencesForPrompt(results: PubMedSearchResult[]): string 
 // The model literally cannot write a name into a `null`-valued field that
 // then gets rendered, because the rendering step is deterministic code.
 
-async function generateHeaderSection(params: {
-  spec: SectionSpec;
-  synthesisParams: SynthesisParams;
-}): Promise<GeneratedSection> {
-  const { spec, synthesisParams } = params;
-  const startMs = Date.now();
-
-  const variant = variantForSectionId(spec.id, synthesisParams.caseRole) ?? 'stragiudiziale';
-
-  // Build a JSON-only system prompt. The constitutional preamble + anti-
-  // fabrication rule + JSON schema description are sufficient — no role
-  // directive needed (the role only affects narrative tone, not data
-  // extraction). The LLM's job is purely: read events + metadata, fill
-  // a fixed schema with what's there, leave the rest null.
-  const systemPrompt = `${CONSTITUTIONAL_PREAMBLE}
+/**
+ * Build the JSON-only system prompt for the intestazione sections. The
+ * constitutional preamble + anti-fabrication rule + JSON schema description
+ * are sufficient — no role directive needed (the role only affects narrative
+ * tone, not data extraction). The LLM's job is purely: read events + metadata,
+ * fill a fixed schema with what's there, leave the rest null.
+ *
+ * Exported so computeSectionalPromptVersion can hash the REAL header prompt
+ * (Sprint 2.3): any change here changes the prompt-version of new reports.
+ */
+export function buildHeaderSystemPrompt(): string {
+  return `${CONSTITUTIONAL_PREAMBLE}
 
 ---
 
@@ -666,6 +681,19 @@ ${HEADER_JSON_SCHEMA_DESCRIPTION}
 ${NEGATIVE_FEW_SHOT_INTESTAZIONE}
 
 OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backticks, niente commenti.`;
+}
+
+async function generateHeaderSection(params: {
+  spec: SectionSpec;
+  synthesisParams: SynthesisParams;
+  attempt?: number;
+}): Promise<GeneratedSection> {
+  const { spec, synthesisParams, attempt } = params;
+  const startMs = Date.now();
+
+  const variant = variantForSectionId(spec.id, synthesisParams.caseRole) ?? 'stragiudiziale';
+
+  const systemPrompt = buildHeaderSystemPrompt();
 
   // User prompt: feed the perizia metadata + medical events (light projection)
   // so the LLM has everything it needs to extract real values.
@@ -683,7 +711,7 @@ OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backti
     maxTokens: spec.maxTokens,
     responseFormat: { type: 'json_object' },
     timeoutMs: SECTION_TIMEOUT_MS,
-    randomSeed: DETERMINISTIC_SEED,
+    randomSeed: seedForAttempt(attempt),
     label: `header:${spec.id}`,
   });
   assertNotTruncated(headerResult, `header:${spec.id}`);

@@ -7,6 +7,11 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { grantCredits } from '@/services/credits/credit-service';
 import { PLAN_CREDITS } from '@/services/credits/credit-costs';
+import {
+  isMfaChallengeRequired,
+  normalizeTotpCode,
+  pickVerifiedTotpFactorId,
+} from '@/lib/auth/mfa-utils';
 
 export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
@@ -184,6 +189,54 @@ export async function signIn(formData: FormData) {
       await supabase.auth.signOut();
       return { error: 'Il tuo account è stato disattivato.' };
     }
+  }
+
+  // MFA (opt-in): if the user has a verified TOTP factor, the password-only
+  // session is aal1 and must be upgraded with a code before entering.
+  const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (isMfaChallengeRequired(aalData?.currentLevel ?? null, aalData?.nextLevel ?? null)) {
+    return { mfaRequired: true };
+  }
+
+  redirect('/');
+}
+
+/**
+ * Second login step for users with MFA enabled: verify the 6-digit TOTP
+ * code and upgrade the session from aal1 to aal2.
+ */
+export async function verifyMfa(formData: FormData) {
+  const rawCode = (formData.get('code') as string | null) ?? '';
+  const code = normalizeTotpCode(rawCode);
+  if (!code) {
+    return { error: 'Inserisci il codice a 6 cifre generato dall\'app di autenticazione' };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: 'Sessione scaduta. Esegui di nuovo l\'accesso.' };
+  }
+
+  const rateCheck = await checkRateLimit({ key: `mfa:${user.id}`, ...RATE_LIMITS.AUTH });
+  if (!rateCheck.success) {
+    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
+  }
+
+  const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+  if (factorsError) {
+    logger.error('auth', 'MFA listFactors failed at login', { error: factorsError.message });
+    return { error: 'Errore durante la verifica. Riprova.' };
+  }
+
+  const factorId = pickVerifiedTotpFactorId(factorsData?.all ?? []);
+  if (!factorId) {
+    return { error: 'Nessuna verifica in due passaggi attiva su questo account.' };
+  }
+
+  const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+  if (error) {
+    return { error: 'Codice non valido o scaduto. Controlla l\'app e riprova.' };
   }
 
   redirect('/');

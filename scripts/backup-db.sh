@@ -15,7 +15,12 @@
 #   R2_ENDPOINT       — bucket endpoint URL (visible in R2 dashboard)
 #   BACKUP_RETENTION_WEEKS — default 12 (3 mesi); rimuovi backup piu' vecchi
 #
-# Output: backup_<ISO_DATE>.sql.gz uploaded a $R2_BUCKET/db/
+# Optional env vars:
+#   BACKUP_PASSPHRASE — se presente, il dump viene cifrato con gpg simmetrico
+#                       (AES256) prima dell'upload (consigliato: GDPR Art. 9).
+#                       Output diventa db/<ISO_DATE>.sql.gz.gpg
+#
+# Output: db/<ISO_DATE>.sql.gz (o .sql.gz.gpg) uploaded a $R2_BUCKET/db/
 
 set -euo pipefail
 
@@ -50,12 +55,28 @@ pg_dump "${SUPABASE_DB_URL}" \
 DUMP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 echo "✅ Dump complete: ${DUMP_SIZE}"
 
+# ── Optional: encrypt dump (gpg symmetric AES256 — GDPR Art. 9 data) ─────────
+REMOTE_SUFFIX=""
+if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
+  command -v gpg >/dev/null 2>&1 || { echo "ERROR: gpg not installed but BACKUP_PASSPHRASE is set"; exit 1; }
+  echo "🔐 Encrypting dump (gpg symmetric AES256)..."
+  gpg --batch --yes --symmetric \
+    --cipher-algo AES256 \
+    --pinentry-mode loopback \
+    --passphrase "${BACKUP_PASSPHRASE}" \
+    --output "${BACKUP_FILE}.gpg" \
+    "${BACKUP_FILE}"
+  rm -f "${BACKUP_FILE}"
+  BACKUP_FILE="${BACKUP_FILE}.gpg"
+  REMOTE_SUFFIX=".gpg"
+fi
+
 # ── Upload to R2 (S3-compatible API) ──────────────────────────────────────────
 export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY}"
 export AWS_SECRET_ACCESS_KEY="${R2_SECRET_KEY}"
 export AWS_DEFAULT_REGION=auto  # R2 ignora region
 
-REMOTE_PATH="db/${TIMESTAMP}.sql.gz"
+REMOTE_PATH="db/${TIMESTAMP}.sql.gz${REMOTE_SUFFIX}"
 echo "☁️  Uploading to R2: s3://${R2_BUCKET}/${REMOTE_PATH}"
 
 aws s3 cp "${BACKUP_FILE}" "s3://${R2_BUCKET}/${REMOTE_PATH}" \

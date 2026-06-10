@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { generateCsrfToken } from '@/lib/csrf';
+import { isMfaChallengeRequired } from '@/lib/auth/mfa-utils';
 
 /**
  * Build a Content-Security-Policy header.
@@ -73,6 +74,35 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // MFA enforcement (opt-in): users with a verified TOTP factor must upgrade
+  // the session to aal2 before reaching any protected route. Reads the AAL
+  // from the session cookie (no extra network round-trip).
+  // TODO (security roadmap): make MFA MANDATORY for admin accounts — see
+  // src/lib/auth/mfa-utils.ts.
+  let mfaChallengePending = false;
+  if (user) {
+    try {
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      mfaChallengePending = isMfaChallengeRequired(
+        aalData?.currentLevel ?? null,
+        aalData?.nextLevel ?? null,
+      );
+    } catch {
+      // Fail-open by design: MFA is opt-in defense-in-depth — a transient
+      // error here must not lock every user out of the app. Auth itself
+      // (getUser above) is still enforced.
+      mfaChallengePending = false;
+    }
+  }
+
+  if (user && mfaChallengePending && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = '';
+    url.searchParams.set('mfa', '1');
+    return NextResponse.redirect(url);
+  }
+
   // Check if the user has been deactivated (cookie set by signIn check)
   if (user && !isPublicPath && request.cookies.get('deactivated')?.value) {
     await supabase.auth.signOut();
@@ -84,8 +114,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Redirect authenticated users away from public pages to dashboard
+  // (skip while an MFA challenge is pending — the user must stay on /login)
   if (
     user &&
+    !mfaChallengePending &&
     (request.nextUrl.pathname.startsWith('/login') ||
       request.nextUrl.pathname.startsWith('/register') ||
       request.nextUrl.pathname.startsWith('/forgot-password') ||

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL, fidelitySignal } from './section-generator';
+import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL, fidelitySignal, seedForAttempt } from './section-generator';
+import { DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import type { SectionSpec } from './section-generation-types';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 
@@ -255,6 +256,24 @@ describe('filterOcrForSection', () => {
       const r = fidelitySignal({ needsOcr: false, sectionId: 'considerazioni_ml', summaryCount: 0, truncatedByCap: false });
       expect(r.mode).toBeUndefined();
       expect(r.note).toBeUndefined();
+    });
+  });
+
+  describe('seedForAttempt — retry variance (Sprint 2.4-A1)', () => {
+    it('should keep the base deterministic seed on the first attempt', () => {
+      expect(seedForAttempt(undefined)).toBe(DETERMINISTIC_SEED);
+      expect(seedForAttempt(0)).toBe(DETERMINISTIC_SEED);
+    });
+
+    it('should produce a DIFFERENT seed on each Inngest retry', () => {
+      expect(seedForAttempt(1)).toBe(DETERMINISTIC_SEED + 1);
+      expect(seedForAttempt(2)).toBe(DETERMINISTIC_SEED + 2);
+      expect(seedForAttempt(1)).not.toBe(seedForAttempt(2));
+    });
+
+    it('should be defensive on invalid attempt values', () => {
+      expect(seedForAttempt(-3)).toBe(DETERMINISTIC_SEED);
+      expect(seedForAttempt(1.7)).toBe(DETERMINISTIC_SEED + 1);
     });
   });
 });

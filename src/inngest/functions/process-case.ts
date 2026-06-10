@@ -223,7 +223,7 @@ export const processCase = inngest.createFunction(
     onFailure: async ({ event }) => handlePipelineFailure(event),
   },
   { event: 'case/pipeline.start' },
-  async ({ event, step }) => {
+  async ({ event, step, attempt }) => {
     const { caseId, userId } = event.data as { caseId: string; userId: string };
 
     // Pipeline health tracking — accumulated across all steps, saved to perizia_metadata at finalize
@@ -984,11 +984,14 @@ export const processCase = inngest.createFunction(
               const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
 
               const { generateSingleSection } = await import('@/services/synthesis/section-generator');
+              // 2.4-A1: `attempt` (Inngest retry counter) varies the seed so a
+              // retry after a validator block produces a real variant.
               return generateSingleSection({
                 spec,
                 synthesisParams,
                 previousContext,
                 documentsOcrText: batchOcr,
+                attempt,
               });
             });
 
@@ -1025,10 +1028,10 @@ export const processCase = inngest.createFunction(
             } : undefined,
           });
         } else {
-          // Normal section: single step
+          // Normal section: single step. `attempt` varies the seed per retry (2.4-A1).
           const section = await step.run(`gen-section-${spec.id}`, async () => {
             await updateProgress(spec.title);
-            return generateSectionStep(caseId, spec, synthesisParams, previousContext);
+            return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
           accumulatedSections.push(section);
         }
@@ -1041,9 +1044,10 @@ export const processCase = inngest.createFunction(
       }
     }
 
-    // Save report (partial or complete)
+    // Save report (partial or complete). sectionPlan feeds the real-prompt
+    // version hash (2.3); no ignoreValidation on the automatic pipeline.
     const synthesisResult = await step.run('assemble-and-save-report', () =>
-      assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams),
+      assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams, sectionPlan),
     );
 
     // If a section failed, throw AFTER saving partial report so user has something

@@ -82,9 +82,25 @@ git commit -m "test(e2e): update snapshots after Ondata N approval"
 - `maxDiffPixelRatio: 0.02` tollera fino al 2% di differenza (fonts, scrollbars, antialiasing).
 - Le baseline sono committate in `e2e/__screenshots__/<spec>/<test-name>.png`.
 
+## CI (GitHub Actions) — job `e2e` di `.github/workflows/ci.yml`
+
+Il job `e2e` è **condizionale sui secrets** (Sprint 2.5):
+
+| Secret GitHub | Obbligatorio | Descrizione |
+|---------------|--------------|-------------|
+| `E2E_USER_EMAIL` | Sì | Account di test dedicato (MAI quello di produzione) |
+| `E2E_USER_PASSWORD` | Sì | Password dell'account di test |
+| `E2E_BASE_URL` | No | URL del deployment da testare; default `http://localhost:3000` (build locale del job) |
+
+Comportamento:
+- **Secrets configurati** → gli smoke test (auth/upload/export) girano e sono **BLOCCANTI**: un fallimento fa diventare rosso il job (niente `continue-on-error`).
+- **Secrets mancanti** → tutti gli step vengono **skippati** con un notice esplicito "E2E SKIPPED: secrets non configurati" nel summary della run — lo skip è visibile, mai silenzioso.
+
+Per configurarli: GitHub → repo → Settings → Secrets and variables → Actions → New repository secret.
+
 ## Cosa NON funziona ancora (TODO)
 
-- [ ] CI integration (eseguire e2e su Vercel preview deploy ad ogni PR)
+- [x] CI integration condizionale sui secrets (fatto — vedi sezione CI sopra; restano da configurare i secrets)
 - [ ] Benchmark output testing (PASSO 4) — confronto report generato vs gold standard Lavini
 - [ ] Test specifici per i 4 pipeline mode (full/extraction/expenses/anonymize)
 - [ ] Mock Mistral API per test deterministici (oggi serve real Mistral key)

@@ -113,7 +113,13 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   // LLM. The AI must not author or rewrite them (VINCOLO #1: oggettività assoluta).
   // Re-emit the deterministic placeholder content (keeps the ITT/ITP sentinel).
   if (spec.isPlaceholder) {
-    return replaceSectionContent(currentSynthesis, sectionId, buildPlaceholderContent(spec));
+    // Same opts as the main pipeline: decesso/penale suppress the ITT/ITP and
+    // stima-danno sentinels; caseType parameterizes the stima marker (4.3).
+    return replaceSectionContent(currentSynthesis, sectionId, buildPlaceholderContent(spec, {
+      decesso: periziaMetadata?.decesso,
+      ambitoPenale: periziaMetadata?.ambitoPenale,
+      caseType,
+    }));
   }
 
   // Inject the perito's free-text instruction into the section directive. This
