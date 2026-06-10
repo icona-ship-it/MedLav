@@ -1,3 +1,4 @@
+import { formatEuro } from '@/lib/format';
 import { describe, it, expect } from 'vitest';
 import {
   buildStimaDannoMarker,
@@ -66,11 +67,11 @@ describe('formatStimaDannoBlock', () => {
     expect(out).toContain('22%');
     expect(out).toContain('TUN DPR 12/2025');
     expect(out).toContain(
-      new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(expectedTun.estimatedAmount!),
+      formatEuro(expectedTun.estimatedAmount!),
     );
     expect(out).toContain('Tabelle Milano 2024');
     expect(out).toContain(
-      new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(expectedMilano.estimatedAmount),
+      formatEuro(expectedMilano.estimatedAmount),
     );
     expect(out).toContain('Balthazard');
   });

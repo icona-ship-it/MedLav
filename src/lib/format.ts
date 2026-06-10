@@ -63,3 +63,16 @@ export function safeJsonParse<T>(value: string, fallback: T): T {
     return fallback;
   }
 }
+
+/**
+ * Euro IT deterministico e indipendente dal locale di sistema: "7.225,50 €".
+ * NON usa Intl.NumberFormat perché i dati ICU variano fra macchine (il runner
+ * CI formattava senza separatore delle migliaia → output del report diverso
+ * fra ambienti, inaccettabile per un documento depositabile).
+ */
+export function formatEuro(amount: number): string {
+  const sign = amount < 0 ? '-' : '';
+  const [int, dec] = Math.abs(amount).toFixed(2).split('.');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${sign}${grouped},${dec} €`;
+}

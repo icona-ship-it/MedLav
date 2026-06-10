@@ -8,7 +8,7 @@
  * Pure + client-safe: no I/O, no LLM. Reuses analyzeExpenses (amount/category
  * extraction) and sortEventsChrono (the single chronological comparator).
  */
-import { formatDate } from '@/lib/format';
+import { formatDate, formatEuro } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
@@ -64,10 +64,6 @@ function cell(value: string | null | undefined): string {
   return v || '—';
 }
 
-/** Italian euro formatting, deterministic. */
-function formatEuro(amount: number): string {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
-}
 
 /**
  * Render the medical-expense table from the case events. Only `spesa_medica`

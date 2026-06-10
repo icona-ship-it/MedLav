@@ -14,6 +14,7 @@
  * type): the perito sets the real percentage and the official ministerial
  * tables prevail (disclaimer always appended).
  */
+import { formatEuro } from '@/lib/format';
 import type { CaseType } from '@/types';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { estimateBiologicalDamage } from './damage-estimator';
@@ -54,9 +55,6 @@ function cell(value: string): string {
 }
 
 /** Italian euro formatting, deterministic. */
-function formatEuro(amount: number): string {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
-}
 
 /** Earliest real ISO date among the events (sentinel/malformed excluded). */
 function earliestValidDate(events: ReadonlyArray<{ event_date: string }>): string | undefined {
