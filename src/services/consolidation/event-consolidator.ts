@@ -92,10 +92,16 @@ export function consolidateEvents(
     );
   }
 
-  // Sort chronologically, then by event type, then by title for deterministic ordering
+  // Sort chronologically, then admission-first intra-day (benchmark gold
+  // passaniti 2026-06-10: l'accesso in PS apre la giornata — coerente con il
+  // rank di lib/event-order usato a display), then by type/title (deterministic).
+  const admissionRank = (e: { eventType?: string | null; title?: string | null }): number =>
+    e.eventType === 'ricovero' && /\b(accesso|giunge|accettazione)\b/i.test(e.title ?? '') ? 0 : 1;
   allEvents.sort((a, b) => {
     const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
+    const rankCompare = admissionRank(a) - admissionRank(b);
+    if (rankCompare !== 0) return rankCompare;
     const typeCompare = (a.eventType ?? '').localeCompare(b.eventType ?? '');
     if (typeCompare !== 0) return typeCompare;
     return (a.title ?? '').localeCompare(b.title ?? '');

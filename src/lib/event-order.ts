@@ -17,6 +17,8 @@ const SENTINEL_DATE = '1900-01-01';
 interface OrderableEvent {
   event_date?: string | null;
   order_number?: number | null;
+  event_type?: string | null;
+  title?: string | null;
 }
 
 /** Normalized date key: '' for undated/sentinel, else the ISO string. */
@@ -26,6 +28,18 @@ function dateKey(e: OrderableEvent): string {
   return d;
 }
 
+/**
+ * Rank intra-giornata (benchmark gold passaniti 2026-06-10): l'evento di
+ * ACCESSO/ammissione apre la giornata nella cronistoria — il perito sposta
+ * sempre in testa l'accesso in PS rispetto agli esami della stessa data.
+ * Rank 0 = ammissione, 1 = tutto il resto (l'ordine LegMed è già accettato).
+ */
+function intraDayRank(e: OrderableEvent): number {
+  return e.event_type === 'ricovero' && /\b(accesso|giunge|accettazione)\b/i.test(e.title ?? '')
+    ? 0
+    : 1;
+}
+
 export function compareEventsChrono(a: OrderableEvent, b: OrderableEvent): number {
   const ak = dateKey(a);
   const bk = dateKey(b);
@@ -33,6 +47,8 @@ export function compareEventsChrono(a: OrderableEvent, b: OrderableEvent): numbe
   if (ak === '' && bk !== '') return 1;
   if (ak !== '' && bk === '') return -1;
   if (ak !== bk) return ak < bk ? -1 : 1; // ISO strings sort lexicographically = chronologically
+  const rankDiff = intraDayRank(a) - intraDayRank(b);
+  if (rankDiff !== 0) return rankDiff;
   return (a.order_number ?? 0) - (b.order_number ?? 0);
 }
 

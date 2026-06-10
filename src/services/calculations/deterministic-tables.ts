@@ -170,6 +170,17 @@ export function formatDocumentazioneSanitaria(
     if (!prev || d < prev) docDate.set(id, d);
   }
 
+  // Struttura/autore per documento (benchmark gold 2026-06-10: l'header del
+  // blocco è "Tipo, Struttura/Autore in data DD.MM.YYYY:" — mai il filename,
+  // che non compare in una perizia depositabile). Primo evento con il dato.
+  const docAttribution = new Map<string, string>();
+  for (const e of events) {
+    const id = e.document_id;
+    if (!id || docAttribution.has(id)) continue;
+    const attribution = e.facility?.trim() || e.doctor?.trim();
+    if (attribution) docAttribution.set(id, attribution);
+  }
+
   // Chronological order: dated docs first (by date), undated last in input order.
   const orderedDocs = clinicalDocs
     .map((doc, index) => ({ doc, index }))
@@ -193,10 +204,14 @@ export function formatDocumentazioneSanitaria(
   }
 
   // (b) RIPRODUZIONE INTEGRALE VERBATIM — per documento, pagina per pagina.
+  // Header di blocco in formato perizia (benchmark gold 2026-06-10):
+  // "**Tipo, Struttura/Autore in data DD.MM.YYYY:**" — il filename resta SOLO
+  // nell'elenco analitico iniziale come riferimento tecnico.
   for (const doc of orderedDocs) {
     const d = docDate.get(doc.documentId);
-    const dateSuffix = d ? ` — ${formatDate(d)}` : '';
-    parts.push('', `### ${getDocumentTypeLabel(doc.documentType)}: ${doc.fileName}${dateSuffix}`);
+    const attribution = docAttribution.get(doc.documentId);
+    const header = `**${getDocumentTypeLabel(doc.documentType)}${attribution ? `, ${attribution}` : ''}${d ? ` in data ${formatDate(d)}` : ''}:**`;
+    parts.push('', header);
     if (doc.pages.length === 0) {
       parts.push('*[Testo non disponibile per questo documento.]*');
     } else {

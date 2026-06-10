@@ -174,10 +174,15 @@ describe('formatDocumentazioneSanitaria (complete + analytical list)', () => {
   it('lists docs analytically AND reproduces the full OCR verbatim per document', () => {
     const out = formatDocumentazioneSanitaria(
       [doc({ documentId: 'd1', fileName: 'rx.pdf', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura del radio distale.' }] })],
-      [ev({ document_id: 'd1', event_date: '2024-04-20' })],
+      [ev({ document_id: 'd1', event_date: '2024-04-20', facility: 'Ospedale Esempio' })],
     );
     expect(out).toContain('Documenti sanitari esaminati');
-    expect(out).toContain('### Referto Specialistico: rx.pdf');
+    // Benchmark gold 2026-06-10: header di blocco in formato perizia
+    // "**Tipo, Struttura in data DD.MM.YYYY:**" — il filename resta SOLO
+    // nell'elenco analitico iniziale (riferimento tecnico).
+    expect(out).toContain('**Referto Specialistico, Ospedale Esempio in data 20.04.2024:**');
+    expect(out).not.toContain('### Referto Specialistico: rx.pdf');
+    expect(out).toContain('*rx.pdf*'); // filename nell'elenco analitico
     expect(out).toContain('Diagnosi: frattura del radio distale.');
   });
 

@@ -1,5 +1,5 @@
 import { formatDate } from '@/lib/format';
-import { sourceLabelsExport as sourceLabels } from '@/lib/constants';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
 // ---------------------------------------------------------------------------
@@ -24,8 +24,12 @@ export interface TimelineHtmlEvent {
 
 interface TimelineHtmlParams {
   caseCode: string;
+  /** Non più renderizzato (benchmark gold passaniti 2026-06-10 + GDPR): il
+   * meta-block di testa con la riga Paziente è stato eliminato. Mantenuto
+   * nell'interfaccia per compatibilità con i call-site. */
   patientInitials: string | null;
   events: TimelineHtmlEvent[];
+  /** Non più renderizzato (dicitura interna dell'app). */
   moduleName?: string;
 }
 
@@ -33,33 +37,12 @@ interface TimelineHtmlParams {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  visita: 'Visita',
-  esame: 'Esame',
-  intervento: 'Intervento',
-  diagnosi: 'Diagnosi',
-  terapia: 'Terapia',
-  ricovero: 'Ricovero',
-  dimissione: 'Dimissione',
-  prognosi: 'Prognosi',
-  certificato: 'Certificato',
-  altro: 'Altro',
-};
-
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function eventTypeLabel(raw: string): string {
-  return EVENT_TYPE_LABELS[raw] ?? raw;
-}
-
-function sourceLabel(raw: string): string {
-  return sourceLabels[raw] ?? raw;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +54,7 @@ function sourceLabel(raw: string): string {
  * for extraction_only / expenses_only pipeline cases.
  */
 export function generateTimelineHtml(params: TimelineHtmlParams): string {
-  const { caseCode, patientInitials, events: allEvents, moduleName } = params;
+  const { caseCode, events: allEvents } = params;
 
   // Fix audit 2026-05-11: spese senza data pagamento (eventDate='1900-01-01')
   // sopravvivono ora al consolidator, ma nella timeline cronologica non hanno
@@ -80,8 +63,13 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   const SENTINEL_DATE = '1900-01-01';
   // Filter undated rows + eventi esclusi dal perito (is_relevant_for_chronology
   // === false; default incluso), poi ordina cronologicamente (difensivo).
+  // Difesa in profondità (oltre al filtro nelle route): mai eventi non clinici
+  // (spese/amministrativi) nella cronistoria — il perito li cancella sempre.
   const events = sortEventsChrono(
-    allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE && ev.is_relevant_for_chronology !== false),
+    allEvents.filter((ev) =>
+      ev.event_date !== SENTINEL_DATE &&
+      ev.is_relevant_for_chronology !== false &&
+      !NON_CLINICAL_EVENT_TYPES.has(ev.event_type)),
   );
 
   const now = new Date().toLocaleDateString('it-IT', {
@@ -90,35 +78,30 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     day: 'numeric',
   });
 
-  const metaLines: string[] = [
-    `<strong>Caso:</strong> ${escapeHtml(caseCode)}`,
-  ];
-  if (patientInitials) {
-    metaLines.push(`<strong>Paziente:</strong> ${escapeHtml(patientInitials)}`);
-  }
-  if (moduleName) {
-    metaLines.push(`<strong>Modulo:</strong> ${escapeHtml(moduleName)}`);
-  }
-  metaLines.push(`<strong>Data generazione:</strong> ${now}`);
-  metaLines.push(`<strong>Numero eventi:</strong> ${events.length}`);
-
+  // Benchmark gold passaniti (2026-06-10): il perito elimina titolo grande e
+  // meta-block (Caso/Paziente/Modulo/Data/Numero eventi — la riga Paziente era
+  // anche un'esposizione GDPR inutile), il tipo evento e le etichette FONTE.
+  // Il documento parte direttamente dagli eventi sotto il watermark RISERVATO;
+  // la testata di ogni evento è "data — titolo", l'attribuzione resta
+  // "Dr. — Struttura".
   const eventsHtml = events.length === 0
     ? '<p style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</p>'
     : events.map((ev) => {
       const meta: string[] = [];
       if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? escapeHtml(ev.doctor) : `Dr. ${escapeHtml(ev.doctor)}`);
       if (ev.facility) meta.push(escapeHtml(ev.facility));
-      if (ev.source_type) meta.push(escapeHtml(sourceLabel(ev.source_type)));
       const metaStr = meta.length > 0
         ? `<p class="event-meta">${meta.join(' &mdash; ')}</p>`
         : '';
       const diag = ev.diagnosis
         ? `<p class="event-diag"><strong>Diagnosi:</strong> ${escapeHtml(ev.diagnosis)}</p>`
         : '';
+      const head = ev.title
+        ? `${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(ev.title)}`
+        : escapeHtml(formatDate(ev.event_date));
       // Documento professionale: nessun flag interno di lavoro (DA VERIFICARE).
       return `<div class="event-block">
-      <p class="event-head">${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(eventTypeLabel(ev.event_type))}</p>
-      ${ev.title ? `<p class="event-title">${escapeHtml(ev.title)}</p>` : ''}
+      <p class="event-head">${head}</p>
       ${ev.description ? `<p class="event-desc">${escapeHtml(ev.description)}</p>` : ''}
       ${diag}
       ${metaStr}
@@ -140,25 +123,6 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     max-width: 960px;
     margin: 0 auto;
     padding: 20px;
-  }
-  h1 {
-    font-size: 24px;
-    color: #1e40af;
-    border-bottom: 3px solid #2563eb;
-    padding-bottom: 8px;
-    margin-bottom: 20px;
-    text-align: center;
-  }
-  .header-info {
-    background: #f8fafc;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    text-align: center;
-  }
-  .header-info p {
-    margin: 3px 0;
-    font-size: 14px;
   }
   .watermark-wrapper { position: relative; }
   .watermark-wrapper::after {
@@ -205,8 +169,6 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   @media print {
     @page { margin: 1.5cm; }
     body { padding: 0; font-size: 11pt; max-width: 100%; color: #000; }
-    h1 { font-size: 16pt; page-break-after: avoid; }
-    .header-info { page-break-inside: avoid; background: none !important; border: 1px solid #ccc; }
     .watermark-wrapper::after {
       position: fixed;
       color: rgba(180, 180, 180, 0.20);
@@ -220,12 +182,6 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
 </head>
 <body>
 <div class="watermark-wrapper">
-<h1>Cronistoria Documentale</h1>
-
-<div class="header-info">
-  ${metaLines.map((l) => `<p>${l}</p>`).join('\n  ')}
-</div>
-
 <div class="timeline">
   ${eventsHtml}
 </div>

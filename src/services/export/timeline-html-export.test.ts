@@ -24,11 +24,39 @@ describe('generateTimelineHtml — documento scritto (non tabella)', () => {
     expect(html).not.toContain('<th');
   });
 
-  it('shows "data — tipo", title and description per event', () => {
+  // Benchmark gold passaniti (2026-06-10): il perito elimina SEMPRE il tipo
+  // evento, le etichette FONTE e il meta-block di testa. Restano: data+titolo
+  // in testa, descrizione, attribuzione "Dr. — Struttura", watermark e footer.
+  it('shows "data — titolo" in testa e la descrizione (niente tipo evento)', () => {
     const html = generateTimelineHtml({ caseCode: 'C1', patientInitials: null, events: [ev({})] });
-    expect(html).toContain('&mdash; Esame'); // data — tipo
     expect(html).toContain('RX polso destro');
     expect(html).toContain('Frattura del radio distale.');
+    expect(html).not.toContain('&mdash; Esame'); // tipo evento eliminato dal perito
+  });
+
+  it('niente titolo grande né meta-block (Caso/Paziente/Modulo/Numero eventi) — GDPR + gold', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C1', patientInitials: 'M.R.', events: [ev({})], moduleName: 'Cronistoria',
+    });
+    expect(html).not.toContain('<h1>');
+    expect(html).not.toContain('Paziente:');
+    expect(html).not.toContain('Modulo:');
+    expect(html).not.toContain('Numero eventi:');
+    expect(html).not.toContain('header-info');
+    // Watermark RISERVATO e footer LegMed mantenuti (il perito li conserva)
+    expect(html).toContain('RISERVATO');
+    expect(html).toContain('Generato con LegMed');
+  });
+
+  it('riga meta senza etichetta FONTE: resta "Dr. — Struttura"', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C1', patientInitials: null,
+      events: [ev({ doctor: 'Mario Esempi', facility: 'UOC Ortopedia, Ospedale X' })],
+    });
+    expect(html).toContain('Dr. Mario Esempi');
+    expect(html).toContain('UOC Ortopedia, Ospedale X');
+    expect(html).not.toContain('Esame Strumentale'); // etichetta FONTE eliminata
+    expect(html).not.toContain('FONTE');
   });
 
   it('excludes events the perito marked out of the chronology', () => {

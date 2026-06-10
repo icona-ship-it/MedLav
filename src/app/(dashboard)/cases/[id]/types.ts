@@ -17,6 +17,9 @@ export interface PeriziaMetadataUI {
   ctuPec?: string;
   collaboratoreName?: string;
   collaboratoreTitle?: string;
+  coCtuName?: string;
+  coCtuTitle?: string;
+  oggettoIncarico?: string;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;
@@ -24,6 +27,9 @@ export interface PeriziaMetadataUI {
   dataIncarico?: string;
   dataOperazioni?: string;
   dataDeposito?: string;
+  termineBozza?: string;
+  termineOsservazioni?: string;
+  provvedimentiOrdinanza?: string;
   quesiti?: string[];
   speseMediche?: string;
   esameObiettivo?: string;
@@ -40,6 +46,7 @@ export interface PeriziaMetadataUI {
   anamnesiLavorativa?: string;
   excludedReportSections?: string[];
   ambitoPenale?: boolean;
+  decesso?: boolean;
   esameObiettivoStrutturato?: {
     districts: Array<{ id: string; label: string; examined: boolean; findings: string }>;
     generalInfo?: { altezza?: string; peso?: string; deambulazione?: string; condizioni?: string };

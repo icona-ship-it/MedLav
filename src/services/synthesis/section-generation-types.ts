@@ -66,7 +66,9 @@ export type SectionCondition =
   | 'has-perizie-docs'
   | 'has-quesiti'
   | 'has-pubmed-references'
-  | 'has-conciliazione-procedure';
+  | 'has-conciliazione-procedure'
+  | 'has-ausiliario'
+  | 'has-ctp-nominati';
 
 /**
  * Output of generating a single section.

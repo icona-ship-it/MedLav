@@ -98,6 +98,15 @@ export interface PeriziaMetadata {
   ctuPec?: string;             // PEC perito (carta intestata)
   collaboratoreName?: string;  // ausiliario: "Dr. Luigi Giuseppe Bongiovanni"
   collaboratoreTitle?: string; // ausiliario: "Specialista in Neurologia"
+  // Collegio di CC.TT.U. / co-perito PARITETICO (benchmark gold 2026-06-10): distinto
+  // dall'ausiliario (subordinato). Attiva conferimento plurale "conferiva ai sottoscritti",
+  // doppia carta intestata e firma collegiale.
+  coCtuName?: string;          // co-perito: "Dott. ..."
+  coCtuTitle?: string;         // co-perito: "specialista in Cardiologia"
+  // Oggetto dell'incarico custom nel conferimento, al posto di "alla vicenda clinica":
+  // es. "alla vicenda clinica e alle cause del decesso" (decesso) o "alla natura delle
+  // prestazioni erogate" (casi qualificatori RSA/LEA). Deve iniziare con la preposizione.
+  oggettoIncarico?: string;
   ctpRicorrente?: string;      // "Dott.ssa Sarah Nalin"
   ctpResistente?: string;      // "Dott. Lorenzo Micheli"
   parteRicorrente?: string;    // nome parte ricorrente
@@ -105,6 +114,13 @@ export interface PeriziaMetadata {
   dataIncarico?: string;       // data conferimento incarico
   dataOperazioni?: string;     // data inizio operazioni peritali
   dataDeposito?: string;       // termine deposito relazione
+  // Termini multi-fase dell'ordinanza (benchmark gold 2026-06-10): bozza ai
+  // CC.TT.P. → osservazioni → deposito (dataDeposito).
+  termineBozza?: string;        // termine inoltro bozza ai consulenti di parte
+  termineOsservazioni?: string; // termine osservazioni dei CC.TT.P.
+  // Provvedimenti dell'ordinanza riprodotti nell'intestazione (testo libero:
+  // autorizzazioni del Giudice, istruzioni di liquidazione D.P.R. 115/2002...).
+  provvedimentiOrdinanza?: string;
   quesiti?: string[];          // array di quesiti del giudice
   speseMediche?: string;       // testo libero spese mediche
   esameObiettivo?: string;     // testo libero esame del paziente
@@ -125,6 +141,11 @@ export interface PeriziaMetadata {
   // Ambito penale (CTU/CTP): true = responsabilità penale (causa morte + colpa, niente
   // ITT/ITP/SIMLA); false/undefined = civile (default).
   ambitoPenale?: boolean;
+  // Periziando deceduto (CTU/CTP civile): variante considerazioni ML (causa del decesso,
+  // nesso "più probabile che non", danno iure proprio/hereditatis — NO ITT/ITP/SIMLA sul
+  // deceduto) e operazioni peritali senza visita (riunione tecnica). In ambito penale la
+  // morte è già il fulcro di considerazioni_penale, quindi il flag non vi si applica.
+  decesso?: boolean;
 }
 
 // API Response

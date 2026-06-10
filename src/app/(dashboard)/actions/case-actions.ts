@@ -47,6 +47,9 @@ const periziaMetadataSchema = z.object({
   ctuTitle: z.string().max(200).optional(),
   collaboratoreName: z.string().max(100).optional(),
   collaboratoreTitle: z.string().max(200).optional(),
+  coCtuName: z.string().max(100).optional(),
+  coCtuTitle: z.string().max(200).optional(),
+  oggettoIncarico: z.string().max(300).optional(),
   ctpRicorrente: z.string().max(100).optional(),
   ctpResistente: z.string().max(100).optional(),
   parteRicorrente: z.string().max(200).optional(),
@@ -54,6 +57,9 @@ const periziaMetadataSchema = z.object({
   dataIncarico: z.string().max(20).optional(),
   dataOperazioni: z.string().max(20).optional(),
   dataDeposito: z.string().max(20).optional(),
+  termineBozza: z.string().max(20).optional(),
+  termineOsservazioni: z.string().max(20).optional(),
+  provvedimentiOrdinanza: z.string().max(3000).optional(),
   quesiti: z.array(z.string().max(2000)).max(20).optional(),
   speseMediche: z.string().max(5000).optional(),
   esameObiettivo: z.string().max(10000).optional(),
@@ -70,6 +76,7 @@ const periziaMetadataSchema = z.object({
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
   ambitoPenale: z.boolean().optional(),
+  decesso: z.boolean().optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({

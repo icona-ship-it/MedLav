@@ -1,9 +1,9 @@
 import {
-  Document, Packer, Paragraph, TextRun, HeadingLevel,
-  AlignmentType, Header, Footer, PageNumber, BorderStyle,
+  Document, Packer, Paragraph, TextRun,
+  AlignmentType, Header, Footer, PageNumber,
 } from 'docx';
 import { formatDate } from '@/lib/format';
-import { sourceLabelsExport as sourceLabels } from '@/lib/constants';
+import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
 // ---------------------------------------------------------------------------
@@ -29,8 +29,12 @@ export interface TimelineEvent {
 
 interface TimelineDocxParams {
   caseCode: string;
+  /** Non più renderizzato (benchmark gold passaniti 2026-06-10 + GDPR): il
+   * meta-block di testa con la riga Paziente è stato eliminato. Mantenuto
+   * nell'interfaccia per compatibilità con i call-site. */
   patientInitials: string | null;
   events: TimelineEvent[];
+  /** Non più renderizzato (dicitura interna dell'app). */
   moduleName?: string;
 }
 
@@ -38,43 +42,24 @@ interface TimelineDocxParams {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  visita: 'Visita',
-  esame: 'Esame',
-  intervento: 'Intervento',
-  diagnosi: 'Diagnosi',
-  terapia: 'Terapia',
-  ricovero: 'Ricovero',
-  dimissione: 'Dimissione',
-  prognosi: 'Prognosi',
-  certificato: 'Certificato',
-  altro: 'Altro',
-};
-
-function eventTypeLabel(raw: string): string {
-  return EVENT_TYPE_LABELS[raw] ?? raw;
-}
-
-function sourceLabel(raw: string): string {
-  return sourceLabels[raw] ?? raw;
-}
-
 /**
- * Build the paragraphs for a single event, in NARRATIVE form (not a table):
- *   **DATA — TIPO**            (intestazione in grassetto)
- *   Titolo
+ * Build the paragraphs for a single event, in NARRATIVE form (not a table).
+ * Benchmark gold passaniti (2026-06-10): il perito elimina il tipo evento e le
+ * etichette FONTE — la testata è "DATA — TITOLO", l'attribuzione resta
+ * "Dr. — Struttura":
+ *   **DATA — TITOLO**          (intestazione in grassetto)
  *   Descrizione
  *   Diagnosi: ...              (se presente)
- *   Medico — Struttura — Fonte (riga meta, piccola)
+ *   Medico — Struttura         (riga meta, piccola)
  */
 function buildEventBlock(ev: TimelineEvent): Paragraph[] {
   const paragraphs: Paragraph[] = [];
 
-  // Intestazione "DATA — TIPO". Documento professionale: NESSUN flag interno di
-  // lavoro (DA VERIFICARE / confidenza). La revisione avviene a schermo.
+  // Intestazione "DATA — TITOLO". Documento professionale: NESSUN flag interno
+  // di lavoro (DA VERIFICARE / confidenza). La revisione avviene a schermo.
   paragraphs.push(new Paragraph({
     children: [new TextRun({
-      text: `${formatDate(ev.event_date)} — ${eventTypeLabel(ev.event_type)}`,
+      text: ev.title ? `${formatDate(ev.event_date)} — ${ev.title}` : formatDate(ev.event_date),
       bold: true,
       size: 22,
       font: 'Calibri',
@@ -82,14 +67,6 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
     })],
     spacing: { before: 180, after: 40 },
   }));
-
-  // Titolo
-  if (ev.title) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: ev.title, bold: true, size: 20, font: 'Calibri' })],
-      spacing: { after: 30 },
-    }));
-  }
 
   // Descrizione
   if (ev.description) {
@@ -110,11 +87,10 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
     }));
   }
 
-  // Riga meta: medico — struttura — fonte
+  // Riga meta: medico — struttura (niente etichetta FONTE, eliminata dal perito)
   const meta: string[] = [];
   if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? ev.doctor : `Dr. ${ev.doctor}`);
   if (ev.facility) meta.push(ev.facility);
-  if (ev.source_type) meta.push(sourceLabel(ev.source_type));
   if (meta.length > 0) {
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: meta.join(' — '), size: 16, italics: true, color: '777777', font: 'Calibri' })],
@@ -134,60 +110,27 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
  * Documento scritto (non tabella). Returns a Buffer ready for download.
  */
 export async function generateTimelineDocx(params: TimelineDocxParams): Promise<Buffer> {
-  const { caseCode, patientInitials, events: allEvents, moduleName } = params;
+  const { caseCode, events: allEvents } = params;
 
   // Fix audit 2026-05-11: le spese senza data (eventDate='1900-01-01') non hanno
   // posto nella cronologia temporale (sono nella tabella spese). Inoltre filtriamo
   // gli eventi che il perito ha escluso dalla cronologia (is_relevant_for_chronology
   // === false). Default: incluso. Poi ordina cronologicamente (difensivo).
   const SENTINEL_DATE = '1900-01-01';
+  // Difesa in profondità (oltre al filtro nelle route): mai eventi non clinici
+  // (spese/amministrativi) nella cronistoria — il perito li cancella sempre.
   const events = sortEventsChrono(
-    allEvents.filter((ev) => ev.event_date !== SENTINEL_DATE && ev.is_relevant_for_chronology !== false),
+    allEvents.filter((ev) =>
+      ev.event_date !== SENTINEL_DATE &&
+      ev.is_relevant_for_chronology !== false &&
+      !NON_CLINICAL_EVENT_TYPES.has(ev.event_type)),
   );
 
-  const now = new Date().toLocaleDateString('it-IT', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
+  // Benchmark gold passaniti (2026-06-10): niente titolo grande né meta-block
+  // (Caso/Paziente/Modulo/Data/Numero eventi — la riga Paziente era anche
+  // un'esposizione GDPR inutile). Il documento parte direttamente dagli eventi
+  // sotto l'header RISERVATO; il codice caso resta nel footer.
   const children: Paragraph[] = [];
-
-  // Titolo
-  children.push(new Paragraph({
-    children: [new TextRun({
-      text: 'CRONISTORIA DOCUMENTALE',
-      bold: true,
-      size: 36,
-      font: 'Calibri',
-      color: '2B579A',
-    })],
-    heading: HeadingLevel.HEADING_1,
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 200 },
-  }));
-
-  // Metadati
-  const metaLines: string[] = [`Caso: ${caseCode}`];
-  if (patientInitials) metaLines.push(`Paziente: ${patientInitials}`);
-  if (moduleName) metaLines.push(`Modulo: ${moduleName}`);
-  metaLines.push(`Data generazione: ${now}`);
-  metaLines.push(`Numero eventi: ${events.length}`);
-
-  for (const line of metaLines) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: line, size: 22, font: 'Calibri', color: '333333' })],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 40 },
-    }));
-  }
-
-  // Riga orizzontale
-  children.push(new Paragraph({
-    children: [],
-    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '2B579A', space: 1 } },
-    spacing: { before: 200, after: 300 },
-  }));
 
   // Eventi in forma narrativa
   if (events.length === 0) {

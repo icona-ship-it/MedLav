@@ -418,12 +418,20 @@ const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
  * table updates by itself, no regeneration. The arithmetic is a proposal to
  * verify; the medico-legal judgment stays the perito's.
  */
-export function buildPlaceholderContent(spec: SectionSpec): string {
+export function buildPlaceholderContent(spec: SectionSpec, opts?: { decesso?: boolean }): string {
   const base = spec.placeholderText ?? '';
   if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id)) {
     return base;
   }
-  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}`;
+  // Decesso: il deceduto non ha invalidità temporanea da graduare — la tabella
+  // ITT/ITP sarebbe fuorviante nelle considerazioni (benchmark gold 2026-06-10).
+  if (opts?.decesso) {
+    return base;
+  }
+  // Guida di conversione (benchmark gold 2026-06-10): nei depositati i periodi
+  // ITT/ITP compaiono come elenco in prosa motivato, non come tabella — la
+  // tabella resta la fonte dei fatti, la formula guida la stesura del perito.
+  return `${base}\n\n**Periodi di invalidità temporanea (proposta automatica — il perito verifica e corregge):**\n\n${DETERMINISTIC_MARKERS.ITT_ITP}\n\n*[Il perito trasforma la proposta in elenco motivato secondo la formula: "va ragionevolmente riconosciuto un periodo di: invalidità temporanea totale pari a NN (lettere) giorni, corrispondenti a [motivazione clinica, es. periodo di ricovero in ambiente nosocomiale], ovvero dal DD.MM.YYYY al DD.MM.YYYY, come da documentazione sanitaria; invalidità temporanea parziale al NN% pari a NN (lettere) giorni, per [motivazione clinica del periodo]".]*`;
 }
 
 export async function generateSectionStep(
@@ -437,7 +445,7 @@ export async function generateSectionStep(
     return {
       id: spec.id,
       title: spec.title,
-      content: buildPlaceholderContent(spec),
+      content: buildPlaceholderContent(spec, { decesso: synthesisParams.periziaMetadata?.decesso }),
       contextSummary: '',
       wordCount: 0,
     };

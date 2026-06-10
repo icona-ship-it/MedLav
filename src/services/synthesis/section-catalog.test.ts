@@ -168,14 +168,17 @@ describe('section-catalog', () => {
   // ── Role-specific section arrays ──────────────────────────────────
 
   describe('role-specific section arrays', () => {
-    it('should have 13 CTU sections (benchmark scuola veronese + conciliazione 696-bis)', () => {
-      expect(CTU_SECTIONS).toHaveLength(13);
+    it('should have 16 CTU sections (benchmark gold 2026-06-10: + profilo metodologico, accertamento ausiliario, preventivi CTP)', () => {
+      expect(CTU_SECTIONS).toHaveLength(16);
       expect(CTU_SECTIONS.map((s) => s.id)).toContain('conciliazione_ante_bozza');
       expect(CTU_SECTIONS.map((s) => s.id)).toContain('conciliazione_post_bozza');
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('profilo_metodologico');
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('accertamento_ausiliario');
+      expect(CTU_SECTIONS.map((s) => s.id)).toContain('preventivi_spese_ml');
     });
 
-    it('should have 12 CTP sections (CTU without osservazioni_bozza)', () => {
-      expect(CTP_SECTIONS).toHaveLength(12);
+    it('should have 15 CTP sections (CTU without osservazioni_bozza)', () => {
+      expect(CTP_SECTIONS).toHaveLength(15);
       expect(CTP_SECTIONS.map((s) => s.id)).not.toContain('osservazioni_bozza');
     });
 
@@ -233,7 +236,8 @@ describe('section-catalog', () => {
 
     it('should not contain removed sections after benchmark alignment', () => {
       const allCtuCtp = [...CTU_SECTIONS.map((s) => s.id), ...CTP_SECTIONS.map((s) => s.id)];
-      expect(allCtuCtp).not.toContain('profilo_metodologico');
+      // profilo_metodologico: rimosso nel 2026-05, REINTRODOTTO il 2026-06-10
+      // come placeholder deterministico (gold Del Porto, righe 91-115).
       expect(allCtuCtp).not.toContain('verbale_operazioni_peritali');
       expect(allCtuCtp).not.toContain('visita_periziando');
       expect(allCtuCtp).not.toContain('conclusioni_quesiti');
@@ -418,7 +422,9 @@ describe('section-catalog', () => {
       expect(ids).toContain('intestazione');
       expect(ids).toContain('quesiti');
       expect(ids).toContain('documentazione_atti');
-      expect(ids).toContain('premesse');
+      // Benchmark gold 2026-06-10: premesse e documentazione_atti sono mutuamente
+      // esclusive (5/6 gold riproducono gli atti UNA sola volta) — vince doc_atti.
+      expect(ids).not.toContain('premesse');
       expect(ids).toContain('spese_mediche');
       expect(ids).toContain('pareri_tecnici');
     });
@@ -740,6 +746,243 @@ describe('section-catalog', () => {
       const intestazione = getSectionSpecById('intestazione', 'ctu');
       expect(intestazione).toBeDefined();
       expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
+    });
+  });
+
+  // ── Benchmark gold 2026-06-10 — P0 alignment ──────────────────────
+
+  describe('benchmark gold 2026-06-10 — P0 alignment', () => {
+    const ATTI_DOC_TYPES = ['cartella_clinica', 'memoria_difensiva'];
+
+    it('premesse soppressa quando documentazione_atti è nel piano (atti riprodotti una volta sola)', () => {
+      const ids = resolveSectionPlan({
+        ...CTU_PARAMS,
+        documentTypes: ATTI_DOC_TYPES,
+        periziaMetadata: { tribunale: 'Tribunale di Verona' },
+      }).map((s) => s.id);
+      expect(ids).toContain('documentazione_atti');
+      expect(ids).not.toContain('premesse');
+    });
+
+    it('premesse attiva quando il perito esclude documentazione_atti dal selettore', () => {
+      const ids = resolveSectionPlan({
+        ...CTU_PARAMS,
+        documentTypes: ATTI_DOC_TYPES,
+        periziaMetadata: {
+          tribunale: 'Tribunale di Verona',
+          excludedReportSections: ['documentazione_atti'],
+        },
+      }).map((s) => s.id);
+      expect(ids).toContain('premesse');
+      expect(ids).not.toContain('documentazione_atti');
+    });
+
+    it('premesse: budget LARGE + maxChars, directive verbatim atti processuali con formule intro', () => {
+      const premesse = CTU_SECTIONS.find((s) => s.id === 'premesse');
+      expect(premesse?.maxTokens).toBe(10_000);
+      expect(premesse?.maxChars).toBe(32_000);
+      expect(premesse?.promptDirective).toMatch(/VERBATIM/);
+      expect(premesse?.promptDirective).toMatch(/redatt[oa] dall'Avv\./);
+      expect(premesse?.promptDirective).toMatch(/NON riprodurre qui i documenti stragiudiziali/i);
+    });
+
+    it('quesiti: blocco virgolettato unico con numerazione ORIGINALE, vietato rinumerare', () => {
+      const quesiti = CTU_SECTIONS.find((s) => s.id === 'quesiti');
+      expect(quesiti?.promptDirective).toMatch(/numerazione\/elencazione ORIGINALE/i);
+      expect(quesiti?.promptDirective).toMatch(/NON rinumerare/i);
+      expect(quesiti?.promptDirective).toMatch(/formula di rito/i);
+      expect(quesiti?.promptDirective).not.toMatch(/Numera ciascun quesito progressivamente/);
+    });
+
+    it('operazioni_peritali: scheletro-verbale con comparizioni, dichiarazioni a verbale, rubriche visita e firme', () => {
+      const op = CTU_SECTIONS.find((s) => s.id === 'operazioni_peritali');
+      expect(op?.isPlaceholder).toBe(true);
+      const txt = op?.placeholderText ?? '';
+      expect(txt).toMatch(/In tale occasione, sono comparsi/);
+      expect(txt).toMatch(/chiede che sia scritto a verbale/);
+      expect(txt).toMatch(/ANAMNESI PATOLOGICA PROSSIMA/i);
+      expect(txt).toMatch(/ESAME OBIETTIVO per distretti/i);
+      expect(txt).toMatch(/L'incontro terminava alle ore/);
+      expect(txt).toMatch(/FIRME DEL VERBALE/i);
+      expect(txt).toMatch(/imperfetto/);
+    });
+
+    it('decesso (civile): considerazioni_ml guida su causa morte e danno iure proprio/hereditatis, niente ITT/SIMLA', () => {
+      const plan = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { decesso: true } });
+      const cons = plan.find((s) => s.id === 'considerazioni_ml');
+      expect(cons?.isPlaceholder).toBe(true);
+      const txt = cons?.placeholderText ?? '';
+      expect(txt).toMatch(/CAUSA DEL DECESSO/i);
+      expect(txt).toMatch(/più probabile che non/);
+      expect(txt).toMatch(/iure proprio/i);
+      expect(txt).toMatch(/iure hereditatis/i);
+      expect(txt).toMatch(/NON si applicano al periziando deceduto/i);
+      expect(txt).not.toMatch(/danno biologico temporaneo \(ITT\/ITP\) con date/i);
+    });
+
+    it('decesso (civile): operazioni_peritali diventa verbale di riunione tecnica senza visita', () => {
+      const plan = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { decesso: true } });
+      const op = plan.find((s) => s.id === 'operazioni_peritali');
+      expect(op?.placeholderText).toMatch(/riunione di discussione tecnica/i);
+      expect(op?.placeholderText).not.toMatch(/SOGGETTIVAMENTE|VISITA DEL PERIZIANDO/);
+    });
+
+    it('penale: operazioni_peritali diventa "I Dati dell\'Incontro Peritale" senza visita', () => {
+      const plan = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { ambitoPenale: true } });
+      const op = plan.find((s) => s.id === 'operazioni_peritali');
+      expect(op?.title).toBe('I Dati dell\'Incontro Peritale');
+      expect(op?.placeholderText).toMatch(/incontro peritale/i);
+      expect(op?.placeholderText).toMatch(/per gli imputati/i);
+      expect(op?.placeholderText).not.toMatch(/SOGGETTIVAMENTE|VISITA DEL PERIZIANDO/);
+    });
+
+    it('penale + decesso: vince il penale (considerazioni_penale + incontro peritale)', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { ambitoPenale: true, decesso: true },
+      });
+      expect(plan.map((s) => s.id)).toContain('considerazioni_penale');
+      expect(plan.map((s) => s.id)).not.toContain('considerazioni_ml');
+      const op = plan.find((s) => s.id === 'operazioni_peritali');
+      expect(op?.title).toBe('I Dati dell\'Incontro Peritale');
+    });
+
+    it('getSectionSpecById applica la variante decesso a considerazioni_ml e operazioni_peritali', () => {
+      const cons = getSectionSpecById('considerazioni_ml', 'ctu', undefined, { decesso: true });
+      expect(cons?.placeholderText).toMatch(/CAUSA DEL DECESSO/i);
+      const op = getSectionSpecById('operazioni_peritali', 'ctu', undefined, { decesso: true });
+      expect(op?.placeholderText).toMatch(/riunione di discussione tecnica/i);
+    });
+
+    it('senza flag decesso: considerazioni_ml e operazioni_peritali restano le varianti standard', () => {
+      const plan = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: {} });
+      const cons = plan.find((s) => s.id === 'considerazioni_ml');
+      expect(cons?.placeholderText).toMatch(/danno biologico temporaneo \(ITT\/ITP\)/i);
+      const op = plan.find((s) => s.id === 'operazioni_peritali');
+      expect(op?.placeholderText).toMatch(/VISITA DEL PERIZIANDO/);
+    });
+  });
+
+  // ── Benchmark gold 2026-06-10 — P1 CTU ────────────────────────────
+
+  describe('benchmark gold 2026-06-10 — P1 CTU', () => {
+    it('considerazioni_ml: struttura PER QUESITO con formule peritali, SIMLA 2016 e guida polizza infortuni', () => {
+      const cons = CTU_SECTIONS.find((s) => s.id === 'considerazioni_ml');
+      const txt = cons?.placeholderText ?? '';
+      expect(txt).toMatch(/Venendo a rispondere ai quesiti proposti dal Sig\. Giudice/);
+      expect(txt).toMatch(/ri-citato testualmente tra virgolette|ri-citazione testuale/i);
+      expect(txt).toMatch(/SIMLA, Linee Guida per la valutazione del danno alla persona in ambito civilistico/);
+      expect(txt).toMatch(/omnicomprensiva/i);
+      expect(txt).toMatch(/polizza infortuni privata/i);
+      expect(txt).toMatch(/conseguenze dirette ed esclusive/i);
+      expect(txt).toMatch(/Il testo di cui sopra viene inviato alle parti/);
+    });
+
+    it('considerazioni_penale: sinossi clinico-documentale, risposta per-quesito alla Corte, diagnosi differenziale eziologica', () => {
+      const plan = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: { ambitoPenale: true } });
+      const pen = plan.find((s) => s.id === 'considerazioni_penale');
+      const txt = pen?.placeholderText ?? '';
+      expect(txt).toMatch(/Breve sinossi clinico-documentale/i);
+      expect(txt).toMatch(/Ecc\.ma Corte|Sig\. Magistrato/);
+      expect(txt).toMatch(/diagnosi differenziale eziologica/i);
+      expect(txt).toMatch(/elevatissima probabilità/);
+      expect(txt).toMatch(/controfattuale/i);
+    });
+
+    it('conciliazione attivata anche dal QUESITO "tenti la conciliazione" (causa ordinaria)', () => {
+      const ids = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: {
+          tipoProcedimento: 'Causa civile ordinaria',
+          quesiti: ['Accerti il CTU le lesioni e tenti la conciliazione delle parti.'],
+        },
+      }).map((s) => s.id);
+      expect(ids).toContain('conciliazione_ante_bozza');
+      expect(ids).toContain('conciliazione_post_bozza');
+    });
+
+    it('conciliazione: i placeholder hanno le formule peritali e non dichiarano più "solo ATP 696-bis"', () => {
+      const ante = CTU_SECTIONS.find((s) => s.id === 'conciliazione_ante_bozza');
+      const post = CTU_SECTIONS.find((s) => s.id === 'conciliazione_post_bozza');
+      expect(ante?.placeholderText).toMatch(/primo tentativo di soluzione conciliativa/i);
+      expect(ante?.placeholderText).not.toMatch(/solo per procedimenti ATP/i);
+      expect(post?.placeholderText).toMatch(/Non essendo stato possibile addivenire ad una soluzione bonaria/);
+    });
+
+    it('pareri_tecnici: riproduzione INTEGRALE con struttura a campi dei fiduciari, budget HUGE', () => {
+      const pareri = CTU_SECTIONS.find((s) => s.id === 'pareri_tecnici');
+      expect(pareri?.maxTokens).toBe(20_000);
+      expect(pareri?.maxChars).toBe(60_000);
+      expect(pareri?.promptDirective).toMatch(/INTEGRALMENTE/);
+      expect(pareri?.promptDirective).toMatch(/fiduciari/i);
+      expect(pareri?.promptDirective).toMatch(/clausole di polizza/i);
+    });
+
+    it('osservazioni_bozza: iter completo invio → osservazioni integrali → Risposta del C.T.U. → deposito', () => {
+      const oss = CTU_SECTIONS.find((s) => s.id === 'osservazioni_bozza');
+      const txt = oss?.placeholderText ?? '';
+      expect(txt).toMatch(/si inviavano le bozze di CTU alle Parti/);
+      expect(txt).toMatch(/INTEGRALMENTE/i);
+      expect(txt).toMatch(/Risposta del C\.T\.U\./);
+      expect(txt).toMatch(/si procede al deposito dell'elaborato tecnico/);
+    });
+
+    it('documentazione_atti: inventario per parte + formule intro + documentazione amministrativa', () => {
+      const atti = CTU_SECTIONS.find((s) => s.id === 'documentazione_atti');
+      const d = atti?.promptDirective ?? '';
+      expect(d).toMatch(/economia espositiva/i);
+      expect(d).toMatch(/raggruppat[oi] per parte/i);
+      expect(d).toMatch(/Dichiarazione testimoniale resa da/);
+      expect(d).toMatch(/amministrativa/i);
+    });
+
+    it('ordine sezioni: spese_mediche DOPO pareri_tecnici (doc sanitaria → pareri → spese)', () => {
+      const ids = CTU_SECTIONS.map((s) => s.id);
+      expect(ids.indexOf('spese_mediche')).toBeGreaterThan(ids.indexOf('pareri_tecnici'));
+      expect(ids.indexOf('pareri_tecnici')).toBeGreaterThan(ids.indexOf('documentazione_sanitaria'));
+    });
+
+    it('nuova sezione profilo_metodologico (placeholder deterministico) subito dopo i quesiti', () => {
+      const ids = CTU_SECTIONS.map((s) => s.id);
+      expect(ids.indexOf('profilo_metodologico')).toBe(ids.indexOf('quesiti') + 1);
+      const pm = CTU_SECTIONS.find((s) => s.id === 'profilo_metodologico');
+      expect(pm?.isPlaceholder).toBe(true);
+      expect(pm?.placeholderText).toMatch(/comparata disamina dei dati/);
+    });
+
+    it('nuova sezione accertamento_ausiliario: solo quando è nominato un ausiliario', () => {
+      const withAus = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { collaboratoreName: 'Dr. Aldo Fittizio' },
+      }).map((s) => s.id);
+      expect(withAus).toContain('accertamento_ausiliario');
+
+      const without = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: {} }).map((s) => s.id);
+      expect(without).not.toContain('accertamento_ausiliario');
+
+      const spec = CTU_SECTIONS.find((s) => s.id === 'accertamento_ausiliario');
+      expect(spec?.placeholderText).toMatch(/seguiva l'accertamento di natura/);
+    });
+
+    it('nuova sezione preventivi_spese_ml: solo quando sono nominati CC.TT.P.', () => {
+      const withCtp = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { ctpRicorrente: 'Dott.ssa Bianca Fittizia' },
+      }).map((s) => s.id);
+      expect(withCtp).toContain('preventivi_spese_ml');
+
+      const without = resolveSectionPlan({ ...CTU_PARAMS, periziaMetadata: {} }).map((s) => s.id);
+      expect(without).not.toContain('preventivi_spese_ml');
+
+      const spec = CTU_SECTIONS.find((s) => s.id === 'preventivi_spese_ml');
+      expect(spec?.placeholderText).toMatch(/proforme di fattura/i);
+    });
+
+    it('spese_mediche: il placeholder guida la valutazione per categorie di congruità', () => {
+      const spese = CTU_SECTIONS.find((s) => s.id === 'spese_mediche');
+      const txt = spese?.placeholderText ?? '';
+      expect(txt).toMatch(/pertinenti e congrue/i);
+      expect(txt).toMatch(/si rimettono alla discrezione del Sig\. Giudice/);
     });
   });
 });

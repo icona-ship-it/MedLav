@@ -33,9 +33,9 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
-  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese'] },
-  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
-  { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito'] },
+  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese', 'oggettoIncarico'] },
+  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle', 'coCtuName', 'coCtuTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
+  { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito', 'termineBozza', 'termineOsservazioni'] },
   { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
   { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
 ];
@@ -136,6 +136,8 @@ export function PeriziaMetadataForm({
     rgNumber: existing.rgNumber ?? '',
     tipoProcedimento: existing.tipoProcedimento ?? '',
     ambitoPenale: existing.ambitoPenale ?? false,
+    decesso: existing.decesso ?? false,
+    oggettoIncarico: existing.oggettoIncarico ?? '',
     judgeName: existing.judgeName ?? '',
     ctuName: existing.ctuName ?? '',
     ctuTitle: existing.ctuTitle ?? '',
@@ -145,6 +147,8 @@ export function PeriziaMetadataForm({
     ctuPec: existing.ctuPec ?? '',
     collaboratoreName: existing.collaboratoreName ?? '',
     collaboratoreTitle: existing.collaboratoreTitle ?? '',
+    coCtuName: existing.coCtuName ?? '',
+    coCtuTitle: existing.coCtuTitle ?? '',
     ctpRicorrente: existing.ctpRicorrente ?? '',
     ctpResistente: existing.ctpResistente ?? '',
     parteRicorrente: existing.parteRicorrente ?? '',
@@ -152,6 +156,9 @@ export function PeriziaMetadataForm({
     dataIncarico: existing.dataIncarico ?? '',
     dataOperazioni: existing.dataOperazioni ?? '',
     dataDeposito: existing.dataDeposito ?? '',
+    termineBozza: existing.termineBozza ?? '',
+    termineOsservazioni: existing.termineOsservazioni ?? '',
+    provvedimentiOrdinanza: existing.provvedimentiOrdinanza ?? '',
     fondoSpese: existing.fondoSpese ?? '',
     esameObiettivo: existing.esameObiettivo ?? '',
     // Anamnesi (RC) — peso/altezza tenuti come stringa nel form, convertiti a numero al salvataggio
@@ -237,6 +244,8 @@ export function PeriziaMetadataForm({
         ...(form.rgNumber ? { rgNumber: form.rgNumber } : {}),
         ...(form.tipoProcedimento ? { tipoProcedimento: form.tipoProcedimento } : {}),
         ...(form.ambitoPenale ? { ambitoPenale: true } : {}),
+        ...(form.decesso ? { decesso: true } : {}),
+        ...(form.oggettoIncarico ? { oggettoIncarico: form.oggettoIncarico } : {}),
         ...(form.judgeName ? { judgeName: form.judgeName } : {}),
         ...(form.ctuName ? { ctuName: form.ctuName } : {}),
         ...(form.ctuTitle ? { ctuTitle: form.ctuTitle } : {}),
@@ -246,6 +255,8 @@ export function PeriziaMetadataForm({
         ...(form.ctuPec ? { ctuPec: form.ctuPec } : {}),
         ...(form.collaboratoreName ? { collaboratoreName: form.collaboratoreName } : {}),
         ...(form.collaboratoreTitle ? { collaboratoreTitle: form.collaboratoreTitle } : {}),
+        ...(form.coCtuName ? { coCtuName: form.coCtuName } : {}),
+        ...(form.coCtuTitle ? { coCtuTitle: form.coCtuTitle } : {}),
         ...(form.ctpRicorrente ? { ctpRicorrente: form.ctpRicorrente } : {}),
         ...(form.ctpResistente ? { ctpResistente: form.ctpResistente } : {}),
         ...(form.parteRicorrente ? { parteRicorrente: form.parteRicorrente } : {}),
@@ -253,6 +264,9 @@ export function PeriziaMetadataForm({
         ...(form.dataIncarico ? { dataIncarico: form.dataIncarico } : {}),
         ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
+        ...(form.termineBozza ? { termineBozza: form.termineBozza } : {}),
+        ...(form.termineOsservazioni ? { termineOsservazioni: form.termineOsservazioni } : {}),
+        ...(form.provvedimentiOrdinanza ? { provvedimentiOrdinanza: form.provvedimentiOrdinanza } : {}),
         ...(form.fondoSpese ? { fondoSpese: form.fondoSpese } : {}),
         ...(form.esameObiettivo ? { esameObiettivo: form.esameObiettivo } : {}),
         // Anamnesi (RC) — i campi non renderizzati per non-RC restano vuoti → esclusi
@@ -402,6 +416,29 @@ export function PeriziaMetadataForm({
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">Penale: causa dell&apos;evento/morte + profili di colpa, senza ITT/ITP n&eacute; tabelle SIMLA.</p>
                     </div>
+                    <div>
+                      <Label>Periziando</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Button type="button" size="sm" variant={form.decesso ? 'outline' : 'default'} onClick={() => setForm({ ...form, decesso: false })}>Vivente</Button>
+                        <Button type="button" size="sm" variant={form.decesso ? 'default' : 'outline'} onClick={() => setForm({ ...form, decesso: true })}>Deceduto</Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Deceduto: considerazioni su causa della morte e danno iure proprio/hereditatis (senza ITT/ITP), operazioni peritali senza visita.</p>
+                    </div>
+                    <div>
+                      <Label>Oggetto dell&apos;incarico (opzionale)</Label>
+                      <Input value={form.oggettoIncarico} onChange={(e) => setForm({ ...form, oggettoIncarico: e.target.value })} placeholder="es. alla vicenda clinica e alle cause del decesso" />
+                      <p className="text-xs text-muted-foreground mt-1">Sostituisce &quot;alla vicenda clinica&quot; nel conferimento. Inizia con la preposizione (&quot;alla...&quot;, &quot;alle...&quot;).</p>
+                    </div>
+                    <div>
+                      <Label>Provvedimenti dell&apos;ordinanza (opzionale)</Label>
+                      <Textarea
+                        value={form.provvedimentiOrdinanza}
+                        onChange={(e) => setForm({ ...form, provvedimentiOrdinanza: e.target.value })}
+                        placeholder={'es. Il Giudice autorizza il CTU ad acquisire documentazione presso le strutture sanitarie e ad avvalersi di ausiliari...'}
+                        className="min-h-[80px] text-sm mt-1"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Autorizzazioni e istruzioni dell&apos;ordinanza riprodotte nell&apos;intestazione (es. liquidazione ex D.P.R. 115/2002)</p>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Giudice</Label>
@@ -467,6 +504,17 @@ export function PeriziaMetadataForm({
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
+                        <Label>Co-CTU / Collegio (nome)</Label>
+                        <Input value={form.coCtuName ?? ''} onChange={(e) => setForm({ ...form, coCtuName: e.target.value })} placeholder="es. Prof. Secondo Perito" />
+                        <p className="text-xs text-muted-foreground mt-1">Secondo perito PARITETICO del collegio (conferimento plurale e firma collegiale). Diverso dall&apos;ausiliario.</p>
+                      </div>
+                      <div>
+                        <Label>Co-CTU (qualifica)</Label>
+                        <Input value={form.coCtuTitle ?? ''} onChange={(e) => setForm({ ...form, coCtuTitle: e.target.value })} placeholder="es. specialista in Cardiologia" />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
                         <Label>Parte Ricorrente</Label>
                         <Input value={form.parteRicorrente} onChange={(e) => setForm({ ...form, parteRicorrente: e.target.value })} placeholder="Nome parte ricorrente" />
                       </div>
@@ -497,6 +545,15 @@ export function PeriziaMetadataForm({
                     <div>
                       <Label>Data inizio operazioni</Label>
                       <Input value={form.dataOperazioni} onChange={(e) => setForm({ ...form, dataOperazioni: e.target.value })} placeholder="es. 20/02/2025" />
+                    </div>
+                    <div>
+                      <Label>Termine bozza ai CC.TT.P.</Label>
+                      <Input value={form.termineBozza} onChange={(e) => setForm({ ...form, termineBozza: e.target.value })} placeholder="es. 30/04/2025" />
+                      <p className="text-xs text-muted-foreground mt-1">Termine per l&apos;inoltro della bozza ai consulenti di parte</p>
+                    </div>
+                    <div>
+                      <Label>Termine osservazioni CC.TT.P.</Label>
+                      <Input value={form.termineOsservazioni} onChange={(e) => setForm({ ...form, termineOsservazioni: e.target.value })} placeholder="es. 10/05/2025" />
                     </div>
                     <div>
                       <Label>Termine deposito</Label>

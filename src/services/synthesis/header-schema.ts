@@ -30,6 +30,9 @@ export const HeaderDataSchema = z.object({
       email: z.string().nullable().optional(),
       pec: z.string().nullable().optional(),
       ausiliario: z.string().nullable().optional(),
+      // Collegio: co-perito PARITETICO (overlay dai metadati, non dall'LLM).
+      coPeritoNome: z.string().nullable().optional(),
+      coPeritoQualifica: z.string().nullable().optional(),
     })
     .nullable(),
 
@@ -41,6 +44,14 @@ export const HeaderDataSchema = z.object({
     residenza: z.string().nullable(),
     codiceFiscale: z.string().nullable(),
     telefono: z.string().nullable(),
+    // Decesso (benchmark gold 2026-06-10): estratti dall'LLM da scheda di morte /
+    // lettera di constatazione quando il caso riguarda un periziando deceduto.
+    dataDecesso: z.string().nullable().optional(),
+    luogoDecesso: z.string().nullable().optional(),
+    // Stragiudiziale (carta intestata Antoniazzi): contatti e legale di parte.
+    email: z.string().nullable().optional(),
+    avvocato: z.string().nullable().optional(),
+    accompagnatore: z.string().nullable().optional(),
   }),
 
   /** Oggetto dell'incarico — descrizione neutra dell'evento e delle lesioni. */
@@ -87,7 +98,13 @@ export const HeaderDataSchema = z.object({
       tipoProcedimento: z.string().nullable().optional(),
       dataInizioOperazioni: z.string().nullable().optional(),
       termineDeposito: z.string().nullable().optional(),
+      termineBozza: z.string().nullable().optional(),
+      termineOsservazioni: z.string().nullable().optional(),
+      provvedimentiOrdinanza: z.string().nullable().optional(),
       fondoSpese: z.string().nullable().optional(),
+      // Oggetto dell'incarico custom (overlay dai metadati): sostituisce "alla
+      // vicenda clinica" nel conferimento (es. "...e alle cause del decesso").
+      oggettoIncarico: z.string().nullable().optional(),
     })
     .nullable(),
 });
@@ -115,7 +132,11 @@ export const HEADER_JSON_SCHEMA_DESCRIPTION = `Genera un oggetto JSON con questa
     "luogoNascita": string | null,
     "residenza": string | null,
     "codiceFiscale": string | null,
-    "telefono": string | null
+    "telefono": string | null,
+    "dataDecesso": string | null,
+    "luogoDecesso": string | null,
+    "email": string | null,
+    "avvocato": string | null
   },
   "oggetto": {
     "eventoIndice": string | null,
@@ -148,6 +169,8 @@ REGOLE:
 4. Per "giudiziale": SOLO per CTU/CTP. Per stragiudiziale o pareri privati, \`null\`.
 5. Date: formato preferito DD/MM/YYYY. Se non presente, \`null\`.
 6. NESSUN campo deve essere "[da compilare dal perito]" — usa \`null\`. Il marker testuale viene aggiunto dal template di rendering.
+7. "dataDecesso"/"luogoDecesso": SOLO se il periziando è deceduto e il dato risulta dai documenti (scheda di morte, verbale di constatazione, lettera di dimissione con exitus). Periziando vivente → \`null\`.
+8. "email"/"avvocato": SOLO se documentati nei metadati o negli atti (es. "Avvocato di parte: ..."). MAI inventarli.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON, senza testo prima o dopo.`;
 
@@ -193,6 +216,9 @@ export function sanitizeHeaderData(data: HeaderData): HeaderData {
         : null,
       dataNascita: isValidItalianDate(data.paziente.dataNascita)
         ? data.paziente.dataNascita
+        : null,
+      dataDecesso: isValidItalianDate(data.paziente.dataDecesso ?? null)
+        ? data.paziente.dataDecesso
         : null,
     },
     oggetto: {

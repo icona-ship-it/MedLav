@@ -9,6 +9,21 @@ import {
   EPICRISI_FORMULATIONS,
   EPICRISI_EXAMPLE,
 } from './peritale-formulations';
+import {
+  OPERAZIONI_PERITALI_PLACEHOLDER,
+  OPERAZIONI_PERITALI_DECESSO_PLACEHOLDER,
+  INCONTRO_PERITALE_PENALE_PLACEHOLDER,
+  CONSIDERAZIONI_DECESSO_PLACEHOLDER,
+  CONSIDERAZIONI_ML_PLACEHOLDER,
+  CONSIDERAZIONI_PENALE_PLACEHOLDER,
+  OSSERVAZIONI_BOZZA_PLACEHOLDER,
+  CONCILIAZIONE_ANTE_PLACEHOLDER,
+  CONCILIAZIONE_POST_PLACEHOLDER,
+  EPICRISI_COMPLETAMENTO_GUIDE,
+  PROFILO_METODOLOGICO_PLACEHOLDER,
+  ACCERTAMENTO_AUSILIARIO_PLACEHOLDER,
+  PREVENTIVI_SPESE_ML_PLACEHOLDER,
+} from './section-placeholders';
 
 // ── Token budget tiers (per-section, calibrated to natural output length) ──
 //
@@ -262,11 +277,27 @@ ${NO_EVN_RULE}`,
     contextMaxChars: 500,
     needsOcr: false,
     condition: 'has-quesiti',
-    promptDirective: `Riproduci FEDELMENTE e INTEGRALMENTE i quesiti del Giudice cosi come formulati nell'ordinanza di conferimento.
-Numera ciascun quesito progressivamente.
-NON modificare, riassumere o parafrasare il testo dei quesiti.
-Se un quesito contiene sotto-punti, riportali tutti fedelmente.
+    // Benchmark gold 2026-06-10: in 6 gold su 6 i quesiti sono un UNICO blocco
+    // virgolettato fedele all'ordinanza, mai una lista rinumerata dall'estensore.
+    promptDirective: `Riproduci i quesiti del Giudice come UNICO blocco virgolettato FEDELE all'ordinanza di conferimento.
+REGOLE VINCOLANTI:
+- Conserva la formula di rito iniziale se presente (es. "Letti gli atti e documenti di causa, visitato il periziando...").
+- Conserva la numerazione/elencazione ORIGINALE dell'ordinanza: trattini, lettere a)-l), numeri romani I)-IV), sotto-punti 8.1/8.2. NON rinumerare: numera SOLO se e come l'ordinanza numera.
+- NON modificare, riassumere o parafrasare il testo dei quesiti. Se un quesito contiene sotto-punti, riportali tutti fedelmente.
 ${NO_EVN_RULE}`,
+  },
+  {
+    // Benchmark gold Del Porto (2026-06-10): frase-ponte metodologica + indice
+    // della relazione, subito dopo i quesiti. Deterministica, deselezionabile.
+    id: 'profilo_metodologico',
+    title: 'Profilo Metodologico',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    isPlaceholder: true,
+    placeholderText: PROFILO_METODOLOGICO_PLACEHOLDER,
+    promptDirective: '',
   },
   {
     id: 'documentazione_atti',
@@ -280,25 +311,40 @@ ${NO_EVN_RULE}`,
     needsOcr: true,
     condition: 'has-non-medical-docs',
     promptDirective: `Riproduzione FEDELE e VERBATIM dei documenti NON sanitari presenti nel fascicolo, in ordine cronologico:
-ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice, clausole di polizza.
+ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice, clausole di polizza, e la documentazione AMMINISTRATIVA rilevante (contratti di ingresso/ospitalità, fatture, carta dei servizi, schede di valutazione regionali, delibere).
 ${CITATION_FORMAT}
-- Ogni atto introdotto da una riga con tipo + autore/avvocato + data di deposito: **Ricorso ex art. ... depositato dall'Avv. [nome] in data DD.MM.YYYY:** "..."
-- Riproduci il contenuto VIRGOLETTATO mantenendo la NUMERAZIONE ORIGINALE dei punti dell'atto (1), 2), 3)...) e i virgolettati testuali (PEC, clausole, certificati) come nell'originale. NON riassumere il testo dell'atto.
-- I documenti che scegli di non riprodurre integralmente vanno comunque elencati con la formula: "... che non viene riportato per economia espositiva."
+- Ogni atto introdotto da una riga con tipo + autore/avvocato + data di deposito. Formule di introduzione (benchmark):
+  **[Tipo atto] redatto dall'Avv. [nome] in rappresentanza di [parte], datato DD.MM.YYYY:** "..."
+  **Messaggio a mezzo PEC indirizzato a [struttura], redatto dal Dott. [autore] per conto di [parte], in data DD.MM.YYYY:** "..."
+  **Dichiarazione testimoniale resa da [testimone], [relazione con il periziando], in data DD.MM.YYYY:** "..."
+- Riproduci il contenuto VIRGOLETTATO mantenendo la NUMERAZIONE ORIGINALE dei punti dell'atto (1), 2), 3)...), le CONCLUSIONI delle parti e i virgolettati testuali (PEC, clausole, certificati) come nell'originale. NON riassumere il testo dell'atto.
+- CHIUSURA DI SEZIONE (inventario, benchmark): separatore "* * * * *" su riga propria + formula "Si dà inoltre atto di aver preso visione dei seguenti documenti, di cui si omette la recensione per motivi di economia espositiva." seguita dall'elenco RAGGRUPPATO PER PARTE ("Documenti allegati da parte ricorrente/attrice:" / "da parte resistente/convenuta – [parte]:" / "da terza chiamata – [parte]:"), una voce per riga con numero di documento, tipo e data.
 REGOLA DI NEUTRALITÀ: riproduci senza commentare, valutare o evidenziare criticità, lacune, ritardi o discrepanze. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
 ${NO_EVN_RULE}`,
   },
   {
+    // Benchmark gold 2026-06-10: 5 gold su 6 NON hanno una sezione Premesse —
+    // ricorsi e memorie vivono UNA sola volta dentro "I Dati della Documentazione
+    // in Atti". La sezione resta disponibile per il profilo Del Porto (atti
+    // processuali separati): resolveSectionPlan la sopprime quando
+    // documentazione_atti è attiva (mutuamente esclusive, niente doppioni).
     id: 'premesse',
     title: 'Premesse',
-    maxTokens: TOKENS_MEDIUM,
+    maxTokens: TOKENS_LARGE,
+    // Stesso cap di documentazione_atti: il verbatim di ricorso + memorie nel
+    // gold Del Porto supera ampiamente il vecchio budget MEDIUM.
+    maxChars: 32_000,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
     condition: 'has-legal-docs',
-    promptDirective: `Riproduci FEDELMENTE il contenuto delle memorie difensive e dei ricorsi presenti nel fascicolo.
-${CITATION_FORMAT}
-Riporta le posizioni delle parti e le argomentazioni giuridiche presentate.
+    promptDirective: `Riproduzione FEDELE e VERBATIM degli atti processuali introduttivi presenti nel fascicolo: ricorso introduttivo (es. ricorso ex art. 696-bis c.p.c.), atto di citazione, memorie difensive e comparse di costituzione.
+Per ogni atto usa la formula di introduzione:
+**Ricorso per Consulenza Tecnica Preventiva redatto dall'Avv. [nome] per parte ricorrente in data DD.MM.YYYY:** "..."
+**Memoria difensiva di costituzione nell'interesse di [parte], redatta dall'Avv. [nome], in data DD.MM.YYYY:** "..."
+- Riproduci il contenuto VIRGOLETTATO mantenendo la NUMERAZIONE ORIGINALE dei punti dell'atto (1), 2), 3)...) e le CONCLUSIONI delle parti come nell'originale. NON riassumere il testo dell'atto.
+- NON riprodurre qui i documenti stragiudiziali (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze): sono oggetto della sezione "I Dati della Documentazione in Atti".
+REGOLA DI NEUTRALITÀ: riproduci senza commentare, valutare o evidenziare criticità. Riporta solo ciò che gli atti dichiarano, lasciando ogni giudizio al perito.
 ${NO_EVN_RULE}`,
   },
   {
@@ -328,6 +374,29 @@ ${DOCUMENT_ANALYSIS_FORMULATIONS}
 ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
   },
   {
+    id: 'pareri_tecnici',
+    title: 'Precedenti Pareri Tecnici',
+    // Benchmark gold 2026-06-10: i pareri di parte e i moduli dei fiduciari
+    // assicurativi vanno riprodotti INTEGRALMENTE (non solo le conclusioni) →
+    // budget HUGE con cap chars come la documentazione sanitaria.
+    maxTokens: TOKENS_HUGE,
+    maxChars: 60_000,
+    dataSources: ['events-perizie'],
+    contextMaxChars: 500,
+    needsOcr: true,
+    condition: 'has-perizie-docs',
+    promptDirective: `Riproduci INTEGRALMENTE ogni parere tecnico precedente (CTP, CTU, perizie di parte): intestazione del parere, ricostruzione della vicenda, esame obiettivo, valutazione medico-legale e conclusioni, conservando le sotto-rubriche originali (es. VISITA DEL DANNEGGIATO, PARERE MEDICO-LEGALE).
+Per le relazioni dei fiduciari assicurativi conserva la struttura a campi del modulo (DATI IDENTIFICATIVI / GENERALITÀ DEL DANNEGGIATO / GIUDIZIO SUL NESSO DI CAUSALITÀ / TIPOLOGIA E LOCALIZZAZIONE DELLE LESIONI / VALUTAZIONE RC / VALUTAZIONE POLIZZA INFORTUNI con tabella di riferimento ANIA/INAIL/di polizza e punteggi / CONGRUITÀ SPESE MEDICHE / FIRMA DEL FIDUCIARIO). Riporta verbatim le clausole di polizza citate nel parere.
+Formula di introduzione per ogni parere:
+**Parere medico legale redatto dal Dott. [nome], specialista in [specialità], per parte ricorrente/resistente – [parte], in data DD.MM.YYYY:** "..."
+**Relazione medico legale a firma della Dott.ssa [CTP] per conto del Sig. [periziando], in data DD.MM.YYYY:** "..."
+Se sono disponibili immagini diagnostiche citate nei pareri, inseriscile INLINE dopo la citazione pertinente.
+${NO_EVN_RULE}`,
+  },
+  {
+    // Ordine benchmark gold 2026-06-10: doc sanitaria → pareri tecnici → spese
+    // (2 gold su 3 con entrambe le sezioni; Del Porto usa l'ordine inverso —
+    // scelta documentata in ARCHITECTURE-DECISIONS).
     id: 'spese_mediche',
     title: 'Spese Mediche Esibite',
     maxTokens: TOKENS_NONE,
@@ -345,22 +414,21 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
 
 ${DETERMINISTIC_MARKERS.SPESE}
 
-*[Il perito valuta la congruità e la necessità delle spese rispetto al quadro clinico documentato.]*`,
+*[Il perito valuta la congruità rispetto al quadro clinico documentato. Struttura dei benchmark (quesito spese): per CATEGORIE DI CONGRUITÀ — spese pertinenti e congrue / non valutabili / non saldate ma congrue / non pertinenti / intestate a soggetto diverso / a finalità medico-legale rimesse al Giudice ("si rimettono alla discrezione del Sig. Giudice le spese relative a…") — ciascuna con tabella N. documento/Data/Acquisto/Importo + TOTALE.]*`,
     promptDirective: '',
   },
   {
-    id: 'pareri_tecnici',
-    title: 'Precedenti Pareri Tecnici',
-    maxTokens: TOKENS_LARGE,
-    dataSources: ['events-perizie'],
-    contextMaxChars: 500,
-    needsOcr: true,
-    condition: 'has-perizie-docs',
-    promptDirective: `Riproduci le conclusioni e l'analisi delle perizie precedenti (CTP, CTU, perizie precedenti) in forma virgolettata fedele.
-Per ogni perizia usa il formato:
-**Tipo perizia, autore, in data DD.MM.YYYY:** "... conclusioni e analisi ..."
-Se sono disponibili immagini diagnostiche citate nei pareri, inseriscile INLINE dopo la citazione pertinente.
-${NO_EVN_RULE}`,
+    // Proforme dei CC.TT.P. (gold CTU collegiale): in coda alle spese.
+    id: 'preventivi_spese_ml',
+    title: 'Preventivi e Spese per Attività Medico-Legale',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-ctp-nominati',
+    isPlaceholder: true,
+    placeholderText: PREVENTIVI_SPESE_ML_PLACEHOLDER,
+    promptDirective: '',
   },
   {
     id: 'operazioni_peritali',
@@ -370,24 +438,24 @@ ${NO_EVN_RULE}`,
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui:*
-
-*VERBALE OPERAZIONI PERITALI*
-*- Data, ora e luogo delle operazioni*
-*- Presenze: CTU, CTP delle parti, legali, periziando*
-*- Attivita svolte: esame documentazione, discussione, visita medico-legale*
-*- Eventuali richieste dei CTP*
-
-*VISITA DEL PERIZIANDO*
-*SOGGETTIVAMENTE — Il/La periziando/a riferisce:*
-*- Sintomatologia attuale*
-*- Limitazioni funzionali riferite*
-*- Terapie in corso*
-
-*OBIETTIVAMENTE — All'esame obiettivo si rileva:*
-*- Esame obiettivo generale*
-*- Esame obiettivo locale/specialistico*
-*- Eventuali esami strumentali eseguiti in sede di visita]*`,
+    // Benchmark gold 2026-06-10: scheletro-verbale completo (apertura, comparizioni,
+    // dichiarazioni a verbale, attività del CTU, visita in rubriche, rinvio, firme).
+    // Varianti decesso/penale swappate da applyDecessoSections/applyPenaleSections.
+    placeholderText: OPERAZIONI_PERITALI_PLACEHOLDER,
+    promptDirective: '',
+  },
+  {
+    // Accertamento specialistico dell'Ausiliario (gold CTU danno psichico):
+    // presente solo quando il perito ha nominato un ausiliario nei metadati.
+    id: 'accertamento_ausiliario',
+    title: 'Accertamento Specialistico dell\'Ausiliario',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-ausiliario',
+    isPlaceholder: true,
+    placeholderText: ACCERTAMENTO_AUSILIARIO_PLACEHOLDER,
     promptDirective: '',
   },
   {
@@ -403,11 +471,7 @@ ${NO_EVN_RULE}`,
     needsOcr: false,
     condition: 'has-conciliazione-procedure',
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui — solo per procedimenti ATP ex art. 696-bis c.p.c. — la cronologia del tentativo di conciliazione nella fase antecedente l'invio della bozza:*
-
-*- Date e modalita dei contatti fra le parti (PEC, incontri)*
-*- Posizioni espresse dai legali e dai CC.TT.P.*
-*- Esito del tentativo (riuscito / non riuscito) in questa fase]*`,
+    placeholderText: CONCILIAZIONE_ANTE_PLACEHOLDER,
     promptDirective: '',
   },
   {
@@ -418,22 +482,7 @@ ${NO_EVN_RULE}`,
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui le considerazioni medico-legali. Questa sezione contiene la sintesi conclusiva del CTU e le risposte ai quesiti del Giudice.*
-
-*1. SINTESI DELLA VICENDA CLINICA*
-*Ricostruzione cronologica essenziale dei fatti principali (i dati di dettaglio sono nelle sezioni precedenti).*
-
-*2. ANALISI MEDICO-LEGALE*
-*- Nesso di causalita materiale: applicare i criteri criteriologici (cronologico, topografico, di idoneita/efficienza lesiva, di continuita fenomenologica, di esclusione di altre cause); nesso giuridico secondo il criterio del "piu probabile che non"; per la malpractice omissiva, giudizio controfattuale ad alta probabilita logica*
-*- In presenza di preesistenze: valutazione dello stato anteriore e del danno differenziale*
-*- Analisi della condotta sanitaria alla luce delle linee guida e buone pratiche cliniche applicabili al momento dei fatti*
-*- Valutazione del danno biologico temporaneo (ITT/ITP) con date e periodi*
-*- Valutazione del danno biologico permanente con barème di riferimento citato esplicitamente (Tabella SIMLA / Tabella Unica Nazionale / Tabella di Milano)*
-*- Eventuale danno morale ed esistenziale*
-*- Personalizzazione del danno se applicabile*
-
-*3. RISPOSTE AI QUESITI DEL GIUDICE*
-*Per ciascun quesito formulato dal Giudice (vedi sezione "Quesiti"), ri-citare testualmente il quesito tra virgolette come intestazione e articolare di seguito la risposta motivata, richiamando i fatti documentali e l'analisi sopra esposta. I quesiti omogenei possono essere accorpati.]*`,
+    placeholderText: CONSIDERAZIONI_ML_PLACEHOLDER,
     promptDirective: '',
   },
   {
@@ -474,12 +523,7 @@ ${NO_EVN_RULE}`,
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Spazio riservato per la valutazione delle osservazioni dei CTP alla bozza di relazione peritale.*
-
-*Dopo il deposito della bozza e la ricezione delle osservazioni dei Consulenti di Parte, inserire qui:*
-*- Sintesi delle osservazioni ricevute da ciascun CTP*
-*- Controdeduzioni puntuali a ciascuna osservazione (formula: "Risposta del C.T.U.")*
-*- Eventuali modifiche apportate alla relazione a seguito delle osservazioni]*`,
+    placeholderText: OSSERVAZIONI_BOZZA_PLACEHOLDER,
     promptDirective: '',
   },
   {
@@ -493,11 +537,7 @@ ${NO_EVN_RULE}`,
     needsOcr: false,
     condition: 'has-conciliazione-procedure',
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui — solo per procedimenti ATP ex art. 696-bis c.p.c. — la cronologia del tentativo di conciliazione nella fase successiva all'invio della bozza:*
-
-*- Date e modalita dei contatti fra le parti dopo l'invio della bozza*
-*- Posizioni finali dei legali / esito del tentativo*
-*- Formula di chiusura: "Non essendo stato possibile addivenire ad una soluzione bonaria della controversia ... si procede al deposito dell'elaborato tecnico."]*`,
+    placeholderText: CONCILIAZIONE_POST_PLACEHOLDER,
     promptDirective: '',
   },
 ];
@@ -627,23 +667,6 @@ ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}`,
   },
   {
-    id: 'spese_mediche',
-    title: 'Spese Mediche',
-    maxTokens: TOKENS_NONE,
-    dataSources: [],
-    contextMaxChars: 0,
-    needsOcr: false,
-    condition: 'has-expense-events',
-    // DETERMINISTIC (B-pillar): table rendered from spesa_medica events at read
-    // time — every voce inclusa (anche senza data → '—'), bollo come riga
-    // separata, nessuna voce persa. Niente dipendenza dalla compliance LLM.
-    isPlaceholder: true,
-    placeholderText: `Le spese mediche documentate sono riepilogate nella tabella seguente, calcolata automaticamente dalle voci di spesa del fascicolo.
-
-${DETERMINISTIC_MARKERS.SPESE}`,
-    promptDirective: '',
-  },
-  {
     id: 'visita_clinica',
     title: 'Visita Clinica',
     maxTokens: TOKENS_NONE,
@@ -660,6 +683,26 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
 *OBIETTIVAMENTE — All'esame obiettivo:*
 *- Esame obiettivo generale e locale*
 *- Eventuali esami strumentali]*`,
+    promptDirective: '',
+  },
+  {
+    // Ordine benchmark gold 2026-06-10 (Antoniazzi/Regnoto): la visita segue
+    // direttamente la documentazione; le spese stanno in coda, prima
+    // dell'Epicrisi che ne valuta la congruità (scheletro punto 7).
+    id: 'spese_mediche',
+    title: 'Spese Mediche',
+    maxTokens: TOKENS_NONE,
+    dataSources: [],
+    contextMaxChars: 0,
+    needsOcr: false,
+    condition: 'has-expense-events',
+    // DETERMINISTIC (B-pillar): table rendered from spesa_medica events at read
+    // time — every voce inclusa (anche senza data → '—'), bollo come riga
+    // separata, nessuna voce persa. Niente dipendenza dalla compliance LLM.
+    isPlaceholder: true,
+    placeholderText: `Le spese mediche documentate sono riepilogate nella tabella seguente, calcolata automaticamente dalle voci di spesa del fascicolo.
+
+${DETERMINISTIC_MARKERS.SPESE}`,
     promptDirective: '',
   },
   {
@@ -691,7 +734,7 @@ ${EPICRISI_FORMULATIONS}
 
 ${EPICRISI_EXAMPLE}
 
-*[Il perito completerà l'epicrisi con: valutazione nesso causale, danno biologico permanente (tabelle SIMLA per resp. civile / ANIA-INAIL per polizza infortuni), danno morale, livello di sofferenza, congruità complessiva spese]*`,
+${EPICRISI_COMPLETAMENTO_GUIDE}`,
   },
 ];
 
@@ -980,11 +1023,24 @@ export function evaluateCondition(
     case 'has-perizie-docs':
       return ctx.documentTypes.some((t) => PERIZIA_DOC_TYPES.has(t));
 
-    case 'has-conciliazione-procedure':
-      // Tentativo di conciliazione = atto dovuto solo nell'ATP ex art. 696-bis
-      // c.p.c. (istruzione preventiva con funzione conciliativa). Riconosciuto
-      // dal tipo di procedimento nei metadati perizia.
-      return /\b696[\s-]?bis\b|concilia/i.test(ctx.periziaMetadata?.tipoProcedimento ?? '');
+    case 'has-conciliazione-procedure': {
+      // Tentativo di conciliazione: dovuto nell'ATP ex art. 696-bis c.p.c.
+      // (funzione conciliativa) MA ANCHE quando il Giudice lo demanda con il
+      // quesito "tenti la conciliazione" in causa ordinaria (benchmark gold
+      // 2026-06-10). Si testa quindi tipoProcedimento + testo dei quesiti.
+      const quesitiText = (ctx.periziaMetadata?.quesiti ?? []).join(' ');
+      return /\b696[\s-]?bis\b|concilia/i.test(
+        `${ctx.periziaMetadata?.tipoProcedimento ?? ''} ${quesitiText}`,
+      );
+    }
+
+    case 'has-ausiliario':
+      // Accertamento specialistico dell'Ausiliario: solo se nominato nei metadati.
+      return !!ctx.periziaMetadata?.collaboratoreName?.trim();
+
+    case 'has-ctp-nominati':
+      // Preventivi/proforme dei CC.TT.P.: solo se almeno un CTP è nominato.
+      return !!(ctx.periziaMetadata?.ctpRicorrente?.trim() || ctx.periziaMetadata?.ctpResistente?.trim());
 
     default:
       return false;
@@ -1056,35 +1112,51 @@ const CONSIDERAZIONI_PENALE_SECTION: SectionSpec = {
   contextMaxChars: 0,
   needsOcr: false,
   isPlaceholder: true,
-  placeholderText: `*[Inserire qui le considerazioni medico-legali in ambito PENALE. Questa sezione contiene la valutazione conclusiva del Perito e le risposte ai quesiti.*
-
-*1. INQUADRAMENTO E CAUSA DELL'EVENTO/DECESSO*
-*Ricostruzione essenziale della vicenda e identificazione della causa dell'evento lesivo o del decesso (substrato anatomo-patologico, criterio cronologico, criterio di esclusione delle altre cause).*
-
-*2. NESSO DI CAUSALITÀ PENALE*
-*- Nesso tra la condotta (commissiva/omissiva) e l'evento secondo il giudizio controfattuale (la condotta alternativa lecita avrebbe evitato l'evento?)*
-*- Scala probabilistica VERBALE: "oltre ogni ragionevole dubbio" / "elevatissima probabilità" / "alta probabilità" / "altamente improbabile" — NON percentuali di danno*
-*- Eventuale ruolo concausale e fattori endogeni preesistenti*
-
-*3. PROFILI DI COLPA*
-*- Valutazione di imperizia / negligenza / imprudenza rispetto alle linee guida e alle buone pratiche vigenti al momento dei fatti (condotta esigibile)*
-
-*NOTA: in ambito penale NON si quantifica il danno biologico (no ITT/ITP, no tabelle SIMLA).*
-
-*4. RISPOSTE AI QUESITI*
-*Per ciascun quesito, ri-citare testualmente il quesito tra virgolette come intestazione e articolare la risposta motivata. I quesiti omogenei possono essere accorpati.]*`,
+  placeholderText: CONSIDERAZIONI_PENALE_PLACEHOLDER,
   promptDirective: '',
 };
 
 /**
  * Trasforma il piano CTU/CTP civile in penale: sostituisce considerazioni_ml con
- * considerazioni_penale ed esclude le sezioni puramente civilistiche (spese mediche).
- * Pura.
+ * considerazioni_penale, esclude le sezioni puramente civilistiche (spese mediche)
+ * e sostituisce le operazioni peritali con "I Dati dell'Incontro Peritale"
+ * (benchmark CTU penale: nessuna visita, incontro con i periti di parte di
+ * imputati e parte civile). Stesso id per non rompere selettore/regen. Pura.
  */
 function applyPenaleSections(specs: SectionSpec[]): SectionSpec[] {
   return specs
     .filter((s) => s.id !== 'spese_mediche')
-    .map((s) => (s.id === 'considerazioni_ml' ? CONSIDERAZIONI_PENALE_SECTION : s));
+    .map((s) => {
+      if (s.id === 'considerazioni_ml') return CONSIDERAZIONI_PENALE_SECTION;
+      if (s.id === 'operazioni_peritali') {
+        return {
+          ...s,
+          title: 'I Dati dell\'Incontro Peritale',
+          placeholderText: INCONTRO_PERITALE_PENALE_PLACEHOLDER,
+        };
+      }
+      return s;
+    });
+}
+
+/**
+ * Variante DECESSO del piano CTU/CTP civile (periziando deceduto): le
+ * considerazioni guidano su causa della morte, nesso "più probabile che non" e
+ * danno iure proprio/hereditatis (NO ITT/ITP/SIMLA sul deceduto); le operazioni
+ * peritali diventano un verbale di riunione tecnica senza visita. Stessi id e
+ * titoli (nessun impatto su selettore/regen/parser). Non si applica in ambito
+ * penale, dove la morte è già il fulcro di considerazioni_penale. Pura.
+ */
+function applyDecessoSections(specs: SectionSpec[]): SectionSpec[] {
+  return specs.map((s) => {
+    if (s.id === 'considerazioni_ml') {
+      return { ...s, placeholderText: CONSIDERAZIONI_DECESSO_PLACEHOLDER };
+    }
+    if (s.id === 'operazioni_peritali') {
+      return { ...s, placeholderText: OPERAZIONI_PERITALI_DECESSO_PLACEHOLDER };
+    }
+    return s;
+  });
 }
 
 /**
@@ -1169,9 +1241,18 @@ export function resolveSectionPlan(params: {
   // (risparmio token + report su misura). Le sezioni MANDATORY non sono mai rimosse.
   // Lista assente/vuota = tutte le sezioni (retrocompatibile coi casi esistenti).
   const excluded = periziaMetadata?.excludedReportSections;
-  const filtered = excluded && excluded.length > 0
+  const selectorFiltered = excluded && excluded.length > 0
     ? conditionFiltered.filter((spec) => MANDATORY_SECTION_IDS.has(spec.id) || !excluded.includes(spec.id))
     : conditionFiltered;
+
+  // Benchmark gold 2026-06-10: premesse e documentazione_atti sono mutuamente
+  // esclusive — 5 gold su 6 riproducono ricorsi/memorie UNA sola volta dentro
+  // "I Dati della Documentazione in Atti" (LEGAL_DOC_TYPES ⊂ NON_MEDICAL_DOC_TYPES
+  // attiverebbe entrambe sugli stessi atti, duplicandoli). Premesse resta
+  // raggiungibile escludendo documentazione_atti dal selettore (profilo Del Porto).
+  const filtered = selectorFiltered.some((s) => s.id === 'documentazione_atti')
+    ? selectorFiltered.filter((s) => s.id !== 'premesse')
+    : selectorFiltered;
 
   // Ambito penale (CTU/CTP role-based): considerazioni civilistiche → penali e
   // niente spese mediche. Non si applica ai moduli parere/RC (civilistici).
@@ -1180,7 +1261,12 @@ export function resolveSectionPlan(params: {
     moduleId !== 'parere_pro_veritate' &&
     moduleId !== 'parere_scopo_riserva' &&
     moduleId !== RC_CIVILE_MODULE_ID;
-  const roleAdjusted = penaleApplicable ? applyPenaleSections(filtered) : filtered;
+  // Decesso (civile): variante considerazioni/operazioni senza visita né ITT/ITP.
+  // In penale non si applica (la morte è già il fulcro di considerazioni_penale).
+  const penaleOrDecesso = penaleApplicable
+    ? applyPenaleSections(filtered)
+    : (periziaMetadata?.decesso ? applyDecessoSections(filtered) : filtered);
+  const roleAdjusted = penaleOrDecesso;
 
   // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
   if (moduleId === RC_CIVILE_MODULE_ID) {
@@ -1225,7 +1311,9 @@ export function getSectionSpecById(
     moduleId !== 'parere_pro_veritate' &&
     moduleId !== 'parere_scopo_riserva' &&
     moduleId !== RC_CIVILE_MODULE_ID;
-  let sections = penaleApplicable ? applyPenaleSections(base) : base;
+  let sections = penaleApplicable
+    ? applyPenaleSections(base)
+    : (periziaMetadata?.decesso ? applyDecessoSections(base) : base);
   if (moduleId === RC_CIVILE_MODULE_ID) {
     sections = applyRcPeritoSections(sections, periziaMetadata);
   }

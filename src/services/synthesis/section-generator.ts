@@ -698,7 +698,16 @@ OUTPUT: ESCLUSIVAMENTE l'oggetto JSON validato. NIENTE prefazione, niente backti
     headerData = overlayGiudizialeFromMetadata(headerData, synthesisParams.periziaMetadata);
   }
 
-  const markdown = renderHeaderMarkdown(headerData, { variant });
+  // Benchmark gold 2026-06-10: il template conosce l'ambito (penale vs civile)
+  // e se la sezione Quesiti segue nel piano (formula-ponte vs rinvio ordinanza).
+  const pm = synthesisParams.periziaMetadata;
+  const markdown = renderHeaderMarkdown(headerData, {
+    variant,
+    ambitoPenale: pm?.ambitoPenale,
+    quesitiInPlan:
+      (pm?.quesiti?.length ?? 0) > 0 &&
+      !(pm?.excludedReportSections ?? []).includes('quesiti'),
+  });
   const wordCount = markdown.split(/\s+/).filter((w) => w.length > 0).length;
 
   const elapsed = Date.now() - startMs;

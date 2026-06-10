@@ -79,10 +79,12 @@ describe('renderHeaderMarkdown — CTU benchmark scuola veronese (Del Balzo/Lavi
     expect(md).toContain('**SEZIONE CENTRALE CIVILE**');
     expect(md).toContain('**Numero di Ruolo Generale 10965/2025**');
     expect(md).toContain('Accertamento tecnico preventivo');
-    // Destinatario: giudice maschile → "Ill.mo Signore" + "Giudice Istruttore"
+    // Destinatario: giudice maschile → "Ill.mo Signore"; in ATP la qualifica
+    // corretta è "Giudice Delegato" (gold Del Porto, 2026-06-10).
     expect(md).toContain('Ill.mo Signore');
     expect(md).toContain('Dott. Raffaele Del Porto');
-    expect(md).toContain('Giudice Istruttore');
+    expect(md).toContain('Giudice Delegato');
+    expect(md).not.toContain('Giudice Istruttore');
     // Caption parti
     expect(md).toContain('**Luca Mao // ASST della Franciacorta**');
     // Formula di conferimento veronese
@@ -191,5 +193,263 @@ describe('renderHeaderMarkdown — CTU benchmark scuola veronese (Del Balzo/Lavi
     expect(md).not.toContain('TRIBUNALE');
     expect(md).not.toContain('conferiva');
     expect(md).not.toContain('fondo spese');
+  });
+});
+
+describe('renderHeaderMarkdown — benchmark gold 2026-06-10 (collegio, decesso, penale, formula-ponte)', () => {
+  // Tutti i nomi qui sotto sono FITTIZI (GDPR: mai nomi reali nei nuovi test).
+  const COLLEGIO_META: PeriziaMetadata = {
+    ...DEL_PORTO_META,
+    coCtuName: 'Dott. Carlo Albertini',
+    coCtuTitle: 'specialista in Ortopedia e Traumatologia',
+  };
+
+  function baseHeader(): HeaderData {
+    const d = emptyHeader();
+    d.paziente.nome = 'Mario Fittizi';
+    return d;
+  }
+
+  it('collegio: conferimento plurale "conferiva ai sottoscritti" con co-perito paritetico (non Ausiliario)', () => {
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), COLLEGIO_META), { variant: 'ctu' });
+    expect(md).toContain('conferiva ai sottoscritti Dott. Nicola Pigaiani');
+    expect(md).toContain('e Dott. Carlo Albertini, specialista in Ortopedia e Traumatologia');
+    expect(md).not.toContain('Ausiliario del CTU: Dott. Carlo Albertini');
+  });
+
+  it('collegio: carta intestata con entrambi i nominativi', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), { ...COLLEGIO_META, specialita: 'Specialista in Medicina Legale' }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('**Dott. Nicola Pigaiani**');
+    expect(md).toContain('**Dott. Carlo Albertini**');
+    expect(md).toContain('*specialista in Ortopedia e Traumatologia*');
+  });
+
+  it('collegio + quesiti nel piano: formula-ponte "Il compito affidato al Collegio di CC.TT.U. era precisato nei seguenti quesiti:"', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), { ...COLLEGIO_META, tipoProcedimento: 'Consulenza Tecnica d\'Ufficio' }),
+      { variant: 'ctu', quesitiInPlan: true },
+    );
+    expect(md).toContain('Il compito affidato al Collegio di CC.TT.U. era precisato nei seguenti quesiti:');
+  });
+
+  it('decesso: blocco periziando "residente in vita ... e deceduto/a il ... presso ..."', () => {
+    const d = baseHeader();
+    d.paziente.dataNascita = '01/01/1950';
+    d.paziente.luogoNascita = 'Verona';
+    d.paziente.residenza = 'Verona, via Esempio 1';
+    d.paziente.dataDecesso = '10/02/2025';
+    d.paziente.luogoDecesso = 'Ospedale Esempio di Verona';
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(d, DEL_PORTO_META), { variant: 'ctu' });
+    expect(md).toContain('residente in vita in Verona, via Esempio 1');
+    expect(md).toContain('e deceduto/a il 10/02/2025 presso Ospedale Esempio di Verona');
+  });
+
+  it('oggettoIncarico custom: conferimento "in merito alla vicenda clinica e alle cause del decesso di"', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), {
+        ...DEL_PORTO_META,
+        oggettoIncarico: 'alla vicenda clinica e alle cause del decesso',
+      }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('incarico di Consulenza Tecnica in merito alla vicenda clinica e alle cause del decesso di');
+  });
+
+  it('formula-ponte: con quesiti nel piano chiude con "era precisato nei seguenti quesiti:" (procedimento ordinario)', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), { ...DEL_PORTO_META, tipoProcedimento: 'Consulenza Tecnica d\'Ufficio' }),
+      { variant: 'ctu', quesitiInPlan: true },
+    );
+    expect(md).toContain('Il compito affidato al Consulente Tecnico era precisato nei seguenti quesiti:');
+    expect(md).not.toContain('nei quesiti formulati nell\'ordinanza di conferimento');
+  });
+
+  it('formula-ponte ATP 696-bis: "Lo scopo dell\'accertamento era indicato dai seguenti quesiti:"', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), DEL_PORTO_META), // DEL_PORTO_META è ATP 696-bis
+      { variant: 'ctu', quesitiInPlan: true },
+    );
+    expect(md).toContain('Lo scopo dell\'accertamento era indicato dai seguenti quesiti:');
+  });
+
+  it('senza quesiti nel piano: resta la formula di rinvio all\'ordinanza (retrocompatibile)', () => {
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), DEL_PORTO_META), { variant: 'ctu' });
+    expect(md).toContain('precisato nei quesiti formulati nell\'ordinanza di conferimento');
+  });
+
+  it('riga-oggetto dopo il tipo procedimento: "relativo alla vicenda clinica di **[periziando]**"', () => {
+    const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), DEL_PORTO_META), { variant: 'ctu' });
+    expect(md).toContain('relativo alla vicenda clinica di **Mario Fittizi**');
+  });
+
+  it('termini multi-fase: bozza → osservazioni CC.TT.P. → deposito in un\'unica formula', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), {
+        ...DEL_PORTO_META,
+        termineBozza: '30.04.2026',
+        termineOsservazioni: '20.05.2026',
+      }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('Era concesso termine entro il 30.04.2026 per l\'inoltro della bozza di relazione ai consulenti di parte');
+    expect(md).toContain('assegnava a questi ultimi termine entro il 20.05.2026 per l\'invio al C.T.U. di eventuali osservazioni');
+    expect(md).toContain('assegnava infine termine entro il 15.06.2026 per il deposito della relazione definitiva');
+  });
+
+  it('nomina dell\'ausiliario nel corpo dell\'intestazione', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), {
+        ...DEL_PORTO_META,
+        collaboratoreName: 'Dr. Bruno Fittizio',
+        collaboratoreTitle: 'Specialista in Neurologia',
+      }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('Era individuato in qualità di Ausiliario del C.T.U. Dr. Bruno Fittizio, Specialista in Neurologia.');
+  });
+
+  it('provvedimenti dell\'ordinanza (testo libero) renderizzati dopo i termini', () => {
+    const md = renderHeaderMarkdown(
+      overlayGiudizialeFromMetadata(baseHeader(), {
+        ...DEL_PORTO_META,
+        provvedimentiOrdinanza: 'Il Giudice autorizza il CTU ad acquisire documentazione presso le strutture sanitarie.',
+      }),
+      { variant: 'ctu' },
+    );
+    expect(md).toContain('Il Giudice autorizza il CTU ad acquisire documentazione presso le strutture sanitarie.');
+  });
+
+  describe('ambito penale', () => {
+    const PENALE_META: PeriziaMetadata = {
+      tribunale: 'Corte d\'Appello di Brescia',
+      rgNumber: '15/2024',
+      ctuName: 'Dr.ssa Maria Esempi',
+      ctuTitle: 'medico legale',
+      dataIncarico: '21.01.2025',
+      ctpRicorrente: 'Dott. Aldo Fittizio',
+      ctpResistente: 'Prof. Bruno Fittizio',
+      ambitoPenale: true,
+    };
+
+    it('penale: "incarico di Perizia Tecnica medico legale" conferito presso la Corte, niente formule civilistiche', () => {
+      const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), PENALE_META), { variant: 'ctu', ambitoPenale: true });
+      expect(md).toContain('In data 21.01.2025, presso la Corte d\'Appello di Brescia, era conferito alla sottoscritta Dr.ssa Maria Esempi');
+      expect(md).toContain('incarico di Perizia Tecnica medico legale');
+      expect(md).not.toContain('Signoria Vostra Illustrissima');
+      expect(md).not.toContain('Giudice Istruttore');
+      expect(md).not.toContain('incarico di Consulenza Tecnica');
+    });
+
+    it('penale: numero come "N. ... R.G. App." (non "Numero di Ruolo Generale")', () => {
+      const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), PENALE_META), { variant: 'ctu', ambitoPenale: true });
+      expect(md).toContain('**N. 15/2024 R.G. App.**');
+      expect(md).not.toContain('Numero di Ruolo Generale');
+    });
+
+    it('penale: parti come imputati/parte civile, mai CC.TT.P. ricorrente/resistente', () => {
+      const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), PENALE_META), { variant: 'ctu', ambitoPenale: true });
+      expect(md).toContain('I difensori degli imputati nominavano quali propri consulenti Prof. Bruno Fittizio.');
+      expect(md).toContain('Il difensore della parte civile nominava quale proprio consulente Dott. Aldo Fittizio.');
+      expect(md).not.toContain('CC.TT.P.');
+      expect(md).not.toContain('parte ricorrente');
+    });
+
+    it('penale + quesiti nel piano: "Il compito affidato al Perito era precisato nei seguenti quesiti:"', () => {
+      const md = renderHeaderMarkdown(overlayGiudizialeFromMetadata(baseHeader(), PENALE_META), { variant: 'ctu', ambitoPenale: true, quesitiInPlan: true });
+      expect(md).toContain('Il compito affidato al Perito era precisato nei seguenti quesiti:');
+    });
+
+    it('penale collegiale: conferimento "ed al" co-perito + formula "ai Periti"', () => {
+      const md = renderHeaderMarkdown(
+        overlayGiudizialeFromMetadata(baseHeader(), { ...PENALE_META, coCtuName: 'Dott. Carlo Albertini', coCtuTitle: 'specialista in Cardiologia' }),
+        { variant: 'ctu', ambitoPenale: true, quesitiInPlan: true },
+      );
+      expect(md).toContain('ed al Dott. Carlo Albertini, specialista in Cardiologia');
+      expect(md).toContain('Il compito affidato ai Periti era precisato nei seguenti quesiti:');
+    });
+  });
+});
+
+describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniazzi/Regnoto)', () => {
+  // Nomi FITTIZI (GDPR).
+  function stragHeader(): HeaderData {
+    return {
+      perito: {
+        nome: 'Dott. Mario Esempio',
+        qualifica: null,
+        specializzazione: 'Specialista in Ortopedia e Traumatologia\nSpecialista in Medicina Legale',
+        iscrizioneAlbo: null,
+      },
+      paziente: {
+        nome: 'Carla Fittizia',
+        dataNascita: '01/01/2000',
+        luogoNascita: 'Verona',
+        residenza: 'Verona, via Esempio 2',
+        codiceFiscale: 'XXXXXX00X00X000X',
+        telefono: '333 0000000',
+        email: 'carla@esempio.it',
+        avvocato: 'Avv. Franca Fittizia',
+      },
+      oggetto: {
+        eventoIndice: 'caduta accidentale',
+        dataEvento: '12/09/2025',
+        lesione: 'frattura del gomito destro',
+        struttura: null,
+        ambito: 'rc_civile',
+      },
+      dataVisitaMedicoLegale: '05/06/2026',
+      soggettoRichiedente: null,
+      giudiziale: null,
+    };
+  }
+
+  it('layout carta intestata: niente schede "###" né titolo VALUTAZIONE', () => {
+    const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
+    expect(md).not.toContain('### ');
+    expect(md).not.toContain('VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE');
+    expect(md).toContain('**Dott. Mario Esempio**');
+    expect(md).toContain('*Specialista in Ortopedia e Traumatologia*');
+    expect(md).toContain('*Specialista in Medicina Legale*');
+  });
+
+  it('riga visita con formula del consenso', () => {
+    const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
+    expect(md).toContain('In data 05/06/2026 ho sottoposto ad accertamenti clinici e valutazione medico legale, con il suo consenso');
+  });
+
+  it('accompagnatore documentato: ", in presenza di ..."', () => {
+    const d = stragHeader();
+    d.paziente.accompagnatore = 'sua madre';
+    const md = renderHeaderMarkdown(d, { variant: 'stragiudiziale' });
+    expect(md).toContain('con il suo consenso, in presenza di sua madre');
+  });
+
+  it('blocco dati periziando riga per riga (nato/residente, C.F., MAIL, TEL, Avvocato)', () => {
+    const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
+    expect(md).toContain('**Carla Fittizia**');
+    expect(md).toContain('Nato/a a Verona il 01/01/2000 e residente a Verona, via Esempio 2');
+    expect(md).toContain('C.F. XXXXXX00X00X000X');
+    expect(md).toContain('MAIL: carla@esempio.it');
+    expect(md).toContain('TEL: 333 0000000');
+    expect(md).toContain('Avvocato di parte: Avv. Franca Fittizia');
+  });
+
+  it('riga scopo "Al fine di valutare le lesioni patite..."', () => {
+    const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
+    expect(md).toContain('Al fine di valutare le lesioni patite in occasione di caduta accidentale occorso in data 12/09/2025 in ambito di responsabilità civile.');
+  });
+
+  it('NESSUN riferimento al tribunale (regola assoluta stragiudiziale)', () => {
+    const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
+    expect(md).not.toMatch(/tribunale|giudice|R\.G\.|ricorrente|resistente/i);
+  });
+
+  it('campi critici mancanti → [da compilare dal perito], mai inventati', () => {
+    const md = renderHeaderMarkdown(emptyHeader(), { variant: 'stragiudiziale' });
+    expect(md).toContain('[da compilare dal perito]');
+    expect(md).not.toContain('### ');
   });
 });

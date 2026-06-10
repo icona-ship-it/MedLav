@@ -51,8 +51,12 @@ describe('adversarial: header schema + template', () => {
 
     expect(md).toContain('REGNOTO VALERIA');
     expect(md).toContain('11/08/1962');
-    expect(md).toContain('frattura del collo femorale sinistro');
-    expect(md).toContain('Borgo Trento');
+    // Benchmark gold 2026-06-10: la riga-scopo della carta intestata
+    // stragiudiziale è "Al fine di valutare le lesioni patite in occasione di
+    // [EVENTO] occorso in data [DATA] in ambito ..." — lesione e struttura non
+    // compaiono nell'intestazione (vivono nelle sezioni cliniche del report).
+    expect(md).toContain('in occasione di caduta accidentale');
+    expect(md).toContain('occorso in data 13/12/2025');
     // Fabricated values from the original bug must NOT be present
     expect(md).not.toContain('Mario Bianchi');
     expect(md).not.toContain('Niguarda');

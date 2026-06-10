@@ -85,7 +85,7 @@ export const EPICRISI_FORMULATIONS = `
 FORMULAZIONI STANDARD PER L'EPICRISI:
 - "Dalla disamina complessiva della documentazione in atti emerge che il paziente..."
 - "Il quadro documentale evidenzia un iter clinico caratterizzato da..."
-- "I periodi di invalidita' temporanea risultano documentati come segue:..."
+- "I periodi di inabilita' temporanea, come desumibili dalla documentazione, risultano: un periodo di INABILITA' TEMPORANEA AL 100% di gg. [N]; INABILITA' TEMPORANEA AL 75% di gg. [N]; AL 50% di gg. [N]; AL 25% di gg. [N]" (una riga per periodo, solo i livelli effettivamente presenti — formato benchmark gold 2026-06-10)
 - "Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data], e' caratterizzato da..."
 - "Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato..."
 - "La documentazione consente di ricostruire la seguente sequenza cronologica:..."
@@ -168,9 +168,10 @@ Il quadro documentale evidenzia un iter clinico caratterizzato da [sintesi del d
 
 Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato [complicanze/evoluzione con date e fonti].
 
-I periodi di invalidita' temporanea, come desumibili dalla documentazione esaminata, risultano i seguenti:
-- ITT (Invalidita' Temporanea Totale): [N] giorni (dal [data] al [data]) — [fonte]
-- ITP (Invalidita' Temporanea Parziale) al [%]%: [N] giorni (dal [data] al [data]) — [fonte]
+I periodi di inabilita' temporanea, come desumibili dalla documentazione esaminata, risultano i seguenti:
+- un periodo di INABILITA' TEMPORANEA AL 100% di gg. [N]
+- un periodo di INABILITA' TEMPORANEA AL [X]% di gg. [N]
+(una riga per periodo; livelli tipici 100/75/50/25, SOLO quelli effettivamente presenti; percentuale in maiuscolo, giorni come "gg. N" — formato dei benchmark depositati. Ancoraggio alla fonte tra parentesi solo se utile alla tracciabilita')
 
 Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data ultimo controllo], e' caratterizzato da [situazione clinica attuale — solo fatti documentati].
 

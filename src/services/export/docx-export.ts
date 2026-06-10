@@ -55,6 +55,10 @@ interface PeriziaMetadataExport {
   ctuTitle?: string;
   collaboratoreName?: string;
   collaboratoreTitle?: string;
+  // Collegio di CC.TT.U.: co-perito PARITETICO (firma collegiale, non ausiliario).
+  coCtuName?: string;
+  coCtuTitle?: string;
+  ambitoPenale?: boolean;
   ctpRicorrente?: string;
   ctpResistente?: string;
   parteRicorrente?: string;
@@ -124,12 +128,21 @@ function pushDatedSignature(
     spacing: { after: 400 },
   }));
 
-  const signerLabel = caseRole === 'ctu' ? 'I CC.TT.U.'
+  // Secondo firmatario: co-perito PARITETICO (collegio, benchmark gold 2026-06-10)
+  // con precedenza sull'ausiliario/collaboratore.
+  const coSigner = pm?.coCtuName
+    ? { name: pm.coCtuName, title: pm.coCtuTitle }
+    : pm?.collaboratoreName
+      ? { name: pm.collaboratoreName, title: pm.collaboratoreTitle }
+      : null;
+
+  const signerLabel = pm?.coCtuName
+    ? (pm?.ambitoPenale ? 'I Periti' : 'Il Collegio di CC.TT.U.')
+    : caseRole === 'ctu' ? 'I CC.TT.U.'
     : caseRole === 'ctp' ? 'Il Consulente Tecnico di Parte'
     : 'Il Perito';
-  const hasCollaboratore = Boolean(pm?.collaboratoreName);
 
-  if (hasCollaboratore) {
+  if (coSigner) {
     // Dual signature block using borderless table
     const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
     const cellBorders = { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder };
@@ -160,13 +173,13 @@ function pushDatedSignature(
 
     const rightChildren: Paragraph[] = [
       new Paragraph({
-        children: [new TextRun({ text: pm!.collaboratoreName!, size: 24 })],
+        children: [new TextRun({ text: coSigner.name, size: 24 })],
         alignment: AlignmentType.CENTER,
       }),
     ];
-    if (pm?.collaboratoreTitle) {
+    if (coSigner.title) {
       rightChildren.push(new Paragraph({
-        children: [new TextRun({ text: pm.collaboratoreTitle, size: 20, italics: true })],
+        children: [new TextRun({ text: coSigner.title, size: 20, italics: true })],
         alignment: AlignmentType.CENTER,
       }));
     }

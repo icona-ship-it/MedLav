@@ -39,6 +39,12 @@ describe('buildPlaceholderContent — B3 ITT/ITP deterministic sentinel', () => 
     expect(content).toBe(base);
     expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
   });
+
+  it('decesso: NON inietta la tabella ITT/ITP (il deceduto non ha invalidità temporanea da graduare)', () => {
+    const content = buildPlaceholderContent(spec('considerazioni_ml'), { decesso: true });
+    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
+    expect(content).toContain('Inserire qui le considerazioni');
+  });
 });
 
 describe('assembleSectionBlock — heading assembly', () => {
