@@ -293,7 +293,7 @@ export function CaseDetailClient({
                     : processingStage === 'completato' ? 'Completata' : 'Pronto')
                 : hasEvents ? `${events.length} eventi estratti` : processingStage === 'completato' ? 'Nessun evento trovato' : 'In attesa')
             : (step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
-            : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Da compilare')
+            : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Facoltativo')
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
                 ? (processingProgress?.phase === 'extraction'

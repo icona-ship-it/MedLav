@@ -197,7 +197,7 @@ export function DocumentsSection({
       if (!data.success) {
         toast.error(data.error ?? 'Errore nella categorizzazione');
       } else {
-        toast.success(`Categorizzato come: ${data.data?.documentType ?? 'sconosciuto'}`);
+        toast.success(`Categorizzato come: ${DOCUMENT_TYPES.find((t) => t.value === data.data?.documentType)?.label ?? data.data?.documentType ?? 'sconosciuto'}`);
         router.refresh();
       }
     } catch {
@@ -353,8 +353,8 @@ export function DocumentsSection({
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   <span className="ml-1.5">Categorizza tutti con AI</span>
-                  <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                    {uploadedDocs.length * CREDIT_COSTS.categorizzazione} cr
+                  <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
+                    {uploadedDocs.length * CREDIT_COSTS.categorizzazione} crediti
                   </Badge>
                 </Button>
               )}
@@ -457,7 +457,7 @@ export function DocumentsSection({
                       {canDelete && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Azioni documento" aria-label="Azioni documento">
                               <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -509,11 +509,13 @@ export function DocumentsSection({
 
                     {/* Row 2: Inline type dropdown (only for uploaded/ready docs) */}
                     {(isUploaded || isComplete) && (
+                      <>
+                      <p className="text-xs font-medium text-foreground mt-2">Categoria del documento — scegli o usa l&apos;AI</p>
                       <Select
                         value={doc.document_type ?? 'altro'}
                         onValueChange={(value) => handleTypeChange(doc.id, value)}
                       >
-                        <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectTrigger className="w-full h-10 text-sm" aria-label="Categoria del documento">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -524,6 +526,7 @@ export function DocumentsSection({
                           ))}
                         </SelectContent>
                       </Select>
+                      </>
                     )}
 
                     {/* Error message */}

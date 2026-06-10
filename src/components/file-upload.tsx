@@ -191,10 +191,10 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
       >
         <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
-        <p className="text-sm font-medium">
+        <p className="text-base font-medium">
           Trascina qui i documenti o <span className="text-primary underline">seleziona file</span>
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           PDF, immagini, Word, Excel
         </p>
         <input

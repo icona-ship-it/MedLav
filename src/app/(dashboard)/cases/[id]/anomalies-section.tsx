@@ -359,17 +359,17 @@ function ActionableAnomalyCard({
       {/* "Cosa devi decidere" — always visible, no toggle */}
       {guidance && (
         <div className="mt-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
             <Lightbulb className="h-3.5 w-3.5" />
             Cosa devi decidere
           </p>
           <div>
-            <p className="text-xs font-medium text-blue-900 dark:text-blue-300">Cosa significa</p>
-            <p className="text-xs text-blue-800 dark:text-blue-400">{guidance.meaning}</p>
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-300">Cosa significa</p>
+            <p className="text-sm text-blue-800 dark:text-blue-400">{guidance.meaning}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-blue-900 dark:text-blue-300">Cosa fare</p>
-            <p className="text-xs text-blue-800 dark:text-blue-400">{guidance.howToResolve}</p>
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-300">Cosa fare</p>
+            <p className="text-sm text-blue-800 dark:text-blue-400">{guidance.howToResolve}</p>
           </div>
         </div>
       )}
@@ -387,7 +387,7 @@ function ActionableAnomalyCard({
             value={expertNote}
             onChange={(e) => setExpertNote(e.target.value)}
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Quello che scrivi qui sarà integrato nel report finale.
           </p>
         </div>
@@ -396,7 +396,7 @@ function ActionableAnomalyCard({
           <Button
             variant="default"
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 text-sm"
             onClick={handleConfirm}
             disabled={isConfirming || isDismissing}
           >
@@ -410,7 +410,7 @@ function ActionableAnomalyCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 text-sm"
             onClick={handleDismiss}
             disabled={isConfirming || isDismissing}
           >
@@ -493,7 +493,7 @@ function ConfirmedAnomalyCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs"
+              className="h-9 text-sm"
               onClick={() => { setDraftNote(anomaly.resolution_note ?? ''); setEditing(true); }}
               disabled={isReverting}
             >
@@ -503,7 +503,7 @@ function ConfirmedAnomalyCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-muted-foreground"
+              className="h-9 text-sm text-muted-foreground"
               onClick={handleRevert}
               disabled={isReverting}
             >
@@ -521,11 +521,11 @@ function ConfirmedAnomalyCard({
             onChange={(e) => setDraftNote(e.target.value)}
           />
           <div className="flex items-center gap-2">
-            <Button size="sm" className="h-7 text-xs" onClick={handleSaveNote} disabled={isSaving}>
+            <Button size="sm" className="h-9 text-sm" onClick={handleSaveNote} disabled={isSaving}>
               {isSaving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
               Salva
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)} disabled={isSaving}>
+            <Button variant="ghost" size="sm" className="h-9 text-sm" onClick={() => setEditing(false)} disabled={isSaving}>
               Annulla
             </Button>
           </div>

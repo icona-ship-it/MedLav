@@ -26,6 +26,7 @@ import { parseSections } from '@/lib/section-parser-client';
 import { getSectionStatus } from '@/lib/section-state';
 import { computeStaleSections } from '@/lib/section-staleness';
 import { EventsTab } from './events-tab';
+import { MissingDocsSection } from './anomalies-section';
 import { RegeneratePanelDialog } from './regenerate-panel-dialog';
 import { ReportA4Viewer } from './report-a4-viewer';
 import { ReportTocSidebar } from './report-toc-sidebar';
@@ -265,7 +266,7 @@ export function ReportStep({
           )}
 
           {/* Export toolbar for timeline data */}
-          <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3 mb-4">
+          <div className="sticky top-9 z-20 border-b bg-background/95 backdrop-blur-sm px-4 py-3 mb-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
                 Analisi completata — {events.length} eventi trovati
@@ -489,7 +490,7 @@ export function ReportStep({
       <Dialog open={ocrDialogOpen} onOpenChange={setOcrDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Anteprima OCR</DialogTitle>
+            <DialogTitle>Testo originale dei documenti</DialogTitle>
           </DialogHeader>
           <OcrPreviewTab
             caseId={caseId}
@@ -536,7 +537,7 @@ export function ReportStep({
       <Sheet open={ocrDrawerOpen} onOpenChange={setOcrDrawerOpen}>
         <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
           <SheetHeader className="pb-3 border-b">
-            <SheetTitle>Testo OCR originale</SheetTitle>
+            <SheetTitle>Testo originale dei documenti</SheetTitle>
           </SheetHeader>
           <div className="py-4">
             <OcrPreviewTab
@@ -570,6 +571,13 @@ export function ReportStep({
             documents={documents}
             onChanged={() => router.refresh()}
           />
+          {missingDocs.length > 0 && (
+            <MissingDocsSection
+              missingDocs={missingDocs}
+              caseId={caseId}
+              onUploadComplete={() => router.refresh()}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -631,7 +639,7 @@ function PipelineWarningsBanner({
                   </span>
                   {w.failedItems && w.failedItems.length > 0 && (
                     <>
-                      <span className="text-muted-foreground/70">
+                      <span className="text-muted-foreground">
                         {' '}({w.failedItems.slice(0, 3).join(', ')}
                         {w.failedItems.length > 3 && ` +${w.failedItems.length - 3}`})
                       </span>

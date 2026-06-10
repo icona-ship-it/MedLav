@@ -189,7 +189,7 @@
 .report-a4-page .prose {
   font-family: inherit;
   max-width: none;
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.75;
 }
 
@@ -215,7 +215,7 @@
 }
 
 .report-a4-page .prose table {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .report-a4-page .prose img {

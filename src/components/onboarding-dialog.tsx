@@ -41,6 +41,7 @@ const STEPS = [
       'Perizia medico legale: per privati, studi legali, assicurazioni',
       'CTU/ATP: in ambito civile, previdenziale o INAIL',
       'E molto altro: pareri, analisi spese, anonimizzazione',
+      'Premendo il pulsante creiamo un caso dimostrativo con dati fittizi, per esplorare l\'app senza rischi.',
     ],
   },
 ];
@@ -138,7 +139,7 @@ export function OnboardingDialog() {
             {isCreatingDemo ? (
               <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Creazione demo...</>
             ) : isLast ? (
-              <>Inizia<ArrowRight className="ml-1 h-3 w-3" /></>
+              <>Inizia con un esempio<ArrowRight className="ml-1 h-3 w-3" /></>
             ) : (
               <>Avanti<ArrowRight className="ml-1 h-3 w-3" /></>
             )}

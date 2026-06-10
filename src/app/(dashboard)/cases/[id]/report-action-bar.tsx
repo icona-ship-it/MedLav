@@ -141,7 +141,7 @@ export function ReportActionBar({
 
   return (
     <>
-      <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-sm px-4 py-3">
+      <div className="sticky top-9 z-20 border-b bg-background/95 backdrop-blur-sm px-4 py-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           {/* Left: Status badge + last export */}
           <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export function ReportActionBar({
             {/* UX Ondata 3-IA: Support panel buttons (drawer da destra) — eventi/pubmed/ocr */}
             {onOpenEventsDrawer && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={onOpenEventsDrawer}
                 title="Eventi clinici della cronistoria (apre pannello laterale)"
@@ -177,7 +177,7 @@ export function ReportActionBar({
                 <FileText className="mr-1 h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Eventi</span>
                 {typeof eventsCount === 'number' && eventsCount > 0 && (
-                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 leading-tight">
+                  <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 leading-tight">
                     {eventsCount}
                   </Badge>
                 )}
@@ -185,7 +185,7 @@ export function ReportActionBar({
             )}
             {onOpenPubmedDrawer && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={onOpenPubmedDrawer}
                 title="Riferimenti scientifici PubMed (apre pannello laterale)"
@@ -193,7 +193,7 @@ export function ReportActionBar({
                 <BookOpen className="mr-1 h-3.5 w-3.5" />
                 <span className="hidden sm:inline">PubMed</span>
                 {typeof pubmedCount === 'number' && pubmedCount > 0 && (
-                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 leading-tight">
+                  <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 leading-tight">
                     {pubmedCount}
                   </Badge>
                 )}
@@ -201,13 +201,13 @@ export function ReportActionBar({
             )}
             {onOpenOcrDrawer && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={onOpenOcrDrawer}
-                title="Testo OCR originale dei documenti (apre pannello laterale)"
+                title="Testo originale dei documenti (apre pannello laterale)"
               >
                 <FileSearch className="mr-1 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">OCR</span>
+                <span className="hidden sm:inline">Testo originale</span>
               </Button>
             )}
 
@@ -216,18 +216,17 @@ export function ReportActionBar({
               <span className="hidden sm:inline-block w-px h-5 bg-border" aria-hidden />
             )}
 
-            {/* Mobile: Quality button with badge */}
+            {/* Quality button with badge (apre lo Sheet a tutte le larghezze) */}
             {onOpenQualitySheet && (
               <Button
                 variant="outline"
                 size="sm"
-                className="lg:hidden"
                 onClick={onOpenQualitySheet}
               >
                 <ShieldAlert className="mr-1 h-3.5 w-3.5" />
                 Qualità
                 {alertCount > 0 && (
-                  <Badge variant="destructive" className="ml-1 text-[10px] px-1 py-0 leading-tight">
+                  <Badge variant="destructive" className="ml-1 text-xs px-1 py-0 leading-tight">
                     {alertCount}
                   </Badge>
                 )}
@@ -322,7 +321,7 @@ export function ReportActionBar({
             {/* Overflow menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" title="Altre azioni" aria-label="Altre azioni">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>

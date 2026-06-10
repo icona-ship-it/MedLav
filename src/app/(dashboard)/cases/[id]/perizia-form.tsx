@@ -100,7 +100,7 @@ function HeaderDateInput({
       {invalid ? (
         <p className="text-xs text-destructive mt-1" role="alert">{DATE_FORMAT_HINT}</p>
       ) : hint ? (
-        <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+        <p className="text-sm text-muted-foreground mt-1">{hint}</p>
       ) : null}
     </div>
   );
@@ -429,7 +429,7 @@ export function PeriziaMetadataForm({
                 Dati per l&apos;intestazione della perizia
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                Questi dati vengono inseriti nell&apos;intestazione formale della perizia esportata e nel prompt di generazione. Puoi tornare a compilarli in qualsiasi momento.
+                <strong>Tutti i campi sono facoltativi</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati vengono inseriti nell&apos;intestazione formale della perizia esportata e nel prompt di generazione. Puoi tornare a compilarli in qualsiasi momento.
               </p>
             </div>
           </div>
@@ -474,7 +474,7 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>Nome e Cognome</Label>
                         <Input value={form.patientFullName} onChange={(e) => setForm({ ...form, patientFullName: e.target.value })} placeholder="es. Mario Esempi" />
-                        <p className="text-xs text-muted-foreground mt-1">Apparirà nell&apos;intestazione della perizia</p>
+                        <p className="text-sm text-muted-foreground mt-1">Apparirà nell&apos;intestazione della perizia</p>
                       </div>
                       <div>
                         <Label>Data di nascita</Label>
@@ -503,7 +503,7 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>Tribunale</Label>
                         <Input value={form.tribunale} onChange={(e) => setForm({ ...form, tribunale: e.target.value })} placeholder="es. Tribunale Ordinario di Brescia" />
-                        <p className="text-xs text-muted-foreground mt-1">Il tribunale che ha conferito l&apos;incarico</p>
+                        <p className="text-sm text-muted-foreground mt-1">Il tribunale che ha conferito l&apos;incarico</p>
                       </div>
                       <div>
                         <Label>Sezione</Label>
@@ -512,13 +512,13 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>Numero RG</Label>
                         <Input value={form.rgNumber} onChange={(e) => setForm({ ...form, rgNumber: e.target.value })} placeholder="es. 1234/2025" />
-                        <p className="text-xs text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
+                        <p className="text-sm text-muted-foreground mt-1">Numero di Ruolo Generale del procedimento</p>
                       </div>
                     </div>
                     <div>
                       <Label>Tipo di procedimento</Label>
                       <Input value={form.tipoProcedimento ?? ''} onChange={(e) => setForm({ ...form, tipoProcedimento: e.target.value })} placeholder="es. Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)" />
-                      <p className="text-xs text-muted-foreground mt-1">Appare nell&apos;intestazione formale (ATP, CTU, ecc.)</p>
+                      <p className="text-sm text-muted-foreground mt-1">Appare nell&apos;intestazione formale (ATP, CTU, ecc.)</p>
                     </div>
                     <div>
                       <Label>Ambito (CTU/CTP)</Label>
@@ -526,7 +526,7 @@ export function PeriziaMetadataForm({
                         <Button type="button" size="sm" variant={form.ambitoPenale ? 'outline' : 'default'} onClick={() => setForm({ ...form, ambitoPenale: false })}>Civile</Button>
                         <Button type="button" size="sm" variant={form.ambitoPenale ? 'default' : 'outline'} onClick={() => setForm({ ...form, ambitoPenale: true })}>Penale</Button>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">Penale: causa dell&apos;evento/morte + profili di colpa, senza ITT/ITP n&eacute; tabelle SIMLA.</p>
+                      <p className="text-sm text-muted-foreground mt-1">Penale: causa dell&apos;evento/morte + profili di colpa, senza ITT/ITP n&eacute; tabelle SIMLA.</p>
                     </div>
                     <div>
                       <Label>Periziando</Label>
@@ -534,12 +534,12 @@ export function PeriziaMetadataForm({
                         <Button type="button" size="sm" variant={form.decesso ? 'outline' : 'default'} onClick={() => setForm({ ...form, decesso: false })}>Vivente</Button>
                         <Button type="button" size="sm" variant={form.decesso ? 'default' : 'outline'} onClick={() => setForm({ ...form, decesso: true })}>Deceduto</Button>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">Deceduto: considerazioni su causa della morte e danno iure proprio/hereditatis (senza ITT/ITP), operazioni peritali senza visita.</p>
+                      <p className="text-sm text-muted-foreground mt-1">Deceduto: considerazioni su causa della morte e danno iure proprio/hereditatis (senza ITT/ITP), operazioni peritali senza visita.</p>
                     </div>
                     <div>
                       <Label>Oggetto dell&apos;incarico (opzionale)</Label>
                       <Input value={form.oggettoIncarico} onChange={(e) => setForm({ ...form, oggettoIncarico: e.target.value })} placeholder="es. alla vicenda clinica e alle cause del decesso" />
-                      <p className="text-xs text-muted-foreground mt-1">Sostituisce &quot;alla vicenda clinica&quot; nel conferimento. Inizia con la preposizione (&quot;alla...&quot;, &quot;alle...&quot;).</p>
+                      <p className="text-sm text-muted-foreground mt-1">Sostituisce &quot;alla vicenda clinica&quot; nel conferimento. Inizia con la preposizione (&quot;alla...&quot;, &quot;alle...&quot;).</p>
                     </div>
                     <div>
                       <Label>Provvedimenti dell&apos;ordinanza (opzionale)</Label>
@@ -549,7 +549,7 @@ export function PeriziaMetadataForm({
                         placeholder={'es. Il Giudice autorizza il CTU ad acquisire documentazione presso le strutture sanitarie e ad avvalersi di ausiliari...'}
                         className="min-h-[80px] text-sm mt-1"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Autorizzazioni e istruzioni dell&apos;ordinanza riprodotte nell&apos;intestazione (es. liquidazione ex D.P.R. 115/2002)</p>
+                      <p className="text-sm text-muted-foreground mt-1">Autorizzazioni e istruzioni dell&apos;ordinanza riprodotte nell&apos;intestazione (es. liquidazione ex D.P.R. 115/2002)</p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
@@ -559,14 +559,14 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>Qualifica giudice</Label>
                         <Input value={form.giudiceQualifica} onChange={(e) => setForm({ ...form, giudiceQualifica: e.target.value })} placeholder="es. Giudice Delegato / Giudice Istruttore" />
-                        <p className="text-xs text-muted-foreground mt-1">Se vuoto: &quot;Giudice Delegato&quot; per ATP, &quot;Giudice Istruttore&quot; altrimenti</p>
+                        <p className="text-sm text-muted-foreground mt-1">Se vuoto: &quot;Giudice Delegato&quot; per ATP, &quot;Giudice Istruttore&quot; altrimenti</p>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Fondo spese</Label>
                         <Input value={form.fondoSpese} onChange={(e) => setForm({ ...form, fondoSpese: e.target.value })} placeholder="es. Euro 1.800,00" />
-                        <p className="text-xs text-muted-foreground mt-1">Importo stanziato dal giudice per le spese peritali</p>
+                        <p className="text-sm text-muted-foreground mt-1">Importo stanziato dal giudice per le spese peritali</p>
                       </div>
                     </div>
                   </div>
@@ -584,43 +584,43 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>CTU (nome)</Label>
                         <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Mario Esempi" />
-                        <p className="text-xs text-muted-foreground mt-1">Nome completo del Consulente Tecnico d&apos;Ufficio</p>
+                        <p className="text-sm text-muted-foreground mt-1">Nome completo del Consulente Tecnico d&apos;Ufficio</p>
                       </div>
                       <div>
                         <Label>Qualifica CTU</Label>
                         <Input value={form.ctuTitle} onChange={(e) => setForm({ ...form, ctuTitle: e.target.value })} placeholder="es. medico legale presso..." />
-                        <p className="text-xs text-muted-foreground mt-1">Specializzazione e affiliazione professionale</p>
+                        <p className="text-sm text-muted-foreground mt-1">Specializzazione e affiliazione professionale</p>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Specialita</Label>
                         <Input value={form.specialita ?? ''} onChange={(e) => setForm({ ...form, specialita: e.target.value })} placeholder="es. Specialista in Ortopedia; Specialista in Medicina Legale" />
-                        <p className="text-xs text-muted-foreground mt-1">Specializzazioni del perito (separale con ; per andare a capo nella carta intestata)</p>
+                        <p className="text-sm text-muted-foreground mt-1">Specializzazioni del perito (separale con ; per andare a capo nella carta intestata)</p>
                       </div>
                       <div>
                         <Label>N. Iscrizione Albo</Label>
                         <Input value={form.alboNumber ?? ''} onChange={(e) => setForm({ ...form, alboNumber: e.target.value })} placeholder="es. 12345 - Ordine Medici di Verona" />
-                        <p className="text-xs text-muted-foreground mt-1">Numero di iscrizione all&apos;Albo professionale</p>
+                        <p className="text-sm text-muted-foreground mt-1">Numero di iscrizione all&apos;Albo professionale</p>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>E-mail perito</Label>
                         <Input value={form.ctuEmail ?? ''} onChange={(e) => setForm({ ...form, ctuEmail: e.target.value })} placeholder="es. nome@studio.it" />
-                        <p className="text-xs text-muted-foreground mt-1">Mostrata nella carta intestata</p>
+                        <p className="text-sm text-muted-foreground mt-1">Mostrata nella carta intestata</p>
                       </div>
                       <div>
                         <Label>PEC perito</Label>
                         <Input value={form.ctuPec ?? ''} onChange={(e) => setForm({ ...form, ctuPec: e.target.value })} placeholder="es. nome@pec.omceo..." />
-                        <p className="text-xs text-muted-foreground mt-1">Posta elettronica certificata</p>
+                        <p className="text-sm text-muted-foreground mt-1">Posta elettronica certificata</p>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Ausiliario (nome)</Label>
                         <Input value={form.collaboratoreName ?? ''} onChange={(e) => setForm({ ...form, collaboratoreName: e.target.value })} placeholder="es. Dott.ssa Anna Esempi" />
-                        <p className="text-xs text-muted-foreground mt-1">Specialista che assiste il CTU (se nominato)</p>
+                        <p className="text-sm text-muted-foreground mt-1">Specialista che assiste il CTU (se nominato)</p>
                       </div>
                       <div>
                         <Label>Ausiliario (specializzazione)</Label>
@@ -631,7 +631,7 @@ export function PeriziaMetadataForm({
                       <div>
                         <Label>Co-CTU / Collegio (nome)</Label>
                         <Input value={form.coCtuName ?? ''} onChange={(e) => setForm({ ...form, coCtuName: e.target.value })} placeholder="es. Prof. Secondo Perito" />
-                        <p className="text-xs text-muted-foreground mt-1">Secondo perito PARITETICO del collegio (conferimento plurale e firma collegiale). Diverso dall&apos;ausiliario.</p>
+                        <p className="text-sm text-muted-foreground mt-1">Secondo perito PARITETICO del collegio (conferimento plurale e firma collegiale). Diverso dall&apos;ausiliario.</p>
                       </div>
                       <div>
                         <Label>Co-CTU (qualifica)</Label>

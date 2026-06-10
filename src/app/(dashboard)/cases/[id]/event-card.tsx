@@ -171,7 +171,7 @@ export function EventCard({
                     handleQuickVerify();
                   }}
                   disabled={isVerifying}
-                  className="inline-flex items-center gap-1 text-[11px] text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors disabled:opacity-50"
                   title="Clicca per segnare come verificato"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
@@ -179,7 +179,7 @@ export function EventCard({
                 </button>
               )}
               {isClinical && !includeInChrono && (
-                <Badge variant="secondary" className="text-[11px]">Fuori cronologia</Badge>
+                <Badge variant="secondary" className="text-xs">Fuori cronologia</Badge>
               )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>

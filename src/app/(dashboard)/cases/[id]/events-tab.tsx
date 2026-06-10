@@ -438,18 +438,18 @@ export function EventsTab({
             <div className="flex flex-wrap gap-2 items-end">
               <div className="flex items-center gap-1.5">
                 <label className="text-xs text-muted-foreground whitespace-nowrap">Da:</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-7 rounded border px-2 text-xs bg-background" />
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded border px-2 text-sm bg-background" />
               </div>
               <div className="flex items-center gap-1.5">
                 <label className="text-xs text-muted-foreground whitespace-nowrap">A:</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-7 rounded border px-2 text-xs bg-background" />
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded border px-2 text-sm bg-background" />
               </div>
               <input
                 type="text"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="Cerca medico, struttura, diagnosi..."
-                className="h-7 rounded border px-2 text-xs bg-background flex-1 min-w-[180px]"
+                className="h-9 rounded border px-2 text-sm bg-background flex-1 min-w-[180px]"
               />
               {(dateFrom || dateTo || searchText) && (
                 <button

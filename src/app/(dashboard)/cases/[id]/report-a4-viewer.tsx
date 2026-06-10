@@ -187,8 +187,11 @@ export function ReportA4Viewer({
                     {isDocSanitaria && !docSanitariaHasSentinel && (
                       <Badge variant="warning" title="Variante AI (sintetica o integrale): NON è la riproduzione verbatim. Le citazioni «...» sono verificate contro l'OCR; rigenerala dopo modifiche agli eventi.">Versione AI</Badge>
                     )}
+                    {rawSectionContent.trim().startsWith('*[') && (
+                      <Badge variant="warning" title="Sezione riservata alle tue valutazioni: l'AI non la compila. Sostituisci lo scheletro-guida con il tuo testo prima di esportare.">Da compilare (a tua cura)</Badge>
+                    )}
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
+                  <div className="opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0 mt-1 flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"

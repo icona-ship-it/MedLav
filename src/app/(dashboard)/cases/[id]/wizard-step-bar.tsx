@@ -34,7 +34,7 @@ export function WizardStepBar({
   if (isCompact) {
     return (
       <nav aria-label="Passaggi caso" className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm py-1.5">
-        <ol className="flex items-center gap-1 text-xs text-muted-foreground">
+        <ol className="flex items-center gap-1 text-sm text-foreground/80">
           {steps.map((step, index) => {
             const isActive = activeStep === step.number;
             return (
@@ -42,10 +42,10 @@ export function WizardStepBar({
                 <button
                   type="button"
                   onClick={() => onSetStep(step.number)}
-                  className={`rounded px-2 py-0.5 transition-colors ${
+                  className={`rounded px-3 py-1.5 cursor-pointer transition-colors ${
                     isActive
-                      ? 'font-semibold text-foreground'
-                      : 'hover:text-foreground hover:bg-muted/60'
+                      ? 'font-semibold bg-primary/10 text-primary'
+                      : 'text-foreground/80 hover:text-foreground hover:bg-muted/60 hover:underline underline-offset-2'
                   }`}
                   aria-current={isActive ? 'step' : undefined}
                 >
@@ -93,7 +93,7 @@ export function WizardStepBar({
               key={step.number}
               type="button"
               onClick={() => onSetStep(step.number)}
-              className={`h-2 rounded-full transition-all ${
+              className={`h-2 rounded-full cursor-pointer transition-all ${
                 step.number === activeStep
                   ? 'w-6 bg-primary'
                   : autoStep > step.number
@@ -117,7 +117,7 @@ export function WizardStepBar({
               <button
                 type="button"
                 onClick={() => onSetStep(step.number)}
-                className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${
+                className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left cursor-pointer transition-all ${
                   isActive
                     ? 'bg-primary/5 shadow-sm ring-2 ring-primary/30'
                     : isCompleted

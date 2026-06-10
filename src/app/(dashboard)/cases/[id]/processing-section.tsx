@@ -339,7 +339,7 @@ export function ProcessingSection({
                           </div>
                           <div>
                             <p className="text-xs font-medium">{i + 1}. {step.label}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{step.desc}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
                           </div>
                         </div>
                       ))}

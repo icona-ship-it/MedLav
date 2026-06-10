@@ -99,6 +99,9 @@ export default async function DashboardPage() {
         <p className="mt-1 text-muted-foreground">
           Scegli un modulo, carica i documenti e otterrai il risultato in pochi minuti.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          I crediti si usano solo quando avvii un&apos;elaborazione — creare un caso e caricare documenti è gratis.
+        </p>
       </div>
 
       {/* Priority categories — large cards */}
@@ -137,7 +140,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="mt-auto flex items-center justify-between pt-2">
                       {count > 1 && (
-                        <span className="text-xs text-muted-foreground">{count} sotto-tipi</span>
+                        <span className="text-xs text-muted-foreground">{count} varianti</span>
                       )}
                       <span className="ml-auto flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
                         {count === 1 ? 'Inizia' : 'Scegli'}
@@ -178,7 +181,7 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-xs">
-                      {creditCost} cr
+                      {creditCost} crediti
                     </Badge>
                     <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
                   </CardContent>

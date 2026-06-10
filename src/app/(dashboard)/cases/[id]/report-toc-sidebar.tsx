@@ -57,7 +57,7 @@ export function ReportTocSidebar({ sections }: ReportTocSidebarProps) {
 
   return (
     <nav
-      className="w-48 shrink-0 hidden xl:block"
+      className="w-56 shrink-0 hidden lg:block"
       aria-label="Indice sezioni report"
     >
       <div className="sticky top-[140px]">

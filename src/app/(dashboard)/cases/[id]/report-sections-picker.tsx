@@ -39,7 +39,7 @@ export function ReportSectionsPicker({
           <label
             key={opt.id}
             className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
-              opt.mandatory ? 'opacity-70' : 'cursor-pointer hover:bg-muted/50'
+              opt.mandatory ? '' : 'cursor-pointer hover:bg-muted/50'
             }`}
           >
             <input
@@ -54,7 +54,7 @@ export function ReportSectionsPicker({
             />
             <span className="flex-1">{opt.title}</span>
             {opt.mandatory && (
-              <span className="text-[11px] text-muted-foreground">sempre inclusa</span>
+              <span className="text-xs text-muted-foreground">sempre inclusa</span>
             )}
           </label>
         );
