@@ -26,8 +26,22 @@ interface UploadProgress {
   error?: string;
 }
 
+/** Formats the pipeline can actually process (mirrors the picker `accept`).
+ * Drag&drop bypasses `accept`, so the same allowlist is enforced here — an
+ * unsupported file (e.g. the .xml envelope of the processo telematico) must be
+ * skipped with a clear explanation, not fail server-side with a generic error. */
+const SUPPORTED_EXTENSIONS = new Set([
+  'pdf', 'jpg', 'jpeg', 'png', 'tiff', 'tif', 'doc', 'docx', 'xls', 'xlsx',
+]);
+
+function fileExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
 export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
+  const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -35,9 +49,12 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const fileArray = Array.from(newFiles);
+    const supported = fileArray.filter((f) => SUPPORTED_EXTENSIONS.has(fileExtension(f.name)));
+    const skipped = fileArray.filter((f) => !SUPPORTED_EXTENSIONS.has(fileExtension(f.name)));
+    setSkippedFiles(skipped.map((f) => f.name));
     setFiles((prev) => {
       const existing = new Set(prev.map((f) => `${f.name}-${f.size}`));
-      const unique = fileArray.filter((f) => !existing.has(`${f.name}-${f.size}`));
+      const unique = supported.filter((f) => !existing.has(`${f.name}-${f.size}`));
       return [...prev, ...unique];
     });
     setProgress([]);
@@ -215,6 +232,18 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
           }}
         />
       </div>
+
+      {/* Unsupported files skipped at selection (e.g. busta telematica .xml) */}
+      {skippedFiles.length > 0 && !isUploading && (
+        <div className="flex items-start gap-2 rounded-md bg-muted border p-3 text-sm text-muted-foreground">
+          <Info className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            {skippedFiles.map((n) => `"${n}"`).join(', ')}: formato non supportato, file non aggiunto.
+            I file tecnici del fascicolo telematico (es. .xml di ricevute PEC e dati atto) non
+            contengono documentazione utile alla perizia e non servono.
+          </span>
+        </div>
+      )}
 
       {/* File list (before upload) — names only, no type selection */}
       {files.length > 0 && !isUploading && progress.length === 0 && (
