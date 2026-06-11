@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSignedUrl, uploadBase64Image } from '@/lib/supabase/storage';
 import { ocrDocument } from '@/services/ocr/ocr-service';
+import { isTextIngestType, buildTextIngestResult } from '@/services/ocr/text-ingestion';
 import type { OcrImageResult } from '@/services/ocr/ocr-types';
 import type { DocumentInfo, OcrResult } from './types';
 import { logger } from '@/lib/logger';
@@ -119,17 +120,33 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
     .eq('id', doc.id);
 
   try {
-    const signedUrl = await getSignedUrl(doc.storagePath);
-
     const ocrStartMs = Date.now();
     logger.info('pipeline', ` Step 2: Starting OCR for doc ${doc.id} (${doc.fileName})`);
 
-    const result = await ocrDocument({
-      documentId: doc.id,
-      fileName: doc.fileName,
-      fileType: doc.fileType,
-      signedUrl,
-    });
+    let result;
+    if (isTextIngestType(doc.fileType, doc.fileName)) {
+      // Text-based document (XML/TXT): the file IS text — read it directly
+      // (no OCR call, ocrPages = 0). XML is sanitized: tags stripped,
+      // attribute values kept, embedded base64 payloads removed.
+      const { downloadFile } = await import('@/lib/supabase/storage');
+      const blob = await downloadFile(doc.storagePath);
+      const rawText = await blob.text();
+      result = buildTextIngestResult({
+        documentId: doc.id,
+        fileName: doc.fileName,
+        fileType: doc.fileType,
+        rawText,
+      });
+      logger.info('pipeline', ` Step 2: Text ingestion for doc ${doc.id}: ${result.pageCount} pages from ${rawText.length} raw chars`);
+    } else {
+      const signedUrl = await getSignedUrl(doc.storagePath);
+      result = await ocrDocument({
+        documentId: doc.id,
+        fileName: doc.fileName,
+        fileType: doc.fileType,
+        signedUrl,
+      });
+    }
 
     // Save OCR pages to database
     let savedPageCount = 0;

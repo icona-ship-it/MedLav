@@ -20,7 +20,14 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  // Text-based documents (2026-06-11): clinical XML exists in Italy (HL7/CDA
+  // referti from the FSE) — ingested via the direct-text path, no OCR.
+  'text/xml',
+  'application/xml',
+  'text/plain',
 ] as const);
+
+const TEXT_DOCUMENT_MIME_TYPES = new Set(['text/xml', 'application/xml', 'text/plain']);
 
 export type AllowedDocumentMime = typeof ALLOWED_DOCUMENT_MIME_TYPES extends Set<infer T> ? T : never;
 
@@ -109,6 +116,28 @@ export function validateDocumentBytes(
 
   if (!isAllowedDocumentMime(declaredMimeType)) {
     return { ok: false, reason: `Tipo file non supportato: ${declaredMimeType}` };
+  }
+
+  // Text formats have no magic bytes — validate they actually look like text:
+  // no NUL bytes (binary marker), and XML must open with '<' (after optional
+  // BOM/whitespace). A renamed binary still gets rejected here.
+  if (TEXT_DOCUMENT_MIME_TYPES.has(declaredMimeType)) {
+    const head = bytes.subarray(0, Math.min(bytes.byteLength, 4096));
+    for (const b of head) {
+      if (b === 0x00) {
+        return { ok: false, reason: 'Il file dichiarato come testo contiene dati binari. Possibile file rinominato o corrotto.' };
+      }
+    }
+    if (declaredMimeType !== 'text/plain') {
+      // Skip UTF-8 BOM (EF BB BF) and leading whitespace, then require '<'
+      let i = 0;
+      if (head.byteLength >= 3 && head[0] === 0xef && head[1] === 0xbb && head[2] === 0xbf) i = 3;
+      while (i < head.byteLength && (head[i] === 0x20 || head[i] === 0x09 || head[i] === 0x0a || head[i] === 0x0d)) i++;
+      if (head[i] !== 0x3c /* '<' */) {
+        return { ok: false, reason: 'Il file dichiarato come XML non ha la struttura attesa.' };
+      }
+    }
+    return { ok: true };
   }
 
   const detected = detectMimeFromMagic(bytes);

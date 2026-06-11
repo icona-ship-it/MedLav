@@ -28,11 +28,21 @@ interface UploadProgress {
 
 /** Formats the pipeline can actually process (mirrors the picker `accept`).
  * Drag&drop bypasses `accept`, so the same allowlist is enforced here — an
- * unsupported file (e.g. the .xml envelope of the processo telematico) must be
- * skipped with a clear explanation, not fail server-side with a generic error. */
+ * unsupported file (e.g. a signed .p7m) must be skipped with a clear
+ * explanation, not fail server-side with a generic error. XML/TXT are
+ * supported via the direct-text ingestion path (no OCR). */
 const SUPPORTED_EXTENSIONS = new Set([
-  'pdf', 'jpg', 'jpeg', 'png', 'tiff', 'tif', 'doc', 'docx', 'xls', 'xlsx',
+  'pdf', 'jpg', 'jpeg', 'png', 'tiff', 'tif', 'doc', 'docx', 'xls', 'xlsx', 'xml', 'txt',
 ]);
+
+/** Browsers sometimes report an empty MIME for .xml/.txt — fall back by extension. */
+function effectiveMimeType(file: File): string {
+  if (file.type) return file.type;
+  const ext = fileExtension(file.name);
+  if (ext === 'xml') return 'text/xml';
+  if (ext === 'txt') return 'text/plain';
+  return file.type;
+}
 
 function fileExtension(name: string): string {
   const dot = name.lastIndexOf('.');
@@ -134,7 +144,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(storagePath, file, {
-          contentType: file.type,
+          contentType: effectiveMimeType(file),
           upsert: false,
         });
 
@@ -151,7 +161,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       const result = await saveDocumentMetadata({
         caseId,
         fileName: file.name,
-        fileType: file.type,
+        fileType: effectiveMimeType(file),
         fileSize: file.size,
         storagePath,
         documentType: 'altro',
@@ -218,13 +228,13 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
           Trascina qui i documenti o <span className="text-primary underline">seleziona file</span>
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          PDF, immagini, Word, Excel
+          PDF, immagini, Word, Excel, XML, TXT
         </p>
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.doc,.docx,.xls,.xlsx"
+          accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.doc,.docx,.xls,.xlsx,.xml,.txt"
           aria-label="Carica documenti"
           className="hidden"
           onChange={(e) => {
@@ -241,9 +251,8 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <span className="flex-1">
             {skippedFiles.map((n) => `"${n}"`).join(', ')}: formato non supportato, file non aggiunto.
-            I file .xml del fascicolo telematico non contengono documentazione clinica e non vengono
-            analizzati; i dati di causa che riportano (numero di ruolo, parti) sono presenti anche
-            negli atti in PDF.
+            Per gli atti firmati digitalmente (.p7m) estrai prima il PDF contenuto; per gli altri
+            formati converti il file in PDF.
           </span>
           <button
             type="button"

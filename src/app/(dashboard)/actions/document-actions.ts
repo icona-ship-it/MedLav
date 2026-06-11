@@ -90,6 +90,8 @@ export async function saveDocumentMetadata(params: {
     'image/jpeg', 'image/png', 'image/tiff', 'image/webp',
     'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    // Text documents (XML/TXT) — ingested via direct-text path, no OCR
+    'text/xml', 'application/xml', 'text/plain',
   ]);
 
   // Fast pre-check on the CLIENT-DECLARED size (cheap, rejects obvious lies). The
@@ -102,7 +104,7 @@ export async function saveDocumentMetadata(params: {
     return { error: 'File vuoto o non valido.' };
   }
   if (!ALLOWED_MIME_TYPES.has(params.fileType)) {
-    return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel.' };
+    return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel, XML, TXT.' };
   }
 
   // Real (server-verified) byte size, captured from the downloaded blob below.
