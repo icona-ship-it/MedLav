@@ -33,6 +33,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
+import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
 import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
 
@@ -1051,7 +1052,6 @@ export const processCase = inngest.createFunction(
     };
 
     const completedSections = new Map<string, GeneratedSection>();
-    let sectionGenerationFailed = false;
 
     // Same semantics as the old sequential loop: a section sees the context
     // of completed sections that come BEFORE it in plan order.
@@ -1070,6 +1070,14 @@ export const processCase = inngest.createFunction(
     // the generator injects rolling context ONLY for 'context-summaries'
     // consumers, which are all in the sequential tail. Per-promise catch keeps
     // partial success: a failed section never loses its wave-mates.
+    //
+    // GRACEFUL DEGRADATION (Tedesco live test 2026-06-11): one failed section
+    // must NOT abort the rest — before this, a single burst section killed all
+    // remaining waves + the tail, the validator (correctly) refused the
+    // near-empty report, and a 30-minute run produced NOTHING. Now every other
+    // section completes, the failed one gets an explicit technical marker, and
+    // the perito regenerates just that section from the editor.
+    const failedSections = new Map<string, { id: string; title: string }>();
     for (const wave of chunkArray(parallelSections, PARALLEL_SECTIONS_PER_WAVE)) {
       const waveResults = await Promise.all(wave.map(({ spec, planIndex }) =>
         step.run(`gen-section-${spec.id}`, async () => {
@@ -1084,37 +1092,51 @@ export const processCase = inngest.createFunction(
         if (result.section) {
           completedSections.set(result.spec.id, result.section);
         } else {
-          sectionGenerationFailed = true;
-          logger.error('pipeline', `Section "${result.spec.id}" failed after retries, saving partial report`, {
+          failedSections.set(result.spec.id, { id: result.spec.id, title: result.spec.title });
+          logger.error('pipeline', `Section "${result.spec.id}" failed after retries — continuing with the remaining sections`, {
             error: result.error instanceof Error ? result.error.message : 'unknown',
           });
         }
       }
-      if (sectionGenerationFailed) break;
     }
 
     // Sequential tail: rolling-context consumers + doc-sanitaria AI batches.
-    if (!sectionGenerationFailed) {
-      for (const { spec, planIndex } of sequentialSections) {
-        const previousContext = buildPreviousContext(planIndex);
-        try {
-          if (isDocSanitariaBatchPath(spec, ocrResults.length, DOC_BATCH_SIZE)) {
-            completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
-          } else {
-            const section = await step.run(`gen-section-${spec.id}`, async () => {
-              await updateProgress(planIndex, spec.title);
-              return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
-            });
-            completedSections.set(spec.id, section);
-          }
-        } catch (sectionError) {
-          logger.error('pipeline', `Section "${spec.id}" failed after retries, saving partial report (${completedSections.size}/${sectionPlan.length} sections)`, {
-            error: sectionError instanceof Error ? sectionError.message : 'unknown',
+    // A failure here also degrades to the fallback — never aborts the rest.
+    for (const { spec, planIndex } of sequentialSections) {
+      const previousContext = buildPreviousContext(planIndex);
+      try {
+        if (isDocSanitariaBatchPath(spec, ocrResults.length, DOC_BATCH_SIZE)) {
+          completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
+        } else {
+          const section = await step.run(`gen-section-${spec.id}`, async () => {
+            await updateProgress(planIndex, spec.title);
+            return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
-          sectionGenerationFailed = true;
-          break;
+          completedSections.set(spec.id, section);
         }
+      } catch (sectionError) {
+        failedSections.set(spec.id, { id: spec.id, title: spec.title });
+        logger.error('pipeline', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, {
+          error: sectionError instanceof Error ? sectionError.message : 'unknown',
+        });
       }
+    }
+
+    // Stand-ins for failed sections: the report stays structurally complete
+    // (titles present for the validator) with an explicit technical marker.
+    for (const failed of failedSections.values()) {
+      if (!completedSections.has(failed.id)) {
+        completedSections.set(failed.id, buildFailedSectionFallback(failed));
+      }
+    }
+    if (failedSections.size > 0) {
+      pipelineWarnings.push({
+        step: 'synthesis',
+        severity: 'critical',
+        message: `${failedSections.size === 1 ? 'Una sezione non è stata generata' : `${failedSections.size} sezioni non sono state generate`} per un errore tecnico (${Array.from(failedSections.values()).map((f) => f.title).join(', ')}). Il resto del report è completo: rigenera solo le sezioni mancanti dall'editor con "Rigenera sezione".`,
+        failedCount: failedSections.size,
+        totalCount: sectionPlan.length,
+      });
     }
 
     // Assemble in PLAN order regardless of completion order.
@@ -1127,14 +1149,6 @@ export const processCase = inngest.createFunction(
     const synthesisResult = await step.run('assemble-and-save-report', () =>
       assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams, sectionPlan),
     );
-
-    // If a section failed, throw AFTER saving partial report so user has something
-    if (sectionGenerationFailed) {
-      throw new Error(
-        `Report parziale salvato (${accumulatedSections.length}/${sectionPlan.length} sezioni). ` +
-        `Una sezione ha fallito dopo i retry. Il report è disponibile ma incompleto.`
-      );
-    }
 
     const synthesisWordCount = synthesisResult.wordCount;
 

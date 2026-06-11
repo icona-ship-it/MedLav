@@ -23,6 +23,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
+import { buildFailedSectionFallback } from '../steps/section-fallback';
 
 /**
  * Full report regeneration via the SECTIONAL deterministic pipeline (same path
@@ -321,7 +322,9 @@ export const regenerateReport = inngest.createFunction(
     };
 
     const completedSections = new Map<string, GeneratedSection>();
-    let sectionGenerationFailed = false;
+    // Graceful degradation (mirrors process-case): one failed section never
+    // aborts the rest — it degrades to an explicit technical marker.
+    const failedSections = new Map<string, { id: string; title: string }>();
 
     // Same semantics as the old sequential loop: a section sees the context
     // of completed sections that come BEFORE it in plan order.
@@ -350,35 +353,39 @@ export const regenerateReport = inngest.createFunction(
         if (result.section) {
           completedSections.set(result.spec.id, result.section);
         } else {
-          sectionGenerationFailed = true;
-          logger.error('regenerate-report', `Section "${result.spec.id}" failed after retries`, {
+          failedSections.set(result.spec.id, { id: result.spec.id, title: result.spec.title });
+          logger.error('regenerate-report', `Section "${result.spec.id}" failed after retries — continuing with the remaining sections`, {
             error: result.error instanceof Error ? result.error.message : 'unknown',
           });
         }
       }
-      if (sectionGenerationFailed) break;
     }
 
-    if (!sectionGenerationFailed) {
-      for (const { spec, planIndex } of sequentialSections) {
-        const previousContext = buildPreviousContext(planIndex);
-        try {
-          if (isDocSanitariaBatchPath(spec, prep.docIds.length, DOC_BATCH_SIZE)) {
-            completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
-          } else {
-            const section = await step.run(`regen-section-${spec.id}`, async () => {
-              await updateProgress(planIndex, spec.title);
-              return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
-            });
-            completedSections.set(spec.id, section);
-          }
-        } catch (sectionError) {
-          logger.error('regenerate-report', `Section "${spec.id}" failed after retries (${completedSections.size}/${sectionPlan.length} done)`, {
-            error: sectionError instanceof Error ? sectionError.message : 'unknown',
+    for (const { spec, planIndex } of sequentialSections) {
+      const previousContext = buildPreviousContext(planIndex);
+      try {
+        if (isDocSanitariaBatchPath(spec, prep.docIds.length, DOC_BATCH_SIZE)) {
+          completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
+        } else {
+          const section = await step.run(`regen-section-${spec.id}`, async () => {
+            await updateProgress(planIndex, spec.title);
+            return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
-          sectionGenerationFailed = true;
-          break;
+          completedSections.set(spec.id, section);
         }
+      } catch (sectionError) {
+        failedSections.set(spec.id, { id: spec.id, title: spec.title });
+        logger.error('regenerate-report', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, {
+          error: sectionError instanceof Error ? sectionError.message : 'unknown',
+        });
+      }
+    }
+
+    // Stand-ins for failed sections (explicit technical marker, regenerable
+    // one-by-one from the editor) — the report stays structurally complete.
+    for (const failed of failedSections.values()) {
+      if (!completedSections.has(failed.id)) {
+        completedSections.set(failed.id, buildFailedSectionFallback(failed));
       }
     }
 
@@ -397,12 +404,13 @@ export const regenerateReport = inngest.createFunction(
       }),
     );
 
-    // If a section failed: partial report is saved, but throw so Inngest retries
-    // the failed section. After retries are exhausted, onFailure restores
-    // 'completato' (the previous/partial report stays valid — never 'errore').
-    if (sectionGenerationFailed) {
-      Sentry.captureMessage(`regenerate-report: partial (${accumulatedSections.length}/${sectionPlan.length}) for case ${caseId}`);
-      throw new Error(`Rigenerazione parziale (${accumulatedSections.length}/${sectionPlan.length} sezioni).`);
+    // Sections that failed degrade to explicit markers (regenerable one-by-one)
+    // — the run completes normally so the user gets the report; Sentry tracks
+    // the degradation for follow-up.
+    if (failedSections.size > 0) {
+      Sentry.captureMessage(
+        `regenerate-report: ${failedSections.size}/${sectionPlan.length} sections degraded to fallback for case ${caseId}`,
+      );
     }
 
     // Success: back to 'completato' + clear progress (no email/doc-completion — this is a regenerate).
