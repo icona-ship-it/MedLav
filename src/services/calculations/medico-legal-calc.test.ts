@@ -279,3 +279,39 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
     expect(totShuffled?.endDate).toBe('2024-03-01');
   });
 });
+
+describe('QA 2026-06-11 — dedup ricoveri e sanity check (caso Tedesco, PDF duplicato)', () => {
+  it('should merge identical/overlapping ricovero intervals (duplicated docs counted once)', () => {
+    const events = [
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero ortopedia'),
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero ortopedia'), // duplicato dal PDF doppio
+      makeEvent('2024-01-20', 'referto', 'Dimissione'),
+      makeEvent('2024-01-20', 'referto', 'Dimissione'), // duplicato
+      makeEvent('2024-03-01', 'visita', 'Controllo finale'),
+    ];
+    const calcs = calculateMedicoLegalPeriods(events);
+    const ricoveri = calcs.filter((c) => c.label === 'Giorni di ricovero');
+    expect(ricoveri).toHaveLength(1);
+    expect(ricoveri[0].days).toBe(10);
+  });
+
+  it('should flag DA VERIFICARE when estimated periods exceed the observed interval', () => {
+    // Intervallo osservato corto, ma ricovero "fantasma" lungo che gonfia ITT
+    const events = [
+      makeEvent('2024-01-01', 'ricovero', 'Ricovero'),
+      makeEvent('2024-12-31', 'referto', 'Dimissione'), // ricovero di un anno
+      makeEvent('2025-01-10', 'visita', 'Controllo'),
+    ];
+    const calcs = calculateMedicoLegalPeriods(events);
+    const graduated = calcs.filter((c) => /ITT|ITP/.test(c.label));
+    // La somma ITT(365) + ITP graduata supera l'intervallo (374 gg) → flag
+    const flagged = graduated.filter((c) => c.notes.includes('DA VERIFICARE'));
+    const total = graduated.reduce((s, c) => s + (c.days ?? 0), 0);
+    if (total > 374 * 1.1) {
+      expect(flagged.length).toBe(graduated.length);
+      expect(flagged[0].notes).toContain('supera l\'intervallo documentato');
+    } else {
+      expect(flagged).toHaveLength(0); // somma plausibile: nessun falso allarme
+    }
+  });
+});

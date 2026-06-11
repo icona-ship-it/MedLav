@@ -264,3 +264,30 @@ describe('analyzeExpenses', () => {
     }
   });
 });
+
+describe('QA 2026-06-11 — dedup voci di spesa (PDF caricato due volte)', () => {
+  function makeExpense(overrides: Partial<{ title: string; description: string; event_date: string; facility: string | null }> = {}) {
+    return {
+      event_type: 'spesa_medica',
+      title: 'Fattura visita ortopedica € 150,00',
+      description: 'Fattura n. 42/2024 per visita specialistica, importo 150,00 euro',
+      event_date: '2024-06-15',
+      facility: 'Studio Medico',
+      source_type: 'altro',
+      ...overrides,
+    };
+  }
+
+  it('should count the same expense once when extracted from duplicate documents', () => {
+    const result = analyzeExpenses([makeExpense(), makeExpense()]);
+    expect(result.totalItems).toBe(1);
+  });
+
+  it('should keep genuinely different expenses (different date or amount)', () => {
+    const result = analyzeExpenses([
+      makeExpense(),
+      makeExpense({ event_date: '2024-07-01', title: 'Fattura visita di controllo € 80,00', description: 'Fattura n. 51/2024, importo 80,00 euro' }),
+    ]);
+    expect(result.totalItems).toBe(2);
+  });
+});

@@ -132,13 +132,16 @@ export function ProcessingSection({
 
   const uploadedCount = documents.filter((d) => d.processing_status === 'caricato').length;
 
-  // Tutti i documenti senza categoria ("altro"/nessuna) al momento dell'avvio →
-  // l'estrazione userà istruzioni generiche invece dei suggerimenti per tipo.
+  // Documenti senza categoria ("altro") al momento dell'avvio → estrazione con
+  // istruzioni generiche E (QA 2026-06-11) TUTTO finisce riprodotto nella
+  // sezione Documentazione Sanitaria, atti legali e tabelle inclusi. Soglia
+  // abbassata da "tutti" a >50%: nel test reale l'avviso non scattò abbastanza.
   // Avviso NON bloccante: la categorizzazione resta facoltativa.
+  const uncategorizedCount = documents.filter((d) => (d.document_type ?? 'altro') === 'altro').length;
   const allDocsUncategorized =
     (pipelineMode === 'full' || pipelineMode === 'extraction_only') &&
     documents.length > 0 &&
-    documents.every((d) => (d.document_type ?? 'altro') === 'altro');
+    uncategorizedCount > documents.length / 2;
 
   // Track processing start time
   useEffect(() => {
@@ -369,8 +372,10 @@ export function ProcessingSection({
                     <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
                       <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                       <p className="text-sm text-amber-800 dark:text-amber-300">
-                        Tutti i documenti sono senza categoria: l&apos;estrazione userà istruzioni generiche.
-                        Puoi categorizzarli dalla sezione Documenti per risultati più precisi.
+                        Molti documenti sono senza categoria: l&apos;analisi userà istruzioni generiche
+                        e <strong>tutti</strong> i documenti (anche atti legali e allegati non clinici)
+                        verranno riprodotti integralmente nella sezione &quot;Documentazione Sanitaria&quot;
+                        del report. Consigliato: torna al passaggio Documenti e usa &quot;Categorizza tutti con AI&quot;.
                       </p>
                     </div>
                   )}

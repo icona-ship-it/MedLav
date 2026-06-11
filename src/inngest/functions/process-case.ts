@@ -3,6 +3,7 @@ import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
 
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
+import { dedupCaseDocuments } from '../steps/dedup-documents';
 import { ocrSingleDocument } from '../steps/ocr-document';
 import { chunkArray } from '@/lib/array-utils';
 // Classification removed from pipeline — handled by Document Organizer (Pro) or user manual selection
@@ -259,10 +260,29 @@ export const processCase = inngest.createFunction(
       logger.info('pipeline', `Marked case ${caseId} as elaborazione`);
       return fetchCaseMetadata(caseId, userId);
     });
-    const { documents } = caseData;
+    const { documents: allDocuments } = caseData;
 
-    if (documents.length === 0) {
+    if (allDocuments.length === 0) {
       throw new Error('No documents to process');
+    }
+
+    // ── Step 1.5: dedup documenti identici (QA 2026-06-11) ───────
+    // Un PDF caricato due volte duplicava eventi/spese/verbatim a valle
+    // (ITT assurdi, totali gonfiati). Si processa UNA copia per contenuto.
+    const dedup = await step.run('dedup-documents', () => dedupCaseDocuments(caseId, allDocuments));
+    const duplicateIds = new Set(dedup.duplicates.map((d) => d.documentId));
+    const documents = allDocuments.filter((d) => !duplicateIds.has(d.id));
+    if (dedup.duplicates.length > 0) {
+      pipelineWarnings.push({
+        step: 'dedup',
+        severity: 'warning',
+        message: `${dedup.duplicates.length} ${dedup.duplicates.length === 1 ? 'documento identico a un altro è stato escluso' : 'documenti identici ad altri sono stati esclusi'} dall'analisi (contenuto contato una volta sola): ${dedup.duplicates.map((d) => d.fileName).join(', ')}`,
+        failedCount: dedup.duplicates.length,
+        totalCount: allDocuments.length,
+      });
+    }
+    if (documents.length === 0) {
+      throw new Error('No documents to process after dedup');
     }
 
     // ── Step 2: OCR all documents (parallel, fault-tolerant) ──

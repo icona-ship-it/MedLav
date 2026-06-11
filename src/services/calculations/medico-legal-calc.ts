@@ -217,7 +217,19 @@ export function calculateMedicoLegalPeriods(
   calculations.push(...calculateDiagnosisToTreatment(events));
 
   // 5. ITT/ITP graduated estimate (75%, 50%, 25%)
-  calculations.push(...calculateGraduatedITTITP(events));
+  // QA 2026-06-11 (Tedesco): eventi duplicati produssero "ITT 2052 giorni" su
+  // un intervallo osservato di ~400 — numeri assurdi consegnati in silenzio.
+  // Sanity check: se la somma ITT+ITP supera l'intervallo osservato, ogni voce
+  // viene marcata DA VERIFICARE (mai cap silenzioso: il perito deve vederlo).
+  const graduated = calculateGraduatedITTITP(events);
+  const observedDays = daysDiff(events[0].event_date, events[events.length - 1].event_date);
+  const graduatedTotalDays = graduated.reduce((sum, c) => sum + (c.days ?? 0), 0);
+  if (observedDays > 0 && graduatedTotalDays > observedDays * 1.1) {
+    const flag = ` [DA VERIFICARE: la somma dei periodi stimati (${graduatedTotalDays} gg) supera l'intervallo documentato (${observedDays} gg) — possibili eventi duplicati o date errate nel fascicolo.]`;
+    calculations.push(...graduated.map((c) => ({ ...c, notes: c.notes + flag })));
+  } else {
+    calculations.push(...graduated);
+  }
 
   // 7. Biological damage estimate with table reference
   if (caseType) {
@@ -291,15 +303,33 @@ function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
   const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
   const discharges = events.filter(isDischargeEvent);
 
-  return pairAdmissionsToDischarges(admissions, discharges).map(({ admission, discharge }) => {
-    const days = daysDiff(admission.event_date, discharge.event_date);
+  // QA 2026-06-11 (Tedesco): un PDF caricato due volte duplicava gli eventi di
+  // ricovero → lo stesso intervallo contato fino a 6 volte. Gli intervalli
+  // identici o SOVRAPPOSTI vengono fusi: lo stesso letto non si occupa due volte.
+  const rawIntervals = pairAdmissionsToDischarges(admissions, discharges)
+    .map(({ admission, discharge }) => ({ start: admission.event_date, end: discharge.event_date }))
+    .filter((iv) => iv.start <= iv.end)
+    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+
+  const merged: Array<{ start: string; end: string }> = [];
+  for (const iv of rawIntervals) {
+    const last = merged[merged.length - 1];
+    if (last && iv.start <= last.end) {
+      if (iv.end > last.end) last.end = iv.end;
+    } else {
+      merged.push({ ...iv });
+    }
+  }
+
+  return merged.map(({ start, end }) => {
+    const days = daysDiff(start, end);
     return {
       label: 'Giorni di ricovero',
       value: `${days} giorni`,
       days,
-      startDate: admission.event_date,
-      endDate: discharge.event_date,
-      notes: `Dal ricovero del ${formatDate(admission.event_date)} alla dimissione del ${formatDate(discharge.event_date)}`,
+      startDate: start,
+      endDate: end,
+      notes: `Dal ricovero del ${formatDate(start)} alla dimissione del ${formatDate(end)}`,
     };
   });
 }

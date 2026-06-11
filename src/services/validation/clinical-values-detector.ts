@@ -13,6 +13,10 @@ interface ClinicalValuePattern {
   unit: string;
   normalRange: { min: number; max: number };
   criticalRange: { min: number; max: number };
+  /** Lab values (Hb, glicemia, INR, creatinina) only make sense on BLOOD
+   * tests: a urinalysis legitimately reports "Hb 1" in different units (QA
+   * 2026-06-11: "Emoglobina 1 g/dL CRITICA" from an esame urine). */
+  requiresBloodContext?: boolean;
 }
 
 /**
@@ -50,6 +54,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
   },
   {
     name: 'Glicemia',
+    requiresBloodContext: true,
     regex: /(?:glicemia|glucosio|glyc)\s*[:\s]*(\d{2,3}(?:[.,]\d+)?)\s*(?:mg\/dl|mg)?/i,
     unit: 'mg/dL',
     normalRange: { min: 70, max: 110 },
@@ -57,6 +62,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
   },
   {
     name: 'INR',
+    requiresBloodContext: true,
     regex: /(?:inr)\s*[:\s]*(\d{1,2}[.,]\d{1,2})/i,
     unit: '',
     normalRange: { min: 0.8, max: 1.2 },
@@ -64,6 +70,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
   },
   {
     name: 'Emoglobina',
+    requiresBloodContext: true,
     regex: /(?:hb|emoglobina|hgb)\s*[:\s]*(\d{1,2}[.,]\d{1,2})\s*(?:g\/dl|g)?/i,
     unit: 'g/dL',
     normalRange: { min: 12.0, max: 17.0 },
@@ -78,6 +85,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
   },
   {
     name: 'Creatinina',
+    requiresBloodContext: true,
     regex: /(?:creatinina|creat\.?)\s*[:\s]*(\d{1,2}[.,]\d{1,2})\s*(?:mg\/dl|mg)?/i,
     unit: 'mg/dL',
     normalRange: { min: 0.6, max: 1.2 },
@@ -102,9 +110,20 @@ export function detectCriticalClinicalValues(
   const seen = new Set<string>();
 
   for (const event of events) {
+    // Eventi con data sentinella o ignota: il valore può essere reale ma non
+    // collocabile nel tempo — non genera anomalie (QA 2026-06-11: anomalie
+    // assurde da date 01.01.2006 inferite).
+    if (event.eventDate === '1900-01-01' || event.datePrecision === 'sconosciuta') continue;
+
     const textToScan = `${event.title} ${event.description}`;
+    // Contesto URINE senza menzione di sangue: i valori di laboratorio ematici
+    // (Hb, glicemia, creatinina, INR) hanno unità e range diversi — skip.
+    const mentionsUrine = /urin/i.test(textToScan);
+    const mentionsBlood = /sangue|ematochimic|emocromo|siero|plasma|ematic/i.test(textToScan);
+    const bloodContextOk = !mentionsUrine || mentionsBlood;
 
     for (const pattern of CLINICAL_PATTERNS) {
+      if (pattern.requiresBloodContext && !bloodContextOk) continue;
       const match = textToScan.match(pattern.regex);
       if (!match || !match[1]) continue;
 

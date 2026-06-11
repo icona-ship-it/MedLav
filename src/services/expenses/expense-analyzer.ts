@@ -284,6 +284,22 @@ export function analyzeExpenses(
   // Sort by date
   items.sort((a, b) => a.date.localeCompare(b.date));
 
+  // QA 2026-06-11 (Tedesco): un PDF spese caricato due volte duplicava le voci
+  // gonfiando il totale. Dedup deterministica: stessa data + stesso importo +
+  // stesso numero ricevuta (quando presente) o stessa descrizione normalizzata
+  // → è la STESSA spesa, conta una volta sola (anche fattura vs quietanza).
+  const seenExpense = new Set<string>();
+  const dedupedItems = items.filter((item) => {
+    const refOrDesc = item.receiptRef?.trim()
+      || item.description.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
+    const key = `${item.date}|${item.amount ?? 'null'}|${refOrDesc}`;
+    if (seenExpense.has(key)) return false;
+    seenExpense.add(key);
+    return true;
+  });
+  items.length = 0;
+  items.push(...dedupedItems);
+
   // Calculate totals per category
   const allCategories: ExpenseCategory[] = [
     'farmaci', 'visite_specialistiche', 'esami_diagnostici', 'interventi',
