@@ -180,6 +180,9 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       pageCount: savedPageCount || result.pageCount,
       averageConfidence: result.averageConfidence,
       ocrPages: result.ocrPages ?? result.pageCount,
+      // Total extracted chars (computed here while the text is in hand) —
+      // drives the map-reduce volume gate without re-reading pages from DB.
+      totalChars: result.pages.reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'OCR failed';

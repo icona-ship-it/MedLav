@@ -10,12 +10,26 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 /** Cases with more docs than this trigger map-reduce summarization.
  * Summaries replace raw OCR text in synthesis prompts, keeping them small
  * enough to complete within Vercel's 300s function timeout. */
 export const MAP_REDUCE_THRESHOLD_DOCS = 10;
+
+/** Below this total OCR volume, map-reduce is skipped even with many documents:
+ * the raw OCR fits the per-section cap (MAX_OCR_CHARS_PER_SECTION = 200K)
+ * directly, which is higher-fidelity AND cheaper than 10+ summary LLM calls. */
+export const MIN_TOTAL_CHARS_FOR_MAP_REDUCE = 100_000;
+
+/**
+ * Map-reduce gate: doc count alone over-triggers on many-tiny-docs cases
+ * (12 one-page certificates ≠ a large case). Volume must ALSO justify it.
+ */
+export function shouldUseMapReduce(docCount: number, totalChars: number): boolean {
+  return docCount >= MAP_REDUCE_THRESHOLD_DOCS && totalChars >= MIN_TOTAL_CHARS_FOR_MAP_REDUCE;
+}
 
 /** Max chars of OCR text sent per-document summary call (increased to include last pages: discharge, therapy) */
 export const OCR_PER_DOC_SUMMARY_LIMIT = 45_000;
@@ -29,6 +43,8 @@ export interface DocumentSummary {
   documentType: string;
   summary: string;
   totalCharsOriginal: number;
+  /** LLM token usage of the summary call — feeds pipeline cost tracking. */
+  usage?: TokenUsage;
 }
 
 /**
@@ -115,6 +131,7 @@ GROUNDING (vincolo assoluto): riporta SOLO informazioni effettivamente presenti 
     documentType: doc.documentType,
     summary: summary.slice(0, DOC_SUMMARY_MAX_CHARS),
     totalCharsOriginal: doc.totalChars,
+    usage: result.usage,
   };
 }
 
@@ -135,8 +152,10 @@ export async function summarizeDocumentBatchByIds(
   const { createAdminClient } = await import('@/lib/supabase/admin');
   const supabase = createAdminClient();
 
-  const results: DocumentSummary[] = [];
-  for (const ref of docRefs) {
+  // Concurrent within the batch: the per-process Mistral semaphore caps the
+  // actual API concurrency, and per-doc errors degrade to a warning summary
+  // (never reject), so Promise.all preserves order AND partial success.
+  return Promise.all(docRefs.map(async (ref): Promise<DocumentSummary> => {
     try {
       const { data: pages } = await supabase
         .from('pages')
@@ -154,36 +173,34 @@ export async function summarizeDocumentBatchByIds(
         pages: pageList.map((p) => ({ pageNumber: p.page_number as number, ocrText: p.ocr_text as string })),
         totalChars,
       };
-      const summary = await summarizeDocument(doc);
-      results.push(summary);
+      return await summarizeDocument(doc);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
       logger.error('synthesis', `Failed to summarize doc ${ref.documentId}: ${message}`);
       // Mark as failed with clear warning — synthesis will see this and know the summary is missing
-      results.push({
+      return {
         documentId: ref.documentId,
         fileName: ref.fileName,
         documentType: ref.documentType,
         summary: `[ATTENZIONE: Riassunto di "${ref.fileName}" non disponibile per errore di elaborazione. Il report potrebbe essere incompleto per questo documento. Errore: ${message}]`,
         totalCharsOriginal: 0,
-      });
+      };
     }
-  }
-  return results;
+  }));
 }
 
 /**
- * Summarize a batch of documents sequentially (legacy — receives full OCR text).
- * The Mistral semaphore serializes calls anyway, so sequential is correct.
+ * Summarize a batch of documents concurrently (legacy — receives full OCR text).
+ * NOTE: the Mistral semaphore is PER-PROCESS, not global — within one invocation
+ * it caps concurrency without serializing across processes, so Promise.all here
+ * is both safe and faster. Per-doc errors degrade to a fallback summary.
  */
 export async function summarizeDocumentBatch(
   docs: DocumentOcrContext[],
 ): Promise<DocumentSummary[]> {
-  const results: DocumentSummary[] = [];
-  for (const doc of docs) {
+  return Promise.all(docs.map(async (doc): Promise<DocumentSummary> => {
     try {
-      const summary = await summarizeDocument(doc);
-      results.push(summary);
+      return await summarizeDocument(doc);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
       logger.error('synthesis', `Failed to summarize doc ${doc.documentId}: ${message}`);
@@ -195,14 +212,13 @@ export async function summarizeDocumentBatch(
       const fallback = rawText.length > 0
         ? `[Riassunto non disponibile — estratto OCR grezzo (primi 3000 caratteri)]:\n${rawText}`
         : `[Riassunto non disponibile — ${doc.totalChars} caratteri OCR originali, nessun testo estraibile]`;
-      results.push({
+      return {
         documentId: doc.documentId,
         fileName: doc.fileName,
         documentType: doc.documentType,
         summary: fallback,
         totalCharsOriginal: doc.totalChars,
-      });
+      };
     }
-  }
-  return results;
+  }));
 }

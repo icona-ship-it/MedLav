@@ -26,16 +26,20 @@ export interface PipelineCostSummary {
   steps: CostStep[];
 }
 
-// Pricing per 1M tokens (March 2026)
+// Pricing per 1M tokens — verified on mistral.ai/pricing 2026-06-11.
+// Mistral Large 3 is $0.5/$1.5 (the old $2/$6 was Large 2 — kept stale here
+// for months, overstating every case cost ~2.3×). Dated aliases included so a
+// future model pin doesn't silently zero the cost tracking (unknown model → 0).
 const PRICING: Record<string, { input: number; output: number }> = {
-  'mistral-large-latest': { input: 2, output: 6 },
-  'pixtral-large-latest': { input: 2, output: 6 },
+  'mistral-large-latest': { input: 0.5, output: 1.5 },
+  'mistral-large-2512': { input: 0.5, output: 1.5 },
   'mistral-small-latest': { input: 0.1, output: 0.3 },
+  'mistral-small-2603': { input: 0.1, output: 0.3 },
   'mistral-embed': { input: 0.1, output: 0 },
 };
 
-// OCR pricing: ~$1 per 1000 pages
-const OCR_COST_PER_PAGE = 0.001;
+// OCR pricing: $2 per 1000 pages (verified 2026-06-11 — was wrongly $1/1000)
+const OCR_COST_PER_PAGE = 0.002;
 
 export function calculateTokenCost(model: string, usage: TokenUsage): number {
   const pricing = PRICING[model];

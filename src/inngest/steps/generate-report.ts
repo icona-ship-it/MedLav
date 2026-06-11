@@ -16,6 +16,7 @@ import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import type { CaseMetadata, SynthesisStepResult, DocumentOcrContext } from './types';
+import { MISTRAL_MODELS } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 /**
@@ -689,6 +690,11 @@ export async function assembleSectionsAndSaveReport(
   // Build generation metadata
   const generationMetadata: Record<string, unknown> = {
     promptVersion,
+    // Audit trail (perizie depositabili): which model id was REQUESTED for the
+    // LLM sections. Today this is the '-latest' alias — record it with the
+    // date so a silent alias remap (already happened once: Pixtral → Large 3)
+    // is at least reconstructable. Becomes exact once models are pinned.
+    modelId: MISTRAL_MODELS.MISTRAL_LARGE,
     generationMode: 'sectional',
     sectionCount: sections.length,
     sectionIds: sections.map((s) => s.id),

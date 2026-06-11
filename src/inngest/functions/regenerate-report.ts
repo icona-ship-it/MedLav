@@ -15,6 +15,14 @@ import {
   assembleSectionsAndSaveReport,
 } from '../steps/generate-report';
 import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
+import { chunkArray } from '@/lib/array-utils';
+import {
+  MAP_REDUCE_THRESHOLD_DOCS,
+  shouldUseMapReduce,
+  summarizeDocumentBatchByIds,
+} from '@/services/synthesis/document-summarizer';
+import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
+import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
 
 /**
  * Full report regeneration via the SECTIONAL deterministic pipeline (same path
@@ -167,20 +175,69 @@ export const regenerateReport = inngest.createFunction(
       };
 
       // Document types (all docs, any status) for section planning + the doc
-      // list for documentazione_sanitaria batching.
+      // list for documentazione_sanitaria batching and map-reduce summaries.
       const { data: docs } = await supabase
         .from('documents')
-        .select('id, document_type')
+        .select('id, document_type, file_name')
         .eq('case_id', caseId);
-      const docList = (docs ?? []).map((d) => ({ id: d.id as string, documentType: (d.document_type ?? 'altro') as string }));
+      const docList = (docs ?? []).map((d) => ({
+        id: d.id as string,
+        documentType: (d.document_type ?? 'altro') as string,
+        fileName: (d.file_name ?? '') as string,
+      }));
       const documentTypes = [...new Set(docList.map((d) => d.documentType))];
+      const docRefs: DocumentRef[] = docList.map((d) => ({
+        documentId: d.id,
+        fileName: d.fileName,
+        documentType: d.documentType,
+      }));
 
-      return { metadata, documentTypes, docIds: docList.map((d) => d.id) };
+      return { metadata, documentTypes, docIds: docList.map((d) => d.id), docRefs };
     });
 
     const allEvents: ConsolidatedEvent[] = await step.run('regen-fetch-events', () => fetchAllEventsForCase(caseId));
     if (allEvents.length === 0) {
       throw new Error('Nessun evento disponibile per la rigenerazione del report');
+    }
+
+    const sectionPlan = await step.run('regen-plan-sections', () =>
+      planReportSections(prep.metadata, allEvents, prep.documentTypes),
+    );
+    if (sectionPlan.length === 0) {
+      throw new Error('Section plan vuoto — impossibile rigenerare un report vuoto');
+    }
+    const planConsumesDocContext = sectionPlan.some((s) => !s.isPlaceholder && s.needsOcr);
+
+    // ── Map-reduce summaries: REGENERATED with the same gate as the first run.
+    // They were previously skipped here ("not re-run on regenerate"), so on
+    // ≥10-doc cases a regenerated report silently had LESS context than the
+    // original — needsOcr sections saw NO document content at all (summaries
+    // replace raw OCR in those prompts, and the regenerate path passes none).
+    let documentSummaries: DocumentSummary[] | undefined;
+    if (planConsumesDocContext && prep.docRefs.length >= MAP_REDUCE_THRESHOLD_DOCS) {
+      // Volume gate parity with process-case: chars counted inside a step so
+      // the (potentially large) OCR text is never an Inngest step output.
+      const totalOcrChars = await step.run('regen-check-ocr-volume', async () => {
+        const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+        const allOcr = await fetchDocumentsOcrContext(caseId);
+        return allOcr.reduce((sum, d) => sum + d.totalChars, 0);
+      });
+      if (shouldUseMapReduce(prep.docRefs.length, totalOcrChars)) {
+        const SUMMARY_BATCH_SIZE = 5;
+        const summaryBatches = chunkArray(prep.docRefs, SUMMARY_BATCH_SIZE);
+        const summarySettled = await Promise.allSettled(
+          summaryBatches.map((batch, idx) =>
+            step.run(`regen-summarize-batch-${idx}`, () => summarizeDocumentBatchByIds(batch)),
+          ),
+        );
+        documentSummaries = summarySettled
+          .filter((r): r is PromiseFulfilledResult<DocumentSummary[]> => r.status === 'fulfilled')
+          .flatMap((r) => r.value);
+        const failedSummaryCount = summarySettled.filter((r) => r.status === 'rejected').length;
+        if (failedSummaryCount > 0) {
+          logger.error('regenerate-report', `${failedSummaryCount}/${summaryBatches.length} summary batches failed — regenerated report may have less context`);
+        }
+      }
     }
 
     const synthesisParams = await step.run('regen-build-params', async () => {
@@ -195,17 +252,11 @@ export const regenerateReport = inngest.createFunction(
       const calculations = calculateMedicoLegalPeriods(
         allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
       );
-      // imageAnalysis/documentSummaries/pubmed: not re-run on regenerate (mirrors
-      // the previous behaviour) — facts now come from deterministic sentinels.
-      return buildSynthesisParams(prep.metadata, allEvents, anomalies, missingDocs, calculations, []);
+      // imageAnalysis/pubmed: not re-run on regenerate (mirrors the previous
+      // behaviour) — facts come from deterministic sentinels. documentSummaries
+      // ARE re-run (above) for context parity with the first generation.
+      return buildSynthesisParams(prep.metadata, allEvents, anomalies, missingDocs, calculations, [], documentSummaries);
     });
-
-    const sectionPlan = await step.run('regen-plan-sections', () =>
-      planReportSections(prep.metadata, allEvents, prep.documentTypes),
-    );
-    if (sectionPlan.length === 0) {
-      throw new Error('Section plan vuoto — impossibile rigenerare un report vuoto');
-    }
 
     // Progress writer (drives the existing UI progress bar).
     const updateProgress = async (i: number, title: string) => {
@@ -225,64 +276,116 @@ export const regenerateReport = inngest.createFunction(
     // so the progress bar doesn't show a fake 0/1 then jump when work begins.
     await step.run('regen-init-progress', () => updateProgress(-1, 'Inizializzazione…'));
 
-    // ── Sectional generation (mirrors process-case: per-section step + doc-sanitaria batching) ──
-    const accumulatedSections: GeneratedSection[] = [];
-    let sectionGenerationFailed = false;
-    for (let i = 0; i < sectionPlan.length; i++) {
-      const spec = sectionPlan[i];
-      const previousContext = accumulatedSections.map((s) => ({ id: s.id, title: s.title, contextSummary: s.contextSummary }));
+    // ── Sectional generation (mirrors process-case: context-independent
+    // sections run concurrently in bounded waves; rolling-context consumers +
+    // doc-sanitaria AI batches run after, in plan order) ──
+    const runDocSanitariaBatched = async (
+      spec: (typeof sectionPlan)[number],
+      planIndex: number,
+      previousContext: Array<{ id: string; title: string; contextSummary: string }>,
+    ): Promise<GeneratedSection> => {
+      const batchContents: string[] = [];
+      const totalBatches = Math.ceil(prep.docIds.length / DOC_BATCH_SIZE);
+      let promptTokens = 0;
+      let completionTokens = 0;
 
-      try {
-        if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder && spec.needsOcr && prep.docIds.length > DOC_BATCH_SIZE) {
-          const batchContents: string[] = [];
-          const totalBatches = Math.ceil(prep.docIds.length / DOC_BATCH_SIZE);
-          let promptTokens = 0;
-          let completionTokens = 0;
-
-          for (let b = 0; b < totalBatches; b++) {
-            const batchDocIds = prep.docIds.slice(b * DOC_BATCH_SIZE, (b + 1) * DOC_BATCH_SIZE);
-            const batchResult = await step.run(`regen-section-documentazione_sanitaria-batch-${b}`, async () => {
-              await updateProgress(i, `${spec.title} (${b + 1}/${totalBatches})`);
-              const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-              const allOcr = await fetchDocumentsOcrContext(caseId);
-              const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
-              const { generateSingleSection } = await import('@/services/synthesis/section-generator');
-              // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
-              return generateSingleSection({ spec, synthesisParams, previousContext, documentsOcrText: batchOcr, attempt });
-            });
-            if (batchResult.content) batchContents.push(batchResult.content);
-            else logger.warn('regenerate-report', `Batch ${b + 1}/${totalBatches} documentazione_sanitaria: contenuto vuoto`, { caseId });
-            if (batchResult.usage) {
-              promptTokens += batchResult.usage.promptTokens;
-              completionTokens += batchResult.usage.completionTokens;
-            }
-          }
-
-          const combinedContent = batchContents.join('\n\n');
-          const { summarizeForContext } = await import('@/services/synthesis/section-generator');
-          accumulatedSections.push({
-            id: spec.id,
-            title: spec.title,
-            content: combinedContent,
-            contextSummary: spec.contextMaxChars > 0 ? summarizeForContext(combinedContent, spec.contextMaxChars) : '',
-            wordCount: combinedContent.split(/\s+/).filter((w) => w.length > 0).length,
-            usage: promptTokens > 0 ? { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } : undefined,
-          });
-        } else {
-          const section = await step.run(`regen-section-${spec.id}`, async () => {
-            await updateProgress(i, spec.title);
-            return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
-          });
-          accumulatedSections.push(section);
-        }
-      } catch (sectionError) {
-        logger.error('regenerate-report', `Section "${spec.id}" failed after retries (${accumulatedSections.length}/${sectionPlan.length} done)`, {
-          error: sectionError instanceof Error ? sectionError.message : 'unknown',
+      for (let b = 0; b < totalBatches; b++) {
+        const batchDocIds = prep.docIds.slice(b * DOC_BATCH_SIZE, (b + 1) * DOC_BATCH_SIZE);
+        const batchResult = await step.run(`regen-section-documentazione_sanitaria-batch-${b}`, async () => {
+          await updateProgress(planIndex, `${spec.title} (${b + 1}/${totalBatches})`);
+          const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+          const allOcr = await fetchDocumentsOcrContext(caseId);
+          const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
+          const { generateSingleSection } = await import('@/services/synthesis/section-generator');
+          // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
+          return generateSingleSection({ spec, synthesisParams, previousContext, documentsOcrText: batchOcr, attempt });
         });
-        sectionGenerationFailed = true;
-        break;
+        if (batchResult.content) batchContents.push(batchResult.content);
+        else logger.warn('regenerate-report', `Batch ${b + 1}/${totalBatches} documentazione_sanitaria: contenuto vuoto`, { caseId });
+        if (batchResult.usage) {
+          promptTokens += batchResult.usage.promptTokens;
+          completionTokens += batchResult.usage.completionTokens;
+        }
+      }
+
+      const combinedContent = batchContents.join('\n\n');
+      const { summarizeForContext } = await import('@/services/synthesis/section-generator');
+      return {
+        id: spec.id,
+        title: spec.title,
+        content: combinedContent,
+        contextSummary: spec.contextMaxChars > 0 ? summarizeForContext(combinedContent, spec.contextMaxChars) : '',
+        wordCount: combinedContent.split(/\s+/).filter((w) => w.length > 0).length,
+        usage: promptTokens > 0 ? { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } : undefined,
+      };
+    };
+
+    const completedSections = new Map<string, GeneratedSection>();
+    let sectionGenerationFailed = false;
+
+    // Same semantics as the old sequential loop: a section sees the context
+    // of completed sections that come BEFORE it in plan order.
+    const buildPreviousContext = (beforePlanIndex: number) =>
+      sectionPlan.slice(0, beforePlanIndex)
+        .filter((s) => completedSections.has(s.id))
+        .map((s) => {
+          const done = completedSections.get(s.id) as GeneratedSection;
+          return { id: done.id, title: done.title, contextSummary: done.contextSummary };
+        });
+
+    const { parallel: parallelSections, sequential: sequentialSections } =
+      partitionSectionPlan(sectionPlan, prep.docIds.length, DOC_BATCH_SIZE);
+
+    for (const wave of chunkArray(parallelSections, PARALLEL_SECTIONS_PER_WAVE)) {
+      const waveResults = await Promise.all(wave.map(({ spec, planIndex }) =>
+        step.run(`regen-section-${spec.id}`, async () => {
+          await updateProgress(planIndex, spec.title);
+          return generateSectionStep(caseId, spec, synthesisParams, [], attempt);
+        }).then(
+          (section) => ({ spec, section, error: undefined as unknown }),
+          (error: unknown) => ({ spec, section: undefined, error }),
+        ),
+      ));
+      for (const result of waveResults) {
+        if (result.section) {
+          completedSections.set(result.spec.id, result.section);
+        } else {
+          sectionGenerationFailed = true;
+          logger.error('regenerate-report', `Section "${result.spec.id}" failed after retries`, {
+            error: result.error instanceof Error ? result.error.message : 'unknown',
+          });
+        }
+      }
+      if (sectionGenerationFailed) break;
+    }
+
+    if (!sectionGenerationFailed) {
+      for (const { spec, planIndex } of sequentialSections) {
+        const previousContext = buildPreviousContext(planIndex);
+        try {
+          if (isDocSanitariaBatchPath(spec, prep.docIds.length, DOC_BATCH_SIZE)) {
+            completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
+          } else {
+            const section = await step.run(`regen-section-${spec.id}`, async () => {
+              await updateProgress(planIndex, spec.title);
+              return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
+            });
+            completedSections.set(spec.id, section);
+          }
+        } catch (sectionError) {
+          logger.error('regenerate-report', `Section "${spec.id}" failed after retries (${completedSections.size}/${sectionPlan.length} done)`, {
+            error: sectionError instanceof Error ? sectionError.message : 'unknown',
+          });
+          sectionGenerationFailed = true;
+          break;
+        }
       }
     }
+
+    // Assemble in PLAN order regardless of completion order.
+    const accumulatedSections: GeneratedSection[] = sectionPlan
+      .filter((s) => completedSections.has(s.id))
+      .map((s) => completedSections.get(s.id) as GeneratedSection);
 
     // Save the report (partial or complete) — new version, deterministic facts.
     // sectionPlan → real-prompt version hash (2.3); ignoreValidation → manual

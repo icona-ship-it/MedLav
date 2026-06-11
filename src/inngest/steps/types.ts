@@ -29,6 +29,9 @@ export interface OcrResult {
   pageCount: number;
   averageConfidence: number;
   ocrPages?: number;
+  /** Total extracted OCR chars across all pages (volume gate for map-reduce).
+   * Optional: step outputs memoized before this field existed don't have it. */
+  totalChars?: number;
 }
 
 export interface ExtractionResult {

@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import { verifySourceTexts } from '@/services/validation/source-text-verifier';
+import { createEmptyUsage, mergeUsage, type TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
@@ -178,12 +179,15 @@ export async function extractChunkBatch(
   perDoc: Record<string, number>;
   truncationWarnings: ExtractionTruncationWarning[];
   languageWarnings: ExtractionLanguageWarning[];
+  /** Aggregated LLM token usage across all chunk jobs — feeds cost tracking. */
+  usage: TokenUsage;
 }> {
   let totalCount = 0;
   let failedCount = 0;
   const perDoc: Record<string, number> = {};
   const truncationWarnings: ExtractionTruncationWarning[] = [];
   const languageWarnings: ExtractionLanguageWarning[] = [];
+  let usage = createEmptyUsage();
 
   for (const job of jobs) {
     try {
@@ -198,6 +202,9 @@ export async function extractChunkBatch(
       });
       totalCount += result.count;
       perDoc[job.ocrResult.documentId] = (perDoc[job.ocrResult.documentId] ?? 0) + result.count;
+      if (result.usage) {
+        usage = mergeUsage(usage, result.usage);
+      }
       if (result.truncationWarning) {
         truncationWarnings.push(result.truncationWarning);
       }
@@ -216,7 +223,7 @@ export async function extractChunkBatch(
     throw new Error(`All ${jobs.length} extraction chunk jobs in batch failed`);
   }
 
-  return { totalCount, perDoc, truncationWarnings, languageWarnings };
+  return { totalCount, perDoc, truncationWarnings, languageWarnings, usage };
 }
 
 interface ExtractChunkParams {
@@ -237,9 +244,11 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
   count: number;
   truncationWarning?: ExtractionTruncationWarning;
   languageWarning?: ExtractionLanguageWarning;
+  usage?: TokenUsage;
 }> {
   const { caseId, ocrResult, range, chunkIndex, totalChunks, caseType, caseTypes } = params;
   const supabase = createAdminClient();
+  let llmUsage = createEmptyUsage();
 
   try {
     const extractionStartMs = Date.now();
@@ -289,7 +298,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     let truncationWarning: ExtractionTruncationWarning | undefined;
     if (nonEmptyPages.length === 0) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: all ${pages.length} pages have empty OCR text for doc ${ocrResult.documentId}`);
-      return { count: 0, truncationWarning };
+      return { count: 0, truncationWarning, usage: llmUsage };
     }
     if (nonEmptyPages.length < pages.length) {
       logger.warn('pipeline', ` Chunk ${chunkIndex + 1}: ${pages.length - nonEmptyPages.length} pages with empty OCR text filtered out`);
@@ -362,6 +371,9 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       pageRange: `pag ${range.start}-${range.end}`,
       languageHint,
     });
+    if (result.usage) {
+      llmUsage = mergeUsage(llmUsage, result.usage);
+    }
 
     // If Mistral returned 0 events, retry ONLY when the chunk has substantial clinical content.
     // Safeguard (audit P0-EXT-001): avoid coercive retries that pressure the LLM to fabricate
@@ -389,6 +401,9 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         documentName: ocrResult.fileName,
         pageRange: `pag ${range.start}-${range.end}`,
       });
+      if (retryResult.usage) {
+        llmUsage = mergeUsage(llmUsage, retryResult.usage);
+      }
       if (retryResult.events.length > 0) {
         logger.info('pipeline', ` Retry succeeded: ${retryResult.events.length} events recovered`);
         // Verbatim safety net: flag events whose sourceText isn't found in the
@@ -428,16 +443,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
-          return { count: 0, truncationWarning, languageWarning };
+          return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
         }
-        return { count: retryRows.length, truncationWarning, languageWarning };
+        return { count: retryRows.length, truncationWarning, languageWarning, usage: llmUsage };
       }
       logger.warn('pipeline', ` Retry also returned 0 events for doc ${ocrResult.documentId}`);
-      return { count: 0, truncationWarning, languageWarning };
+      return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
     }
 
     if (result.events.length === 0) {
-      return { count: 0, truncationWarning, languageWarning };
+      return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
     }
 
     // Idempotency: delete any existing events for this chunk before inserting
@@ -484,7 +499,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       throw new Error(`Event insert failed: ${insertError.message}`);
     }
     logger.info('pipeline', ` Chunk ${chunkIndex + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
-    return { count: eventRows.length, truncationWarning, languageWarning };
+    return { count: eventRows.length, truncationWarning, languageWarning, usage: llmUsage };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);
@@ -497,7 +512,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       throw error;
     }
 
-    return { count: 0, truncationWarning: undefined };
+    return { count: 0, truncationWarning: undefined, usage: llmUsage };
   }
 }
 

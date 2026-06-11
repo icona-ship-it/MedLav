@@ -17,7 +17,16 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { summarizeDocument, summarizeDocumentBatch, buildTailPrioritizedOcrInput, OCR_PER_DOC_SUMMARY_LIMIT, DOC_SUMMARY_MAX_CHARS } from './document-summarizer';
+import {
+  summarizeDocument,
+  summarizeDocumentBatch,
+  buildTailPrioritizedOcrInput,
+  shouldUseMapReduce,
+  OCR_PER_DOC_SUMMARY_LIMIT,
+  DOC_SUMMARY_MAX_CHARS,
+  MAP_REDUCE_THRESHOLD_DOCS,
+  MIN_TOTAL_CHARS_FOR_MAP_REDUCE,
+} from './document-summarizer';
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamMistralChat = vi.mocked(streamMistralChat);
@@ -205,6 +214,60 @@ describe('document-summarizer', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].summary).toContain('nessun testo estraibile');
+    });
+
+    it('should preserve input order with concurrent summarization', async () => {
+      // Resolve doc-2 FIRST, doc-1 later: order must still follow the input
+      let resolveFirst: (v: { content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; finishReason: string }) => void;
+      mockStreamMistralChat
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+        .mockResolvedValueOnce({
+          content: 'Summary doc-2',
+          usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+          finishReason: 'stop',
+        });
+
+      const pending = summarizeDocumentBatch([
+        makeDoc({ documentId: 'doc-1' }),
+        makeDoc({ documentId: 'doc-2' }),
+      ]);
+      // Let doc-2 settle first, then release doc-1
+      await new Promise((r) => setTimeout(r, 0));
+      resolveFirst!({
+        content: 'Summary doc-1',
+        usage: { promptTokens: 20, completionTokens: 8, totalTokens: 28 },
+        finishReason: 'stop',
+      });
+
+      const results = await pending;
+      expect(results.map((r) => r.documentId)).toEqual(['doc-1', 'doc-2']);
+      expect(results[0].summary).toBe('Summary doc-1');
+      expect(results[1].summary).toBe('Summary doc-2');
+    });
+
+    it('should expose LLM usage on each summary for cost tracking', async () => {
+      mockStreamMistralChat.mockResolvedValueOnce({
+        content: 'Summary',
+        usage: { promptTokens: 120, completionTokens: 40, totalTokens: 160 },
+        finishReason: 'stop',
+      });
+      const result = await summarizeDocument(makeDoc());
+      expect(result.usage).toEqual({ promptTokens: 120, completionTokens: 40, totalTokens: 160 });
+    });
+  });
+
+  describe('shouldUseMapReduce', () => {
+    it('should require BOTH doc count and total volume', () => {
+      // Classic large case: many docs, lots of text
+      expect(shouldUseMapReduce(MAP_REDUCE_THRESHOLD_DOCS, MIN_TOTAL_CHARS_FOR_MAP_REDUCE)).toBe(true);
+      expect(shouldUseMapReduce(15, 500_000)).toBe(true);
+      // Many tiny docs (12 one-page certificates): raw OCR fits directly — skip
+      expect(shouldUseMapReduce(12, 40_000)).toBe(false);
+      // Few huge docs: stays on the direct-OCR path (tail-priority truncation)
+      expect(shouldUseMapReduce(3, 800_000)).toBe(false);
+      // Boundaries
+      expect(shouldUseMapReduce(MAP_REDUCE_THRESHOLD_DOCS - 1, MIN_TOTAL_CHARS_FOR_MAP_REDUCE)).toBe(false);
+      expect(shouldUseMapReduce(MAP_REDUCE_THRESHOLD_DOCS, MIN_TOTAL_CHARS_FOR_MAP_REDUCE - 1)).toBe(false);
     });
   });
 });

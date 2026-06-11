@@ -9,13 +9,21 @@ import {
 
 describe('calculateTokenCost', () => {
   it('computes input + output cost using per-1M-token pricing', () => {
-    // mistral-large-latest: $2/M input, $6/M output
+    // mistral-large (Large 3): $0.5/M input, $1.5/M output — verified 2026-06-11
     const cost = calculateTokenCost('mistral-large-latest', {
       promptTokens: 1_000_000,
       completionTokens: 1_000_000,
       totalTokens: 2_000_000,
     });
-    expect(cost).toBeCloseTo(8, 6);
+    expect(cost).toBeCloseTo(2, 6);
+  });
+
+  it('prices the dated alias identically to -latest (model pin safety)', () => {
+    const usage = { promptTokens: 500_000, completionTokens: 200_000, totalTokens: 700_000 };
+    expect(calculateTokenCost('mistral-large-2512', usage))
+      .toBeCloseTo(calculateTokenCost('mistral-large-latest', usage), 9);
+    expect(calculateTokenCost('mistral-small-2603', usage))
+      .toBeCloseTo(calculateTokenCost('mistral-small-latest', usage), 9);
   });
 
   it('returns 0 for unknown models', () => {
@@ -26,8 +34,8 @@ describe('calculateTokenCost', () => {
 });
 
 describe('calculateOcrCost', () => {
-  it('charges $0.001 per page', () => {
-    expect(calculateOcrCost(1000)).toBeCloseTo(1, 6);
+  it('charges $0.002 per page ($2 per 1000 pages, verified 2026-06-11)', () => {
+    expect(calculateOcrCost(1000)).toBeCloseTo(2, 6);
     expect(calculateOcrCost(0)).toBe(0);
   });
 });
@@ -58,7 +66,7 @@ describe('buildPipelineSummary', () => {
     expect(summary.totalOcrPages).toBe(10);
     expect(summary.steps).toHaveLength(2);
     expect(summary.steps[1].step).toBe('ocr');
-    expect(summary.totalCostUSD).toBeCloseTo(0.51, 4);
+    expect(summary.totalCostUSD).toBeCloseTo(0.52, 4); // 0.5 token + 10pp × $0.002 OCR
   });
 
   it('omits the OCR step when pages = 0', () => {
