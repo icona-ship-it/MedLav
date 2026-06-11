@@ -75,6 +75,7 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
   async function handleUpload() {
     if (files.length === 0) return;
     setIsUploading(true);
+    setSkippedFiles([]);
     onUploadStart?.();
 
     const supabase = createClient();
@@ -233,16 +234,25 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         />
       </div>
 
-      {/* Unsupported files skipped at selection (e.g. busta telematica .xml) */}
+      {/* Unsupported files skipped at selection (e.g. busta telematica .xml) —
+          dismissible, and cleared automatically when the upload starts */}
       {skippedFiles.length > 0 && !isUploading && (
         <div className="flex items-start gap-2 rounded-md bg-muted border p-3 text-sm text-muted-foreground">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>
+          <span className="flex-1">
             {skippedFiles.map((n) => `"${n}"`).join(', ')}: formato non supportato, file non aggiunto.
             I file .xml del fascicolo telematico non contengono documentazione clinica e non vengono
             analizzati; i dati di causa che riportano (numero di ruolo, parti) sono presenti anche
             negli atti in PDF.
           </span>
+          <button
+            type="button"
+            aria-label="Chiudi avviso"
+            className="shrink-0 rounded p-0.5 hover:bg-accent"
+            onClick={() => setSkippedFiles([])}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
