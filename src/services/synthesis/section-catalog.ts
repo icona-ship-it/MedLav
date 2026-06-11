@@ -240,6 +240,15 @@ export function resolveSectionPlan(params: {
         placeholderText: '*[Inserire qui, come unico blocco virgolettato fedele all\'ordinanza di conferimento, i quesiti formulati dal Giudice — con la numerazione originale. I quesiti non erano presenti nei dati della perizia al momento della generazione.]*',
       } as SectionSpec
       : spec
+  )).map((spec) => (
+    // Decisione medici 2026-06-12: la documentazione sanitaria nasce SELETTIVA
+    // (narrativa che virgoletta verbatim i passaggi significativi, citazioni
+    // hard-verificate vs OCR, routine parafrasata) — la riproduzione INTEGRALE
+    // da 100+ pagine "prende troppe informazioni" e resta disponibile con
+    // docSanitariaMode: 'integrale' o on-demand dall'editor.
+    spec.id === 'documentazione_sanitaria' && periziaMetadata?.docSanitariaMode !== 'integrale'
+      ? buildDocSanitariaSelectiveSpec(spec)
+      : spec
   ));
 
   // Selettore "Sezioni del report": il perito può disattivare le sezioni OPZIONALI

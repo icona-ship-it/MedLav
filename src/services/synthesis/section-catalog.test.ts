@@ -432,8 +432,19 @@ describe('section-catalog', () => {
       expect(ids).toContain('pareri_tecnici');
     });
 
-    it('should be a deterministic placeholder for documentazione_sanitaria (verbatim OCR, no LLM)', () => {
+    it('documentazione_sanitaria: default SELETTIVA (decisione medici 2026-06-12) — narrativa con citazioni verbatim verificate', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
+      const docSan = plan.find((s) => s.id === 'documentazione_sanitaria');
+      expect(docSan?.isPlaceholder).toBe(false);
+      expect(docSan?.needsOcr).toBe(true);
+      expect(docSan?.promptDirective).toBeTruthy();
+    });
+
+    it('documentazione_sanitaria: docSanitariaMode integrale → placeholder deterministico verbatim', () => {
+      const plan = resolveSectionPlan({
+        ...CTU_PARAMS,
+        periziaMetadata: { docSanitariaMode: 'integrale' },
+      });
       const docSan = plan.find((s) => s.id === 'documentazione_sanitaria');
       expect(docSan?.isPlaceholder).toBe(true);
       expect(docSan?.needsOcr).toBe(false);

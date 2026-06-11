@@ -24,6 +24,8 @@ import {
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
+import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 
 /**
  * Full report regeneration via the SECTIONAL deterministic pipeline (same path
@@ -391,6 +393,20 @@ export const regenerateReport = inngest.createFunction(
     for (const failed of failedSections.values()) {
       if (!completedSections.has(failed.id)) {
         completedSections.set(failed.id, buildFailedSectionFallback(failed));
+      }
+    }
+
+    // Copertura T1 della doc-sanitaria selettiva (mirrors process-case):
+    // ogni evento clinicamente rilevante deve comparire nel testo combinato.
+    const docSanSection = completedSections.get('documentazione_sanitaria');
+    if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+      const coverage = checkSelectiveCoverage(docSanSection.content, allEvents);
+      if (coverage.missing.length > 0) {
+        completedSections.set('documentazione_sanitaria', {
+          ...docSanSection,
+          content: `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
+        });
+        logger.warn('regenerate-report', `Doc-sanitaria selettiva: ${coverage.missing.length}/${coverage.t1Total} eventi T1 non riscontrati — banner inserito`);
       }
     }
 

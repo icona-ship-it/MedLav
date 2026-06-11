@@ -35,6 +35,8 @@ import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
+import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import { MISTRAL_MODELS } from '@/lib/mistral/client';
 import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
 
@@ -1163,6 +1165,28 @@ export const processCase = inngest.createFunction(
         failedCount: failedSections.size,
         totalCount: sectionPlan.length,
       });
+    }
+
+    // Garanzia di completezza della doc-sanitaria SELETTIVA (decisione medici
+    // 2026-06-12): "solo ciò che interessa" non può mai diventare "ho perso una
+    // diagnosi". Check deterministico sul contenuto COMBINATO: ogni evento T1
+    // deve comparire; se manca, banner visibile + warning di pipeline.
+    const docSanSection = completedSections.get('documentazione_sanitaria');
+    if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+      const coverage = checkSelectiveCoverage(docSanSection.content, synthesisParams.events);
+      if (coverage.missing.length > 0) {
+        completedSections.set('documentazione_sanitaria', {
+          ...docSanSection,
+          content: `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
+        });
+        pipelineWarnings.push({
+          step: 'synthesis',
+          severity: 'warning',
+          message: `Documentazione sanitaria selettiva: ${coverage.missing.length} ${coverage.missing.length === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${coverage.t1Total} verificati). Banner di verifica inserito nella sezione.`,
+          failedCount: coverage.missing.length,
+          totalCount: coverage.t1Total,
+        });
+      }
     }
 
     // Assemble in PLAN order regardless of completion order.

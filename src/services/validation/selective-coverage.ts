@@ -69,3 +69,15 @@ export function checkSelectiveCoverage(
 
   return { t1Total: t1Dated.length, missing };
 }
+
+/**
+ * Non-blocking banner prepended to the selective documentazione sanitaria when
+ * one or more clinically-significant (T1) events are not found in the narrative.
+ * Plain inline markdown (no blockquote) so it survives the HTML and DOCX
+ * exporters intact. Shared by the regenerator AND the main pipeline (the
+ * selective mode is the DEFAULT since the doctors' decision of 2026-06-12).
+ */
+export function buildOmissionBanner(missingCount: number): string {
+  const plural = missingCount === 1 ? 'un evento clinicamente rilevante non risulta' : `${missingCount} eventi clinicamente rilevanti non risultano`;
+  return `⚠️ *[Possibile omissione: ${plural} riportati nel testo selettivo. Verificare la documentazione completa prima del deposito.]*`;
+}

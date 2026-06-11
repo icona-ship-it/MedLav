@@ -16,7 +16,7 @@ import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
 import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
-import { checkSelectiveCoverage } from '../validation/selective-coverage';
+import { checkSelectiveCoverage, buildOmissionBanner } from '../validation/selective-coverage';
 import { logger } from '@/lib/logger';
 
 interface RegenerateSectionParams {
@@ -208,13 +208,5 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   return replaceSectionContent(currentSynthesis, sectionId, finalContent);
 }
 
-/**
- * Non-blocking banner prepended to the selective documentazione sanitaria when
- * one or more clinically-significant (T1) events are not found in the narrative.
- * Plain inline markdown (no blockquote) so it survives the HTML and DOCX
- * exporters intact — mirroring the convention of UNVERIFIED_QUOTE_MARKER.
- */
-function buildOmissionBanner(missingCount: number): string {
-  const plural = missingCount === 1 ? 'un evento clinicamente rilevante non risulta' : `${missingCount} eventi clinicamente rilevanti non risultano`;
-  return `⚠️ *[Possibile omissione: ${plural} riportati nel testo selettivo. Verificare la documentazione completa prima del deposito.]*`;
-}
+// buildOmissionBanner: ora condiviso in ../validation/selective-coverage (la
+// modalità selettiva è il default di pipeline dal 2026-06-12).

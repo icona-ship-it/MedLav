@@ -143,6 +143,11 @@ export interface PeriziaMetadata {
   // Selettore sezioni report: id (canonici) delle sezioni OPZIONALI disattivate dal
   // perito. Assente/vuoto = tutte le sezioni. Le sezioni mandatory non sono mai escluse.
   excludedReportSections?: string[];
+  // Modalità documentazione sanitaria (decisione medici 2026-06-12): default
+  // 'selettiva' = narrativa clinica che VIRGOLETTA verbatim i passaggi
+  // significativi (citazioni hard-verificate vs OCR) e parafrasa la routine;
+  // 'integrale' = riproduzione verbatim completa (sentinella deterministica).
+  docSanitariaMode?: 'selettiva' | 'integrale';
   // Ambito penale (CTU/CTP): true = responsabilità penale (causa morte + colpa, niente
   // ITT/ITP/SIMLA); false/undefined = civile (default).
   ambitoPenale?: boolean;

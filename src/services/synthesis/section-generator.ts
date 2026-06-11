@@ -30,6 +30,7 @@ import {
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { formatEuro } from '@/lib/format';
+import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
 import {
   HEADER_JSON_SCHEMA_DESCRIPTION,
   parseHeaderData,
@@ -473,6 +474,19 @@ export async function generateSingleSection(params: {
     : '';
 
   if (fidelity.note) finalContent += fidelity.note;
+
+  // Doc-sanitaria SELETTIVA (default dal 2026-06-12): ogni citazione «...»
+  // viene hard-verificata contro l'OCR sorgente — una citazione non riscontrata
+  // viene annotata visibilmente, mai consegnata come fedele. Gira in TUTTI i
+  // path (pipeline batched, pipeline singola, rigenerazione).
+  if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder
+    && documentsOcrText && documentsOcrText.length > 0) {
+    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
+    finalContent = checked.annotatedMarkdown;
+    if (checked.ungroundedCount > 0) {
+      logger.warn('section-generator', `Doc-sanitaria selettiva: ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR — annotate per il perito`);
+    }
+  }
 
   // Benchmark gold 2026-06-10 (3/3 CTU-RC): il blocco operativo dell'incarico
   // (CC.TT.P., ausiliario, inizio operazioni, termini, fondo spese,
