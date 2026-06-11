@@ -44,6 +44,38 @@ function effectiveMimeType(file: File): string {
   return file.type;
 }
 
+/** OS metadata files that ride along with every dragged folder — never user documents. */
+export function isOsJunkFile(name: string): boolean {
+  return name.startsWith('.') || name === 'Thumbs.db' || name === 'desktop.ini';
+}
+
+/** Recursively collect Files from drag&drop entries (folders included).
+ * readEntries() returns batches of ≤100 — it must be called until empty. */
+async function collectFilesFromEntries(entries: FileSystemEntry[]): Promise<File[]> {
+  const collected: File[] = [];
+  for (const entry of entries) {
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((resolve) => {
+        (entry as FileSystemFileEntry).file(resolve, () => resolve(null));
+      });
+      if (file) collected.push(file);
+    } else if (entry.isDirectory && !isOsJunkFile(entry.name)) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      const children: FileSystemEntry[] = [];
+      // Drain the reader: each call yields at most ~100 entries
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((resolve) => {
+          reader.readEntries(resolve, () => resolve([]));
+        });
+        if (batch.length === 0) break;
+        children.push(...batch);
+      }
+      collected.push(...await collectFilesFromEntries(children));
+    }
+  }
+  return collected;
+}
+
 function fileExtension(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
@@ -56,9 +88,12 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
-    const fileArray = Array.from(newFiles);
+    // OS junk (.DS_Store, Thumbs.db, __MACOSX/…) arrives with every dragged
+    // folder — dropped silently, it is not a user document.
+    const fileArray = Array.from(newFiles).filter((f) => !isOsJunkFile(f.name));
     const supported = fileArray.filter((f) => SUPPORTED_EXTENSIONS.has(fileExtension(f.name)));
     const skipped = fileArray.filter((f) => !SUPPORTED_EXTENSIONS.has(fileExtension(f.name)));
     setSkippedFiles(skipped.map((f) => f.name));
@@ -77,6 +112,21 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    // Folders can only be traversed via the entries API: e.dataTransfer.files
+    // represents a dropped DIRECTORY as an unusable 0-byte File. Entries must
+    // be grabbed synchronously (the DataTransfer is invalidated after the
+    // handler returns), then walked asynchronously.
+    const items = Array.from(e.dataTransfer.items ?? []);
+    const entries = items
+      .map((item) => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+      .filter((entry): entry is FileSystemEntry => entry !== null);
+
+    if (entries.some((entry) => entry.isDirectory)) {
+      void collectFilesFromEntries(entries).then((collected) => {
+        if (collected.length > 0) addFiles(collected);
+      });
+      return;
+    }
     if (e.dataTransfer.files.length > 0) {
       addFiles(e.dataTransfer.files);
     }
@@ -225,10 +275,30 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       >
         <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
         <p className="text-base font-medium">
-          Trascina qui i documenti o <span className="text-primary underline">seleziona file</span>
+          Trascina qui documenti o intere cartelle, oppure{' '}
+          <span className="text-primary underline">seleziona file</span>
+          {' '}·{' '}
+          <span
+            role="button"
+            tabIndex={0}
+            className="text-primary underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isUploading) folderInputRef.current?.click();
+            }}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && !isUploading) {
+                e.preventDefault();
+                e.stopPropagation();
+                folderInputRef.current?.click();
+              }
+            }}
+          >
+            seleziona cartella
+          </span>
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          PDF, immagini, Word, Excel, XML, TXT
+          PDF, immagini, Word, Excel, XML, TXT — le sottocartelle vengono incluse
         </p>
         <input
           ref={fileInputRef}
@@ -236,6 +306,20 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
           multiple
           accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.doc,.docx,.xls,.xlsx,.xml,.txt"
           aria-label="Carica documenti"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          // Non-standard but supported by all evergreen browsers: lets the
+          // user pick a whole folder; files arrive flattened with their names.
+          {...{ webkitdirectory: '' }}
+          aria-label="Carica una cartella di documenti"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) addFiles(e.target.files);
