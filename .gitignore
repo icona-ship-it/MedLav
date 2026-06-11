@@ -69,3 +69,4 @@ medlav-log-export-*.json
 
 # Test documents (sensitive)
 *.pdf
+.claude/worktrees/
