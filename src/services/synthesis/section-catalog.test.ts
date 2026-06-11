@@ -373,10 +373,13 @@ describe('section-catalog', () => {
       expect(ids).toContain('quesiti');
     });
 
-    it('should not include quesiti section without quesiti (CTU)', () => {
+    it('should degrade quesiti to a guided placeholder when the form has none (CTU) — QA 2026-06-11', () => {
       const plan = resolveSectionPlan(CTU_PARAMS);
-      const ids = plan.map((s) => s.id);
-      expect(ids).not.toContain('quesiti');
+      const quesiti = plan.find((s) => s.id === 'quesiti');
+      // I gold CTU hanno i quesiti in 6 casi su 6: la sezione non sparisce mai.
+      expect(quesiti).toBeDefined();
+      expect(quesiti!.isPlaceholder).toBe(true);
+      expect(quesiti!.placeholderText).toContain('quesiti formulati dal Giudice');
     });
 
     it('should include spese_mediche when expense events exist', () => {

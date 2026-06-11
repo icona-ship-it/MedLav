@@ -133,6 +133,8 @@ export async function GET(
 
     const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
     const isInline = request.nextUrl.searchParams.get('inline') === 'true';
+    // QA 2026-06-11: default DEPOSITABILE; ?mode=lavoro per le carte di lavoro.
+    const exportMode = request.nextUrl.searchParams.get('mode') === 'lavoro' ? 'lavoro' as const : 'depositabile' as const;
 
     logAccess({
       userId: user.id,
@@ -210,6 +212,7 @@ export async function GET(
         documentsWithPages: data.documentsWithPages,
         reportStatus,
         signatureImageBase64,
+        exportMode,
       })
       : generateHtmlReport({
         caseCode: data.caseData.code as string,

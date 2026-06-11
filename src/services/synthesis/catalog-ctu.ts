@@ -118,7 +118,9 @@ ${NO_EVN_RULE}`,
     dataSources: ['perizia-metadata'],
     contextMaxChars: 500,
     needsOcr: false,
-    condition: 'has-quesiti',
+    // QA 2026-06-11: niente condition 'has-quesiti' — in 6 gold su 6 la CTU HA
+    // i quesiti; se il form non li contiene la sezione NON sparisce: in
+    // resolveSectionPlan viene degradata a placeholder con invito a inserirli.
     // Benchmark gold 2026-06-10: in 6 gold su 6 i quesiti sono un UNICO blocco
     // virgolettato fedele all'ordinanza, mai una lista rinumerata dall'estensore.
     promptDirective: `Riproduci i quesiti del Giudice come UNICO blocco virgolettato FEDELE all'ordinanza di conferimento.

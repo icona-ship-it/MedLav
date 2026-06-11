@@ -221,10 +221,26 @@ export function resolveSectionPlan(params: {
   }
 
   // Filter by conditions
-  const conditionFiltered = baseSections.filter((spec) => {
+  const conditionFilteredRaw = baseSections.filter((spec) => {
     if (!spec.condition) return true;
     return evaluateCondition(spec.condition, conditionCtx);
   });
+
+  // QA 2026-06-11: la sezione "Quesiti" della CTU/CTP non sparisce mai (i gold
+  // la hanno in 6 casi su 6) — senza quesiti nel form degrada a placeholder
+  // guidato, così il perito vede DOVE vanno e li inserisce dall'editor.
+  const hasQuesiti = !!(periziaMetadata?.quesiti && periziaMetadata.quesiti.length > 0);
+  const conditionFiltered = conditionFilteredRaw.map((spec) => (
+    spec.id === 'quesiti' && !hasQuesiti
+      ? {
+        ...spec,
+        isPlaceholder: true,
+        maxTokens: 0,
+        dataSources: [],
+        placeholderText: '*[Inserire qui, come unico blocco virgolettato fedele all\'ordinanza di conferimento, i quesiti formulati dal Giudice — con la numerazione originale. I quesiti non erano presenti nei dati della perizia al momento della generazione.]*',
+      } as SectionSpec
+      : spec
+  ));
 
   // Selettore "Sezioni del report": il perito può disattivare le sezioni OPZIONALI
   // (risparmio token + report su misura). Le sezioni MANDATORY non sono mai rimosse.

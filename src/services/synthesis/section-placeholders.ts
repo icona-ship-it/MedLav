@@ -210,9 +210,12 @@ export const CONCILIAZIONE_POST_PLACEHOLDER = `*[Inserire qui — quando il Giud
  * Profilo metodologico (gold Del Porto): frase-ponte metodologica + indice
  * della relazione, subito dopo i quesiti. Placeholder deterministico.
  */
+// NB: niente formulazioni "da template" tipo "[Facoltativo: ...]" — nel QA
+// 2026-06-11 quella riga è stata letta dai medici come istruzione di prompt
+// trapelata. I placeholder parlano al perito come una guida, non come un form.
 export const PROFILO_METODOLOGICO_PLACEHOLDER = `Il caso per cui si procede, implica l'espletamento del rilievo e della comparata disamina dei dati, degli esami e delle fasi desumibili da quanto di seguito esposto.
 
-*[Facoltativo: indice delle sezioni della relazione, una per riga, nell'ordine del documento.]*`;
+*[Se lo desideri, elenca qui le sezioni della relazione nell'ordine del documento — alcuni periti aprono con questo indice metodologico, altri lo omettono.]*`;
 
 /**
  * Accertamento specialistico dell'Ausiliario (gold CTU danno psichico):

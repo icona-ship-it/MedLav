@@ -15,6 +15,7 @@ import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
+import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
 
 /** Minimal event shape needed to render the deterministic tables. Compatible
  * with the DB row (snake_case) and easily mapped from ConsolidatedEvent. */
@@ -211,9 +212,14 @@ export function formatDocumentazioneSanitaria(
       parts.push('*[Testo non disponibile per questo documento.]*');
     } else {
       for (const page of doc.pages) {
-        const text = (page.ocrText ?? '').trim();
+        // QA 2026-06-11: the raw OCR carries artifacts (broken image refs,
+        // marker-wrapped HTML tables, null leaks) that must never reach a
+        // depositable perizia — sanitized content-preserving, never summarized.
+        const text = sanitizeVerbatimOcr((page.ocrText ?? '').trim());
         parts.push(text ? demoteOcrHeadings(text) : `*[Pagina ${page.pageNumber} — testo non disponibile o illeggibile; verificare sul documento originale.]*`);
-        parts.push('\n---\n');
+        // Plain blank line between pages — the old '---' rendered as a rule
+        // line between EVERY page (431 per report), pure visual noise.
+        parts.push('');
       }
     }
   }

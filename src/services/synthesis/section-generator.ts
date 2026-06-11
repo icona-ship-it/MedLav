@@ -28,6 +28,8 @@ import {
   NEGATIVE_FEW_SHOT_INTESTAZIONE,
 } from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
+import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import { formatEuro } from '@/lib/format';
 import {
   HEADER_JSON_SCHEMA_DESCRIPTION,
   parseHeaderData,
@@ -177,6 +179,24 @@ export function buildSectionUserPrompt(params: {
   }
 
   // Add calculations
+  // QA 2026-06-11: l'epicrisi citava "totale di euro [da compilare]" mentre la
+  // tabella spese deterministica aveva già il totale — il dato calcolato va
+  // fornito esplicitamente al prompt (stessa fonte della tabella: analyzeExpenses).
+  if (spec.id === 'epicrisi') {
+    const expenseRows = synthesisParams.events.map((e) => ({
+      event_type: e.eventType,
+      title: e.title,
+      description: e.description,
+      event_date: e.eventDate,
+      facility: e.facility ?? null,
+      source_type: e.sourceType,
+    }));
+    const expenseTotal = analyzeExpenses(expenseRows).totalAmount;
+    if (expenseTotal !== null && expenseTotal > 0) {
+      parts.push(`TOTALE SPESE MEDICHE DOCUMENTATE (calcolo deterministico, stesso valore della tabella spese): ${formatEuro(expenseTotal)}. Usa ESATTAMENTE questo importo nella riga sulle spese.\n`);
+    }
+  }
+
   if (spec.dataSources.includes('calculations') && synthesisParams.calculations) {
     const calcText = formatCalculationsForPrompt(synthesisParams.calculations);
     if (calcText) parts.push(`${calcText}\n`);
@@ -336,9 +356,22 @@ export async function generateSingleSection(params: {
     throw new Error(msg);
   }
 
+  // QA 2026-06-11: the LLM occasionally wraps the whole section in a markdown
+  // code fence (the Tedesco epicrisi shipped fenced). Strip a full ```-wrapper
+  // and any dangling unclosed opening fence — content is never code.
+  let cleanedContent = content.trim();
+  const fullFence = cleanedContent.match(/^```[a-z]*\n([\s\S]*?)\n?```$/);
+  if (fullFence) {
+    cleanedContent = fullFence[1].trim();
+    logger.warn('section-generator', `Section "${spec.id}": stripped full code-fence wrapper`);
+  } else if (/```/.test(cleanedContent)) {
+    cleanedContent = cleanedContent.replace(/```[a-z]*\n?/g, '').trim();
+    logger.warn('section-generator', `Section "${spec.id}": stripped stray code fences`);
+  }
+
   // Optional Chain-of-Verification post-processing for high-stakes sections.
   // ENABLED BY DEFAULT (Wave 3.1); set LEGMED_COVE_ENABLED=false to disable. See cove-verifier.ts.
-  let finalContent = content;
+  let finalContent = cleanedContent;
   let coveMeta: Pick<
     GeneratedSection,
     'coveApplied' | 'coveQuestionCount' | 'coveUnsupportedCount' | 'coveRevised' |
@@ -353,7 +386,7 @@ export async function generateSingleSection(params: {
         : undefined;
 
       const cove = await runCoVe({
-        draftContent: content,
+        draftContent: cleanedContent,
         sectionTitle: spec.title,
         eventsContext,
         ocrContext,

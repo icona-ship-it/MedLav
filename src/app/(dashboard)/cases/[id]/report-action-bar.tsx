@@ -275,8 +275,17 @@ export function ReportActionBar({
                   <a href={`/api/cases/${caseId}/export/docx`} download>
                     <Download className="mr-2 h-3.5 w-3.5" />
                     <div>
-                      <div>Esporta DOCX</div>
-                      <p className="text-xs text-muted-foreground font-normal">Documento Word — per stampare o inviare</p>
+                      <div>Documento Word (depositabile)</div>
+                      <p className="text-xs text-muted-foreground font-normal">Solo la perizia, dall&apos;intestazione alla firma</p>
+                    </div>
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={`/api/cases/${caseId}/export/docx?mode=lavoro`} download>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Fascicolo di lavoro (Word)</div>
+                      <p className="text-xs text-muted-foreground font-normal">Con indice, calcoli, anomalie e note di qualità</p>
                     </div>
                   </a>
                 </DropdownMenuItem>

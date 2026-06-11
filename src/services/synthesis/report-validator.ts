@@ -23,6 +23,7 @@ export interface ReportIssue {
     | 'unverified_citation'
     | 'truncated_response'
     | 'broken_ocr_marker'
+    | 'template_artifact'
     | 'header_mismatch'
     | 'header_fabrication_signature';
   severity: 'error' | 'warning';
@@ -208,6 +209,25 @@ export function validateReport(
         type: 'broken_ocr_marker',
         severity: 'error',
         message: `Marker di errore nel report: ${label}. Il report non può essere salvato — l'output è corrotto.`,
+      });
+    }
+  }
+
+  // 4a-ter. Template/internal artifacts (QA 2026-06-11) — warnings: visibili
+  // al perito e nello HRS ma non bloccano il salvataggio (il rischio falsi
+  // positivi non è zero: un documento-fonte verbatim può contenere testo simile).
+  const TEMPLATE_ARTIFACTS: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\[Facoltativo:/i, label: 'testo-template "[Facoltativo:" non rielaborato' },
+    { pattern: /\(ev\.\s*#?\d+\)/, label: 'riferimento interno "(ev. #N)" nel testo' },
+    { pattern: /```/, label: 'code fence markdown (```) nel report' },
+    { pattern: /\[TABLE_HTML_START\]/, label: 'marker tabella HTML non espanso' },
+  ];
+  for (const { pattern, label } of TEMPLATE_ARTIFACTS) {
+    if (pattern.test(synthesis)) {
+      issues.push({
+        type: 'template_artifact',
+        severity: 'warning',
+        message: `Artefatto tecnico nel report: ${label} — da ripulire prima del deposito.`,
       });
     }
   }

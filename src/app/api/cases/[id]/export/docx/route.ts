@@ -145,6 +145,9 @@ export async function GET(
     }
 
     const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
+    // QA 2026-06-11: default DEPOSITABILE (solo perizia, come i gold);
+    // ?mode=lavoro per il fascicolo completo con le carte di lavoro.
+    const exportMode = _request.nextUrl.searchParams.get('mode') === 'lavoro' ? 'lavoro' as const : 'depositabile' as const;
 
     logAccess({
       userId: user.id,
@@ -218,6 +221,7 @@ export async function GET(
         documentsWithPages: data.documentsWithPages,
         reportStatus,
         signatureImageBase64,
+        exportMode,
       })
       : await generateDocxReport({
         caseCode: data.caseData.code as string,
@@ -231,6 +235,7 @@ export async function GET(
         calculations: data.calculations,
         periziaMetadata: data.periziaMetadata,
         reportStatus,
+        exportMode,
       });
 
     const suffix = shouldAnonymize ? '-anonimizzato' : '';

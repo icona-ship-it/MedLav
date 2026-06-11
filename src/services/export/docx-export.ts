@@ -8,7 +8,7 @@ import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels,
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
-import { assembleFullReport, synthesisHasOwnHeader, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { getAiActDisclosureDocxParagraphs } from './ai-act-disclosure';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -83,6 +83,8 @@ interface DocxExportParams {
   calculations?: MedicoLegalCalculation[];
   periziaMetadata?: PeriziaMetadataExport | null;
   reportStatus?: string;
+  /** 'depositabile' = solo il documento firmabile, niente carte di lavoro. */
+  exportMode?: ExportMode;
 }
 
 /**
@@ -238,6 +240,9 @@ function pushDatedSignature(
  */
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
   const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
+  // QA 2026-06-11: nel depositabile niente carte di lavoro (riepilogo qualità,
+  // periodi calcolati, anomalie, doc mancante) — restano nel fascicolo di lavoro.
+  const isDepositabile = (params.exportMode ?? 'lavoro') === 'depositabile';
 
   const now = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -326,10 +331,10 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     new Paragraph({ text: '' }),
   );
 
-  // Wave B.4: quality summary header for the perito.
+  // Wave B.4: quality summary header for the perito (carta di lavoro).
   const lowConfidenceCount = events.filter((e) => e.confidence < 60).length;
   const verifyCount = events.filter((e) => e.requires_verification).length;
-  if (lowConfidenceCount > 0 || verifyCount > 0) {
+  if (!isDepositabile && (lowConfidenceCount > 0 || verifyCount > 0)) {
     children.push(
       new Paragraph({
         children: [new TextRun({ text: 'Riepilogo qualità estrazione', bold: true, color: '9A3412' })],
@@ -445,8 +450,9 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   children.push(new Paragraph({ text: '' }));
 
-  // Section 3: Calculations (if available)
-  if (calculations && calculations.length > 0) {
+  // Section 3: Calculations (carta di lavoro — la tabella ITT/ITP depositabile
+  // vive già dentro la sintesi via marker deterministico)
+  if (!isDepositabile && calculations && calculations.length > 0) {
     children.push(
       new Paragraph({
         text: '3. PERIODI MEDICO-LEGALI CALCOLATI',
@@ -477,60 +483,62 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     children.push(new Paragraph({ text: '' }));
   }
 
-  // Section: Anomalies
-  const anomalySectionNum = calculations && calculations.length > 0 ? '4' : '3';
-  children.push(
-    new Paragraph({
-      text: `${anomalySectionNum}. ANOMALIE RILEVATE`,
-      heading: HeadingLevel.HEADING_1,
-    }),
-    new Paragraph({ text: '' }),
-  );
+  // Section: Anomalies (carta di lavoro)
+  if (!isDepositabile) {
+    const anomalySectionNum = calculations && calculations.length > 0 ? '4' : '3';
+    children.push(
+      new Paragraph({
+        text: `${anomalySectionNum}. ANOMALIE RILEVATE`,
+        heading: HeadingLevel.HEADING_1,
+      }),
+      new Paragraph({ text: '' }),
+    );
 
-  if (anomalies.length === 0) {
-    children.push(new Paragraph({ text: 'Nessuna anomalia rilevata.' }));
-  } else {
-    for (const anomaly of anomalies) {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: `[${anomaly.severity.toUpperCase()}] `, bold: true, color: anomaly.severity === 'critica' || anomaly.severity === 'alta' ? 'DC2626' : 'CA8A04' }),
-            new TextRun({ text: anomalyLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type, bold: true }),
-          ],
-          spacing: { before: 150 },
-        }),
-        new Paragraph({ text: anomaly.description }),
-      );
-      if (anomaly.suggestion) {
-        children.push(new Paragraph({
-          children: [new TextRun({ text: anomaly.suggestion, italics: true, color: '64748B' })],
-        }));
+    if (anomalies.length === 0) {
+      children.push(new Paragraph({ text: 'Nessuna anomalia rilevata.' }));
+    } else {
+      for (const anomaly of anomalies) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `[${anomaly.severity.toUpperCase()}] `, bold: true, color: anomaly.severity === 'critica' || anomaly.severity === 'alta' ? 'DC2626' : 'CA8A04' }),
+              new TextRun({ text: anomalyLabels[anomaly.anomaly_type] ?? anomaly.anomaly_type, bold: true }),
+            ],
+            spacing: { before: 150 },
+          }),
+          new Paragraph({ text: anomaly.description }),
+        );
+        if (anomaly.suggestion) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: anomaly.suggestion, italics: true, color: '64748B' })],
+          }));
+        }
       }
     }
-  }
 
-  children.push(new Paragraph({ text: '' }));
+    children.push(new Paragraph({ text: '' }));
 
-  // Section 4: Missing Docs
-  children.push(
-    new Paragraph({
-      text: `${calculations && calculations.length > 0 ? '5' : '4'}. DOCUMENTAZIONE MANCANTE`,
-      heading: HeadingLevel.HEADING_1,
-    }),
-    new Paragraph({ text: '' }),
-  );
+    // Section 4: Missing Docs (carta di lavoro)
+    children.push(
+      new Paragraph({
+        text: `${calculations && calculations.length > 0 ? '5' : '4'}. DOCUMENTAZIONE MANCANTE`,
+        heading: HeadingLevel.HEADING_1,
+      }),
+      new Paragraph({ text: '' }),
+    );
 
-  if (missingDocs.length === 0) {
-    children.push(new Paragraph({ text: 'Nessuna documentazione mancante rilevata.' }));
-  } else {
-    for (const doc of missingDocs) {
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: doc.document_name, bold: true })],
-          spacing: { before: 100 },
-        }),
-        new Paragraph({ text: doc.reason }),
-      );
+    if (missingDocs.length === 0) {
+      children.push(new Paragraph({ text: 'Nessuna documentazione mancante rilevata.' }));
+    } else {
+      for (const doc of missingDocs) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: doc.document_name, bold: true })],
+            spacing: { before: 100 },
+          }),
+          new Paragraph({ text: doc.reason }),
+        );
+      }
     }
   }
 
@@ -673,6 +681,8 @@ interface ProfessionalDocxExportParams {
   documentsWithPages: DocumentWithPages[];
   reportStatus?: string;
   signatureImageBase64?: string;
+  /** 'depositabile' (default dalle route) = solo perizia, niente carte di lavoro. */
+  exportMode?: ExportMode;
 }
 
 /**
@@ -1048,6 +1058,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
     anomalies,
     missingDocs,
     calculations,
+    exportMode: params.exportMode,
     events: (params.events ?? []).map((e) => ({
       event_date: e.event_date,
       event_type: e.event_type,
@@ -1128,19 +1139,22 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   children.push(new Paragraph({ text: '', spacing: { after: 400 } }));
   } // fine cover gateata (no doppione intestazione)
 
-  // Table of Contents
-  children.push(new Paragraph({
-    children: [new TextRun({ text: 'INDICE', bold: true, size: 26, underline: {} })],
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 400, after: 200 },
-  }));
-  for (const item of assembled.tableOfContents) {
+  // Table of Contents — solo nel fascicolo di lavoro (l'assembler restituisce
+  // TOC vuoto in modalità depositabile: i gold aprono con l'intestazione).
+  if (assembled.tableOfContents.length > 0) {
     children.push(new Paragraph({
-      children: [new TextRun({ text: `${item.number}. ${item.title}` })],
-      spacing: { before: 50 },
+      children: [new TextRun({ text: 'INDICE', bold: true, size: 26, underline: {} })],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400, after: 200 },
     }));
+    for (const item of assembled.tableOfContents) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `${item.number}. ${item.title}` })],
+        spacing: { before: 50 },
+      }));
+    }
+    children.push(new Paragraph({ text: '', spacing: { after: 400 } }));
   }
-  children.push(new Paragraph({ text: '', spacing: { after: 400 } }));
 
   // Sections
   for (const section of assembled.sections) {

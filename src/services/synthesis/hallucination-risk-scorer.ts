@@ -40,6 +40,7 @@ const PENALTY_BY_TYPE: Record<ReportIssue['type'], number> = {
   missing_section:      20, // required section absent
   duplicate_content:    10, // same paragraph repeated
   sentinel_name_leak:    5, // few-shot example name leaked — review needed but minor
+  template_artifact:     8, // template text / internal markers visible (QA 2026-06-11)
 
   // Wave 2.2 — header coherence and fabrication signatures
   header_mismatch:           50, // perizia metadata field doesn't match the rendered header

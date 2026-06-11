@@ -43,6 +43,14 @@ export interface AssembledReport {
   tableOfContents: Array<{ number: string; title: string; id: string }>;
 }
 
+/**
+ * Export composition mode (QA 2026-06-11): the gold deposited perizie open
+ * with the intestazione and close with the signature — no TOC, no working
+ * papers. 'depositabile' produces that document; 'lavoro' keeps everything
+ * (calcoli, anomalie, doc mancante, indice) as the perito's working file.
+ */
+export type ExportMode = 'depositabile' | 'lavoro';
+
 interface ExportAnomaly {
   anomaly_type: string;
   severity: string;
@@ -129,8 +137,12 @@ export function assembleFullReport(params: {
   missingDocs: ExportMissingDoc[];
   calculations?: MedicoLegalCalculation[];
   events?: ExportEvent[];
+  /** Default 'lavoro' (backward compatible) — the export routes pass 'depositabile' by default. */
+  exportMode?: ExportMode;
 }): AssembledReport {
   const { periziaMetadata: pm, caseRole, documentsWithPages, synthesis, anomalies, missingDocs, calculations, events } = params;
+  const exportMode: ExportMode = params.exportMode ?? 'lavoro';
+  const isDepositabile = exportMode === 'depositabile';
   const sections: ReportSection[] = [];
   let sectionNum = 0;
 
@@ -167,22 +179,32 @@ export function assembleFullReport(params: {
     addSection('premesse', 'PREMESSE', premesseLines.join('\n'));
   }
 
-  // 2. PROFILO METODOLOGICO
-  const metodologico = `La presente relazione è stata redatta sulla base dell'esame della documentazione sanitaria acquisita agli atti, secondo i criteri della medicina legale e nel rispetto delle linee guida scientifiche vigenti.\n\nIl metodo adottato ha previsto:\n- Esame sistematico di tutta la documentazione clinica in atti\n- Ricostruzione cronologica degli eventi\n- Analisi critica dei profili di responsabilità\n- Valutazione del nesso causale secondo il criterio del "più probabile che non"\n- Quantificazione del danno biologico secondo i criteri tabellari`;
-  addSection('metodologico', 'PROFILO METODOLOGICO', metodologico);
+  const synthText = synthesis ?? '';
 
-  // 3. DOCUMENTAZIONE ESAMINATA
-  const docList = documentsWithPages.map((doc) => {
-    const typeLabel = getDocumentTypeLabel(doc.documentType);
-    const pageInfo = doc.pageCount ? ` (${doc.pageCount} pagg.)` : '';
-    return `- ${doc.fileName} — *${typeLabel}*${pageInfo}`;
-  }).join('\n');
-  addSection('doc-esaminata', 'DOCUMENTAZIONE ESAMINATA', docList.length > 0 ? docList : 'Nessun documento allegato.');
+  // 2. PROFILO METODOLOGICO (legacy hardcoded) — SOLO se la sintesi non ha già
+  // la propria sezione dal catalogo (QA 2026-06-11: nel DOCX comparivano
+  // ENTRAMBE, "PROFILO METODOLOGICO" voce 1 e "Profilo Metodologico" voce 4).
+  const synthHasProfilo = /^##\s+.*profilo\s+metodologico/im.test(synthText);
+  if (!synthHasProfilo) {
+    const metodologico = `La presente relazione è stata redatta sulla base dell'esame della documentazione sanitaria acquisita agli atti, secondo i criteri della medicina legale e nel rispetto delle linee guida scientifiche vigenti.\n\nIl metodo adottato ha previsto:\n- Esame sistematico di tutta la documentazione clinica in atti\n- Ricostruzione cronologica degli eventi\n- Analisi critica dei profili di responsabilità\n- Valutazione del nesso causale secondo il criterio del "più probabile che non"\n- Quantificazione del danno biologico secondo i criteri tabellari`;
+    addSection('metodologico', 'PROFILO METODOLOGICO', metodologico);
+  }
+
+  // 3. DOCUMENTAZIONE ESAMINATA (lista filename) — è una carta di LAVORO: nei
+  // gold depositati i filename non compaiono mai (l'elenco analitico vive già
+  // dentro la doc-sanitaria verbatim, in formato perizia). Solo modo 'lavoro'.
+  if (!isDepositabile || !synthText) {
+    const docList = documentsWithPages.map((doc) => {
+      const typeLabel = getDocumentTypeLabel(doc.documentType);
+      const pageInfo = doc.pageCount ? ` (${doc.pageCount} pagg.)` : '';
+      return `- ${doc.fileName} — *${typeLabel}*${pageInfo}`;
+    }).join('\n');
+    addSection('doc-esaminata', 'DOCUMENTAZIONE ESAMINATA', docList.length > 0 ? docList : 'Nessun documento allegato.');
+  }
 
   // 4. DATI DOCUMENTAZIONE SANITARIA (OCR text) — only if NO synthesis
   // When synthesis exists, it already contains the elaborated documentation.
   // Adding raw OCR would duplicate content.
-  const synthText = synthesis ?? '';
   if (!synthText) {
     const ocrContent = buildDocumentazioneSanitaria(documentsWithPages);
     addSection('doc-sanitaria', 'DATI DOCUMENTAZIONE SANITARIA', ocrContent, true);
@@ -191,6 +213,9 @@ export function assembleFullReport(params: {
   // 5. SYNTHESIS (LLM-generated report) — use as-is in markdown format.
   // This matches exactly what the user sees in the preview.
   // Each ## heading in the synthesis becomes a separate section.
+  // QA 2026-06-11: l'esame obiettivo del form si INIETTA nella sezione Visita
+  // della sintesi (il suo posto naturale in perizia), non come sezione autonoma.
+  let esameObiettivoInjected = false;
   if (synthText) {
     // Parse synthesis into sections by ## headings
     const synthSections = synthText.split(/^(?=## )/m).filter((s) => s.trim().length > 0);
@@ -198,7 +223,11 @@ export function assembleFullReport(params: {
       const headingMatch = sectionText.match(/^## (.+)/);
       if (headingMatch) {
         const title = headingMatch[1].trim();
-        const content = sectionText.replace(/^## .+\n+/, '').trim();
+        let content = sectionText.replace(/^## .+\n+/, '').trim();
+        if (pm.esameObiettivo && !esameObiettivoInjected && /visita|esame\s+obiettivo/i.test(title)) {
+          content = `${content}\n\n**Esame obiettivo (rilevato dal perito):**\n\n${pm.esameObiettivo}`;
+          esameObiettivoInjected = true;
+        }
         if (content.length > 0) {
           const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
           addSection(id, title, content, true);
@@ -207,14 +236,16 @@ export function assembleFullReport(params: {
     }
   }
 
-  // CALCOLI MEDICO-LEGALI (ITT/ITP) — always add if available
+  // CALCOLI MEDICO-LEGALI (ITT/ITP) — carta di lavoro (la tabella ITT/ITP del
+  // depositabile vive già DENTRO la sintesi via marker deterministico).
   const calcText = formatCalculationsText(calculations);
-  if (calcText) {
+  if (calcText && !isDepositabile) {
     addSection('calcoli', 'PERIODI MEDICO-LEGALI CALCOLATI', calcText);
   }
 
-  // ESAME OBIETTIVO (from perizia metadata, not LLM)
-  if (pm.esameObiettivo) {
+  // ESAME OBIETTIVO standalone: SOLO se non è stato iniettato nella Visita
+  // (mai perdere il testo del perito — fallback per sintesi senza sezione visita).
+  if (pm.esameObiettivo && !esameObiettivoInjected) {
     addSection('esame-obiettivo', 'ESAME OBIETTIVO', pm.esameObiettivo);
   }
 
@@ -224,8 +255,9 @@ export function assembleFullReport(params: {
     addSection('evidenze-cliniche', 'EVIDENZE CLINICHE', evidenzeContent);
   }
 
-  // 15. ANOMALIE RILEVATE
-  if (anomalies.length > 0) {
+  // 15. ANOMALIE RILEVATE — carta di lavoro (mai in un documento depositato:
+  // QA 2026-06-11, falsi positivi inclusi finivano in coda alla perizia).
+  if (anomalies.length > 0 && !isDepositabile) {
     const anomalyText = anomalies.map((a) => {
       const label = anomalyTypeLabels[a.anomaly_type] ?? a.anomaly_type;
       const suggestion = a.suggestion ? `\n  *Suggerimento:* ${a.suggestion}` : '';
@@ -234,8 +266,8 @@ export function assembleFullReport(params: {
     addSection('anomalie', 'ANOMALIE RILEVATE', anomalyText);
   }
 
-  // 16. DOCUMENTAZIONE MANCANTE
-  if (missingDocs.length > 0) {
+  // 16. DOCUMENTAZIONE MANCANTE — carta di lavoro.
+  if (missingDocs.length > 0 && !isDepositabile) {
     const missingText = missingDocs.map((d) => {
       const related = d.related_event ? ` (evento correlato: ${d.related_event})` : '';
       return `- **${d.document_name}**: ${d.reason}${related}`;
@@ -243,7 +275,9 @@ export function assembleFullReport(params: {
     addSection('doc-mancante', 'DOCUMENTAZIONE MANCANTE', missingText);
   }
 
-  const tableOfContents = sections.map((s) => ({
+  // Niente indice nel depositabile: i gold aprono con l'intestazione, mai con
+  // un sommario (l'INDICE resta nel fascicolo di lavoro).
+  const tableOfContents = isDepositabile ? [] : sections.map((s) => ({
     number: s.number,
     title: s.title,
     id: s.id,

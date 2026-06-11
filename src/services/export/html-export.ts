@@ -2,7 +2,7 @@ import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels,
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
-import { assembleFullReport, synthesisHasOwnHeader, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { markdownToHtml } from './markdown-to-html';
 import { getAiActDisclosureHtml } from './ai-act-disclosure';
 
@@ -423,6 +423,8 @@ interface ProfessionalHtmlExportParams {
   documentsWithPages: DocumentWithPages[];
   reportStatus?: string;
   signatureImageBase64?: string;
+  /** 'depositabile' (default dalle route) = solo perizia, niente carte di lavoro. */
+  exportMode?: ExportMode;
 }
 
 function escapeHtmlPro(text: string): string {
@@ -499,6 +501,7 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
     anomalies,
     missingDocs,
     calculations,
+    exportMode: params.exportMode,
     events: (params.events ?? []).map((e) => ({
       event_date: e.event_date,
       event_type: e.event_type,
@@ -1159,15 +1162,15 @@ ${synthesisHasOwnHeader(synthesis) ? '' : `<div class="cover">
 </div>`}
 
 <!-- ═══════════════════════════════════════════════
-     TABLE OF CONTENTS (Indice)
+     TABLE OF CONTENTS (Indice) — solo fascicolo di lavoro
      ═══════════════════════════════════════════════ -->
-<div class="toc">
+${assembled.tableOfContents.length > 0 ? `<div class="toc">
   <div class="toc-heading">Indice</div>
   <div class="toc-rule"></div>
   <div class="toc-entries">
     ${tocHtml}
   </div>
-</div>
+</div>` : ''}
 
 <!-- ═══════════════════════════════════════════════
      REPORT SECTIONS
