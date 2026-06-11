@@ -958,6 +958,9 @@ export const processCase = inngest.createFunction(
     // Helper to update generation progress in DB (planIndex is stable but
     // waves complete out of order — the title is what the user reads).
     const updateProgress = async (planIndex: number, title: string) => {
+      // Best-effort UI cosmetics: a Supabase hiccup here must NEVER fail a
+      // section step (it would degrade even infallible placeholder sections).
+      try {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
       const { data: caseRow } = await supabase
@@ -977,6 +980,9 @@ export const processCase = inngest.createFunction(
         },
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
+      } catch (progressError) {
+        logger.warn('pipeline', `Progress update failed (non-blocking): ${progressError instanceof Error ? progressError.message : 'unknown'}`);
+      }
     };
 
     // documentazione_sanitaria (AI variant): split into batches of DOC_BATCH_SIZE

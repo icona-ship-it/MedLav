@@ -261,16 +261,21 @@ export const regenerateReport = inngest.createFunction(
 
     // Progress writer (drives the existing UI progress bar).
     const updateProgress = async (i: number, title: string) => {
-      const supabase = createAdminClient();
-      const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
-      const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
-      await supabase.from('cases').update({
-        perizia_metadata: {
-          ...existingMeta,
-          generationProgress: { currentSection: i + 1, totalSections: sectionPlan.length, currentSectionTitle: title },
-        },
-        updated_at: new Date().toISOString(),
-      }).eq('id', caseId);
+      // Best-effort UI cosmetics: a Supabase hiccup must never fail a section step.
+      try {
+        const supabase = createAdminClient();
+        const { data: caseRow } = await supabase.from('cases').select('perizia_metadata').eq('id', caseId).single();
+        const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('cases').update({
+          perizia_metadata: {
+            ...existingMeta,
+            generationProgress: { currentSection: i + 1, totalSections: sectionPlan.length, currentSectionTitle: title },
+          },
+          updated_at: new Date().toISOString(),
+        }).eq('id', caseId);
+      } catch (progressError) {
+        logger.warn('regenerate-report', `Progress update failed (non-blocking): ${progressError instanceof Error ? progressError.message : 'unknown'}`);
+      }
     };
 
     // Surface the REAL section count to the UI immediately (currentSection 0 / N)

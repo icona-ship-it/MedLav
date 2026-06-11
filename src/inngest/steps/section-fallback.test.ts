@@ -18,4 +18,14 @@ describe('buildFailedSectionFallback', () => {
     expect(section.content).toContain('errore tecnico');
     expect(section.content).not.toContain('a tua cura');
   });
+
+  it('intestazione fallback must carry its own ## heading (assembled as-is, validator requires it)', () => {
+    const ctu = buildFailedSectionFallback({ id: 'intestazione', title: 'Intestazione' });
+    expect(ctu.content.startsWith('## Intestazione')).toBe(true);
+    const strag = buildFailedSectionFallback({ id: 'intestazione_stragiudiziale', title: 'Intestazione' });
+    expect(strag.content.startsWith('## ')).toBe(true);
+    // Normal sections get the heading from assembleSectionBlock — no double heading
+    const other = buildFailedSectionFallback({ id: 'quesiti', title: 'I Quesiti' });
+    expect(other.content.startsWith('## ')).toBe(false);
+  });
 });

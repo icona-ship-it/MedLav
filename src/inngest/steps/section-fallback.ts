@@ -19,10 +19,17 @@ const FAILED_SECTION_BODY = `*[${FAILED_SECTION_MARKER} — un errore tecnico ha
 
 /** Build the stand-in section for a spec whose generation failed after retries. */
 export function buildFailedSectionFallback(spec: { id: string; title: string }): GeneratedSection {
+  // intestazione* sections are assembled AS-IS (assembleSectionBlock does not
+  // prepend the canonical heading because the template normally carries its
+  // own). The fallback must therefore carry the heading itself, or the
+  // validator's required-section check blocks the whole report.
+  const content = spec.id.startsWith('intestazione')
+    ? `## ${spec.title}\n\n${FAILED_SECTION_BODY}`
+    : FAILED_SECTION_BODY;
   return {
     id: spec.id,
     title: spec.title,
-    content: FAILED_SECTION_BODY,
+    content,
     contextSummary: '',
     wordCount: FAILED_SECTION_BODY.split(/\s+/).filter((w) => w.length > 0).length,
     usage: undefined,
