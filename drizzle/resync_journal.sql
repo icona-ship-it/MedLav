@@ -249,7 +249,14 @@ WHERE NOT EXISTS (
   SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1780394400000
 );
 
+-- 0031_storage_bucket_allowed_mime_types (when = 1781175312000 ≈ 2026-06-11)
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
+SELECT 'c503ed8a398f29617a9d99db9004af1ab22f5e03144adfcafff848a33cc5c3c7', 1781175312000
+WHERE NOT EXISTS (
+  SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1781175312000
+);
+
 -- ── Verifica finale ─────────────────────────────────────────────────────────
--- Atteso: total_rows >= 31 e last_created_at = 1780394400000 (0030).
+-- Atteso: total_rows >= 32 e last_created_at = 1781175312000 (0031).
 SELECT count(*) AS total_rows, max(created_at) AS last_created_at
 FROM "drizzle"."__drizzle_migrations";

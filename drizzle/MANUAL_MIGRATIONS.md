@@ -13,6 +13,13 @@ il debt: eseguire `drizzle/resync_journal.sql` su Supabase (vedi sotto).
    (entrambe idempotenti):
    - `0025_perizie_benchmark.sql` → verificare con `verify_0025_perizie_benchmark.sql`
    - `0030_storage_bucket_size_limit.sql` → verificare con `verify_0030.sql`
+
+   Nota: la **0031_storage_bucket_allowed_mime_types** è stata APPLICATA il
+   2026-06-11 (utente, via SQL editor — sblocco upload XML/TXT/WebP; il bucket
+   era stato creato a mano con una allowlist più stretta dei validatori app).
+   Verificare con `verify_0031.sql`. Il journal e `resync_journal.sql`
+   includono già la 0031: dopo il re-sync, `pnpm db:migrate` non la riapplica
+   (e se la riapplicasse è idempotente — guard sul contenuto).
 3. **Eseguire `drizzle/resync_journal.sql`** via Supabase SQL editor
    (idempotente, ri-eseguibile). Inserisce in `drizzle.__drizzle_migrations` le
    righe mancanti 0018→0030 con `created_at` = `when` del journal e hash

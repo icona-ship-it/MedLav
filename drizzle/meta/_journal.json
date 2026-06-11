@@ -218,6 +218,13 @@
       "when": 1780394400000,
       "tag": "0030_storage_bucket_size_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1781175312000,
+      "tag": "0031_storage_bucket_allowed_mime_types",
+      "breakpoints": true
     }
   ]
 }
