@@ -144,9 +144,14 @@ ${NO_EVN_RULE}`,
   {
     id: 'documentazione_atti',
     title: 'I Dati della Documentazione in Atti',
-    maxTokens: TOKENS_LARGE,
-    // 32K char (~8K token) sta sotto il budget TOKENS_LARGE (10K): il cap taglia
-    // al boundary di paragrafo prima che scatti il troncamento token (throw).
+    // HUGE (was LARGE): il caso reale Tedesco (~30 atti) ha sfondato il tetto
+    // 10K token a 29.430 char (finishReason=length → throw → retry inutili a
+    // parità di budget). L'assunzione "32K char ≈ 8K token" del vecchio
+    // commento era ottimista: un inventario denso di date/nomi/numeri scende a
+    // ~3 char/token, quindi il soft-cap char scattava DOPO il muro token. Con
+    // 20K token il soft-cap a 32K char (~11K token worst case) torna a fare il
+    // suo lavoro: taglio pulito a boundary di paragrafo, mai troncamento LLM.
+    maxTokens: TOKENS_HUGE,
     maxChars: 32_000,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
