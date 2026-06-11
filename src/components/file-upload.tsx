@@ -239,8 +239,9 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
             {skippedFiles.map((n) => `"${n}"`).join(', ')}: formato non supportato, file non aggiunto.
-            I file tecnici del fascicolo telematico (es. .xml di ricevute PEC e dati atto) non
-            contengono documentazione utile alla perizia e non servono.
+            I file .xml del fascicolo telematico non contengono documentazione clinica e non vengono
+            analizzati; i dati di causa che riportano (numero di ruolo, parti) sono presenti anche
+            negli atti in PDF.
           </span>
         </div>
       )}
