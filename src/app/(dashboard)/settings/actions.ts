@@ -460,6 +460,12 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
           await admin.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
         }
       }
+
+      // Remove cached document summaries (GDPR Art. 9 — derived clinical data)
+      const { removeStoragePrefix } = await import('@/lib/supabase/storage');
+      for (const docId of docIds) {
+        await removeStoragePrefix(`doc-summaries/${docId}`);
+      }
     }
     for (let i = 0; i < caseIds.length; i += BATCH) {
       const batch = caseIds.slice(i, i + BATCH);

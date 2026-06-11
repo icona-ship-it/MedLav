@@ -48,6 +48,21 @@ export async function downloadFile(storagePath: string): Promise<Blob> {
 }
 
 /**
+ * Remove every file under a Storage prefix (e.g. `doc-summaries/{docId}`).
+ * Used by the GDPR deletion cascades — best-effort per batch of 1000
+ * (Supabase remove() limit per call).
+ */
+export async function removeStoragePrefix(prefix: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: listed } = await supabase.storage.from(BUCKET_NAME).list(prefix);
+  if (!listed || listed.length === 0) return;
+  const paths = listed.map((f) => `${prefix}/${f.name}`);
+  for (let i = 0; i < paths.length; i += 1000) {
+    await supabase.storage.from(BUCKET_NAME).remove(paths.slice(i, i + 1000));
+  }
+}
+
+/**
  * Upload a base64-encoded image to Supabase Storage.
  * Compresses to JPEG (quality 80) and resizes to max 1600px width to save storage and egress.
  * Backwards-compatible: storage path extension is controlled by the caller.

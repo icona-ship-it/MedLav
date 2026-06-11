@@ -22,20 +22,27 @@ const MAX_RETRY_DELAY_MS = 30_000;
 export const DETERMINISTIC_SEED = 42;
 
 // Model constants — using -latest aliases.
-// Note: pixtral-large is being retired by Mistral on 2026-05-31. Mistral Large 3
-// (mistral-large-latest) became multimodal in Dec 2025 and is the official
-// vendor-recommended replacement for vision tasks. The PIXTRAL_LARGE export key
-// is kept for now to avoid touching every call site; it will be renamed to
-// VISION in a follow-up cosmetic refactor.
+// Note: pixtral-large was retired by Mistral on 2026-05-31. Mistral Large 3
+// became multimodal in Dec 2025 and is the official vendor-recommended
+// replacement for vision tasks. The PIXTRAL_LARGE export key is kept for now
+// to avoid touching every call site; it will be renamed to VISION in a
+// follow-up cosmetic refactor.
+//
+// PINNED to dated versions (2026-06-11, verified char-by-char on the official
+// changelog + platform-docs model schema): '-latest' aliases get silently
+// remapped under your feet — for reports deposited in court, reproducibility
+// requires the exact model id (recorded in reports.generation_metadata.modelId).
+// Pinning does NOT cover retirement: re-check the Mistral changelog quarterly
+// (next: 2026-09, together with the normative-data staleness check).
 export const MISTRAL_MODELS = {
-  /** Vision model — points to Mistral Large 3 (multimodal) post pixtral retirement. */
-  PIXTRAL_LARGE: 'mistral-large-latest',
+  /** Vision model — Mistral Large 3 (multimodal) post pixtral retirement. */
+  PIXTRAL_LARGE: 'mistral-large-2512',
   /** Large model for complex reasoning (synthesis, review) */
-  MISTRAL_LARGE: 'mistral-large-latest',
+  MISTRAL_LARGE: 'mistral-large-2512',
   /** Small model for fast structured extraction */
-  MISTRAL_SMALL: 'mistral-small-latest',
+  MISTRAL_SMALL: 'mistral-small-2603',
   /** Dedicated OCR model for document text extraction */
-  OCR: 'mistral-ocr-latest',
+  OCR: 'mistral-ocr-2512',
 } as const;
 
 /**

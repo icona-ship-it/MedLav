@@ -60,6 +60,12 @@ export async function deleteCaseAndRelatedData(
         await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
       }
     }
+
+    // Remove cached document summaries (GDPR Art. 9 — derived clinical data)
+    const { removeStoragePrefix } = await import('@/lib/supabase/storage');
+    for (const docId of docIds) {
+      await removeStoragePrefix(`doc-summaries/${docId}`);
+    }
   }
 
   // 3. Delete remaining related tables

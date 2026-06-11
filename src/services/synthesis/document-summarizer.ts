@@ -3,6 +3,7 @@
  * When a case has >=10 documents, per-document summaries are generated
  * so the synthesis step can see 100% of the content instead of <1%.
  */
+import { createHash } from 'crypto';
 import {
   MISTRAL_MODELS,
   streamMistralChat,
@@ -67,6 +68,100 @@ const TAIL_OMISSION_MARKER =
  * the regression vs the old head-only slice while still capturing the tail. */
 const TAIL_RESERVE_CHARS = 12_000;
 
+/** System prompt as a module constant: it is part of the persistent-cache key
+ * material (any edit to it invalidates cached summaries automatically). */
+const SUMMARY_SYSTEM_PROMPT = `Sei un medico legale. Riassumi il contenuto del seguente documento medico in modo strutturato e conciso (max ${DOC_SUMMARY_MAX_CHARS} caratteri). Includi:
+- Tipo documento e data/date principali
+- Diagnosi, interventi, terapie menzionate
+- Nomi di medici e strutture
+- Esiti di esami (valori chiave)
+- Eventuali criticità o anomalie
+- PRIORITÀ ALLE PAGINE FINALI: diagnosi di dimissione, terapia domiciliare conclusiva e follow-up programmato vanno SEMPRE riportati se presenti (sono spesso nelle ultime pagine del documento).
+Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sanitario (memoria, ricorso, fattura), riassumi il contenuto pertinente.
+GROUNDING (vincolo assoluto): riporta SOLO informazioni effettivamente presenti nel testo fornito. Se un dato (diagnosi, valore, data, nome) NON è nel testo, NON inferirlo e NON colmarlo con conoscenza medica generale: ometti o scrivi "non indicato". Nessuna invenzione.`;
+
+// ── Persistent summary cache (Supabase Storage) ─────────────────────
+// Regenerations and pipeline re-runs re-summarize IDENTICAL OCR text — and the
+// summary is deterministic (temperature 0, fixed seed). Cache key embeds the
+// hash of BOTH the OCR text and the prompt material, so any change to either
+// misses naturally (no manual version bump). Scoped per documentId so GDPR
+// deletion cascades cleanly: deleteDocument / delete-case-data / GDPR
+// delete-all remove the `doc-summaries/{docId}` prefix alongside ocr-images.
+export const SUMMARY_CACHE_PREFIX = 'doc-summaries';
+const STORAGE_BUCKET = 'documents';
+
+export function hashOcrTextForCache(fullOcrText: string): string {
+  return createHash('sha256').update(fullOcrText).digest('hex').slice(0, 16);
+}
+
+let promptHashMemo: string | null = null;
+function summaryPromptHash(): string {
+  if (!promptHashMemo) {
+    promptHashMemo = createHash('sha256')
+      .update(SUMMARY_SYSTEM_PROMPT)
+      .update(MISTRAL_MODELS.MISTRAL_LARGE)
+      .update(String(OCR_PER_DOC_SUMMARY_LIMIT))
+      .digest('hex')
+      .slice(0, 12);
+  }
+  return promptHashMemo;
+}
+
+export function summaryCachePath(documentId: string, ocrTextHash: string): string {
+  return `${SUMMARY_CACHE_PREFIX}/${documentId}/${ocrTextHash}-${summaryPromptHash()}.json`;
+}
+
+/** Minimal structural view of the Supabase Storage bucket API used here. */
+interface SummaryCacheBucket {
+  download(path: string): Promise<{ data: { text(): Promise<string> } | null; error: unknown }>;
+  upload(
+    path: string,
+    body: string,
+    options?: { contentType?: string; upsert?: boolean },
+  ): Promise<{ error: { message?: string } | null }>;
+}
+
+async function readCachedSummary(
+  bucket: SummaryCacheBucket,
+  cachePath: string,
+): Promise<DocumentSummary | null> {
+  try {
+    const { data, error } = await bucket.download(cachePath);
+    if (error || !data) return null;
+    const parsed = JSON.parse(await data.text()) as unknown;
+    if (
+      typeof parsed === 'object' && parsed !== null
+      && typeof (parsed as DocumentSummary).summary === 'string'
+      && (parsed as DocumentSummary).summary.length > 0
+    ) {
+      return parsed as DocumentSummary;
+    }
+    return null;
+  } catch {
+    return null; // cache read is best-effort — fall through to regeneration
+  }
+}
+
+async function writeCachedSummary(
+  bucket: SummaryCacheBucket,
+  cachePath: string,
+  summary: DocumentSummary,
+): Promise<void> {
+  try {
+    // usage stripped: a cache HIT pays zero tokens — it must not re-report cost
+    const cacheable = { ...summary, usage: undefined };
+    const { error } = await bucket.upload(cachePath, JSON.stringify(cacheable), {
+      contentType: 'application/json',
+      upsert: true,
+    });
+    if (error) {
+      logger.warn('synthesis', `Summary cache write failed for ${cachePath}: ${error.message ?? 'unknown'}`);
+    }
+  } catch (err) {
+    logger.warn('synthesis', `Summary cache write failed for ${cachePath}: ${err instanceof Error ? err.message : 'unknown'}`);
+  }
+}
+
 export function buildTailPrioritizedOcrInput(fullText: string, limit: number): string {
   if (fullText.length <= limit) return fullText;
   // Reserve the marker within the budget so the returned string never exceeds `limit`.
@@ -99,15 +194,7 @@ export async function summarizeDocument(
     messages: [
       {
         role: 'system',
-        content: `Sei un medico legale. Riassumi il contenuto del seguente documento medico in modo strutturato e conciso (max ${DOC_SUMMARY_MAX_CHARS} caratteri). Includi:
-- Tipo documento e data/date principali
-- Diagnosi, interventi, terapie menzionate
-- Nomi di medici e strutture
-- Esiti di esami (valori chiave)
-- Eventuali criticità o anomalie
-- PRIORITÀ ALLE PAGINE FINALI: diagnosi di dimissione, terapia domiciliare conclusiva e follow-up programmato vanno SEMPRE riportati se presenti (sono spesso nelle ultime pagine del documento).
-Scrivi in italiano, in modo fattuale senza opinioni. Se il documento non è sanitario (memoria, ricorso, fattura), riassumi il contenuto pertinente.
-GROUNDING (vincolo assoluto): riporta SOLO informazioni effettivamente presenti nel testo fornito. Se un dato (diagnosi, valore, data, nome) NON è nel testo, NON inferirlo e NON colmarlo con conoscenza medica generale: ometti o scrivi "non indicato". Nessuna invenzione.`,
+        content: SUMMARY_SYSTEM_PROMPT,
       },
       {
         role: 'user',
@@ -173,7 +260,27 @@ export async function summarizeDocumentBatchByIds(
         pages: pageList.map((p) => ({ pageNumber: p.page_number as number, ocrText: p.ocr_text as string })),
         totalChars,
       };
-      return await summarizeDocument(doc);
+
+      // Read-through cache: identical OCR text + identical prompt → the
+      // deterministic summary is reused (regenerations pay zero LLM calls).
+      const fullText = doc.pages.map((p) => p.ocrText).join('\n\n');
+      const cachePath = summaryCachePath(ref.documentId, hashOcrTextForCache(fullText));
+      const bucket = supabase.storage.from(STORAGE_BUCKET) as unknown as SummaryCacheBucket;
+      const cached = await readCachedSummary(bucket, cachePath);
+      if (cached) {
+        logger.info('synthesis', `Summary cache HIT for doc ${ref.documentId}`);
+        return {
+          ...cached,
+          documentId: ref.documentId,
+          fileName: ref.fileName,
+          documentType: ref.documentType,
+          usage: undefined,
+        };
+      }
+
+      const summary = await summarizeDocument(doc);
+      await writeCachedSummary(bucket, cachePath, summary);
+      return summary;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
       logger.error('synthesis', `Failed to summarize doc ${ref.documentId}: ${message}`);

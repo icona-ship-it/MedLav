@@ -14,6 +14,7 @@ import {
 } from '@/lib/mistral/client';
 import type { DetectedAnomaly } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { isCitationGrounded } from './source-text-verifier';
 import { logger } from '@/lib/logger';
 
@@ -40,6 +41,8 @@ export interface AnomalyResolution {
   confidence: number;
   evidence: string;
   reasoning: string;
+  /** LLM token usage of the resolution call (absent for short-circuited rules). */
+  usage?: TokenUsage;
 }
 
 export interface ResolvedAnomaly extends DetectedAnomaly {
@@ -212,7 +215,7 @@ async function resolveOneAnomaly(
   assertNotTruncated(result, `anomaly-resolve:${anomalyIndex}`);
 
   // 6. Parse response + HARD-VERIFY the cited evidence against the source OCR.
-  return parseResolutionResponse(result.content, anomalyIndex, ocrContext);
+  return { ...parseResolutionResponse(result.content, anomalyIndex, ocrContext), usage: result.usage };
 }
 
 function parseResolutionResponse(

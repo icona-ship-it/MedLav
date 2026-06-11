@@ -314,6 +314,10 @@ export async function deleteDocument(params: { documentId: string; caseId: strin
   // Delete files from Storage
   await admin.storage.from('documents').remove(pathsToDelete);
 
+  // Remove cached document summaries (GDPR Art. 9 — derived clinical data)
+  const { removeStoragePrefix } = await import('@/lib/supabase/storage');
+  await removeStoragePrefix(`doc-summaries/${params.documentId}`);
+
   // Delete document from DB (cascade deletes pages)
   const { error } = await supabase
     .from('documents')

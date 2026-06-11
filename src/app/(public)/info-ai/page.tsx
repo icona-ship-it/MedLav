@@ -96,19 +96,19 @@ export default function InfoAiPage() {
               </thead>
               <tbody>
                 <tr className="border-b border-border">
-                  <td className="px-3 py-2"><code className="text-xs">mistral-ocr-latest</code></td>
+                  <td className="px-3 py-2"><code className="text-xs">mistral-ocr-2512</code></td>
                   <td className="px-3 py-2">OCR documentale</td>
-                  <td className="px-3 py-2 text-muted-foreground">Mistral OCR 3 (dic. 2025)</td>
+                  <td className="px-3 py-2 text-muted-foreground">Mistral OCR 3 (dic. 2025, versione fissata)</td>
                 </tr>
                 <tr className="border-b border-border">
-                  <td className="px-3 py-2"><code className="text-xs">mistral-large-latest</code></td>
+                  <td className="px-3 py-2"><code className="text-xs">mistral-large-2512</code></td>
                   <td className="px-3 py-2">Estrazione, sintesi, analisi immagini</td>
-                  <td className="px-3 py-2 text-muted-foreground">Mistral Large 3 (dic. 2025)</td>
+                  <td className="px-3 py-2 text-muted-foreground">Mistral Large 3 (dic. 2025, versione fissata)</td>
                 </tr>
                 <tr className="border-b border-border">
-                  <td className="px-3 py-2"><code className="text-xs">mistral-small-latest</code></td>
+                  <td className="px-3 py-2"><code className="text-xs">mistral-small-2603</code></td>
                   <td className="px-3 py-2">Classificazione documentale</td>
-                  <td className="px-3 py-2 text-muted-foreground">Mistral Small 4 (mar. 2026)</td>
+                  <td className="px-3 py-2 text-muted-foreground">Mistral Small 4 (mar. 2026, versione fissata)</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2"><code className="text-xs">mistral-embed</code></td>

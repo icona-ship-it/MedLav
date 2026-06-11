@@ -3,7 +3,15 @@ import { resolveAnomalies, filterUnresolvedAnomalies } from '@/services/validati
 import type { OcrPageFetcher } from '@/services/validation/anomaly-resolver';
 import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
+import { createEmptyUsage, mergeUsage, type TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
+
+export interface AnomalyResolutionStepResult {
+  /** Anomalies NOT resolved by the LLM (these flow into the report). */
+  anomalies: DetectedAnomaly[];
+  /** Aggregated LLM token usage across ALL resolution calls (resolved or not). */
+  usage: TokenUsage;
+}
 
 /**
  * Step 5.5: LLM Anomaly Resolution.
@@ -16,10 +24,10 @@ export async function resolveAnomaliesStep(
   caseId: string,
   rawAnomalies: DetectedAnomaly[],
   allEvents: ConsolidatedEvent[],
-): Promise<DetectedAnomaly[]> {
+): Promise<AnomalyResolutionStepResult> {
   if (rawAnomalies.length === 0) {
     logger.info('pipeline', ' Step 5.5: No anomalies to resolve, skipping');
-    return [];
+    return { anomalies: [], usage: createEmptyUsage() };
   }
 
   const supabase = createAdminClient();
@@ -83,7 +91,14 @@ export async function resolveAnomaliesStep(
   const unresolvedAnomalies = filterUnresolvedAnomalies(resolved);
   const resolvedCount = rawAnomalies.length - unresolvedAnomalies.length;
 
+  // Aggregate LLM usage across ALL resolutions (cost is paid whether the
+  // anomaly resolves or not) — feeds the pipeline cost summary.
+  const usage = resolved.reduce(
+    (acc, r) => (r.resolution?.usage ? mergeUsage(acc, r.resolution.usage) : acc),
+    createEmptyUsage(),
+  );
+
   logger.info('pipeline', ` Step 5.5: ${resolvedCount}/${rawAnomalies.length} anomalies resolved by LLM, ${unresolvedAnomalies.length} remain`);
 
-  return unresolvedAnomalies;
+  return { anomalies: unresolvedAnomalies, usage };
 }

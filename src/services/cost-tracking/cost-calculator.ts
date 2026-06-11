@@ -78,7 +78,7 @@ export function buildPipelineSummary(
     totalCompletionTokens: steps.reduce((sum, s) => sum + s.completionTokens, 0),
     totalOcrPages: ocrPages,
     steps: ocrPages > 0
-      ? [...steps, { step: 'ocr', model: 'mistral-ocr-latest', promptTokens: 0, completionTokens: 0, costUSD: ocrCost }]
+      ? [...steps, { step: 'ocr', model: 'mistral-ocr-2512', promptTokens: 0, completionTokens: 0, costUSD: ocrCost }]
       : steps,
   };
 }

@@ -9,6 +9,28 @@ vi.mock('@/lib/mistral/client', () => ({
   assertNotTruncated: vi.fn(),
 }));
 
+// Supabase admin mock (used by summarizeDocumentBatchByIds via dynamic import)
+const supabaseMocks = vi.hoisted(() => ({
+  pagesOrder: vi.fn(),
+  storageDownload: vi.fn(),
+  storageUpload: vi.fn(),
+}));
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({ order: supabaseMocks.pagesOrder }),
+      }),
+    }),
+    storage: {
+      from: () => ({
+        download: supabaseMocks.storageDownload,
+        upload: supabaseMocks.storageUpload,
+      }),
+    },
+  }),
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -20,8 +42,11 @@ vi.mock('@/lib/logger', () => ({
 import {
   summarizeDocument,
   summarizeDocumentBatch,
+  summarizeDocumentBatchByIds,
   buildTailPrioritizedOcrInput,
   shouldUseMapReduce,
+  summaryCachePath,
+  hashOcrTextForCache,
   OCR_PER_DOC_SUMMARY_LIMIT,
   DOC_SUMMARY_MAX_CHARS,
   MAP_REDUCE_THRESHOLD_DOCS,
@@ -253,6 +278,63 @@ describe('document-summarizer', () => {
       });
       const result = await summarizeDocument(makeDoc());
       expect(result.usage).toEqual({ promptTokens: 120, completionTokens: 40, totalTokens: 160 });
+    });
+  });
+
+  describe('summarizeDocumentBatchByIds — persistent cache', () => {
+    const PAGES = { data: [{ page_number: 1, ocr_text: 'Referto: frattura femore, dimissione 20/03/2024.' }] };
+    const REF = { documentId: 'doc-1', fileName: 'referto.pdf', documentType: 'referto_controllo' };
+
+    it('should return the cached summary WITHOUT calling the LLM on cache hit', async () => {
+      supabaseMocks.pagesOrder.mockResolvedValueOnce(PAGES);
+      supabaseMocks.storageDownload.mockResolvedValueOnce({
+        data: {
+          text: async () => JSON.stringify({
+            documentId: 'doc-1',
+            fileName: 'referto.pdf',
+            documentType: 'referto_controllo',
+            summary: 'RIASSUNTO IN CACHE',
+            totalCharsOriginal: 48,
+          }),
+        },
+        error: null,
+      });
+
+      const results = await summarizeDocumentBatchByIds([REF]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].summary).toBe('RIASSUNTO IN CACHE');
+      expect(results[0].usage).toBeUndefined(); // no tokens paid on hit
+      expect(mockStreamMistralChat).not.toHaveBeenCalled();
+      expect(supabaseMocks.storageUpload).not.toHaveBeenCalled();
+    });
+
+    it('should summarize and write the cache (usage stripped) on cache miss', async () => {
+      supabaseMocks.pagesOrder.mockResolvedValueOnce(PAGES);
+      supabaseMocks.storageDownload.mockResolvedValueOnce({ data: null, error: { message: 'not found' } });
+      supabaseMocks.storageUpload.mockResolvedValueOnce({ error: null });
+      mockStreamMistralChat.mockResolvedValueOnce({
+        content: 'Riassunto fresco dal modello.',
+        usage: { promptTokens: 100, completionTokens: 40, totalTokens: 140 },
+        finishReason: 'stop',
+      });
+
+      const results = await summarizeDocumentBatchByIds([REF]);
+
+      expect(results[0].summary).toBe('Riassunto fresco dal modello.');
+      expect(results[0].usage).toEqual({ promptTokens: 100, completionTokens: 40, totalTokens: 140 });
+      expect(mockStreamMistralChat).toHaveBeenCalledTimes(1);
+      expect(supabaseMocks.storageUpload).toHaveBeenCalledTimes(1);
+      const [path, body] = supabaseMocks.storageUpload.mock.calls[0];
+      expect(path).toMatch(/^doc-summaries\/doc-1\/[0-9a-f]{16}-[0-9a-f]{12}\.json$/);
+      expect(JSON.parse(body as string)).not.toHaveProperty('usage'); // never re-reports cost
+    });
+
+    it('cache key should change when the OCR text changes', () => {
+      const a = summaryCachePath('doc-1', hashOcrTextForCache('testo A'));
+      const b = summaryCachePath('doc-1', hashOcrTextForCache('testo B'));
+      expect(a).not.toBe(b);
+      expect(a.startsWith('doc-summaries/doc-1/')).toBe(true);
     });
   });
 

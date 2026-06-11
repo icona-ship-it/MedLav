@@ -733,6 +733,18 @@ export const processCase = inngest.createFunction(
         });
       }
 
+      // Expense extraction LLM usage (expenses_only path, previously untracked)
+      const expenseCostSteps: CostStep[] = [];
+      if (llmExpenseResult?.usage && llmExpenseResult.usage.totalTokens > 0) {
+        expenseCostSteps.push({
+          step: 'expense-extraction',
+          model: MISTRAL_MODELS.MISTRAL_LARGE,
+          promptTokens: llmExpenseResult.usage.promptTokens,
+          completionTokens: llmExpenseResult.usage.completionTokens,
+          costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_LARGE, llmExpenseResult.usage),
+        });
+      }
+
       await step.run('finalize', () => finalizeStep({
         caseId,
         userId,
@@ -742,7 +754,7 @@ export const processCase = inngest.createFunction(
         missingDocs: [],
         synthesisResult: { reportVersion: 0, wordCount: 0 },
         synthesisWordCount: 0,
-        pipelineCost: buildPipelineSummary([], ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0)),
+        pipelineCost: buildPipelineSummary(expenseCostSteps, ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0)),
         pipelineWarnings,
       }));
 
@@ -806,10 +818,16 @@ export const processCase = inngest.createFunction(
     // ── Step 5.5: LLM Anomaly Resolution ─────────────────────────
     // Anomalies are resolved and saved to DB, but NO pause for user review.
     // The report generates immediately. User reviews anomalies after seeing the report.
-    const anomalies = await step.run(
+    const anomalyResolutionRaw = await step.run(
       'resolve-anomalies',
       () => resolveAnomaliesStep(caseId, rawAnomalies, allEvents),
     );
+    // Back-compat guard: runs in flight across the deploy have this step
+    // memoized with the old bare-array output.
+    const anomalyResolution = Array.isArray(anomalyResolutionRaw)
+      ? { anomalies: anomalyResolutionRaw, usage: createEmptyUsage() }
+      : anomalyResolutionRaw;
+    const anomalies = anomalyResolution.anomalies;
 
     // ── PubMed evidence search (optional, non-blocking) ────────────
     let pubmedResults: PubMedSearchResult[] = [];
@@ -1160,6 +1178,17 @@ export const processCase = inngest.createFunction(
         promptTokens: extractionUsage.promptTokens,
         completionTokens: extractionUsage.completionTokens,
         costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_LARGE, extractionUsage),
+      });
+    }
+
+    // Anomaly-resolution LLM usage (up to 25 calls per run, previously untracked)
+    if (anomalyResolution.usage.totalTokens > 0) {
+      costSteps.push({
+        step: 'anomaly-resolution',
+        model: MISTRAL_MODELS.MISTRAL_LARGE,
+        promptTokens: anomalyResolution.usage.promptTokens,
+        completionTokens: anomalyResolution.usage.completionTokens,
+        costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_LARGE, anomalyResolution.usage),
       });
     }
 

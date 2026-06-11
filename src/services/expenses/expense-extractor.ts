@@ -15,6 +15,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { ExpenseCategory } from './expense-analyzer';
+import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export interface ExpenseExtractionResult {
   items: ExtractedExpenseItem[];
   totalAmount: number | null;
   currency: string;
+  /** LLM token usage of the extraction call — feeds pipeline cost tracking. */
+  usage?: TokenUsage;
 }
 
 // ── Prompt ─────────────────────────────────────────────────────────────
@@ -217,7 +220,7 @@ export async function extractExpensesFromOcr(
   });
   assertNotTruncated(result, 'expense-extraction');
 
-  return parseExpenseResponse(result.content);
+  return { ...parseExpenseResponse(result.content), usage: result.usage };
 }
 
 // ── Response parsing ──────────────────────────────────────────────────
