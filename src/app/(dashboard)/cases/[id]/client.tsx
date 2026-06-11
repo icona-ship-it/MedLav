@@ -252,7 +252,18 @@ export function CaseDetailClient({
   }, [autoStep]);
 
   const isClassifying = classificationProgress?.status === 'running';
-  const needsPolling = processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione' || isClassifying);
+  // Bootstrap window: right after "Categorizza tutti" the server hasn't yet
+  // written classificationProgress='running' — without this flag the polling
+  // never starts and the user stares at a frozen page with zero feedback.
+  const [classifyKickoff, setClassifyKickoff] = useState(false);
+  const handleClassificationStarted = useCallback(() => {
+    setClassifyKickoff(true);
+    setTimeout(() => setClassifyKickoff(false), 90_000);
+  }, []);
+  // Classification polling is INDEPENDENT of the pipeline error state: it can
+  // legitimately run on a case whose previous pipeline ended in 'errore'.
+  const needsPolling = isClassifying || classifyKickoff
+    || (processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione'));
   useEffect(() => {
     if (!needsPolling) return;
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
@@ -330,6 +341,7 @@ export function CaseDetailClient({
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
                 classificationProgress={classificationProgress}
+                onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -359,6 +371,7 @@ export function CaseDetailClient({
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
                 classificationProgress={classificationProgress}
+                onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -430,6 +443,7 @@ export function CaseDetailClient({
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
                 classificationProgress={classificationProgress}
+                onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>
@@ -486,6 +500,7 @@ export function CaseDetailClient({
                 processingLabels={processingLabels}
                 hasUploadedDocs={hasUploadedDocs}
                 classificationProgress={classificationProgress}
+                onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
               />
             </div>

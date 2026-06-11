@@ -22,7 +22,7 @@ interface FileUploadProps {
 
 interface UploadProgress {
   fileName: string;
-  status: 'pending' | 'hashing' | 'uploading' | 'saving' | 'done' | 'error';
+  status: 'pending' | 'hashing' | 'uploading' | 'saving' | 'done' | 'error' | 'duplicate';
   error?: string;
 }
 
@@ -175,10 +175,12 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
       if (contentHash) {
         const dupCheck = await checkDuplicateDocument({ caseId, contentHash });
         if (dupCheck?.duplicate) {
+          // Duplicate = the dedup protection WORKING, not a failure: shown as
+          // info, never as a red error (it terrified users during real tests).
           newProgress[i] = {
             ...newProgress[i],
-            status: 'error',
-            error: `Già caricato come "${dupCheck.existingFileName}"`,
+            status: 'duplicate',
+            error: `Identico a "${dupCheck.existingFileName}" — già presente, non ricaricato`,
           };
           setProgress([...newProgress]);
           continue;
@@ -240,7 +242,8 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
 
   const doneCount = progress.filter((p) => p.status === 'done').length;
   const errorCount = progress.filter((p) => p.status === 'error').length;
-  const allDone = progress.length > 0 && progress.every((p) => p.status === 'done' || p.status === 'error');
+  const duplicateCount = progress.filter((p) => p.status === 'duplicate').length;
+  const allDone = progress.length > 0 && progress.every((p) => p.status === 'done' || p.status === 'error' || p.status === 'duplicate');
 
   // Auto-clear progress list 2s after all done (documents list below takes over)
   useEffect(() => {
@@ -417,12 +420,12 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
         <div className="space-y-3" aria-live="polite">
           <div className="space-y-2">
             <p className="text-sm font-bold">
-              Caricamento: {doneCount + errorCount} di {progress.length} documenti
+              Caricamento: {doneCount + errorCount + duplicateCount} di {progress.length} documenti
             </p>
             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${Math.round(((doneCount + errorCount) / progress.length) * 100)}%` }}
+                style={{ width: `${Math.round(((doneCount + errorCount + duplicateCount) / progress.length) * 100)}%` }}
               />
             </div>
             {isUploading && (
@@ -443,7 +446,9 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                       ? 'border-l-green-500 bg-green-50/50 dark:bg-green-950/10'
                       : p.status === 'error'
                         ? 'border-l-destructive bg-destructive/5'
-                        : 'border-l-muted-foreground/30'
+                        : p.status === 'duplicate'
+                          ? 'border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/10'
+                          : 'border-l-muted-foreground/30'
                 }`}
               >
                 <span className={`truncate text-sm ${
@@ -467,7 +472,10 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
                   {p.status === 'error' && (
                     <span className="text-xs text-destructive">{p.error}</span>
                   )}
-                  {(p.status === 'done' || p.status === 'error') && (
+                  {p.status === 'duplicate' && (
+                    <span className="text-xs text-amber-700 dark:text-amber-300">{p.error}</span>
+                  )}
+                  {(p.status === 'done' || p.status === 'error' || p.status === 'duplicate') && (
                     <button
                       type="button"
                       onClick={() => setProgress((prev) => prev.filter((item) => item.fileName !== p.fileName))}
@@ -493,11 +501,11 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
               : 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/20 dark:text-yellow-200'
           }`}
         >
-          {errorCount === 0
-            ? doneCount === 1
-              ? '1 documento caricato con successo!'
-              : `${doneCount} documenti caricati con successo!`
-            : `${doneCount} caricati, ${errorCount} con errori.`}
+          {[
+            doneCount > 0 ? `${doneCount} ${doneCount === 1 ? 'documento caricato' : 'documenti caricati'} con successo` : null,
+            duplicateCount > 0 ? `${duplicateCount} ${duplicateCount === 1 ? 'doppione saltato' : 'doppioni saltati'} (già presenti)` : null,
+            errorCount > 0 ? `${errorCount} con errori` : null,
+          ].filter(Boolean).join(', ')}.
         </div>
       )}
     </div>

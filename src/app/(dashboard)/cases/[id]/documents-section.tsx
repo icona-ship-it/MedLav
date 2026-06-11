@@ -70,6 +70,9 @@ interface DocumentsSectionProps {
   hasUploadedDocs: boolean;
   onProceedToNext: () => void;
   classificationProgress?: ClassificationProgress | null;
+  /** Notifies the parent that "Categorizza tutti" was dispatched, so polling
+   * starts immediately (the server takes seconds to write the first progress). */
+  onClassificationStarted?: () => void;
 }
 
 // --- Helpers ---
@@ -100,6 +103,7 @@ export function DocumentsSection({
   hasUploadedDocs,
   onProceedToNext,
   classificationProgress,
+  onClassificationStarted,
 }: DocumentsSectionProps) {
   const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
@@ -109,6 +113,14 @@ export function DocumentsSection({
   const [classifyingDocId, setClassifyingDocId] = useState<string | null>(null);
   const [classifyingAll, setClassifyingAll] = useState(false);
   const [splittingDocId, setSplittingDocId] = useState<string | null>(null);
+  // True between the "Categorizza tutti" dispatch and the FIRST server-side
+  // progress write: the user must see feedback INSTANTLY, not after ~10s.
+  const [classifyStarting, setClassifyStarting] = useState(false);
+  useEffect(() => {
+    if (classificationProgress?.status === 'running' || classificationProgress?.status === 'done') {
+      setClassifyStarting(false);
+    }
+  }, [classificationProgress?.status]);
 
   // Ticker for live-updating ETA between polls
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -253,15 +265,18 @@ export function DocumentsSection({
       }
 
       toast.success('Categorizzazione AI avviata in background');
-      // Progress is now tracked via classificationProgress prop (from perizia_metadata)
-      // Polling in client.tsx will keep refreshing until done
+      // Instant local feedback + kick the parent's polling: the server takes
+      // a few seconds to write the first classificationProgress, and without
+      // the kickoff the polling condition would never turn on.
+      setClassifyStarting(true);
+      onClassificationStarted?.();
       router.refresh();
     } catch {
       toast.error('Errore nell\'avvio della categorizzazione');
     }
 
     setClassifyingAll(false);
-  }, [documents, caseId, router]);
+  }, [documents, caseId, router, onClassificationStarted]);
 
   const completedCount = documents.filter((d) => d.processing_status === 'completato').length;
   const processingCount = documents.filter((d) => isDocProcessing(d.processing_status)).length;
@@ -359,6 +374,23 @@ export function DocumentsSection({
                 </Button>
               )}
             </div>
+
+            {/* Instant feedback between dispatch and the first server progress
+                write — without this the user stares at a static page for ~10s */}
+            {classifyStarting && classificationProgress?.status !== 'running' && (
+              <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                  <span className="text-sm font-medium">Categorizzazione AI in avvio…</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full w-1/12 rounded-full bg-primary animate-pulse" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Tra pochi secondi vedrai l&apos;avanzamento documento per documento.
+                </p>
+              </div>
+            )}
 
             {/* Classify progress bar (from Inngest via perizia_metadata) */}
             {classificationProgress && classificationProgress.status === 'running' && (
