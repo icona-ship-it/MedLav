@@ -4,6 +4,19 @@
  */
 
 const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  // NB: messaggi GIÀ user-facing (scritti in italiano per l'utente dalla
+  // pipeline) stanno PRIMA di tutto: senza questi pattern finirebbero nel
+  // fallback "errore imprevisto" — successo durante il test reale 2026-06-11:
+  // 12 atti amministrativi correttamente analizzati (zero eventi clinici =
+  // normale per procure/decreti/PEC) mostrati come finti errori spaventosi.
+  {
+    pattern: /nessun evento strutturato individuato/i,
+    message: 'Nessun dato clinico in questo documento (normale per atti amministrativi, procure, comunicazioni): il testo è stato letto ed è comunque consultabile.',
+  },
+  {
+    pattern: /non contiene testo leggibile/i,
+    message: 'Il documento non contiene testo leggibile (potrebbe essere corrotto, protetto o una scansione illeggibile). Prova a riconvertirlo in PDF e ricaricarlo.',
+  },
   // NB: i due pattern del validatore report stanno PRIMA dei pattern generici —
   // i messaggi dei finding possono contenere frasi come "non trovato" che
   // altrimenti verrebbero mappate su "Risorsa non trovata".
