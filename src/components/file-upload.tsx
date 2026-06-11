@@ -9,6 +9,11 @@ import { getFileIcon, formatFileSize } from '@/lib/format';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { computeFileSha256 } from '@/lib/file-hash';
 
+/** Mistral OCR processes ~50 MB / 1000 pages in a single pass; warn only when
+ * a file approaches that ceiling. Upload itself accepts up to 100 MB
+ * (PIPELINE_LIMITS.MAX_FILE_SIZE_MB) — oversized docs can be split after upload. */
+const OCR_SINGLE_PASS_WARN_BYTES = 45 * 1024 * 1024;
+
 interface FileUploadProps {
   caseId: string;
   onUploadComplete?: () => void;
@@ -222,11 +227,18 @@ export function FileUpload({ caseId, onUploadComplete, onUploadStart }: FileUplo
             </Button>
           </div>
 
-          {files.some((f) => f.size > 10 * 1024 * 1024) && (
+          {/* Warn ONLY near the real single-pass OCR limit (~50 MB): files
+              below it are processed fine in one block — a lower threshold
+              (was 10 MB) fired on every normal cartella clinica and pushed
+              pointless manual splitting onto the user. */}
+          {files.some((f) => f.size > OCR_SINGLE_PASS_WARN_BYTES) && (
             <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Alcuni file sono molto grandi. Dopo il caricamento, puoi usare &quot;Dividi PDF&quot; dal menu del documento.
+                {files.filter((f) => f.size > OCR_SINGLE_PASS_WARN_BYTES).map((f) => `"${f.name}"`).join(', ')}
+                {files.filter((f) => f.size > OCR_SINGLE_PASS_WARN_BYTES).length === 1 ? ' supera' : ' superano'} i 45 MB:
+                l&apos;analisi potrebbe non riuscire in un blocco unico. Se dovesse fallire,
+                usa &quot;Dividi PDF&quot; dal menu del documento dopo il caricamento.
               </span>
             </div>
           )}
