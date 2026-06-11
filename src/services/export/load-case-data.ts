@@ -45,6 +45,10 @@ export async function loadCaseDataForExport(caseId: string) {
       .from('anomalies')
       .select('*')
       .eq('case_id', caseId)
+      // Allowlist coerente con fetchAnomaliesForSynthesis: le anomalie ESCLUSE
+      // dal perito (user_dismissed) e i falsi positivi auto-risolti
+      // (llm_resolved) non devono comparire nel documento depositabile.
+      .in('status', ['detected', 'llm_confirmed', 'user_confirmed'])
       .order('created_at', { ascending: true }),
     supabase
       .from('missing_documents')

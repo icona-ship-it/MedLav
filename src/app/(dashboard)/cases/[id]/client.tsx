@@ -537,6 +537,7 @@ export function CaseDetailClient({
                 generationProgress={generationProgress}
                 pubmedReferences={pubmedReferences}
                 pipelineWarnings={pipelineWarnings}
+                lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
               />
             </div>
           )}

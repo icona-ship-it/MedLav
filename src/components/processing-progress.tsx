@@ -51,6 +51,24 @@ function getStepIndex(status: string): number {
   return STATUS_TO_STEP[status] ?? -1;
 }
 
+/** Weighted pipeline progress 0-100 across documents: each doc contributes its
+ * current step / total steps. Far smoother than completed-docs-only counting,
+ * which sits at 0% for minutes on large parallel cases and then jumps. */
+export function computeWeightedProgress(statuses: readonly string[]): number {
+  if (statuses.length === 0) return 0;
+  const maxStep = STATUS_TO_STEP.completato;
+  const sum = statuses.reduce((acc, s) => {
+    // 'errore' counts as terminal (the pipeline moved past this doc)
+    const step = s === 'errore' ? maxStep : Math.max(0, getStepIndex(s));
+    return acc + step;
+  }, 0);
+  return Math.round((sum / (statuses.length * maxStep)) * 100);
+}
+
+/** Above this elapsed time, reassure the user instead of letting them think
+ * the app is stuck (top of the promised "5-15 min" range). */
+export const LONGER_THAN_EXPECTED_MS = 15 * 60 * 1000;
+
 function formatElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -222,6 +240,16 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
           <span>Tempo trascorso: {formatElapsed(elapsed)}</span>
+        </div>
+      )}
+
+      {/* Reassurance when the run exceeds the promised range: a silent long
+          wait reads as "stuck" and invites a destructive cancel. */}
+      {startTimeMs !== null && elapsed > LONGER_THAN_EXPECTED_MS && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+          Sta richiedendo più tempo del solito: succede coi fascicoli molto grandi.
+          L&apos;analisi prosegue sul server — puoi anche chiudere questa pagina e
+          tornare più tardi. Non annullare.
         </div>
       )}
 

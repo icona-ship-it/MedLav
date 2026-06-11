@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2, Download, AlertTriangle } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/inline-alert';
+import { toUserMessage } from '@/lib/user-error-messages';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,6 +82,8 @@ interface ReportStepProps {
   generationProgress?: GenerationProgress | null;
   pubmedReferences?: PubMedReference[];
   pipelineWarnings?: PipelineWarningItem[];
+  /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
+  lastError?: string;
 }
 
 // --- Component ---
@@ -95,10 +98,11 @@ export function ReportStep({
   documentPages,
   eventImages,
   processingStage,
-  // onNavigateToStep reserved for future use (e.g. "go back to documents" button)
+  onNavigateToStep,
   generationProgress,
   pubmedReferences = [],
   pipelineWarnings = [],
+  lastError,
 }: ReportStepProps) {
   const router = useRouter();
 
@@ -337,6 +341,45 @@ export function ReportStep({
             </div>
           </CardContent>
         </Card>
+      );
+    }
+
+    // Pipeline failed before producing a report: say it honestly (the generic
+    // fallback below would tell the user to "upload documents" — misleading
+    // and embarrassing right after a failure).
+    if (processingStage === 'errore') {
+      return (
+        <div className="flex flex-col gap-4">
+          <Card className="border-destructive/30">
+            <CardContent className="pt-6">
+              <div className="py-6 text-center space-y-3">
+                <p className="text-sm font-medium text-destructive">
+                  L&apos;elaborazione non è andata a buon fine
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {lastError ? toUserMessage(lastError) : 'Si è verificato un errore durante l\'elaborazione.'}
+                </p>
+                {events.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    L&apos;analisi dei documenti è riuscita ({events.length} eventi estratti, visibili qui sotto):
+                    è fallita solo la stesura del report.
+                  </p>
+                )}
+                <Button variant="outline" onClick={() => onNavigateToStep(3)}>
+                  Vai all&apos;Elaborazione per riprovare
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          {events.length > 0 && (
+            <EventsTab
+              caseId={caseId}
+              events={events}
+              eventImages={eventImages}
+              highlightedEventOrderNumber={highlightedEventId}
+            />
+          )}
+        </div>
       );
     }
 

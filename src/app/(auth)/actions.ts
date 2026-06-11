@@ -116,7 +116,11 @@ export async function requestPasswordReset(formData: FormData) {
   const supabase = await createClient();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/update-password`,
+    // MUST land on /auth/callback (the only place that exchanges the PKCE
+    // code for a session) and only THEN continue to the update form — landing
+    // directly on /auth/update-password leaves the user without a session and
+    // updateUser fails every time.
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback?next=/auth/update-password`,
   });
 
   if (error) {
@@ -172,6 +176,9 @@ export async function signIn(formData: FormData) {
   if (error) {
     if (error.message.includes('Invalid login credentials')) {
       return { error: 'Email o password non corretti' };
+    }
+    if (error.code === 'email_not_confirmed' || error.message.includes('Email not confirmed')) {
+      return { error: 'Devi prima confermare la tua email: controlla la posta in arrivo (anche lo spam) e clicca il link di conferma.' };
     }
     return { error: 'Errore durante il login. Riprova.' };
   }

@@ -14,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ProcessingProgress } from '@/components/processing-progress';
+import { ProcessingProgress, computeWeightedProgress } from '@/components/processing-progress';
 // Classification review removed — now handled by Document Organizer (Pro) or skipped
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
@@ -68,6 +68,9 @@ export function ProcessingSection({
   // 2.4-A2: sblocco manuale per i casi bloccati dal validatore di qualità
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  // Re-running a COMPLETED case wipes events (incl. perito review), anomaly
+  // decisions and ALL report versions server-side — never on a single click.
+  const [showReprocessDialog, setShowReprocessDialog] = useState(false);
   const processingStartRef = useRef<number | null>(null);
 
   // Il caso è morto su un blocco del VALIDATORE (non un errore tecnico): il
@@ -255,11 +258,13 @@ export function ProcessingSection({
                 const processingDocs = documents.filter((d) => !['caricato'].includes(d.processing_status));
                 const completedCount = processingDocs.filter((d) => d.processing_status === 'completato' || d.processing_status === 'errore').length;
                 const totalCount = processingDocs.length;
-                const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+                // Weighted by pipeline step: moves smoothly from the first
+                // minutes instead of sitting at 0/47 and then jumping.
+                const pct = computeWeightedProgress(processingDocs.map((d) => d.processing_status));
                 return (
                   <div className="space-y-3">
                     <p className="text-base font-semibold text-center">
-                      Elaborazione in corso — {completedCount}/{totalCount} documenti
+                      Elaborazione in corso — {pct}% ({completedCount}/{totalCount} documenti completati)
                     </p>
                     <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                       <div
@@ -352,7 +357,9 @@ export function ProcessingSection({
                       </Badge>
                       <Badge variant="outline" className="text-sm px-3 py-1">
                         <Clock className="mr-1.5 h-3.5 w-3.5" />
-                        Tempo stimato: ~{Math.max(3, Math.ceil(documents.length / 2))}–{Math.max(5, documents.length)} minuti per {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
+                        {/* Flat honest range: docs are processed in PARALLEL, a
+                            per-file linear formula promised ~24-47 min on 47 files */}
+                        Tempo stimato: di solito 5–15 minuti
                       </Badge>
                     </div>
                   </div>
@@ -395,7 +402,13 @@ export function ProcessingSection({
                       size="lg"
                       variant="approve"
                       className="w-full text-base py-6"
-                      onClick={handleStartProcessing}
+                      onClick={() => {
+                        if (processingStage === 'completato') {
+                          setShowReprocessDialog(true);
+                        } else {
+                          handleStartProcessing();
+                        }
+                      }}
                       disabled={isStartingProcessing || !hasUploadedDocs}
                     >
                       {isStartingProcessing ? (
@@ -493,6 +506,31 @@ export function ProcessingSection({
       </Card>
 
       {/* 2.4-A2: conferma sblocco "ignora i controlli di qualità" */}
+      <AlertDialog open={showReprocessDialog} onOpenChange={setShowReprocessDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rielaborare il caso da capo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Il caso è già stato elaborato. Rielaborandolo da capo verranno eliminati:
+              gli eventi estratti (incluse le tue verifiche e modifiche), le decisioni
+              sulle anomalie e il report con tutte le sue versioni (incluse le modifiche
+              manuali). L&apos;operazione non è reversibile e costa {creditCost} crediti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowReprocessDialog(false);
+                handleStartProcessing();
+              }}
+            >
+              Rielabora da capo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
