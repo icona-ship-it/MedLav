@@ -218,7 +218,7 @@ describe('document-summarizer', () => {
 
     it('should preserve input order with concurrent summarization', async () => {
       // Resolve doc-2 FIRST, doc-1 later: order must still follow the input
-      let resolveFirst: (v: { content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; finishReason: string }) => void;
+      let resolveFirst: (v: Awaited<ReturnType<typeof streamMistralChat>>) => void;
       mockStreamMistralChat
         .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
         .mockResolvedValueOnce({
