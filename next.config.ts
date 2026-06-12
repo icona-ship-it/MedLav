@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   // Puppeteer + Chromium are used only by /api/cases/[id]/export/pdf and
   // must not be bundled into every Lambda.
   serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium'],
+  webpack: (config) => {
+    // Hide webpack's own cache-serialization hints ("<w> Serializing big
+    // strings...") from build logs; real errors still surface.
+    config.infrastructureLogging = { ...config.infrastructureLogging, level: 'error' };
+    return config;
+  },
   // Security headers
   async headers() {
     return [
