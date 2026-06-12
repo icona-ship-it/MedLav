@@ -54,8 +54,11 @@ export default withSentryConfig(nextConfig, {
 
   project: "javascript-nextjs",
 
-  // Only print logs for uploading source maps in CI
-  silent: !process.env.CI,
+  // Suppress the per-file source map upload report in build logs (errors still surface)
+  silent: true,
+
+  // No usage telemetry sent to Sentry from the build plugin
+  telemetry: false,
 
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
