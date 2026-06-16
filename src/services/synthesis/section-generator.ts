@@ -38,6 +38,7 @@ import {
 } from './header-schema';
 import { renderHeaderMarkdown, variantForSectionId, overlayGiudizialeFromMetadata, buildOperativeCodaFromMetadata } from './header-template';
 import { buildTailPrioritizedOcrInput } from './document-summarizer';
+import { mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -46,6 +47,19 @@ import { formatCausalNexusForPrompt } from '@/lib/domain-knowledge/causal-nexus'
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
+
+/**
+ * Auto-split della documentazione sanitaria SELETTIVA sui casi voluminosi.
+ * Causa (Lavini caso-2026-195, 217 eventi): una singola chiamata LLM sforava il
+ * tetto token in output (finishReason=length) → tutti i retry fallivano →
+ * fallback vuoto + banner "217 eventi omessi". Sopra la soglia la sezione è
+ * generata in blocchi cronologici e concatenata, restando SELETTIVA (non il
+ * deterministico verbatim, che gonfierebbe il report). Soglia/blocco scelti per
+ * tenere l'output di ogni blocco ben sotto TOKENS_HUGE; i casi normali
+ * (< soglia eventi) restano un'unica chiamata, comportamento invariato.
+ */
+const DOC_SANITARIA_CHUNK_THRESHOLD = 80;
+const DOC_SANITARIA_CHUNK_SIZE = 50;
 
 /**
  * Random seed for a given Inngest retry attempt (Sprint 2.4-A1).
@@ -275,8 +289,10 @@ export async function generateSingleSection(params: {
   documentsOcrText?: DocumentOcrContext[];
   /** Inngest retry attempt (0-based). Varies the seed so retries are real variants. */
   attempt?: number;
+  /** Internal: set by the doc-sanitaria auto-split to avoid infinite recursion. */
+  disableChunking?: boolean;
 }): Promise<GeneratedSection> {
-  const { spec, synthesisParams, previousContext, documentsOcrText, attempt } = params;
+  const { spec, synthesisParams, previousContext, documentsOcrText, attempt, disableChunking } = params;
   const startMs = Date.now();
 
   // Bibliography: fall back to placeholder when no PubMed references available.
@@ -299,6 +315,18 @@ export async function generateSingleSection(params: {
   // fabrication structurally impossible (Wave 2.1, fix Regnoto-style hallucination).
   if (spec.id.startsWith('intestazione')) {
     return generateHeaderSection({ spec, synthesisParams, attempt });
+  }
+
+  // Auto-split selettivo della documentazione sanitaria sui casi voluminosi:
+  // una singola chiamata sforerebbe il tetto token in output. Si genera in
+  // blocchi cronologici e si concatena (vedi DOC_SANITARIA_CHUNK_*).
+  if (
+    !disableChunking &&
+    spec.id === 'documentazione_sanitaria' &&
+    !spec.isPlaceholder &&
+    synthesisParams.events.length > DOC_SANITARIA_CHUNK_THRESHOLD
+  ) {
+    return generateDocSanitariaChunked({ spec, synthesisParams, previousContext, documentsOcrText, attempt });
   }
 
   const hasOcrText = !!(documentsOcrText && documentsOcrText.length > 0);
@@ -517,6 +545,108 @@ export async function generateSingleSection(params: {
     ...(fidelity.mode ? { fidelityMode: fidelity.mode } : {}),
     ...(fidelity.mode === 'summaries' ? { fidelitySummaryCount: summaryCount } : {}),
   };
+}
+
+/**
+ * Spezza un array in blocchi di dimensione `size` (l'ultimo può essere più corto).
+ * Puro e testabile. size <= 0 → un solo blocco con tutto.
+ */
+export function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/** ISO date → DD.MM.YYYY (senza dipendenze; fallback alla stringa originale). */
+function isoToItDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : (iso || 's.d.');
+}
+
+/**
+ * Elenco analitico COMPLETO degli atti (uno per evento, ordine cronologico),
+ * costruito in modo deterministico da TUTTI gli eventi: in split mode i singoli
+ * blocchi LLM omettono l'indice (ne vedrebbero solo una fetta), così l'indice
+ * resta completo e accurato senza costare token.
+ */
+export function buildAttiIndex(events: ConsolidatedEvent[]): string {
+  const lines = events.map((e) => {
+    const who = (e.facility || e.doctor || '').trim();
+    const tipo = e.eventType ? e.eventType.charAt(0).toUpperCase() + e.eventType.slice(1) : 'Documento';
+    return `- ${tipo}${who ? ` — ${who}` : ''} (${isoToItDate(e.eventDate)})`;
+  });
+  return `**Elenco analitico degli atti sanitari esaminati (${lines.length}, in ordine cronologico):**\n\n${lines.join('\n')}`;
+}
+
+/** Direttiva per-blocco: niente indice/intestazione, solo narrazione continua. */
+function buildDocSanitariaChunkSpec(spec: SectionSpec, index: number, total: number): SectionSpec {
+  const note = `\n\nNOTA OPERATIVA (blocco ${index + 1} di ${total}): per la mole documentale questa sezione è prodotta in ${total} blocchi cronologici, poi concatenati. NON produrre l'ELENCO ANALITICO iniziale degli atti (viene aggiunto separatamente) né intestazioni di sezione: redigi SOLO la narrazione cronologica selettiva dei SOLI eventi qui forniti${index > 0 ? ', proseguendo lo stile dei blocchi precedenti senza ripeterli' : ''}.`;
+  return { ...spec, promptDirective: `${spec.promptDirective}${note}` };
+}
+
+/**
+ * Genera la documentazione sanitaria SELETTIVA in blocchi cronologici e li
+ * concatena: mantiene lo stile selettivo (conciso) ma scala a qualsiasi numero
+ * di eventi senza sforare il tetto token in output. MAI vuota: se un blocco
+ * fallisce lascia un marker localizzato e prosegue; solo se TUTTI i blocchi
+ * falliscono rilancia (→ retry/fallback esterno).
+ */
+async function generateDocSanitariaChunked(params: {
+  spec: SectionSpec;
+  synthesisParams: SynthesisParams;
+  previousContext: SectionContext[];
+  documentsOcrText?: DocumentOcrContext[];
+  attempt?: number;
+}): Promise<GeneratedSection> {
+  const { spec, synthesisParams, previousContext, documentsOcrText, attempt } = params;
+  const chunks = chunkArray(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE);
+  logger.info('section-generator', `Doc-sanitaria auto-split: ${synthesisParams.events.length} eventi → ${chunks.length} blocchi`);
+
+  const parts: string[] = [];
+  let rollingContext: SectionContext[] = [...previousContext];
+  let totalUsage = createEmptyUsage();
+  let okChunks = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const sub = await generateSingleSection({
+        spec: buildDocSanitariaChunkSpec(spec, i, chunks.length),
+        synthesisParams: { ...synthesisParams, events: chunks[i] },
+        previousContext: rollingContext,
+        documentsOcrText,
+        attempt,
+        disableChunking: true,
+      });
+      const body = sub.content.trim();
+      if (body.length > 0) {
+        parts.push(body);
+        rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: sub.contextSummary }];
+        if (sub.usage) totalUsage = mergeUsage(totalUsage, sub.usage);
+        okChunks++;
+      }
+    } catch (err) {
+      const chunk = chunks[i];
+      const range = chunk.length > 0
+        ? `${isoToItDate(chunk[0].eventDate)} – ${isoToItDate(chunk[chunk.length - 1].eventDate)}`
+        : '';
+      logger.error('section-generator', `Doc-sanitaria blocco ${i + 1}/${chunks.length} (${range}) fallito: ${err instanceof Error ? err.message : 'unknown'}`);
+      parts.push(`*[⚠ Blocco ${i + 1}/${chunks.length} (${range}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*`);
+    }
+  }
+
+  if (okChunks === 0) {
+    throw new Error(`Doc-sanitaria auto-split: tutti i ${chunks.length} blocchi falliti`);
+  }
+
+  const content = [buildAttiIndex(synthesisParams.events), ...parts].join('\n\n');
+  const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+  const contextSummary = spec.contextMaxChars > 0 ? summarizeForContext(content, spec.contextMaxChars) : '';
+  logger.info('section-generator', `Doc-sanitaria auto-split completato: ${okChunks}/${chunks.length} blocchi ok, ${wordCount} parole`);
+
+  return { id: spec.id, title: spec.title, content, contextSummary, wordCount, usage: totalUsage };
 }
 
 /**
