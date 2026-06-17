@@ -93,6 +93,24 @@ describe('regenerateSection — parity with generation', () => {
     expect(mockGenerate).not.toHaveBeenCalled();
   });
 
+  it('strips hallucinated ocr-image refs but keeps the real ones (HARD FILTER parity)', async () => {
+    const real = 'ocr-images/doc-a/p3-f0.png';
+    mockGenerate.mockResolvedValueOnce({
+      id: 'documentazione_atti',
+      title: 'I Dati della Documentazione in Atti',
+      content: `Testo.\n\n![Fig. 1](ocr-image:${real})\n\n![Fig. 2](ocr-image:ocr-images/fake/p9-f0.png)`,
+      contextSummary: '',
+      wordCount: 3,
+    });
+    const result = await regenerateSection(baseParams({
+      imageAnalysis: [
+        { pageNumber: 3, imageType: 'radiografia', description: 'd', confidence: 0.9, storagePath: real, documentId: 'doc-a' },
+      ],
+    }));
+    expect(result).toContain(`ocr-image:${real}`);
+    expect(result).not.toContain('fake/p9-f0.png');
+  });
+
   it('NEVER sends a PLACEHOLDER section (medico-legal valuation) to the LLM', async () => {
     // considerazioni_ml is isPlaceholder: the AI must not author the valuation —
     // it stays a deterministic placeholder for the perito (VINCOLO oggettività).

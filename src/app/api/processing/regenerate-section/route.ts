@@ -193,6 +193,20 @@ export async function POST(request: NextRequest) {
     // Fetch OCR text for faithful transcription
     const documentsOcrText = await fetchDocumentsOcrContext(caseId);
 
+    // Re-feed persisted diagnostic-image analyses so regenerating a section
+    // (e.g. doc-sanitaria) re-embeds its images instead of dropping them. Reports
+    // generated BEFORE imageAnalysis was persisted (legacy) have none → re-run
+    // Pixtral ONCE, gated to sections that actually use images (no Pixtral cost on
+    // text-only sections). The recomputed set is persisted below so later regens
+    // skip it (parity col fallback del full-regenerate).
+    let imageAnalysis: ReportGenerationMetadata['imageAnalysis'] | undefined = currentMetadata?.imageAnalysis ?? undefined;
+    const sectionUsesImages = sectionId === 'documentazione_sanitaria' && (elaborated || selective);
+    if ((!imageAnalysis || imageAnalysis.length === 0) && sectionUsesImages) {
+      const { analyzeDiagnosticImagesStep } = await import('@/inngest/steps/link-images');
+      const { imageAnalysisForMetadata } = await import('@/inngest/steps/generate-report');
+      imageAnalysis = imageAnalysisForMetadata(await analyzeDiagnosticImagesStep(caseId, caseRow.case_type as CaseType));
+    }
+
     // Regenerate the section
     const updatedSynthesis = await regenerateSection({
       sectionId,
@@ -209,6 +223,7 @@ export async function POST(request: NextRequest) {
       documentsOcrText,
       moduleId: (caseRow.module_id ?? undefined) as string | undefined,
       patientInitials: (caseRow.patient_initials ?? null) as string | null,
+      imageAnalysis,
       elaborated,
       selective,
     });
@@ -238,8 +253,13 @@ export async function POST(request: NextRequest) {
     // state, promptVersion, HRS, …) — previously this was dropped on every
     // regeneration — and reset ONLY the regenerated section to 'auto'.
     const newVersion = ((currentReport.version as number) ?? 0) + 1;
-    const newMetadata = markSectionState(currentMetadata, sectionId, () => ({ status: 'auto' }))
+    const baseMetadata = markSectionState(currentMetadata, sectionId, () => ({ status: 'auto' }))
       ?? currentMetadata ?? undefined;
+    // Persist a freshly-recomputed imageAnalysis (legacy-report fallback) so later
+    // regenerations skip Pixtral.
+    const newMetadata = (imageAnalysis && imageAnalysis.length > 0)
+      ? { ...(baseMetadata ?? {}), imageAnalysis }
+      : baseMetadata;
 
     const { error: insertError } = await admin.from('reports').insert({
       case_id: caseId,

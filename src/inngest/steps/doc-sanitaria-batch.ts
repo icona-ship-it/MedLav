@@ -1,4 +1,5 @@
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
+import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import { chunkArray } from '@/lib/array-utils';
 
 /**
@@ -54,4 +55,20 @@ export function planDocSanitariaEventBatches(
       ? `${isoToItDate(chunk[0].eventDate)} – ${isoToItDate(chunk[chunk.length - 1].eventDate)}`
       : '',
   }));
+}
+
+/**
+ * Restringe l'imageAnalysis ai soli documenti referenziati dalla finestra
+ * cronologica: ogni finestra offre all'LLM SOLO le immagini dei propri documenti,
+ * evitando che la stessa immagine venga proposta (ed eventualmente incorporata) in
+ * più finestre → niente duplicati/misplacement. Richiede `documentId` sul result
+ * (propagato end-to-end dal fix collisione cross-doc): immagini senza documentId
+ * sono escluse (non attribuibili a una finestra). `undefined` resta `undefined`.
+ */
+export function filterImagesForBatch(
+  imageAnalysis: ImageAnalysisResult[] | undefined,
+  docIds: string[],
+): ImageAnalysisResult[] | undefined {
+  if (!imageAnalysis) return undefined;
+  return imageAnalysis.filter((img) => img.documentId !== undefined && docIds.includes(img.documentId));
 }

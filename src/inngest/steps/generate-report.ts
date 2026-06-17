@@ -513,6 +513,37 @@ export interface AssembleReportOptions {
   userId?: string;
 }
 
+/** Image-analysis subset persisted into generation_metadata: drop token usage,
+ * keep the fields a regenerate needs to re-feed the LLM and re-embed images.
+ * Pure & testable. */
+export function imageAnalysisForMetadata(
+  imageAnalysis: ImageAnalysisResult[] | undefined,
+): Array<{ pageNumber: number; imageType: string; description: string; confidence: number; storagePath?: string; documentId?: string }> {
+  return (imageAnalysis ?? []).map((img) => ({
+    pageNumber: img.pageNumber,
+    imageType: img.imageType,
+    description: img.description,
+    confidence: img.confidence,
+    storagePath: img.storagePath,
+    documentId: img.documentId,
+  }));
+}
+
+/** Strip image refs whose ocr-image path is NOT a real (analyzed) image — the
+ * LLM occasionally invents them. Real paths come from imageAnalysis; on
+ * regenerate they are reloaded so genuine images are NOT stripped. Pure &
+ * testable (logs each strip). */
+export function stripHallucinatedImageRefs(report: string, realImagePaths: Set<string>): string {
+  return report.replace(
+    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
+    (match: string, path: string) => {
+      if (realImagePaths.has(path)) return match; // Real image — keep
+      logger.warn('pipeline', `Stripped hallucinated image ref: ocr-image:${path}`);
+      return ''; // Hallucinated — remove
+    },
+  );
+}
+
 /**
  * Assemble all generated sections into a final report and save to DB.
  * No LLM call — pure assembly + validation + DB insert.
@@ -535,22 +566,15 @@ export async function assembleSectionsAndSaveReport(
   const reportParts = sections.map((s) => assembleSectionBlock(s.id, s.title, s.content));
   let fullReport = reportParts.join('\n\n');
 
-  // HARD FILTER: Strip hallucinated image references.
-  // Build set of REAL image paths from imageAnalysis results.
-  // Any ocr-image: reference NOT in this set is hallucinated and gets stripped.
+  // HARD FILTER: Strip hallucinated image references — any ocr-image: path NOT
+  // produced by the analysis is invented by the LLM. Real paths come from
+  // imageAnalysis (persisted + reloaded on regenerate, so images survive).
   const realImagePaths = new Set(
     (synthesisParams.imageAnalysis ?? [])
       .filter((img) => img.storagePath)
       .map((img) => img.storagePath!),
   );
-  fullReport = fullReport.replace(
-    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
-    (match, path) => {
-      if (realImagePaths.has(path)) return match; // Real image — keep
-      logger.warn('pipeline', `Stripped hallucinated image ref: ocr-image:${path}`);
-      return ''; // Hallucinated — remove
-    },
-  );
+  fullReport = stripHallucinatedImageRefs(fullReport, realImagePaths);
 
   // Wave 3.3 — Source attribution appendix: append a "## Riferimenti
   // Documentali" section listing each unique document cited in the report.
@@ -715,6 +739,14 @@ export async function assembleSectionsAndSaveReport(
     ...(overriddenIssues.length > 0
       ? { validationOverridden: true, validationOverriddenIssues: overriddenIssues }
       : {}),
+    // Persist the diagnostic-image analyses (sans token usage) so a later
+    // "Rigenera report"/"Rigenera sezione" can re-feed them to the LLM and keep
+    // the images instead of stripping them as hallucinated (Pixtral is NOT
+    // re-run on regenerate). See regenerate-report.ts / section-regenerator.ts.
+    // SEMPRE presente (anche []): così la rigenerazione distingue "report pre-fix
+    // senza la chiave" (→ fallback Pixtral) da "report post-fix senza immagini"
+    // (→ nessun re-run inutile).
+    imageAnalysis: imageAnalysisForMetadata(synthesisParams.imageAnalysis ?? []),
   };
 
   if (coveBypassed.length > 0) {

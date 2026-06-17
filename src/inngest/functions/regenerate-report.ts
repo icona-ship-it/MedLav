@@ -8,6 +8,7 @@ import type { ConsolidatedEvent } from '@/services/consolidation/event-consolida
 import { fetchAllEventsForCase } from '../steps/consolidate-events';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import {
   buildSynthesisParams,
   planReportSections,
@@ -23,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -196,8 +197,40 @@ export const regenerateReport = inngest.createFunction(
         documentType: d.documentType,
       }));
 
-      return { metadata, documentTypes, docIds: docList.map((d) => d.id), docRefs };
+      // Reload the persisted diagnostic-image analyses from the latest report so
+      // the regenerated sections re-embed the images. Pixtral is NOT re-run on
+      // regenerate; without this the HARD FILTER strips every image marker as
+      // hallucinated (its whitelist is built from imageAnalysis).
+      const { data: lastReport } = await supabase
+        .from('reports')
+        .select('generation_metadata')
+        .eq('case_id', caseId)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastMeta = (lastReport?.generation_metadata ?? null) as { imageAnalysis?: ImageAnalysisResult[] } | null;
+      // null = chiave imageAnalysis ASSENTE (report pre-fix) → fallback Pixtral a
+      // valle; [] o [...] = chiave PRESENTE (report post-fix) → nessun fallback.
+      const imageAnalysis: ImageAnalysisResult[] | null =
+        lastMeta && 'imageAnalysis' in lastMeta && Array.isArray(lastMeta.imageAnalysis)
+          ? lastMeta.imageAnalysis
+          : null;
+
+      return { metadata, documentTypes, docIds: docList.map((d) => d.id), docRefs, imageAnalysis };
     });
+
+    // Fallback SOLO per i report pre-fix (chiave imageAnalysis ASSENTE → prep
+    // null): ri-esegui l'analisi immagini così la rigenerazione re-incorpora le
+    // immagini invece di strisciarle come allucinate. Pixtral costa ~€0.10 SOLO se
+    // il caso ha immagini (analyzeDiagnosticImagesStep esce subito con [] altrimenti);
+    // riusa eventi/OCR, NIENTE re-estrazione che altererebbe la cronologia. I report
+    // post-fix portano già la chiave (anche []) → niente re-run successivi.
+    const imageAnalysis: ImageAnalysisResult[] = prep.imageAnalysis !== null
+      ? prep.imageAnalysis
+      : await step.run('regen-analyze-images', async () => {
+          const { analyzeDiagnosticImagesStep } = await import('../steps/link-images');
+          return analyzeDiagnosticImagesStep(caseId, prep.metadata.caseType);
+        });
 
     const allEvents: ConsolidatedEvent[] = await step.run('regen-fetch-events', () => fetchAllEventsForCase(caseId));
     if (allEvents.length === 0) {
@@ -256,10 +289,10 @@ export const regenerateReport = inngest.createFunction(
       const calculations = calculateMedicoLegalPeriods(
         allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
       );
-      // imageAnalysis/pubmed: not re-run on regenerate (mirrors the previous
-      // behaviour) — facts come from deterministic sentinels. documentSummaries
-      // ARE re-run (above) for context parity with the first generation.
-      return buildSynthesisParams(prep.metadata, allEvents, anomalies, missingDocs, calculations, [], documentSummaries);
+      // imageAnalysis: reloaded from the latest report's metadata (prep) so the
+      // images survive regeneration — NOT re-run via Pixtral. pubmed: still not
+      // re-run. documentSummaries ARE re-run (above) for context parity.
+      return buildSynthesisParams(prep.metadata, allEvents, anomalies, missingDocs, calculations, imageAnalysis, documentSummaries);
     });
 
     // Progress writer (drives the existing UI progress bar).
@@ -317,7 +350,13 @@ export const regenerateReport = inngest.createFunction(
             // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
             return generateSingleSection({
               spec: buildDocSanitariaChunkSpec(spec, b, batches.length),
-              synthesisParams: { ...synthesisParams, events: batch.events },
+              synthesisParams: {
+                ...synthesisParams,
+                events: batch.events,
+                // Solo le immagini dei documenti di QUESTA finestra → niente
+                // duplicati/misplacement tra finestre.
+                imageAnalysis: filterImagesForBatch(synthesisParams.imageAnalysis, batch.docIds),
+              },
               previousContext: contextForBatch,
               documentsOcrText: batchOcr,
               attempt,

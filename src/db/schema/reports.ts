@@ -35,6 +35,17 @@ export interface ReportGenerationMetadata {
   generationMode?: 'monolithic' | 'sectional';
   /** Per-section review state, keyed by canonical section id. */
   sections?: ReportSectionStates;
+  /** Diagnostic-image analyses persisted at generation (sans token usage) so a
+   * regenerate can re-embed the images instead of stripping them. Structurally a
+   * subset of ImageAnalysisResult (no service import to keep the schema light). */
+  imageAnalysis?: Array<{
+    pageNumber: number;
+    imageType: string;
+    description: string;
+    confidence: number;
+    storagePath?: string;
+    documentId?: string;
+  }>;
   [key: string]: unknown;
 }
 

@@ -1,6 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, DOC_SANITARIA_EVENT_BATCH_SIZE } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
+import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
+
+function img(overrides?: Partial<ImageAnalysisResult>): ImageAnalysisResult {
+  return { pageNumber: 1, imageType: 'radiografia', description: 'd', confidence: 0.9, storagePath: 'p', documentId: 'doc-a', ...overrides };
+}
+
+describe('filterImagesForBatch', () => {
+  it('keeps only the images whose documentId is in the batch docIds', () => {
+    const images = [
+      img({ documentId: 'doc-a', storagePath: 'a/1.png' }),
+      img({ documentId: 'doc-b', storagePath: 'b/1.png' }),
+      img({ documentId: 'doc-a', storagePath: 'a/2.png' }),
+    ];
+    const out = filterImagesForBatch(images, ['doc-a']);
+    expect(out?.map((i) => i.storagePath)).toEqual(['a/1.png', 'a/2.png']);
+  });
+
+  it('excludes images without a documentId (not attributable to a window)', () => {
+    const out = filterImagesForBatch([img({ documentId: undefined })], ['doc-a']);
+    expect(out).toEqual([]);
+  });
+
+  it('returns undefined when imageAnalysis is undefined', () => {
+    expect(filterImagesForBatch(undefined, ['doc-a'])).toBeUndefined();
+  });
+});
 
 function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   return {

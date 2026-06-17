@@ -4,6 +4,7 @@ import type { DetectedAnomaly } from '../validation/anomaly-detector';
 import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
+import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionContext } from './section-generation-types';
 import {
@@ -12,7 +13,7 @@ import {
   buildDocSanitariaSelectiveSpec,
 } from './section-catalog';
 import { generateSingleSection, summarizeForContext } from './section-generator';
-import { buildPlaceholderContent } from '@/inngest/steps/generate-report';
+import { buildPlaceholderContent, stripHallucinatedImageRefs } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
 import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
@@ -32,6 +33,9 @@ interface RegenerateSectionParams {
   userInstruction?: string;
   periziaMetadata?: PeriziaMetadata;
   documentsOcrText?: DocumentOcrContext[];
+  /** Persisted diagnostic-image analyses (from the report's generation_metadata)
+   * so a regenerated section re-embeds the images instead of dropping them. */
+  imageAnalysis?: ImageAnalysisResult[];
   /** Module id (parere_pro_veritate / parere_scopo_riserva / RC) for spec resolution. */
   moduleId?: string;
   patientInitials?: string | null;
@@ -144,6 +148,7 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     calculations,
     periziaMetadata,
     documentsOcrText,
+    imageAnalysis: params.imageAnalysis,
   };
 
   // Rolling context: the OTHER sections of the current report, summarized — so a
@@ -204,6 +209,16 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
       });
     }
   }
+
+  // HARD FILTER (parità coi path full-report/monolitico): striscia i marker
+  // ocr-image il cui percorso NON è un'immagine reale analizzata. Ora che la
+  // rigenerazione di sezione riceve imageAnalysis, l'LLM può emettere marker
+  // immagine: senza questo filtro un percorso inventato sopravviverebbe nel
+  // synthesis salvato (immagine rotta in preview/export).
+  const realImagePaths = new Set(
+    (params.imageAnalysis ?? []).filter((i) => i.storagePath).map((i) => i.storagePath as string),
+  );
+  finalContent = stripHallucinatedImageRefs(finalContent, realImagePaths);
 
   return replaceSectionContent(currentSynthesis, sectionId, finalContent);
 }

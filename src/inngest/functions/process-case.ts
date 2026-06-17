@@ -34,7 +34,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1047,7 +1047,13 @@ export const processCase = inngest.createFunction(
             // auto-split annidato.
             return generateSingleSection({
               spec: buildDocSanitariaChunkSpec(spec, b, batches.length),
-              synthesisParams: { ...synthesisParams, events: batch.events },
+              synthesisParams: {
+                ...synthesisParams,
+                events: batch.events,
+                // Solo le immagini dei documenti di QUESTA finestra → niente
+                // duplicati/misplacement tra finestre.
+                imageAnalysis: filterImagesForBatch(synthesisParams.imageAnalysis, batch.docIds),
+              },
               previousContext: contextForBatch,
               documentsOcrText: batchOcr,
               attempt,
