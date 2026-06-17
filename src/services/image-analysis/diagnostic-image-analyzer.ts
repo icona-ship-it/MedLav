@@ -23,7 +23,20 @@ export interface ImageAnalysisResult {
   description: string;
   confidence: number;
   storagePath?: string;
+  /** Source document of the image. Carried end-to-end so the storagePath is
+   * never re-attached by pageNumber (which collides across documents). */
+  documentId?: string;
   usage?: TokenUsage;
+}
+
+/** Input image for analysis: identity (storagePath/documentId) travels WITH the
+ * payload so each result keeps its own source, even when two documents share a
+ * page number. */
+export interface ImageToAnalyze {
+  base64: string;
+  pageNumber: number;
+  storagePath?: string;
+  documentId?: string;
 }
 
 const IMAGE_TYPE_KEYWORDS: Record<string, string[]> = {
@@ -44,7 +57,7 @@ const MAX_IMAGES_PER_CASE = 15;
  * Processes images in parallel to stay within Vercel timeout.
  */
 export async function analyzeDocumentImages(params: {
-  images: Array<{ base64: string; pageNumber: number }>;
+  images: ImageToAnalyze[];
   caseType: CaseType;
   maxImages?: number;
 }): Promise<ImageAnalysisResult[]> {
@@ -57,7 +70,7 @@ export async function analyzeDocumentImages(params: {
 
   // Analyze in parallel to stay within Vercel timeout
   const settledResults = await Promise.allSettled(
-    imagesToAnalyze.map((image) => analyzeSingleImage(image.base64, image.pageNumber, caseType)),
+    imagesToAnalyze.map((image) => analyzeSingleImage(image, caseType)),
   );
 
   const results: ImageAnalysisResult[] = [];
@@ -79,10 +92,10 @@ export async function analyzeDocumentImages(params: {
  * Analyze a single diagnostic image.
  */
 async function analyzeSingleImage(
-  base64: string,
-  pageNumber: number,
+  image: ImageToAnalyze,
   caseType: CaseType,
 ): Promise<ImageAnalysisResult | null> {
+  const { base64, pageNumber, storagePath, documentId } = image;
   const client = getMistralClient();
 
   const systemPrompt = `Sei un assistente che DESCRIVE OGGETTIVAMENTE immagini diagnostiche per una perizia medico-legale. NON sei chiamato a diagnosticare: il giudizio clinico spetta al perito. Riferisci solo ciò che è visibile.
@@ -152,6 +165,8 @@ Rispondi in formato JSON:
       imageType: 'altro',
       description: '[Analisi immagine non disponibile per errore tecnico]',
       confidence: 0,
+      storagePath,
+      documentId,
       usage,
     };
   }
@@ -167,6 +182,8 @@ Rispondi in formato JSON:
       imageType: 'altro',
       description: '[Analisi immagine non disponibile per errore tecnico]',
       confidence: 0,
+      storagePath,
+      documentId,
       usage,
     };
   }
@@ -177,6 +194,8 @@ Rispondi in formato JSON:
     imageType: normalizeImageType(data.imageType ?? 'altro'),
     description: data.description ?? 'Nessuna descrizione disponibile',
     confidence: typeof data.confidence === 'number' ? data.confidence : 0.5,
+    storagePath,
+    documentId,
     usage,
   };
 }

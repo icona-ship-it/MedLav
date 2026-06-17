@@ -165,30 +165,30 @@ export async function analyzeDiagnosticImagesStep(
       if (!imageData) throw new Error('No data');
       const buffer = await imageData.arrayBuffer();
       const base64 = Buffer.from(buffer).toString('base64');
-      return { base64, pageNumber: page.page_number as number, storagePath: firstPath };
+      return {
+        base64,
+        pageNumber: page.page_number as number,
+        storagePath: firstPath,
+        documentId: page.document_id as string,
+      };
     }),
   );
 
   const images = downloadResults
-    .filter((r): r is PromiseFulfilledResult<{ base64: string; pageNumber: number; storagePath: string }> => r.status === 'fulfilled')
+    .filter((r): r is PromiseFulfilledResult<{ base64: string; pageNumber: number; storagePath: string; documentId: string }> => r.status === 'fulfilled')
     .map((r) => r.value);
 
   if (images.length === 0) return [];
 
   logger.info('pipeline', ` Step 4.6: Analyzing ${images.length} diagnostic images`);
+  // storagePath/documentId travel WITH each image into the analyzer and come back
+  // on each result — no re-attach by pageNumber (which collides when two
+  // documents share a page number → wrong image under the right caption).
   const results = await analyzeDocumentImages({
     images,
     caseType,
     maxImages: MAX_DIAGNOSTIC_IMAGES,
   });
-
-  // Attach storage paths to results
-  for (const result of results) {
-    const match = images.find((img) => img.pageNumber === result.pageNumber);
-    if (match) {
-      result.storagePath = match.storagePath;
-    }
-  }
 
   logger.info('pipeline', ` Step 4.6: Got ${results.length} image descriptions`);
   return results;

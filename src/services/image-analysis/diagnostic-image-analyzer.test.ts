@@ -76,5 +76,24 @@ describe('diagnostic-image-analyzer', () => {
 
       expect(results.length).toBeLessThanOrEqual(15);
     });
+
+    // Regressione audit: due documenti con un'immagine sullo STESSO page_number
+    // (comunissimo: ogni doc riparte da pag.1) non devono scambiarsi lo
+    // storagePath. L'identità viaggia col payload, niente re-attach per pageNumber.
+    it('keeps each result’s own storagePath/documentId when two docs share a pageNumber', async () => {
+      const results = await analyzeDocumentImages({
+        images: [
+          { base64: 'dGVzdA==', pageNumber: 3, storagePath: 'ocr-images/docA/p3-f0.png', documentId: 'doc-a' },
+          { base64: 'dGVzdA==', pageNumber: 3, storagePath: 'ocr-images/docB/p3-f0.png', documentId: 'doc-b' },
+        ],
+        caseType: 'ortopedica',
+      });
+
+      expect(results).toHaveLength(2);
+      const a = results.find((r) => r.documentId === 'doc-a');
+      const b = results.find((r) => r.documentId === 'doc-b');
+      expect(a?.storagePath).toBe('ocr-images/docA/p3-f0.png');
+      expect(b?.storagePath).toBe('ocr-images/docB/p3-f0.png');
+    });
   });
 });
