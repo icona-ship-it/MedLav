@@ -27,6 +27,32 @@ import { eventDateAppearsInReport } from '../synthesis/report-validator';
 
 const SENTINEL_DATE = '1900-01-01';
 
+/**
+ * Prefisso dell'indice analitico deterministico prependuto alla doc-sanitaria
+ * selettiva voluminosa (vedi buildAttiIndex in section-generator). L'indice
+ * elenca la DATA di OGNI evento: lasciarlo nel testo analizzato maschererebbe la
+ * rete anti-omissione (ogni data comparirebbe, quindi nessun T1 risulterebbe mai
+ * mancante). La coverage va misurata sulla NARRAZIONE, non sull'indice.
+ */
+const ATTI_INDEX_HEADER_PREFIX = '**Elenco analitico degli atti sanitari esaminati';
+
+/**
+ * Rimuove il blocco-indice analitico iniziale (header + righe "- ..." contigue),
+ * se presente, lasciando la sola narrazione. No-op se l'indice non c'è (es.
+ * rigenerazione di singola sezione non voluminosa). La narrazione è prosa: non
+ * inizia con righe "- ", quindi lo strip si ferma alla prima riga narrativa.
+ */
+export function stripAttiIndex(content: string): string {
+  if (!content.trimStart().startsWith(ATTI_INDEX_HEADER_PREFIX)) return content;
+  const lines = content.split('\n');
+  let i = 0;
+  while (i < lines.length && !lines[i].trimStart().startsWith(ATTI_INDEX_HEADER_PREFIX)) i++;
+  i++; // salta la riga header dell'indice
+  // salta righe vuote e voci "- ..." contigue (l'elenco), fino alla narrazione.
+  while (i < lines.length && (lines[i].trim() === '' || lines[i].trimStart().startsWith('- '))) i++;
+  return lines.slice(i).join('\n');
+}
+
 export interface SelectiveCoverageResult {
   /** Number of high-relevance (T1) events that had a real date to check. */
   t1Total: number;
@@ -49,7 +75,9 @@ export function checkSelectiveCoverage(
   content: string,
   events: ConsolidatedEvent[],
 ): SelectiveCoverageResult {
-  const contentLower = content.toLowerCase();
+  // Misura la copertura sulla SOLA narrazione: l'indice analitico deterministico
+  // (se prependuto) elenca ogni data e maschererebbe ogni omissione (#3/#5 panel).
+  const contentLower = stripAttiIndex(content).toLowerCase();
 
   const t1Dated = events.filter(
     (e) =>

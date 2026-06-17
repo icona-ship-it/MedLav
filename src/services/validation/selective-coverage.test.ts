@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
-import { checkSelectiveCoverage } from './selective-coverage';
+import { checkSelectiveCoverage, stripAttiIndex } from './selective-coverage';
+import { buildAttiIndex } from '../synthesis/section-generator';
 
 function ev(partial: Partial<ConsolidatedEvent>): ConsolidatedEvent {
   return {
@@ -92,5 +93,58 @@ describe('checkSelectiveCoverage', () => {
     const res = checkSelectiveCoverage(content, events);
     expect(res.t1Total).toBe(1);
     expect(res.missing).toHaveLength(1);
+  });
+
+  // Regressione (panel review #3/#5): su casi voluminosi la narrazione è
+  // preceduta dall'indice analitico deterministico, che elenca OGNI data. Senza
+  // strip, la rete anti-omissione non scatta mai. Deve invece misurare la sola
+  // narrazione.
+  it('still flags an omitted T1 even when the deterministic atti-index lists its date', () => {
+    const events = [
+      ev({ eventType: 'intervento', eventDate: '2024-03-12' }),
+      ev({ eventType: 'ricovero', eventDate: '2024-05-20', description: 'ricovero in chirurgia' }),
+    ];
+    // L'indice elenca ENTRAMBE le date; la narrazione cita solo la prima.
+    const content = `${buildAttiIndex(events)}\n\nIn data 12.03.2024 intervento chirurgico.`;
+    const res = checkSelectiveCoverage(content, events);
+    expect(res.t1Total).toBe(2);
+    expect(res.missing).toHaveLength(1);
+    expect(res.missing[0].eventDate).toBe('2024-05-20');
+  });
+
+  it('still passes when the narrative below the atti-index covers every T1', () => {
+    const events = [
+      ev({ eventType: 'intervento', eventDate: '2024-03-12' }),
+      ev({ eventType: 'ricovero', eventDate: '2024-05-20' }),
+    ];
+    const content = `${buildAttiIndex(events)}\n\nIl 12.03.2024 l'intervento; il 20.05.2024 il ricovero.`;
+    const res = checkSelectiveCoverage(content, events);
+    expect(res.missing).toHaveLength(0);
+  });
+});
+
+describe('stripAttiIndex', () => {
+  it('removes the leading deterministic index block, keeping the narrative', () => {
+    const events = [
+      ev({ eventType: 'intervento', eventDate: '2024-03-12' }),
+      ev({ eventType: 'ricovero', eventDate: '2024-05-20' }),
+    ];
+    const narrative = 'In data 12.03.2024 intervento chirurgico.';
+    const stripped = stripAttiIndex(`${buildAttiIndex(events)}\n\n${narrative}`);
+    expect(stripped.trim()).toBe(narrative);
+    expect(stripped).not.toContain('Elenco analitico');
+    expect(stripped).not.toContain('20.05.2024'); // la data viveva solo nell'indice
+  });
+
+  it('is a no-op when there is no leading index (single-section regen)', () => {
+    const content = 'In data 12.03.2024 intervento chirurgico.';
+    expect(stripAttiIndex(content)).toBe(content);
+  });
+
+  // Drift guard: se buildAttiIndex cambia intestazione, stripAttiIndex smette di
+  // funzionare → questo test fallisce e ci avvisa.
+  it('buildAttiIndex output starts with the prefix stripAttiIndex looks for', () => {
+    const idx = buildAttiIndex([ev({ eventType: 'visita', eventDate: '2024-03-12' })]);
+    expect(stripAttiIndex(`${idx}\n\nNARRAZIONE`).trim()).toBe('NARRAZIONE');
   });
 });
