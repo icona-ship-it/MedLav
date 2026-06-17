@@ -1,4 +1,5 @@
 import type { SectionSpec } from '@/services/synthesis/section-generation-types';
+import { DOC_SANITARIA_EVENT_BATCH_SIZE } from './doc-sanitaria-batch';
 
 /**
  * Partitioning of the section plan into a parallel wave and a sequential tail.
@@ -24,17 +25,21 @@ export interface PlannedSection {
   planIndex: number;
 }
 
-/** True when this spec takes the dedicated per-batch doc-sanitaria path
- * (AI variant on >batchSize docs) instead of a single gen-section step. */
+/** True when this spec takes the dedicated multi-step doc-sanitaria path (AI
+ * variant) instead of a single gen-section step. Triggered by a voluminous
+ * fascicolo on EITHER axis: many documents (>batchSize) OR many events
+ * (>one chronological window). The latter is what saves few-docs/many-events
+ * cases from a single step doing dozens of sequential LLM calls. */
 export function isDocSanitariaBatchPath(
   spec: SectionSpec,
   docCount: number,
   batchSize: number,
+  eventCount = 0,
 ): boolean {
   return spec.id === 'documentazione_sanitaria'
     && !spec.isPlaceholder
     && spec.needsOcr
-    && docCount > batchSize;
+    && (docCount > batchSize || eventCount > DOC_SANITARIA_EVENT_BATCH_SIZE);
 }
 
 /** True when the section's prompt consumes the rolling context of previously
@@ -52,11 +57,12 @@ export function partitionSectionPlan(
   plan: readonly SectionSpec[],
   docCount: number,
   batchSize: number,
+  eventCount = 0,
 ): { parallel: PlannedSection[]; sequential: PlannedSection[] } {
   const parallel: PlannedSection[] = [];
   const sequential: PlannedSection[] = [];
   plan.forEach((spec, planIndex) => {
-    if (consumesRollingContext(spec) || isDocSanitariaBatchPath(spec, docCount, batchSize)) {
+    if (consumesRollingContext(spec) || isDocSanitariaBatchPath(spec, docCount, batchSize, eventCount)) {
       sequential.push({ spec, planIndex });
     } else {
       parallel.push({ spec, planIndex });

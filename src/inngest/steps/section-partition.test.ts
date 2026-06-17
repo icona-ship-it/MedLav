@@ -41,6 +41,14 @@ describe('section-partition', () => {
       // Other sections never take the batch path
       expect(isDocSanitariaBatchPath(makeSpec({ id: 'quesiti', needsOcr: true }), 10, 4)).toBe(false);
     });
+
+    it('should batch on many events even with few documents (few-docs/many-events)', () => {
+      const aiVariant = makeSpec({ id: 'documentazione_sanitaria', needsOcr: true, isPlaceholder: false });
+      // 3 docs (≤ batchSize) but 1477 events → must take the multi-step path
+      expect(isDocSanitariaBatchPath(aiVariant, 3, 4, 1477)).toBe(true);
+      // Few docs AND few events → single-step path
+      expect(isDocSanitariaBatchPath(aiVariant, 3, 4, 40)).toBe(false);
+    });
   });
 
   describe('partitionSectionPlan', () => {

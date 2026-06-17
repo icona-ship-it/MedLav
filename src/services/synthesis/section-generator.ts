@@ -582,7 +582,7 @@ export function buildAttiIndex(events: ConsolidatedEvent[]): string {
 }
 
 /** Direttiva per-blocco: niente indice/intestazione, solo narrazione continua. */
-function buildDocSanitariaChunkSpec(spec: SectionSpec, index: number, total: number): SectionSpec {
+export function buildDocSanitariaChunkSpec(spec: SectionSpec, index: number, total: number): SectionSpec {
   const note = `\n\nNOTA OPERATIVA (blocco ${index + 1} di ${total}): per la mole documentale questa sezione è prodotta in ${total} blocchi cronologici, poi concatenati. NON produrre l'ELENCO ANALITICO iniziale degli atti (viene aggiunto separatamente) né intestazioni di sezione: redigi SOLO la narrazione cronologica selettiva dei SOLI eventi qui forniti${index > 0 ? ', proseguendo lo stile dei blocchi precedenti senza ripeterli' : ''}.`;
   return { ...spec, promptDirective: `${spec.promptDirective}${note}` };
 }

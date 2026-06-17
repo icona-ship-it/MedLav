@@ -34,6 +34,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
+import { planDocSanitariaEventBatches } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1007,60 +1008,81 @@ export const processCase = inngest.createFunction(
       }
     };
 
-    // documentazione_sanitaria (AI variant): split into batches of DOC_BATCH_SIZE
-    // documents — each batch a separate Inngest step → separate invocation → no timeout.
+    // documentazione_sanitaria (AI variant): batched per CHRONOLOGICAL EVENT
+    // WINDOWS (not per document). Each window is its own Inngest step → separate
+    // invocation → no per-step timeout. Every event is narrated exactly once, in
+    // chronological order; one analytical index for the whole section. Fixes the
+    // doc-batch × event-chunk interaction that, on voluminous cases (caso-195,
+    // 47 doc / 1477 eventi), made each doc-batch re-chunk ALL events →
+    // duplicazione + esplosione di chiamate LLM + cronologia scombinata.
     const runDocSanitariaBatched = async (
       spec: (typeof sectionPlan)[number],
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      const batchContents: string[] = [];
-      const totalBatches = Math.ceil(ocrResults.length / DOC_BATCH_SIZE);
+      const batches = planDocSanitariaEventBatches(synthesisParams.events);
+      const parts: string[] = [];
+      let rollingContext = [...previousContext];
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
+      let okBatches = 0;
 
-      for (let b = 0; b < totalBatches; b++) {
-        const batchStart = b * DOC_BATCH_SIZE;
-        const batchEnd = Math.min(batchStart + DOC_BATCH_SIZE, ocrResults.length);
-        const batchDocIds = ocrResults.slice(batchStart, batchEnd).map((r) => r.documentId);
+      for (let b = 0; b < batches.length; b++) {
+        const batch = batches[b];
+        const contextForBatch = rollingContext;
+        try {
+          const batchResult = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
+            await updateProgress(planIndex, `${spec.title} (${b + 1}/${batches.length})`);
 
-        const batchResult = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
-          await updateProgress(planIndex, `${spec.title} (${b + 1}/${totalBatches})`);
+            // Fetch OCR INSIDE each batch step to avoid Inngest 4MB payload limit.
+            // Each step is a separate invocation — data stays local, never serialized.
+            const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+            const allOcr = await fetchDocumentsOcrContext(caseId);
+            const batchOcr = allOcr.filter((d) => batch.docIds.includes(d.documentId));
 
-          // Fetch OCR INSIDE each batch step to avoid Inngest 4MB payload limit.
-          // Each step is a separate invocation — data stays local, never serialized.
-          const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-          const allOcr = await fetchDocumentsOcrContext(caseId);
-          const batchOcr = allOcr.filter((d) => batchDocIds.includes(d.documentId));
-
-          const { generateSingleSection } = await import('@/services/synthesis/section-generator');
-          // 2.4-A1: `attempt` (Inngest retry counter) varies the seed so a
-          // retry after a validator block produces a real variant.
-          return generateSingleSection({
-            spec,
-            synthesisParams,
-            previousContext,
-            documentsOcrText: batchOcr,
-            attempt,
+            const { generateSingleSection, buildDocSanitariaChunkSpec } = await import('@/services/synthesis/section-generator');
+            // 2.4-A1: `attempt` (Inngest retry counter) varies the seed so a
+            // retry after a validator block produces a real variant.
+            // disableChunking: la finestra è già ≤ un blocco cronologico → niente
+            // auto-split annidato.
+            return generateSingleSection({
+              spec: buildDocSanitariaChunkSpec(spec, b, batches.length),
+              synthesisParams: { ...synthesisParams, events: batch.events },
+              previousContext: contextForBatch,
+              documentsOcrText: batchOcr,
+              attempt,
+              disableChunking: true,
+            });
           });
-        });
 
-        if (batchResult.content) {
-          batchContents.push(batchResult.content);
-        } else {
-          logger.warn('pipeline', `Batch ${b}/${totalBatches} for documentazione_sanitaria returned empty content`, { caseId });
-        }
-
-        // Aggregate token usage
-        if (batchResult.usage) {
-          totalPromptTokens += batchResult.usage.promptTokens;
-          totalCompletionTokens += batchResult.usage.completionTokens;
+          const body = batchResult.content?.trim() ?? '';
+          if (body.length > 0) {
+            parts.push(body);
+            rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
+            okBatches++;
+          } else {
+            logger.warn('pipeline', `Doc-sanitaria finestra ${b + 1}/${batches.length} contenuto vuoto`, { caseId });
+          }
+          if (batchResult.usage) {
+            totalPromptTokens += batchResult.usage.promptTokens;
+            totalCompletionTokens += batchResult.usage.completionTokens;
+          }
+        } catch (batchError) {
+          // Resilienza (mirror di generateDocSanitariaChunked): una finestra
+          // fallita lascia un marker localizzato e si prosegue; si rilancia solo
+          // se TUTTE falliscono (→ fallback esterno di sezione).
+          logger.error('pipeline', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
+          parts.push(`*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*`);
         }
       }
 
-      // Combine all batches into one section with proper context summary
-      const combinedContent = batchContents.join('\n\n');
-      const { summarizeForContext } = await import('@/services/synthesis/section-generator');
+      if (okBatches === 0) {
+        throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
+      }
+
+      // Indice analitico COMPLETO unico in testa + le narrazioni delle finestre.
+      const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
+      const combinedContent = [buildAttiIndex(synthesisParams.events), ...parts].join('\n\n');
       const contextSummary = spec.contextMaxChars > 0
         ? summarizeForContext(combinedContent, spec.contextMaxChars)
         : '';
@@ -1092,7 +1114,7 @@ export const processCase = inngest.createFunction(
         });
 
     const { parallel: parallelSections, sequential: sequentialSections } =
-      partitionSectionPlan(sectionPlan, ocrResults.length, DOC_BATCH_SIZE);
+      partitionSectionPlan(sectionPlan, ocrResults.length, DOC_BATCH_SIZE, synthesisParams.events.length);
 
     // Parallel waves. previousContext = [] is byte-identical for these specs:
     // the generator injects rolling context ONLY for 'context-summaries'
@@ -1133,7 +1155,7 @@ export const processCase = inngest.createFunction(
     for (const { spec, planIndex } of sequentialSections) {
       const previousContext = buildPreviousContext(planIndex);
       try {
-        if (isDocSanitariaBatchPath(spec, ocrResults.length, DOC_BATCH_SIZE)) {
+        if (isDocSanitariaBatchPath(spec, ocrResults.length, DOC_BATCH_SIZE, synthesisParams.events.length)) {
           completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
         } else {
           const section = await step.run(`gen-section-${spec.id}`, async () => {
