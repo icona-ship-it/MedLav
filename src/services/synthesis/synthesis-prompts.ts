@@ -362,7 +362,7 @@ TIPO CASO: ${caseTypeLabelsText}
 RUOLO PERITO: ${roleLabel}
 PAZIENTE: ${patientInitials || 'N/D'}
 NUMERO EVENTI DOCUMENTATI: ${events.length}
-PERIODO DOCUMENTATO: ${events.length > 0 ? `${formatDate(events[0].eventDate)} — ${formatDate(events[events.length - 1].eventDate)}` : 'N/D'}
+PERIODO DOCUMENTATO: ${events.length > 0 ? `${promptEventDate(events[0].eventDate)} — ${promptEventDate(events[events.length - 1].eventDate)}` : 'N/D'}
 ${periziaSection}
 ## TUTTI GLI EVENTI CLINICI IN ORDINE CRONOLOGICO
 
@@ -669,9 +669,16 @@ export function buildSummaryUserPrompt(params: {
 
 // ── Formatting helpers ──
 
+/** Data per i PROMPT: la sentinella 1900-01-01 (evento senza data) → "s.d.",
+ * MAI "Data non documentata" (che formatDate restituisce) — è una stringa che il
+ * validator blocca come sentinel_date_leak se l'LLM la copia nel report. */
+function promptEventDate(iso: string): string {
+  return iso === '1900-01-01' ? 's.d.' : formatDate(iso);
+}
+
 export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events.map((e) => {
-    const date = formatDate(e.eventDate);
+    const date = promptEventDate(e.eventDate);
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
     const reliabilityScore = getSourceReliabilityScore(e.sourceType);

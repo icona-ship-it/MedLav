@@ -74,4 +74,10 @@ describe('buildAttiIndex', () => {
     expect(bare).toContain('- Ricovero (');
     expect(bare).not.toContain('—');
   });
+
+  it('renders the 1900-01-01 sentinel as "s.d." (never the validator-blocked 01.01.1900)', () => {
+    const idx = buildAttiIndex([makeEvent({ eventDate: '1900-01-01', eventType: 'spesa_medica' })]);
+    expect(idx).toContain('(s.d.)');
+    expect(idx).not.toMatch(/01[./]01[./]1900/);
+  });
 });

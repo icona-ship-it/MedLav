@@ -27,9 +27,12 @@ export interface DocSanitariaEventBatch {
   dateRange: string;
 }
 
-/** ISO date → DD.MM.YYYY (senza dipendenze; fallback alla stringa originale). */
+/** ISO date → DD.MM.YYYY (senza dipendenze; fallback alla stringa originale).
+ * La sentinella 1900-01-01 (evento senza data) → "s.d.", mai "01.01.1900"
+ * (leak bloccato dal validator sentinel_date_leak). */
 function isoToItDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (!iso || iso.startsWith('1900-01-01')) return 's.d.';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}.${m[2]}.${m[1]}` : (iso || 's.d.');
 }
 

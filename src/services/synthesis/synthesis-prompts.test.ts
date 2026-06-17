@@ -8,6 +8,7 @@ import {
   formatDocumentSummariesForPrompt,
   buildChronologyUserPrompt,
   formatAnomaliesForPrompt,
+  formatEventsForPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DocumentSummary } from './document-summarizer';
@@ -203,7 +204,7 @@ describe('synthesis-prompts', () => {
       expect(prompt).toContain('NUMERO EVENTI DOCUMENTATI: 3');
     });
 
-    it('should format sentinel date as "Data non documentata"', () => {
+    it('renders the sentinel date as "s.d." (never validator-blocked sentinel strings)', () => {
       const events = [
         makeEvent({ orderNumber: 1, eventDate: '1900-01-01', title: 'Evento senza data' }),
       ];
@@ -217,9 +218,11 @@ describe('synthesis-prompts', () => {
         missingDocuments: [],
       });
 
-      // formatDate('1900-01-01') returns 'Data non documentata'
-      expect(prompt).toContain('Data non documentata');
-      expect(prompt).not.toContain('01/01/1900');
+      // La sentinella 1900-01-01 → "s.d." nel prompt. MAI "Data non documentata"
+      // o 01.01.1900: stringhe bloccate dal validator (sentinel_date_leak) se copiate.
+      expect(prompt).toContain('s.d.');
+      expect(prompt).not.toContain('Data non documentata');
+      expect(prompt).not.toMatch(/01[./]01[./]1900/);
     });
 
     it('should include anomalies when present', () => {
@@ -658,5 +661,19 @@ describe('synthesis-prompts', () => {
       const noteCount = (result.match(/NOTA DEL PERITO/g) ?? []).length;
       expect(noteCount).toBe(2);
     });
+  });
+});
+
+describe('formatEventsForPrompt — sicurezza data sentinella', () => {
+  it('rende la sentinella 1900-01-01 come "s.d." (mai i pattern bloccati dal validator)', () => {
+    const out = formatEventsForPrompt([makeEvent({ eventDate: '1900-01-01', eventType: 'spesa_medica' })]);
+    expect(out).toContain('s.d.');
+    expect(out).not.toContain('Data non documentata');
+    expect(out).not.toMatch(/01[./]01[./]1900/);
+  });
+
+  it('rende normalmente una data reale (DD.MM.YYYY)', () => {
+    const out = formatEventsForPrompt([makeEvent({ eventDate: '2024-03-15' })]);
+    expect(out).toContain('15.03.2024');
   });
 });
