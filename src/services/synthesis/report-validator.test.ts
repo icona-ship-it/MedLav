@@ -794,3 +794,24 @@ describe('partitionBlockingIssues — manual unlock whitelist (Sprint 2.4-A2)', 
     expect(nonOverridable).toHaveLength(0);
   });
 });
+
+describe('checkRequiredSections — aliasing heading intestazione (fix CRITICAL Parere)', () => {
+  // Report parere realistico: contiene "La Documentazione Medica Prodotta" e
+  // "Conclusioni" (soddisfa REQUIRED_SECTIONS), così la sola variabile è l'heading
+  // intestazione aliasato. NB: REQUIRED_SECTIONS NON blocca il parere (il catalogo
+  // parere ha quelle due sezioni); l'unico blocco era checkRequiredSections.
+  const PARERE_DOC = 'Si e esaminata la documentazione sanitaria in atti relativa al periziando, comprensiva di referti, cartelle e accertamenti strumentali prodotti dalle parti.';
+  const PARERE_CONCL = 'Conclusioni: sussiste nesso causale tra la condotta sanitaria contestata e il danno lamentato dal periziando, con i profili di responsabilita esposti.';
+
+  it('NON segnala missing_section quando l\'intestazione è resa come "## PARERE PRO VERITATE"', () => {
+    const report = `## PARERE PRO VERITATE\n\nIl sottoscritto perito redige il presente parere su incarico della parte committente.\n\n## La Documentazione Medica Prodotta\n\n${PARERE_DOC}\n\n## Conclusioni\n\n${PARERE_CONCL}`;
+    const result = validateReport(report, 0, { requiredSectionTitles: ['Intestazione'], events: [] });
+    expect(result.issues.filter((i) => i.type === 'missing_section')).toHaveLength(0);
+  });
+
+  it('segnala ancora missing_section quando l\'intestazione è davvero assente', () => {
+    const report = `## La Documentazione Medica Prodotta\n\n${PARERE_DOC}\n\n## Conclusioni\n\n${PARERE_CONCL}`;
+    const result = validateReport(report, 0, { requiredSectionTitles: ['Intestazione'], events: [] });
+    expect(result.issues.some((i) => i.type === 'missing_section' && /intestazione/i.test(i.message))).toBe(true);
+  });
+});

@@ -330,7 +330,15 @@ function checkRequiredSections(
 
     // Match the section heading on its own line, case-insensitive. Use [ \t]*
     // (not \s*) so the match stops at the heading's newline.
-    const headingRe = new RegExp(`(?:^|\\n)#{1,3}[ \\t]*${escapeRegex(normalizedTitle)}[ \\t]*(?:\\n|$)`, 'i');
+    // CRITICAL FIX: l'intestazione e' resa con heading ALIASED per ruolo/modulo
+    // ("## PARERE PRO VERITATE", "## VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE", ...),
+    // NON "## Intestazione". Cercare il title letterale produceva un falso
+    // missing_section che bloccava PER SEMPRE ogni report Parere. Per il titolo
+    // "Intestazione" usiamo il regex di aliasing gia' noto al validator.
+    const isIntestazione = /^intestazione$/i.test(normalizedTitle);
+    const headingRe = isIntestazione
+      ? new RegExp(INTESTAZIONE_HEADING_RE.source, 'i')
+      : new RegExp(`(?:^|\\n)#{1,3}[ \\t]*${escapeRegex(normalizedTitle)}[ \\t]*(?:\\n|$)`, 'i');
     const match = headingRe.exec(synthesis);
     if (!match) {
       issues.push({
