@@ -175,8 +175,13 @@ export async function POST(request: NextRequest) {
       ? rawCaseTypes as CaseType[]
       : [caseRow.case_type as CaseType];
 
-    // Compute context data
-    const anomalies = detectAnomalies(events);
+    // Compute context data. FIX: passare caseType così il sequence-validator
+    // (gated su caseType) gira ANCHE in rigenerazione di sezione → le anomalie di
+    // sequenza temporale non spariscono dopo un re-run.
+    const anomalies = detectAnomalies(events, {
+      caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
+    });
     const missingDocs = detectMissingDocuments({
       events,
       caseType: caseRow.case_type as CaseType,

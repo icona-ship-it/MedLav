@@ -191,8 +191,19 @@ export async function POST(request: NextRequest) {
       (existingRows ?? []).map((r) => `${r.anomaly_type}::${r.description}`),
     );
 
-    // Re-detect anomalies (insert only new ones).
-    const rawAnomalies = detectAnomalies(events);
+    // Build caseTypes una volta (riusato anche sotto per missing-docs).
+    const rawCaseTypes = caseRow.case_types as string[] | null;
+    const caseTypes: CaseType[] = rawCaseTypes && rawCaseTypes.length > 0
+      ? rawCaseTypes as CaseType[]
+      : [caseRow.case_type as CaseType];
+
+    // Re-detect anomalies (insert only new ones). FIX: passare caseType così il
+    // sequence-validator (gated su caseType) gira ANCHE in rigenerazione → le
+    // anomalie di sequenza non vengono perse dopo un re-run.
+    const rawAnomalies = detectAnomalies(events, {
+      caseType: caseRow.case_type as CaseType,
+      caseTypes: caseTypes.length > 1 ? caseTypes : undefined,
+    });
     const newAnomalies = rawAnomalies.filter(
       (a) => !existingKeys.has(`${a.anomalyType}::${a.description}`),
     );
@@ -258,11 +269,7 @@ export async function POST(request: NextRequest) {
     const { fetchAnomaliesForSynthesis } = await import('@/services/validation/anomaly-fetcher');
     const anomalies = await fetchAnomaliesForSynthesis(admin, caseId);
 
-    // Build caseTypes: use case_types if available, fallback to [case_type]
-    const rawCaseTypes = caseRow.case_types as string[] | null;
-    const caseTypes: CaseType[] = rawCaseTypes && rawCaseTypes.length > 0
-      ? rawCaseTypes as CaseType[]
-      : [caseRow.case_type as CaseType];
+    // caseTypes già calcolato sopra (riusato qui).
 
     // Re-detect missing docs
     const missingDocs = detectMissingDocuments({
