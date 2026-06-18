@@ -73,6 +73,12 @@ const TITLE_NAME_REGEX = /(?:Dott\.?(?:ssa|\.ssa)?|Prof\.?(?:ssa|\.ssa)?|Sig\.?(
 const DATE_NUMERIC_REGEX = /\b(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}\b/g;
 
 /**
+ * ISO dates: yyyy-mm-dd (le date cliniche escono spesso in ISO; DATE_NUMERIC_REGEX
+ * cattura solo dd/mm/yyyy e le lasciava trapelare nell'export "anonimizzato").
+ */
+const DATE_ISO_REGEX = /\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b/g;
+
+/**
  * Italian dates with month name: "1 gennaio 2024", "15 marzo 2023"
  */
 const ITALIAN_MONTHS = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre';
@@ -90,7 +96,7 @@ const ADDRESS_REGEX = /(?:Via|Piazza|Corso|Viale|Largo|Vicolo|Piazzale|Piazzetta
  * Names preceded by context words (without professional titles).
  * Matches: "sig. Mario Rossi", "paziente Maria Bianchi", "figlio di Giuseppe Verdi"
  */
-const CONTEXT_NAME_REGEX = /(?:(?:sig\.?\s|signor[ae]?\s|paziente\s|parte\s|figlio di\s|figlia di\s|nat[oa]\s))([A-Z][a-z\u00E0-\u00FA]{1,}\s+[A-Z][a-z\u00E0-\u00FA]{1,}(?:\s+[A-Z][a-z\u00E0-\u00FA]{1,})?)/g;
+const CONTEXT_NAME_REGEX = /(?:(?:sig\.?\s|signor[ae]?\s|paziente\s|periziando\s|perizianda\s|attore\s|attrice\s|ricorrente\s|convenuto\s|assistit[oa]\s|infortunat[oa]\s|parte\s|figlio di\s|figlia di\s|nat[oa]\s))([A-Z][a-z\u00E0-\u00FA]{1,}\s+[A-Z][a-z\u00E0-\u00FA]{1,}(?:\s+[A-Z][a-z\u00E0-\u00FA]{1,})?)/g;
 
 /**
  * Hospital and healthcare facility names.
@@ -191,6 +197,32 @@ export function detectPii(params: {
         }
       }
     }
+
+    // 1b. Token-expansion (GDPR best-effort): redige le occorrenze ISOLATE di
+    // cognome/nome dei nomi METADATA noti (es. "Successivamente Rossi" dopo che
+    // "Mario Rossi" e' gia' noto). Solo token len>=4 con word-boundary per ridurre
+    // l'over-redazione di parole comuni; i nomi metadata sono autoritativi.
+    for (const { name, replacement } of nameEntries) {
+      for (const token of name.split(/\s+/).filter((t) => t.length >= 4)) {
+        // Case-SENSITIVE: redige il token solo nelle forme da nome proprio
+        // (Capitalizzato o MAIUSCOLO), MAI la parola minuscola — molti cognomi
+        // italiani sono anche parole comuni/cliniche (Costa=costola, Verde, Bianchi):
+        // redigere "costa" minuscolo corromperebbe il referto.
+        const cap = token.charAt(0).toUpperCase() + token.slice(1);
+        const forms = cap === token.toUpperCase() ? [cap] : [cap, token.toUpperCase()];
+        const tokenRegex = new RegExp(`\\b(?:${forms.map(escapeRegex).join('|')})\\b`, 'g');
+        let tokenMatch: RegExpExecArray | null;
+        while ((tokenMatch = tokenRegex.exec(text)) !== null) {
+          matches.push({
+            original: tokenMatch[0],
+            replacement,
+            category: 'nome',
+            index: tokenMatch.index,
+            length: tokenMatch[0].length,
+          });
+        }
+      }
+    }
   }
 
   // 2. Title + Name patterns
@@ -207,6 +239,9 @@ export function detectPii(params: {
 
   // 6. Dates (numeric)
   collectRegexMatches(text, DATE_NUMERIC_REGEX, 'data', tracker, matches);
+
+  // 6b. Dates (ISO yyyy-mm-dd) — le date cliniche escono spesso in ISO
+  collectRegexMatches(text, DATE_ISO_REGEX, 'data', tracker, matches);
 
   // 7. Dates (text with month name)
   collectRegexMatches(text, DATE_TEXT_REGEX, 'data', tracker, matches);
@@ -226,8 +261,16 @@ export function detectPii(params: {
   // 12. Email
   collectRegexMatches(text, EMAIL_REGEX, 'email', tracker, matches);
 
+  // Protezione immagini: i regex numerici (telefono/CF/date) matchano run di cifre
+  // dentro i base64 delle immagini diagnostiche embedded → le corromperebbero.
+  // Scarta ogni match che cade in una regione immagine (data-URI base64 o ocr-image:).
+  const imageRanges = imageProtectedRanges(text);
+  const visibleMatches = imageRanges.length > 0
+    ? matches.filter((m) => !rangeOverlaps(m.index, m.index + m.length, imageRanges))
+    : matches;
+
   // Deduplicate overlapping matches (keep the first/longest)
-  const deduped = deduplicateMatches(matches);
+  const deduped = deduplicateMatches(visibleMatches);
 
   // Build category counts
   const categories = countByCategory(deduped);
@@ -414,6 +457,14 @@ function countByCategory(matches: PiiMatch[]): Record<PiiCategory, number> {
 function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string; replacement: string }> {
   const entries: Array<{ name: string; replacement: string }> = [];
 
+  // patientFullName entra nel prompt di sintesi (etichettato AUTORITATIVO) → puo'
+  // comparire nel report in forma narrativa: va redatto. coCtuName idem.
+  if (metadata.patientFullName) {
+    entries.push({ name: metadata.patientFullName, replacement: '[PAZIENTE]' });
+  }
+  if (metadata.coCtuName) {
+    entries.push({ name: metadata.coCtuName, replacement: '[CO-CTU]' });
+  }
   if (metadata.parteRicorrente) {
     entries.push({ name: metadata.parteRicorrente, replacement: 'PARTE RICORRENTE' });
   }
@@ -445,4 +496,25 @@ function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string;
  */
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Regioni di testo che NON vanno toccate dai regex PII numerici: le immagini
+ * diagnostiche embedded (data-URI base64) e i marker ocr-image. I run di cifre
+ * del base64 venivano altrimenti matchati da PHONE_REGEX → immagine corrotta
+ * nell'export "anonimizzato".
+ */
+function imageProtectedRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const re = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+|ocr-image:[^\s)]+/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    ranges.push([m.index, m.index + m[0].length]);
+  }
+  return ranges;
+}
+
+/** True se [start,end) si sovrappone a una qualunque delle regioni protette. */
+function rangeOverlaps(start: number, end: number, ranges: Array<[number, number]>): boolean {
+  return ranges.some(([s, e]) => start < e && end > s);
 }

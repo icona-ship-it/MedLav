@@ -790,17 +790,13 @@ function validateExtractedNamesAgainstOcr(
   });
 
   if (nullifiedCount > 0) {
-    // Collect which names were nullified for audit trail (no patient data, only doctor/facility)
-    const nullifiedNames = validated
-      .filter((v, i) => v.doctor !== events[i].doctor || v.facility !== events[i].facility)
-      .map((v, i) => {
-        const parts: string[] = [];
-        if (events[i].doctor && !v.doctor) parts.push(`medico: "${events[i].doctor}"`);
-        if (events[i].facility && !v.facility) parts.push(`struttura: "${events[i].facility}"`);
-        return parts.join(', ');
-      })
-      .filter(Boolean);
-    logger.warn('extraction', `Name validation: ${nullifiedCount}/${events.length} events had names not in OCR text. Nullified: [${nullifiedNames.join(' | ')}]`);
+    // GDPR (.claude/rules/security.md): MAI loggare i nomi propri (medico/struttura
+    // SONO dati personali). Solo conteggi aggregati. Il nome non riscontrato nell'OCR
+    // viene azzerato (anti-hallucination) e reliabilityNotes porta solo una nota
+    // generica: il nome NON viene conservato — coerente col non doverlo loggare.
+    const doctorNullified = validated.filter((v, i) => events[i].doctor && !v.doctor).length;
+    const facilityNullified = validated.filter((v, i) => events[i].facility && !v.facility).length;
+    logger.warn('extraction', `Name validation: ${nullifiedCount}/${events.length} events had names not in OCR. Nullified medico=${doctorNullified}, struttura=${facilityNullified}`);
   }
 
   return validated;

@@ -172,4 +172,36 @@ describe('anonymizer', () => {
       expect(result.anonymizedText).toMatch(/\[RIF_GIUD_\d+\]/);
     });
   });
+
+  describe('GDPR gaps (fix HIGH anonimizzazione)', () => {
+    it('redige le date ISO yyyy-mm-dd, non solo dd/mm/yyyy', () => {
+      const result = anonymizeText({ text: 'Visita del 2024-03-15 e controllo del 15/03/2024.' });
+      expect(result.anonymizedText).not.toContain('2024-03-15');
+      expect(result.anonymizedText).not.toContain('15/03/2024');
+    });
+
+    it('redige un nome metadata in forma narrativa E il cognome isolato successivo', () => {
+      const result = anonymizeText({
+        text: 'Il periziando Mario Rossi e stato visitato. Successivamente Rossi ha riferito dolore.',
+        periziaMetadata: { patientFullName: 'Mario Rossi' } as unknown as import('@/types').PeriziaMetadata,
+      });
+      expect(result.anonymizedText).not.toContain('Mario Rossi');
+      expect(result.anonymizedText).not.toContain('Rossi');
+    });
+
+    it('NON corrompe le immagini base64 embedded (nessun regex numerico dentro il data-URI)', () => {
+      const b64 = 'data:image/png;base64,iVBORw0KGgo3471234567AAAA1234567890shapeddigits==';
+      const result = anonymizeText({ text: `Referto diagnostico. ![Fig](${b64}) Fine referto.` });
+      expect(result.anonymizedText).toContain(b64);
+    });
+
+    it('NON over-redige una parola comune in minuscolo che coincide col cognome (Costa=costola)', () => {
+      const result = anonymizeText({
+        text: 'Paziente Costa, visitato. Frattura della costa VII a sinistra.',
+        periziaMetadata: { patientFullName: 'Mario Costa' } as unknown as import('@/types').PeriziaMetadata,
+      });
+      expect(result.anonymizedText).toContain('della costa VII'); // la PAROLA clinica preservata
+      expect(result.anonymizedText).not.toMatch(/\bCosta\b/); // il NOME (Capitalizzato) redatto
+    });
+  });
 });
