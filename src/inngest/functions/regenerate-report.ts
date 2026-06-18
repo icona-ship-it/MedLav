@@ -241,7 +241,12 @@ export const regenerateReport = inngest.createFunction(
           return analyzeDiagnosticImagesStep(caseId, prep.metadata.caseType);
         });
 
-    const allEvents: ConsolidatedEvent[] = await step.run('regen-fetch-events', () => fetchAllEventsForCase(caseId));
+    // P1 SCALA: l'array eventi cresce col caso (a ~3000+ eventi supera i 4MB di
+    // un Inngest step-output → fallimento netto). Letto nel BODY (non come step),
+    // ri-eseguito a ogni invocazione: e' solo una DB read, cheap, e identico a
+    // come fa process-case.ts. Il lock per-caso (concurrency key=caseId) garantisce
+    // che gli eventi non mutino a meta' run → deterministico tra i replay.
+    const allEvents: ConsolidatedEvent[] = await fetchAllEventsForCase(caseId);
     if (allEvents.length === 0) {
       throw new Error('Nessun evento disponibile per la rigenerazione del report');
     }
@@ -286,23 +291,27 @@ export const regenerateReport = inngest.createFunction(
       }
     }
 
-    const synthesisParams = await step.run('regen-build-params', async () => {
-      const supabase = createAdminClient();
+    // P1 SCALA: synthesisParams CONTIENE l'array eventi → NON puo' essere uno
+    // step-output (4MB). Mirror process-case.ts: le anomalie (output piccolo)
+    // restano uno step memoizzato; missingDocs/calculations/synthesisParams sono
+    // CPU calcolati nel BODY dagli allEvents gia' in memoria (ri-eseguiti a ogni
+    // invocazione, cheap). Cosi' l'array eventi non viene mai serializzato da Inngest.
+    const synthesisAnomalies = await step.run('regen-fetch-anomalies', async () => {
       const { fetchAnomaliesForSynthesis } = await import('@/services/validation/anomaly-fetcher');
-      const anomalies = await fetchAnomaliesForSynthesis(supabase, caseId);
-      const missingDocs = detectMissingDocuments({
-        events: allEvents,
-        caseType: prep.metadata.caseType,
-        caseTypes: prep.metadata.caseTypes.length > 1 ? prep.metadata.caseTypes : undefined,
-      });
-      const calculations = calculateMedicoLegalPeriods(
-        allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
-      );
-      // imageAnalysis: reloaded from the latest report's metadata (prep) so the
-      // images survive regeneration — NOT re-run via Pixtral. pubmed: still not
-      // re-run. documentSummaries ARE re-run (above) for context parity.
-      return buildSynthesisParams(prep.metadata, allEvents, anomalies, missingDocs, calculations, imageAnalysis, documentSummaries);
+      return fetchAnomaliesForSynthesis(createAdminClient(), caseId);
     });
+    const missingDocs = detectMissingDocuments({
+      events: allEvents,
+      caseType: prep.metadata.caseType,
+      caseTypes: prep.metadata.caseTypes.length > 1 ? prep.metadata.caseTypes : undefined,
+    });
+    const calculations = calculateMedicoLegalPeriods(
+      allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
+    );
+    // imageAnalysis: ri-letto dal metadata dell'ultimo report (prep) cosi' le
+    // immagini sopravvivono alla rigenerazione — NON ri-eseguito via Pixtral.
+    // pubmed: non ri-eseguito. documentSummaries: ri-eseguiti (sopra) per parita' di contesto.
+    const synthesisParams = buildSynthesisParams(prep.metadata, allEvents, synthesisAnomalies, missingDocs, calculations, imageAnalysis, documentSummaries);
 
     // Progress writer (drives the existing UI progress bar).
     const updateProgress = async (i: number, title: string) => {
