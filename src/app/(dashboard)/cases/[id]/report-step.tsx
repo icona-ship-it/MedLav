@@ -395,8 +395,57 @@ export function ReportStep({
   }
 
   // --- Report available ---
+  // Banner di rigenerazione in corso: mostrato quando ESISTE già un report e il
+  // job async è attivo (processing_stage='generazione_report'). Senza questo,
+  // rigenerando un report esistente l'utente vedeva solo la vecchia versione
+  // ferma, senza alcun segnale. Lo stato è quello del SERVER (via polling), non
+  // l'`isRegenerating` client che copre solo la chiamata POST iniziale.
+  const isRegeneratingReport = processingStage === 'generazione_report';
+  const regenProgressPct = generationProgress && generationProgress.totalSections > 0
+    ? Math.round((generationProgress.currentSection / generationProgress.totalSections) * 100)
+    : 0;
+
   return (
     <div className="flex flex-col">
+      {isRegeneratingReport && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-primary">
+                Rigenerazione del report in corso…
+              </p>
+              {generationProgress ? (
+                <>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    Sezione {generationProgress.currentSection} di {generationProgress.totalSections}
+                    {generationProgress.currentSectionTitle ? ` — ${generationProgress.currentSectionTitle}` : ''}
+                  </p>
+                  <div className="mt-2 h-2 w-full max-w-md overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-700"
+                      style={{ width: `${regenProgressPct}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{regenProgressPct}%</p>
+                </>
+              ) : (
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Avvio in corso — il report viene ricostruito da capo.
+                </p>
+              )}
+              <p className="mt-1 text-xs italic text-muted-foreground">
+                La pagina si aggiorna automaticamente al termine. Il report qui sotto è la versione precedente.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Warning banner for pipeline issues */}
       {pipelineWarnings.length > 0 && (
         <PipelineWarningsBanner warnings={pipelineWarnings} documents={documents} events={events} />
@@ -408,7 +457,7 @@ export function ReportStep({
         report={report}
         anomalyCount={anomalies.length}
         missingDocsCount={missingDocsCount}
-        isRegenerating={isRegenerating}
+        isRegenerating={isRegenerating || isRegeneratingReport}
         onRegenerate={handleRegenerate}
         onEdit={() => setEditDialogOpen(true)}
         onVersionsToggle={handleVersionsToggle}
