@@ -2,13 +2,16 @@
   "regions": ["fra1"],
   "functions": {
     "app/api/inngest/route.ts": {
-      "maxDuration": 800
+      "maxDuration": 800,
+      "memory": 3008
     },
     "app/api/processing/regenerate/route.ts": {
-      "maxDuration": 800
+      "maxDuration": 800,
+      "memory": 3008
     },
     "app/api/processing/regenerate-section/route.ts": {
-      "maxDuration": 800
+      "maxDuration": 800,
+      "memory": 3008
     }
   }
 }

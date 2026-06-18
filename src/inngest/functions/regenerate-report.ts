@@ -135,10 +135,19 @@ export const regenerateReport = inngest.createFunction(
   {
     id: 'regenerate-report',
     retries: 2,
+    // Inngest accetta max 2 entry concurrency. Teniamo cap GLOBALE (protegge
+    // Mistral/Vercel quando molti utenti rigenerano insieme) + LOCK PER-CASO
+    // (due rigenerazioni dello stesso caso non girano mai insieme: no race sui
+    // report, no doppio costo, copre i retry). La fairness per-utente la dà il
+    // throttle sotto + il rate-limit della route.
     concurrency: [
       { limit: 50 },
-      { limit: 5, key: 'event.data.userId' },
+      { limit: 1, key: 'event.data.caseId' },
     ],
+    // Throttle globale: limita gli AVVII di rigenerazione/min per smussare i burst
+    // (molti utenti insieme). NB: è a livello di RUN (non per-chiamata-LLM) → da
+    // tarare sul rate-limit Mistral EU; il cap LLM globale vero è P2.
+    throttle: { limit: 8, period: '1m' },
     cancelOn: [{ event: 'case/pipeline.cancelled', match: 'data.caseId' }],
     onFailure: async ({ event }) => restoreCompletatoOnFailure(event),
   },
@@ -344,8 +353,9 @@ export const regenerateReport = inngest.createFunction(
           const batchResult = await step.run(`regen-section-documentazione_sanitaria-batch-${b}`, async () => {
             await updateProgress(planIndex, `${spec.title} (${b + 1}/${batches.length})`);
             const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-            const allOcr = await fetchDocumentsOcrContext(caseId);
-            const batchOcr = allOcr.filter((d) => batch.docIds.includes(d.documentId));
+            // OCR scoped ai soli doc della finestra: evita di caricare l'OCR
+            // dell'intero caso a ogni finestra (picco RAM → OOM su casi grandi).
+            const batchOcr = await fetchDocumentsOcrContext(caseId, batch.docIds);
             const { generateSingleSection, buildDocSanitariaChunkSpec } = await import('@/services/synthesis/section-generator');
             // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
             return generateSingleSection({

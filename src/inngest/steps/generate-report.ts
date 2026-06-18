@@ -23,13 +23,27 @@ import { logger } from '@/lib/logger';
  * Fetch OCR text for all documents in a case.
  * Called INSIDE step functions to avoid serializing large text between steps.
  */
-export async function fetchDocumentsOcrContext(caseId: string): Promise<DocumentOcrContext[]> {
+/**
+ * Carica l'OCR dei documenti di un caso. `onlyDocIds` (opzionale) restringe il
+ * caricamento ai soli documenti indicati: fondamentale per i casi voluminosi —
+ * la doc-sanitaria a finestre chiamava questa con tutti i 47+ doc e poi filtrava,
+ * pagando il picco RAM dell'OCR INTERO a ogni finestra (causa OOM su caso-195).
+ * Con onlyDocIds il picco scende all'OCR della sola finestra. `onlyDocIds=[]`
+ * (finestra senza documenti referenziati) → nessun OCR.
+ */
+export async function fetchDocumentsOcrContext(caseId: string, onlyDocIds?: string[]): Promise<DocumentOcrContext[]> {
   const supabase = createAdminClient();
 
-  const { data: docs } = await supabase
+  if (onlyDocIds !== undefined && onlyDocIds.length === 0) return [];
+
+  let docsQuery = supabase
     .from('documents')
     .select('id, file_name, document_type')
     .eq('case_id', caseId);
+  if (onlyDocIds !== undefined) {
+    docsQuery = docsQuery.in('id', onlyDocIds);
+  }
+  const { data: docs } = await docsQuery;
 
   if (!docs || docs.length === 0) return [];
 

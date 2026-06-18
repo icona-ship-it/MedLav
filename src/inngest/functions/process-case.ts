@@ -219,9 +219,13 @@ export const processCase = inngest.createFunction(
   {
     id: 'process-case',
     retries: 3,
+    // Inngest accetta max 2 entry concurrency: cap GLOBALE + LOCK PER-CASO (no
+    // pipeline concorrenti sullo stesso caso → niente race/eventi duplicati,
+    // audit finding). Il per-utente è stato rimosso a favore del lock per-caso;
+    // un caso = un run, quindi la parallelizzazione interna (waves) è invariata.
     concurrency: [
-      { limit: 100 },                              // global cap — Inngest Pro allows 100 concurrent steps
-      { limit: 50, key: 'event.data.userId' },      // per-user — high to maximize parallelism for large cases
+      { limit: 100 },
+      { limit: 1, key: 'event.data.caseId' },
     ],
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
@@ -1037,8 +1041,9 @@ export const processCase = inngest.createFunction(
             // Fetch OCR INSIDE each batch step to avoid Inngest 4MB payload limit.
             // Each step is a separate invocation — data stays local, never serialized.
             const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
-            const allOcr = await fetchDocumentsOcrContext(caseId);
-            const batchOcr = allOcr.filter((d) => batch.docIds.includes(d.documentId));
+            // OCR scoped ai soli doc della finestra: evita di caricare l'OCR
+            // dell'intero caso a ogni finestra (picco RAM → OOM su casi grandi).
+            const batchOcr = await fetchDocumentsOcrContext(caseId, batch.docIds);
 
             const { generateSingleSection, buildDocSanitariaChunkSpec } = await import('@/services/synthesis/section-generator');
             // 2.4-A1: `attempt` (Inngest retry counter) varies the seed so a
