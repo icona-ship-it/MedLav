@@ -620,6 +620,20 @@ export const processCase = inngest.createFunction(
       logger.warn('pipeline', `Extraction partial failure: ${failedDocCount}/${ocrResults.length} docs produced 0 events (${failedBatchCount}/${totalBatches} batches failed)`);
     }
 
+    // "Mai perdere un fatto": un batch (chunk) che ha esaurito i retry significa
+    // che parte di un documento NON è stata estratta — anche quando il doc ha eventi
+    // da ALTRI chunk e quindi non rientra in failedDocCount (0 eventi). Senza questo
+    // warning la perdita parziale resterebbe silenziosa su doc multi-chunk.
+    if (failedBatchCount > 0) {
+      pipelineWarnings.push({
+        step: 'extraction',
+        severity: failedBatchCount > totalBatches / 2 ? 'critical' : 'warning',
+        message: `${failedBatchCount} di ${totalBatches} blocchi di estrazione non completati (testo troppo denso / output troncato): alcuni eventi potrebbero non essere stati estratti. Verificare i documenti interessati.`,
+        failedCount: failedBatchCount,
+        totalCount: totalBatches,
+      });
+    }
+
     // ── Step 4: Consolidate events ───────────────────────────────
     const consolidationResult = await step.run(
       'consolidate-events',

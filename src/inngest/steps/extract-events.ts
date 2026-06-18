@@ -11,6 +11,30 @@ export const PAGES_PER_CHUNK = 10;
 /** Overlap pages between consecutive chunks to prevent mid-document splits. */
 export const OVERLAP_PAGES = 2;
 
+/**
+ * True se un errore di estrazione va RILANCIATO (Inngest ritenta / il doc viene
+ * marcato in errore) invece di ingoiato come {count:0}. Copre i transitori di rete
+ * E gli errori di INTEGRITÀ dell'estrazione: output LLM troncato (assertNotTruncated
+ * → finishReason=length) e JSON irrecuperabile (safeJsonParse dopo 3 livelli).
+ * Ingoiare questi ultimi perderebbe in SILENZIO gli eventi clinici di un intero
+ * chunk ("mai perdere un fatto"). Pura e testabile.
+ */
+export function isRetriableExtractionError(message: string): boolean {
+  const lower = message.toLowerCase();
+  const isTransient = ['timeout', 'fetch failed', 'econnreset', 'socket hang up', 'enotfound'].some((t) => lower.includes(t))
+    || /\b(502|503|429)\b/.test(message);
+  const isIntegrity = lower.includes('truncation detected')
+    || lower.includes('finishreason=length')
+    || lower.includes('irrecuperabile')
+    || lower.includes('json llm')
+    || lower.includes('insert failed')     // eventi estratti ma NON salvati su DB = perdita reale
+    || lower.includes('pages not found')   // timing/replica DB — il messaggio stesso dice "will be retried"
+    || lower.includes('stalled')           // stream LLM bloccato (nessun token)
+    || lower.includes('empty content')     // "...returned empty content"
+    || lower.includes('content is empty'); // "Stream completed but content is empty"
+  return isTransient || isIntegrity;
+}
+
 /** Number of chunk extraction jobs per Inngest step (batch).
  * Kept at 1 for maximum parallelism on Inngest Pro (100 concurrent steps).
  * With the neutral-retry safeguard added in P0-EXT-001, a chunk can take up to
@@ -504,11 +528,11 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);
 
-    // Bug #6: Rethrow transient errors so Inngest retries the step
-    const lowerMsg = message.toLowerCase();
-    const isTransient = ['timeout', 'fetch failed', 'econnreset', 'socket hang up', 'enotfound'].some((t) => lowerMsg.includes(t))
-      || /\b(502|503|429)\b/.test(message);
-    if (isTransient) {
+    // Bug #6 + "MAI perdere un fatto": rilancia i transitori E gli errori di
+    // INTEGRITÀ (output troncato / JSON irrecuperabile) → Inngest ritenta; se
+    // persistente la guard a valle marca il doc in errore, invece di omettere in
+    // silenzio gli eventi di un intero chunk restituendo {count:0}.
+    if (isRetriableExtractionError(message)) {
       throw error;
     }
 

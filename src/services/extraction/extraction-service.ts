@@ -169,7 +169,11 @@ export async function extractEventsFromChunk(params: {
     ],
     responseFormat: EXTRACTION_JSON_SCHEMA,
     temperature,
-    maxTokens: 8192,
+    // 16384 (era 8192): un chunk denso (~30K char di JSON eventi) sforava il tetto
+    // output → finishReason=length → troncamento. Col tetto alzato i chunk densi
+    // completano e il retry (ora che il troncamento NON è più ingoiato) ha una
+    // chance reale invece di ripetere la stessa troncatura.
+    maxTokens: 16384,
     timeoutMs: TIMEOUT_EXTRACTION,
     randomSeed: DETERMINISTIC_SEED,
     label: `extraction:${chunkLabel.slice(0, 30)}`,

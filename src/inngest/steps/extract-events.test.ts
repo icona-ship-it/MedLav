@@ -12,7 +12,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { planChunksSync, PAGES_PER_CHUNK, OVERLAP_PAGES } from './extract-events';
+import { planChunksSync, PAGES_PER_CHUNK, OVERLAP_PAGES, isRetriableExtractionError } from './extract-events';
 
 describe('planChunksSync — A4 overlap', () => {
   it('should use a stride smaller than the chunk size (overlap is active)', () => {
@@ -66,5 +66,28 @@ describe('planChunksSync — A4 overlap', () => {
 
   it('should return no chunks for an empty document', () => {
     expect(planChunksSync(0)).toEqual([]);
+  });
+});
+
+describe('isRetriableExtractionError — mai perdere un fatto', () => {
+  it('rilancia gli errori di INTEGRITÀ (troncamento / JSON irrecuperabile)', () => {
+    expect(isRetriableExtractionError('LLM truncation detected (extraction:foo): finishReason=length, 30000 chars')).toBe(true);
+    expect(isRetriableExtractionError('Estrazione fallita per "doc": JSON LLM irrecuperabile dopo 3 livelli')).toBe(true);
+  });
+
+  it('rilancia i transitori di rete', () => {
+    expect(isRetriableExtractionError('fetch failed: ECONNRESET')).toBe(true);
+    expect(isRetriableExtractionError('HTTP 503 Service Unavailable')).toBe(true);
+  });
+
+  it('rilancia gli altri vettori di perdita silenziosa (insert/pages/stall/empty)', () => {
+    expect(isRetriableExtractionError('Event insert failed: deadlock detected')).toBe(true);
+    expect(isRetriableExtractionError('Pages not found for chunk, will be retried by Inngest')).toBe(true);
+    expect(isRetriableExtractionError('Stream stalled: no tokens received')).toBe(true);
+    expect(isRetriableExtractionError('Stream completed but content is empty')).toBe(true);
+  });
+
+  it('NON rilancia un errore generico non-integrità (resta {count:0})', () => {
+    expect(isRetriableExtractionError('some unexpected non-integrity validation message')).toBe(false);
   });
 });
