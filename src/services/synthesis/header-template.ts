@@ -367,25 +367,27 @@ function renderStragiudizialeHeader(data: HeaderData): string {
   const lines: string[] = [];
   const p = data.paziente;
 
-  // Carta intestata del perito.
+  // Carta intestata del perito: testo PIANO come nei benchmark (MOTTA/Antoniazzi),
+  // senza grassetto/corsivo markdown (decisione Lavini 2026-06-23, #7).
   if (data.perito?.nome) {
-    lines.push(`**${data.perito.nome}**`);
+    lines.push(data.perito.nome);
     if (data.perito.specializzazione) {
       for (const spec of data.perito.specializzazione.split(/\n|;|\s\/\s/).map((s) => s.trim()).filter(Boolean)) {
-        lines.push(`*${spec}*`);
+        lines.push(spec);
       }
     }
     if (data.perito.iscrizioneAlbo) lines.push(`Iscrizione Albo: ${data.perito.iscrizioneAlbo}`);
     if (data.perito.email) lines.push(`E-mail: ${data.perito.email}`);
     if (data.perito.pec) lines.push(`PEC: ${data.perito.pec}`);
   } else {
-    lines.push(`**${TBD}**`);
+    lines.push(TBD);
   }
   lines.push('');
 
-  // Riga visita con la formula del consenso (gold Regnoto).
+  // Riga visita. Niente "con il suo consenso": MOTTA/Antoniazzi non lo scrivono
+  // (decisione Lavini 2026-06-23, #2 — allineare ai benchmark di riferimento).
   const accompagnatore = p.accompagnatore ? `, in presenza di ${p.accompagnatore}` : '';
-  lines.push(`In data ${data.dataVisitaMedicoLegale ?? TBD} ho sottoposto ad accertamenti clinici e valutazione medico legale, con il suo consenso${accompagnatore}:`);
+  lines.push(`In data ${data.dataVisitaMedicoLegale ?? TBD} ho sottoposto ad accertamenti clinici e valutazione medico legale${accompagnatore}:`);
   lines.push('');
 
   // Dati del periziando, riga per riga (gold Antoniazzi).
@@ -405,16 +407,17 @@ function renderStragiudizialeHeader(data: HeaderData): string {
   if (p.avvocato) lines.push(`Avvocato di parte: ${p.avvocato}`);
   lines.push('');
 
-  // Riga-scopo (gold Antoniazzi). L'ambito adatta la chiusura al tipo caso.
+  // Riga-scopo. Decisione Lavini 2026-06-23 (#3): ENTRAMBE le formule dei gold —
+  // "valutare le lesioni patite" (Antoniazzi) + "accertare le conseguenze di ordine
+  // temporaneo e permanente" (MOTTA). L'ambito (es. responsabilità civile) chiude.
   const o = data.oggetto;
-  const scopo: string[] = [];
-  if (o.eventoIndice) scopo.push(`in occasione di ${o.eventoIndice.toLowerCase()}`);
-  if (o.dataEvento) scopo.push(`occorso in data ${o.dataEvento}`);
+  const eventoParts: string[] = [];
+  if (o.eventoIndice) eventoParts.push(`in occasione di ${o.eventoIndice.toLowerCase()}`);
+  if (o.dataEvento) eventoParts.push(`occorso in data ${o.dataEvento}`);
+  const eventoStr = eventoParts.length > 0 ? ` ${eventoParts.join(' ')}` : ` in occasione di ${TBD}`;
   const ambitoLabel = ambitoToText(o.ambito);
-  if (ambitoLabel) scopo.push(`in ambito ${ambitoLabel}`);
-  lines.push(scopo.length > 0
-    ? `Al fine di valutare le lesioni patite ${scopo.join(' ')}.`
-    : `Al fine di valutare le lesioni patite in occasione di ${TBD}.`);
+  const ambitoSuffix = ambitoLabel ? ` in ambito ${ambitoLabel}` : '';
+  lines.push(`Al fine di valutare le lesioni patite${eventoStr} e di accertarne le conseguenze di ordine temporaneo e permanente${ambitoSuffix}.`);
 
   return lines.join('\n').trim();
 }

@@ -460,25 +460,29 @@ describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniaz
     };
   }
 
-  it('layout carta intestata: niente schede "###" né titolo VALUTAZIONE', () => {
+  it('layout carta intestata: niente schede "###" né titolo VALUTAZIONE; blocco perito in TESTO PIANO (#7 Lavini)', () => {
     const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
     expect(md).not.toContain('### ');
     expect(md).not.toContain('VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE');
-    expect(md).toContain('**Dott. Mario Esempio**');
-    expect(md).toContain('*Specialista in Ortopedia e Traumatologia*');
-    expect(md).toContain('*Specialista in Medicina Legale*');
+    // #7: come nei benchmark MOTTA/Antoniazzi — niente grassetto/corsivo sul perito.
+    expect(md).toContain('Dott. Mario Esempio');
+    expect(md).not.toContain('**Dott. Mario Esempio**');
+    expect(md).toContain('Specialista in Ortopedia e Traumatologia');
+    expect(md).not.toContain('*Specialista in Ortopedia e Traumatologia*');
   });
 
-  it('riga visita con formula del consenso', () => {
+  it('riga visita SENZA "con il suo consenso" (#2 Lavini: allineata a MOTTA/Antoniazzi)', () => {
     const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
-    expect(md).toContain('In data 05/06/2026 ho sottoposto ad accertamenti clinici e valutazione medico legale, con il suo consenso');
+    expect(md).toContain('In data 05/06/2026 ho sottoposto ad accertamenti clinici e valutazione medico legale:');
+    expect(md).not.toContain('con il suo consenso');
   });
 
-  it('accompagnatore documentato: ", in presenza di ..."', () => {
+  it('accompagnatore documentato: ", in presenza di ..." (senza consenso)', () => {
     const d = stragHeader();
     d.paziente.accompagnatore = 'sua madre';
     const md = renderHeaderMarkdown(d, { variant: 'stragiudiziale' });
-    expect(md).toContain('con il suo consenso, in presenza di sua madre');
+    expect(md).toContain('valutazione medico legale, in presenza di sua madre:');
+    expect(md).not.toContain('con il suo consenso');
   });
 
   it('blocco dati periziando riga per riga (nato/residente, C.F., MAIL, TEL, Avvocato)', () => {
@@ -491,9 +495,9 @@ describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniaz
     expect(md).toContain('Avvocato di parte: Avv. Franca Fittizia');
   });
 
-  it('riga scopo "Al fine di valutare le lesioni patite..."', () => {
+  it('riga scopo: ENTRAMBE le formule dei gold (#3 Lavini — valutare lesioni + accertare conseguenze temporanee/permanenti)', () => {
     const md = renderHeaderMarkdown(stragHeader(), { variant: 'stragiudiziale' });
-    expect(md).toContain('Al fine di valutare le lesioni patite in occasione di caduta accidentale occorso in data 12/09/2025 in ambito di responsabilità civile.');
+    expect(md).toContain('Al fine di valutare le lesioni patite in occasione di caduta accidentale occorso in data 12/09/2025 e di accertarne le conseguenze di ordine temporaneo e permanente in ambito di responsabilità civile.');
   });
 
   it('NESSUN riferimento al tribunale (regola assoluta stragiudiziale)', () => {
