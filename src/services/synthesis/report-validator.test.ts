@@ -236,6 +236,12 @@ ${Array(100).fill('parola').join(' ')}`;
       const result = validateReport(buildFullReport(), 5);
       expect(result.issues.filter((i) => i.type === 'sentinel_name_leak')).toHaveLength(0);
     });
+
+    it('NON flagga "Laboratorio Analisi" (dicitura clinica comune, non un esempio few-shot) — fix HRS gonfiato', () => {
+      const report = buildFullReport() + '\nGli esami sono stati eseguiti presso il Laboratorio Analisi al 1° piano dell\'Ospedale di Suzzara.';
+      const result = validateReport(report, 5);
+      expect(result.issues.filter((i) => i.type === 'sentinel_name_leak')).toHaveLength(0);
+    });
   });
 
   describe('event coverage', () => {

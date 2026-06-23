@@ -684,7 +684,16 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     logger.warn('extraction', `Detected ${sentinelCopyCount} events with sentinel/placeholder values copied from example — nullified`);
   }
 
-  const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
+  // Validazione al confine (no cast cieco su output LLM): tieni solo le voci
+  // {abbreviation, expansion} valide. Un raw.abbreviations malformato (stringa,
+  // oggetti monchi) altrimenti farebbe crashare lo spread/dedup a valle.
+  const rawAbbr = raw.abbreviations;
+  const abbreviations: Array<{ abbreviation: string; expansion: string }> | undefined = Array.isArray(rawAbbr)
+    ? rawAbbr.filter((a): a is { abbreviation: string; expansion: string } => {
+        const o = a as Record<string, unknown> | null;
+        return !!o && typeof o === 'object' && typeof o.abbreviation === 'string' && typeof o.expansion === 'string';
+      })
+    : undefined;
   logger.info('extraction', ` Parsed ${validEvents.length}/${rawEvents.length} events`);
   // partialRecovery propagato: il flagging degli eventi (requiresVerification + nota)
   // avviene in extractEventsFromChunk DOPO i transform, così non viene sovrascritto.

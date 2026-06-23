@@ -6,6 +6,33 @@ import { safeJsonParse } from '@/lib/format';
 import type { CaseType } from '@/types';
 import { logger } from '@/lib/logger';
 
+/** Un riferimento a una singola figura diagnostica (storagePath risolto). */
+export interface FigureRef {
+  path: string;
+  pageNumber: number;
+  documentId: string;
+}
+
+/**
+ * Espande le pagine in singole FIGURE: `image_path` può contenere PIÙ figure sulla
+ * stessa pagina separate da ';' (es. "p1-f0.png;p1-f1.png" — due proiezioni RX). Il
+ * vecchio `.split(';')[0]` teneva solo la prima → le altre immagini diagnostiche
+ * SPARIVANO dal referto. Capato a `max` (budget Pixtral/MAX_DIAGNOSTIC_IMAGES). Pura e testabile.
+ */
+export function expandFigureRefs(
+  pages: ReadonlyArray<{ page_number: number; image_path: string; document_id: string }>,
+  max: number,
+): FigureRef[] {
+  const refs: FigureRef[] = [];
+  for (const page of pages) {
+    for (const path of page.image_path.split(';').map((p) => p.trim()).filter(Boolean)) {
+      if (refs.length >= max) return refs;
+      refs.push({ path, pageNumber: page.page_number, documentId: page.document_id });
+    }
+  }
+  return refs;
+}
+
 /**
  * Step 4.5: Link images to events based on sourcePages.
  * Matches event sourcePages with page image data and inserts event_images rows.
@@ -155,21 +182,27 @@ export async function analyzeDiagnosticImagesStep(
     );
   }
 
+  // Espandi TUTTE le figure di ogni pagina (non solo la prima): una pagina con più
+  // proiezioni RX/immagini altrimenti perdeva tutte le figure tranne la prima.
+  const figureRefs = expandFigureRefs(
+    pagesWithImages as Array<{ page_number: number; image_path: string; document_id: string }>,
+    MAX_DIAGNOSTIC_IMAGES,
+  );
+
   // Download images in parallel
   const downloadResults = await Promise.allSettled(
-    pagesWithImages.map(async (page) => {
-      const firstPath = (page.image_path as string).split(';')[0];
+    figureRefs.map(async (ref) => {
       const { data: imageData } = await supabase.storage
         .from('documents')
-        .download(firstPath);
+        .download(ref.path);
       if (!imageData) throw new Error('No data');
       const buffer = await imageData.arrayBuffer();
       const base64 = Buffer.from(buffer).toString('base64');
       return {
         base64,
-        pageNumber: page.page_number as number,
-        storagePath: firstPath,
-        documentId: page.document_id as string,
+        pageNumber: ref.pageNumber,
+        storagePath: ref.path,
+        documentId: ref.documentId,
       };
     }),
   );

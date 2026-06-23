@@ -206,7 +206,11 @@ export async function POST(request: NextRequest) {
     // skip it (parity col fallback del full-regenerate).
     let imageAnalysis: ReportGenerationMetadata['imageAnalysis'] | undefined = currentMetadata?.imageAnalysis ?? undefined;
     const sectionUsesImages = sectionId === 'documentazione_sanitaria' && (elaborated || selective);
-    if ((!imageAnalysis || imageAnalysis.length === 0) && sectionUsesImages) {
+    // Fallback Pixtral SOLO per i report PRE-fix (chiave imageAnalysis ASSENTE), come il
+    // full-regenerate (key-presence, non length): un report post-fix SENZA immagini ha la
+    // chiave = [] e NON deve ri-eseguire analyzeDiagnosticImagesStep ad ogni rigenerazione.
+    const hasImageAnalysisKey = currentMetadata != null && 'imageAnalysis' in currentMetadata;
+    if (!hasImageAnalysisKey && sectionUsesImages) {
       const { analyzeDiagnosticImagesStep } = await import('@/inngest/steps/link-images');
       const { imageAnalysisForMetadata } = await import('@/inngest/steps/generate-report');
       imageAnalysis = imageAnalysisForMetadata(await analyzeDiagnosticImagesStep(caseId, caseRow.case_type as CaseType));

@@ -94,7 +94,10 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bDott\.?\s+Neri\b/i, label: 'Dott. Neri' },
   { pattern: /\bOspedale\s+San\s+Marco\b/i, label: 'Ospedale San Marco' },
   { pattern: /\bP\.?O\.?\s+San\s+Giovanni\b/i, label: 'P.O. San Giovanni' },
-  { pattern: /\bLaboratorio\s+Analisi\b/i, label: 'Laboratorio Analisi' },
+  // NB: "Laboratorio Analisi" RIMOSSO (verifica 2026-06-23): è una dicitura clinica
+  // comunissima ("Laboratorio Analisi al 1° piano dell'Ospedale di...") → falso
+  // sentinel_name_leak che gonfiava l'HRS a "critico" su referti puliti. Non era un
+  // token distintivo di un esempio few-shot.
   // Token distintivi dell'esempio narrativo Antoniazzi in il_fatto_e_storia_clinica
   // (section-catalog.ts): se compaiono nel report, l'LLM ha copiato l'esempio.
   { pattern: /\bScuola\s+Cangrande\b/i, label: 'Scuola Cangrande (esempio Antoniazzi)' },
