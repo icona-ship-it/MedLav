@@ -533,6 +533,30 @@ export const processCase = inngest.createFunction(
             });
           }
         }
+        // "Mai perdere un fatto": JSON LLM riparato/recuperato (non parse pulito) →
+        // la coda può mancare. Aggregato per file (no spam per-chunk). Gli eventi
+        // recuperati sono già flaggati requires_verification a monte.
+        if (result.value.recoveryWarnings && result.value.recoveryWarnings.length > 0) {
+          const byFile = new Map<string, { pageRanges: string[]; recoveredCount: number }>();
+          for (const rw of result.value.recoveryWarnings) {
+            const entry = byFile.get(rw.fileName) ?? { pageRanges: [], recoveredCount: 0 };
+            entry.pageRanges.push(rw.pageRange);
+            entry.recoveredCount += rw.recoveredCount;
+            byFile.set(rw.fileName, entry);
+          }
+          for (const [fileName, agg] of byFile.entries()) {
+            // Wording distinto: con 0 eventi recuperati NON dire "recuperati" (fuorviante).
+            const message = agg.recoveredCount > 0
+              ? `Estrazione JSON parziale: documento "${fileName}" pp ${agg.pageRanges.join(', ')} — ${agg.recoveredCount} eventi recuperati da output LLM malformato; eventi successivi in questi segmenti potrebbero mancare. Verificare la completezza nel documento originale.`
+              : `Estrazione JSON malformato: documento "${fileName}" pp ${agg.pageRanges.join(', ')} — output LLM non interamente analizzabile, nessun evento estratto da questi segmenti. Verificare manualmente le pagine indicate nel documento originale.`;
+            pipelineWarnings.push({
+              step: 'extraction',
+              severity: 'warning',
+              message,
+              failedItems: [fileName],
+            });
+          }
+        }
         // Wave C.4: surface language detection so the perito knows the
         // pipeline saw German/English content. Aggregated per file so we
         // don't spam one warning per chunk.

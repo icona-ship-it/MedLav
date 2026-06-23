@@ -121,6 +121,10 @@ export function prepareExtractionChunks(params: ExtractionParams): {
   return { chunks, params: processedParams };
 }
 
+/** Nota su evento estratto da JSON LLM riparato/parziale (recupero non pulito). */
+const PARTIAL_RECOVERY_NOTE =
+  '[AUTO] Estrazione da JSON LLM riparato/parziale: eventi successivi in questo segmento potrebbero non essere stati estratti — verificare la completezza nel documento originale';
+
 /**
  * Extract events from a single text chunk using streaming.
  * Designed to be called as a separate Inngest step for parallelism.
@@ -188,7 +192,19 @@ export async function extractEventsFromChunk(params: {
   const validatedEvents = validateExtractedNamesAgainstOcr(result.events, chunkText);
   const inferredEvents = inferMissingDates(validatedEvents);
   const filteredEvents = flagLegislativeReferences(inferredEvents);
-  return { ...result, events: filteredEvents, usage };
+  // "Mai perdere un fatto": se il JSON è stato riparato/recuperato (non parse pulito),
+  // la coda può essere stata troncata → flagghiamo OGNI evento del chunk per la
+  // verifica del perito, DOPO i transform così il flag non viene sovrascritto.
+  const finalEvents = result.partialRecovery
+    ? filteredEvents.map((e) => ({
+        ...e,
+        requiresVerification: true,
+        reliabilityNotes: e.reliabilityNotes
+          ? `${e.reliabilityNotes} | ${PARTIAL_RECOVERY_NOTE}`
+          : PARTIAL_RECOVERY_NOTE,
+      }))
+    : filteredEvents;
+  return { ...result, events: finalEvents, usage };
 }
 
 /**
@@ -517,24 +533,26 @@ function findDateDonor(
 /**
  * 3-level JSON parse with repair and recovery.
  */
-function safeJsonParse(raw: string, label: string): unknown {
-  // Level 1: Direct parse
+function safeJsonParse(raw: string, label: string): { value: unknown; recovered: boolean } {
+  // Level 1: Direct parse — UNICO path garantito COMPLETO (nessuna perdita).
   try {
-    return JSON.parse(raw);
+    return { value: JSON.parse(raw), recovered: false };
   } catch {
     // continue
   }
 
-  // Level 2: Automatic repair (close brackets, fix quotes, etc.)
+  // Level 2: Automatic repair (close brackets, fix quotes, etc.). ATTENZIONE: su
+  // input TRONCATO jsonrepair scarta l'oggetto-coda incompleto → possibile perdita
+  // silenziosa di eventi. recovered=true → gli eventi vanno flaggati per verifica.
   try {
     const repaired = jsonrepair(raw);
     logger.warn('extraction', `[${label}] JSON repaired (${raw.length} -> ${repaired.length} chars)`);
-    return JSON.parse(repaired);
+    return { value: JSON.parse(repaired), recovered: true };
   } catch {
     // continue
   }
 
-  // Level 3: Manual recovery of events from truncated JSON
+  // Level 3: Manual recovery of events from truncated JSON — lossy (coda persa).
   const eventsMatch = raw.match(/"events"\s*:\s*\[/);
   if (eventsMatch && eventsMatch.index !== undefined) {
     const fromEvents = raw.substring(eventsMatch.index);
@@ -545,7 +563,7 @@ function safeJsonParse(raw: string, label: string): unknown {
         const result = JSON.parse(partial) as Record<string, unknown>;
         const count = Array.isArray(result.events) ? result.events.length : 0;
         logger.warn('extraction', `[${label}] Recovered ${count} events from truncated JSON (${raw.length} chars total)`);
-        return result;
+        return { value: result, recovered: true };
       } catch { /* give up */ }
     }
   }
@@ -572,7 +590,12 @@ function safeJsonParse(raw: string, label: string): unknown {
  */
 function parseExtractionResponse(content: string, chunkLabel?: string): ExtractionResponse {
   const label = `parse:${chunkLabel ?? 'unknown'}`;
-  const raw = safeJsonParse(content, label) as Record<string, unknown>;
+  const parsed = safeJsonParse(content, label);
+  const raw = parsed.value as Record<string, unknown>;
+  // partialRecovery: il JSON è stato riparato/recuperato (non parse pulito) → la
+  // coda incompleta può essere stata scartata. Gli eventi sono flaggati per la
+  // verifica del perito e un warning doc-level risale fino a process-case.
+  const partialRecovery = parsed.recovered;
 
   // Find events array — try multiple key names
   let rawEvents: unknown[] | null = null;
@@ -601,7 +624,7 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     // GDPR Art.9: le chiavi JSON sono strutturali (safe); il content grezzo NO
     // (può contenere nomi/diagnosi) → logghiamo solo le chiavi + la lunghezza.
     logger.error('extraction', `No events found. Keys: ${Object.keys(raw).join(', ')} (${content.length} chars)`);
-    return { events: [] };
+    return { events: [], partialRecovery };
   }
 
   // Parse each event with safe defaults
@@ -663,7 +686,9 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
 
   const abbreviations = raw.abbreviations as Array<{ abbreviation: string; expansion: string }> | undefined;
   logger.info('extraction', ` Parsed ${validEvents.length}/${rawEvents.length} events`);
-  return { events: validEvents, abbreviations };
+  // partialRecovery propagato: il flagging degli eventi (requiresVerification + nota)
+  // avviene in extractEventsFromChunk DOPO i transform, così non viene sovrascritto.
+  return { events: validEvents, abbreviations, partialRecovery };
 }
 
 // ── Date format normalization ──

@@ -551,3 +551,44 @@ describe('GDPR Art.9 — i log NON espongono il body LLM grezzo (nomi/diagnosi)'
     expect(logged).not.toContain(DIAG);
   });
 });
+
+describe('recupero JSON parziale — eventi flaggati, non silenzioso (mai perdere un fatto)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('JSON troncato/riparato -> partialRecovery=true e OGNI evento requiresVerification + nota', async () => {
+    // 1 evento completo + 1 troncato: Level 1 fallisce, jsonrepair recupera scartando
+    // la coda incompleta (perdita silenziosa che ora viene segnalata).
+    const ev = '{"eventDate":"2024-03-15","datePrecision":"giorno","eventType":"visita","title":"Visita ortopedica","description":"controllo","sourceType":"referto_controllo","diagnosis":null,"doctor":null,"facility":null,"confidence":80,"requiresVerification":false,"reliabilityNotes":null,"sourceText":"Visita ortopedica del 15/03/2024","sourcePages":[1]}';
+    mockStreamChat.mockResolvedValue({
+      content: `{"events": [${ev},{"eventDate":"2024-04-01","title":"Secondo evento tronc`,
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+    const result = await extractEventsFromChunk({
+      chunkText: 'Visita ortopedica del 15/03/2024 di controllo.',
+      chunkLabel: 'doc-trunc.pdf', documentType: 'referto_controllo', caseType: 'ortopedica',
+    });
+    expect(result.partialRecovery).toBe(true);
+    expect(result.events.length).toBeGreaterThanOrEqual(1);
+    for (const e of result.events) {
+      expect(e.requiresVerification).toBe(true);
+      expect(e.reliabilityNotes ?? '').toContain('verificare la completezza');
+    }
+  });
+
+  it('JSON valido pulito -> partialRecovery falsy, nessun flag aggiuntivo', async () => {
+    const ev = { eventDate: '2024-03-15', datePrecision: 'giorno', eventType: 'visita', title: 'Visita ortopedica', description: 'controllo', sourceType: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 80, requiresVerification: false, reliabilityNotes: null, sourceText: 'Visita ortopedica del 15/03/2024', sourcePages: [1] };
+    mockStreamChat.mockResolvedValue({
+      content: JSON.stringify({ events: [ev] }),
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+    const result = await extractEventsFromChunk({
+      chunkText: 'Visita ortopedica del 15/03/2024 di controllo.',
+      chunkLabel: 'doc-clean.pdf', documentType: 'referto_controllo', caseType: 'ortopedica',
+    });
+    expect(result.partialRecovery).toBeFalsy();
+    expect(result.events[0].requiresVerification).toBe(false);
+    expect(result.events[0].reliabilityNotes ?? '').not.toContain('verificare la completezza');
+  });
+});

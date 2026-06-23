@@ -202,6 +202,16 @@ export interface ExtractionLanguageWarning {
   language: 'de' | 'en' | 'mixed';
 }
 
+/** Il JSON LLM di questo chunk è stato riparato/recuperato (non parse pulito):
+ * la coda può essere stata troncata → possibile perdita di eventi. Risale a
+ * process-case come pipelineWarning visibile al perito ("mai perdere un fatto"). */
+export interface ExtractionRecoveryWarning {
+  documentId: string;
+  fileName: string;
+  pageRange: string;
+  recoveredCount: number;
+}
+
 export async function extractChunkBatch(
   jobs: ChunkJob[],
 ): Promise<{
@@ -209,6 +219,7 @@ export async function extractChunkBatch(
   perDoc: Record<string, number>;
   truncationWarnings: ExtractionTruncationWarning[];
   languageWarnings: ExtractionLanguageWarning[];
+  recoveryWarnings: ExtractionRecoveryWarning[];
   /** Aggregated LLM token usage across all chunk jobs — feeds cost tracking. */
   usage: TokenUsage;
 }> {
@@ -217,6 +228,7 @@ export async function extractChunkBatch(
   const perDoc: Record<string, number> = {};
   const truncationWarnings: ExtractionTruncationWarning[] = [];
   const languageWarnings: ExtractionLanguageWarning[] = [];
+  const recoveryWarnings: ExtractionRecoveryWarning[] = [];
   let usage = createEmptyUsage();
 
   for (const job of jobs) {
@@ -241,6 +253,9 @@ export async function extractChunkBatch(
       if (result.languageWarning) {
         languageWarnings.push(result.languageWarning);
       }
+      if (result.recoveryWarning) {
+        recoveryWarnings.push(result.recoveryWarning);
+      }
     } catch (error) {
       failedCount++;
       const message = error instanceof Error ? error.message : 'unknown';
@@ -253,7 +268,7 @@ export async function extractChunkBatch(
     throw new Error(`All ${jobs.length} extraction chunk jobs in batch failed`);
   }
 
-  return { totalCount, perDoc, truncationWarnings, languageWarnings, usage };
+  return { totalCount, perDoc, truncationWarnings, languageWarnings, recoveryWarnings, usage };
 }
 
 interface ExtractChunkParams {
@@ -274,6 +289,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
   count: number;
   truncationWarning?: ExtractionTruncationWarning;
   languageWarning?: ExtractionLanguageWarning;
+  recoveryWarning?: ExtractionRecoveryWarning;
   usage?: TokenUsage;
 }> {
   const { caseId, ocrResult, range, chunkIndex, totalChunks, caseType, caseTypes } = params;
@@ -405,6 +421,13 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       llmUsage = mergeUsage(llmUsage, result.usage);
     }
 
+    // Recupero parziale del JSON (riparato/troncato): warning doc-level che risale a
+    // process-case. Gli eventi sono già flaggati requiresVerification + nota a monte
+    // (parseExtractionResponse). Aggiornato dal retry se subentra (vedi sotto).
+    let recoveryWarning: ExtractionRecoveryWarning | undefined = result.partialRecovery
+      ? { documentId: ocrResult.documentId, fileName: ocrResult.fileName, pageRange: `${range.start}-${range.end}`, recoveredCount: result.events.length }
+      : undefined;
+
     // If Mistral returned 0 events, retry ONLY when the chunk has substantial clinical content.
     // Safeguard (audit P0-EXT-001): avoid coercive retries that pressure the LLM to fabricate
     // events on administrative/empty pages (timbro + firma, intestazione legale, pagine vuote).
@@ -434,6 +457,10 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       if (retryResult.usage) {
         llmUsage = mergeUsage(llmUsage, retryResult.usage);
       }
+      // Il retry SOSTITUISCE i dati del chunk → il warning di recupero segue il retry.
+      recoveryWarning = retryResult.partialRecovery
+        ? { documentId: ocrResult.documentId, fileName: ocrResult.fileName, pageRange: `${range.start}-${range.end}`, recoveredCount: retryResult.events.length }
+        : undefined;
       if (retryResult.events.length > 0) {
         logger.info('pipeline', ` Retry succeeded: ${retryResult.events.length} events recovered`);
         // Verbatim safety net: flag events whose sourceText isn't found in the
@@ -481,14 +508,14 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
           // persiste, la guard a valle marca il doc invece di omettere eventi.
           throw new Error(`Retry event insert failed: ${retryInsertError.message}`);
         }
-        return { count: retryRows.length, truncationWarning, languageWarning, usage: llmUsage };
+        return { count: retryRows.length, truncationWarning, languageWarning, recoveryWarning, usage: llmUsage };
       }
       logger.warn('pipeline', ` Retry also returned 0 events for doc ${ocrResult.documentId}`);
-      return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
+      return { count: 0, truncationWarning, languageWarning, recoveryWarning, usage: llmUsage };
     }
 
     if (result.events.length === 0) {
-      return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
+      return { count: 0, truncationWarning, languageWarning, recoveryWarning, usage: llmUsage };
     }
 
     // Idempotency: delete any existing events for this chunk before inserting
@@ -535,7 +562,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       throw new Error(`Event insert failed: ${insertError.message}`);
     }
     logger.info('pipeline', ` Chunk ${chunkIndex + 1} (p${range.start}-${range.end}): ${eventRows.length} events saved in ${Date.now() - extractionStartMs}ms`);
-    return { count: eventRows.length, truncationWarning, languageWarning, usage: llmUsage };
+    return { count: eventRows.length, truncationWarning, languageWarning, recoveryWarning, usage: llmUsage };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed';
     logger.error('pipeline', ` Chunk ${chunkIndex + 1} failed: ${message}`);

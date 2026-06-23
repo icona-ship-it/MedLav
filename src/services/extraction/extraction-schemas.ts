@@ -26,4 +26,9 @@ export type ExtractedEvent = z.infer<typeof extractedEventSchema>;
 export type ExtractionResponse = {
   events: ExtractedEvent[];
   abbreviations?: Array<{ abbreviation: string; expansion: string }>;
+  /** True quando il JSON LLM NON è stato parsato pulito (Livello 1) ma RIPARATO
+   * (jsonrepair) o RECUPERATO da troncatura: in entrambi i casi la coda incompleta
+   * può essere stata scartata → gli eventi sono flaggati requiresVerification e va
+   * emesso un warning doc-level "verificare completezza" ("mai perdere un fatto"). */
+  partialRecovery?: boolean;
 };
