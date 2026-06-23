@@ -294,7 +294,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    logger.info('split-document', `Split ${doc.file_name} into ${newDocIds.length} documents`, { documentId, caseId });
+    // GDPR: niente file_name nei log (può contenere il nome del paziente); documentId basta.
+    logger.info('split-document', `Split document into ${newDocIds.length} documents`, { documentId, caseId });
 
     return NextResponse.json({
       success: true,

@@ -188,7 +188,8 @@ export const organizeDocumentsJob = inngest.createFunction(
             upsert: true,
           });
           if (uploadErr) {
-            logger.error('organize', `Failed to upload split PDF ${doc.fileName}: ${uploadErr.message}`);
+            // GDPR: il filename può contenere il nome del paziente → logga l'id, non il nome.
+            logger.error('organize', `Failed to upload split PDF (origDoc ${doc.originalDocumentId}, pp.${doc.pageRange?.start}-${doc.pageRange?.end}): ${uploadErr.message}`);
             continue; // Skip this split, don't create orphan DB row
           }
           const { error: insertErr } = await supabase.from('documents').insert({
@@ -208,7 +209,8 @@ export const organizeDocumentsJob = inngest.createFunction(
             },
           });
           if (insertErr) {
-            logger.error('organize', `Failed to insert split document ${doc.fileName}: ${insertErr.message}`);
+            // GDPR: niente filename nei log (può contenere il nome del paziente).
+            logger.error('organize', `Failed to insert split document (origDoc ${doc.originalDocumentId}, pp.${doc.pageRange?.start}-${doc.pageRange?.end}): ${insertErr.message}`);
           }
         } else if (doc.originalDocumentId) {
           const { error: updateErr } = await supabase.from('documents').update({
