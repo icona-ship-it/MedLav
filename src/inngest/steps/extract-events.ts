@@ -21,15 +21,21 @@ export const OVERLAP_PAGES = 2;
  */
 export function isRetriableExtractionError(message: string): boolean {
   const lower = message.toLowerCase();
-  const isTransient = ['timeout', 'fetch failed', 'econnreset', 'socket hang up', 'enotfound'].some((t) => lower.includes(t))
+  // Transitori di rete. NB: 'etimedout'/'econnrefused'/'epipe' NON contengono
+  // 'timeout' ('timedout' ≠ 'timeout') → vanno elencati a parte, altrimenti un
+  // timeout di connessione verrebbe ingoiato come {count:0}.
+  const isTransient = ['timeout', 'fetch failed', 'econnreset', 'econnrefused', 'etimedout', 'epipe', 'socket hang up', 'enotfound'].some((t) => lower.includes(t))
     || /\b(502|503|429)\b/.test(message);
+  // Errori di INTEGRITÀ (perdita reale di eventi). Confini di parola su 'stalled' e
+  // 'insert failed' per non matchare per sbaglio 'installed' / 'reinsert' (innocuo
+  // oggi, ma il substring-match nudo è fragile).
   const isIntegrity = lower.includes('truncation detected')
     || lower.includes('finishreason=length')
     || lower.includes('irrecuperabile')
     || lower.includes('json llm')
-    || lower.includes('insert failed')     // eventi estratti ma NON salvati su DB = perdita reale
+    || /\binsert failed\b/.test(lower)     // 'Event insert failed' / 'Retry event insert failed' (NON 'reinsert')
     || lower.includes('pages not found')   // timing/replica DB — il messaggio stesso dice "will be retried"
-    || lower.includes('stalled')           // stream LLM bloccato (nessun token)
+    || /\bstalled\b/.test(lower)           // 'Stream stalled' (NON 'installed')
     || lower.includes('empty content')     // "...returned empty content"
     || lower.includes('content is empty'); // "Stream completed but content is empty"
   return isTransient || isIntegrity;
@@ -467,7 +473,13 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
-          return { count: 0, truncationWarning, languageWarning, usage: llmUsage };
+          // "Mai perdere un fatto": gli eventi RECUPERATI dal retry sono stati
+          // cancellati (delete sopra) ma NON salvati → un return {count:0} li
+          // perderebbe in SILENZIO (proprio il caso che il commit 6b0e08d dichiara
+          // retriable, ma questo ramo lo bypassava). throw → catch →
+          // isRetriableExtractionError ('insert failed') → Inngest ritenta; se
+          // persiste, la guard a valle marca il doc invece di omettere eventi.
+          throw new Error(`Retry event insert failed: ${retryInsertError.message}`);
         }
         return { count: retryRows.length, truncationWarning, languageWarning, usage: llmUsage };
       }

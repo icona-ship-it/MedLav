@@ -90,4 +90,20 @@ describe('isRetriableExtractionError — mai perdere un fatto', () => {
   it('NON rilancia un errore generico non-integrità (resta {count:0})', () => {
     expect(isRetriableExtractionError('some unexpected non-integrity validation message')).toBe(false);
   });
+
+  it('rilancia i codici di rete che NON contengono la parola "timeout"', () => {
+    // 'etimedout' ≠ 'timeout' ('timedout' manca la "e"): prima venivano ingoiati.
+    expect(isRetriableExtractionError('connect ETIMEDOUT 1.2.3.4:443')).toBe(true);
+    expect(isRetriableExtractionError('connect ECONNREFUSED 1.2.3.4:443')).toBe(true);
+    expect(isRetriableExtractionError('write EPIPE')).toBe(true);
+  });
+
+  it('rilancia il fallimento dell\'insert di RECUPERO (no perdita silenziosa)', () => {
+    expect(isRetriableExtractionError('Retry event insert failed: deadlock detected')).toBe(true);
+  });
+
+  it('NON scatta su falsi positivi da substring (word boundary su stalled/insert failed)', () => {
+    expect(isRetriableExtractionError('package reinstalled successfully')).toBe(false); // contiene 'stalled' ma non è '\\bstalled\\b'
+    expect(isRetriableExtractionError('the module was reinserted into the registry')).toBe(false);
+  });
 });
