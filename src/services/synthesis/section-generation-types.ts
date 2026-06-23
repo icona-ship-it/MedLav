@@ -36,6 +36,14 @@ export interface SectionSpec {
   contextMaxChars: number;
   /** Whether this section needs to fetch OCR text from DB */
   needsOcr: boolean;
+  /**
+   * Se true, le citazioni verbatim della sezione (incl. virgolette dritte "...")
+   * vengono hard-verificate contro l'OCR sorgente e quelle non riscontrate sono
+   * annotate inline "[citazione da verificare]". Per le sezioni che riproducono
+   * VERBATIM atti/pareri (documentazione_atti, premesse, pareri_tecnici). La
+   * documentazione_sanitaria selettiva ha il suo gate dedicato («...»).
+   */
+  verifyQuotes?: boolean;
   /** Condition for inclusion (undefined = always included) */
   condition?: SectionCondition;
   /** Section-specific prompt instructions */

@@ -514,6 +514,17 @@ export async function generateSingleSection(params: {
     if (checked.ungroundedCount > 0) {
       logger.warn('section-generator', `Doc-sanitaria selettiva: ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR — annotate per il perito`);
     }
+  } else if (spec.verifyQuotes && !spec.isPlaceholder
+    && documentsOcrText && documentsOcrText.length > 0) {
+    // Sezioni che riproducono VERBATIM atti/pareri (documentazione_atti, premesse,
+    // pareri_tecnici): le citazioni "..." sono hard-verificate contro l'OCR — una
+    // citazione fabbricata/alterata (es. una percentuale di invalidità modificata
+    // in una conclusione CTP) viene annotata, mai consegnata come fedele.
+    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText, { annotateStraightQuotes: true });
+    finalContent = checked.annotatedMarkdown;
+    if (checked.ungroundedCount > 0) {
+      logger.warn('section-generator', `Sezione "${spec.id}": ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR — annotate per il perito`);
+    }
   }
 
   // Benchmark gold 2026-06-10 (3/3 CTU-RC): il blocco operativo dell'incarico

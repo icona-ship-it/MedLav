@@ -208,6 +208,15 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
         t1Total: coverage.t1Total,
       });
     }
+  } else if (spec.verifyQuotes && !spec.isPlaceholder && documentsOcrText && documentsOcrText.length > 0) {
+    // Rigenerazione singola di una sezione verbatim (atti/pareri/premesse): stesso
+    // hard-check citazioni "..." del path principale, così le citazioni fabbricate/
+    // alterate non sfuggono al perito anche su un re-run mirato.
+    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText, { annotateStraightQuotes: true });
+    finalContent = checked.annotatedMarkdown;
+    if (checked.ungroundedCount > 0) {
+      logger.warn('section-regenerator', `Sezione "${sectionId}": ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR — annotate`);
+    }
   }
 
   // HARD FILTER (parità coi path full-report/monolitico): striscia i marker

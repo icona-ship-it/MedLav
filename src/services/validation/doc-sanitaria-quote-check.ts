@@ -10,7 +10,7 @@
  */
 
 import type { DocumentOcrContext } from '@/inngest/steps/types';
-import { verifyGeneratedQuotes, type GeneratedQuotesResult } from './generated-quote-verifier';
+import { verifyGeneratedQuotes, type GeneratedQuotesResult, type VerifyQuotesOptions } from './generated-quote-verifier';
 
 /**
  * Concatenate all OCR page text across documents into a single grounding corpus.
@@ -32,6 +32,7 @@ export function concatOcrText(documentsOcrText: DocumentOcrContext[] | undefined
 export function annotateDocSanitariaQuotes(
   content: string,
   documentsOcrText: DocumentOcrContext[] | undefined,
+  opts?: VerifyQuotesOptions,
 ): GeneratedQuotesResult {
-  return verifyGeneratedQuotes(content, concatOcrText(documentsOcrText));
+  return verifyGeneratedQuotes(content, concatOcrText(documentsOcrText), opts);
 }

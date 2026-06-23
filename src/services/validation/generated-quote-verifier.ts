@@ -87,49 +87,80 @@ function hasUnverifiedNonGuillemetQuotes(markdown: string, fullOcrText: string):
  */
 const MIN_QUOTE_LEN = 4;
 
+/** Soglia per le virgolette dritte/curve "..." quando verificate inline. Più alta
+ * di MIN_QUOTE_LEN (4 delle «...», riservate al verbatim) perché le "..." sono più
+ * rumorose, ma BASSA abbastanza da catturare le distorsioni clinico-legali brevi-ma-
+ * decisive — una percentuale di invalidità o una prognosi alterata ("INVALIDITÀ 25%"
+ * = 14 char, "prognosi 90 giorni" = 18): a 20 sfuggivano (panel 2026-06-23). */
+const MIN_STRAIGHT_QUOTE_LEN = 12;
+
 // Guillemet quote, non-greedy, no nested guillemets, bounded length.
 const GUILLEMET_QUOTE = /«([^«»]{1,2000})»/g;
+// Straight / curly double-quoted spans (single line, bounded length).
+const STRAIGHT_DOUBLE_QUOTE_INLINE = /"([^"\n]{4,2000})"/g;
+const CURLY_DOUBLE_QUOTE_INLINE = /“([^”\n]{4,2000})”/g;
+
+export interface VerifyQuotesOptions {
+  /** Annota inline (per-citazione) anche le citazioni con virgolette dritte/curve
+   * "..." — non solo una nota di sezione. Per le sezioni la cui convenzione di
+   * citazione È "..." (documentazione_atti, premesse, pareri_tecnici), così una
+   * citazione alterata/fabbricata viene flaggata accanto al testo. doc-sanitaria
+   * riserva «...» → default false (lì le "..." stray ricevono solo la nota). */
+  annotateStraightQuotes?: boolean;
+}
 
 /**
- * Verify the guillemet quotes in `markdown` against `fullOcrText` and annotate
- * the ungrounded ones in place.
+ * Annota inline ogni citazione (catturata da `re`) NON fondata nell'OCR, con
+ * marker visibile non-bloccante. STRICT: pulita solo su match verbatim
+ * (exact/normalized); un `near` (una parola clinicamente decisiva alterata) è
+ * flaggato, mai fidato. Idempotente. Le citazioni < `minLen` sono ignorate.
+ */
+function annotateUngroundedQuotes(
+  text: string,
+  re: RegExp,
+  minLen: number,
+  fullOcrText: string,
+  verifications: QuoteVerification[],
+): string {
+  return text.replace(re, (match: string, inner: string, offset: number, full: string) => {
+    const quote = inner.trim();
+    if (quote.length < minLen) return match;
+    const level = groundCitation(quote, fullOcrText);
+    const grounded = level === 'exact' || level === 'normalized';
+    verifications.push({ quote, grounded });
+    if (grounded) return match;
+    // Idempotency: do not append a second marker if one already follows.
+    const rest = full.slice(offset + match.length);
+    if (rest.startsWith(UNVERIFIED_QUOTE_MARKER)) return match;
+    return `${match}${UNVERIFIED_QUOTE_MARKER}`;
+  });
+}
+
+/**
+ * Verify the verbatim quotes in `markdown` against `fullOcrText` and annotate
+ * the ungrounded ones in place. By default only `«...»` are inline-verified
+ * (and stray "..." get a section note); with `annotateStraightQuotes` the
+ * straight/curly "..." citations are inline-verified too (per-quote).
  */
 export function verifyGeneratedQuotes(
   markdown: string,
   fullOcrText: string,
+  opts?: VerifyQuotesOptions,
 ): GeneratedQuotesResult {
   const verifications: QuoteVerification[] = [];
 
-  const annotatedMarkdown = markdown.replace(
-    GUILLEMET_QUOTE,
-    (match, inner: string, offset: number, full: string) => {
-      const quote = inner.trim();
+  let annotatedMarkdown = annotateUngroundedQuotes(markdown, GUILLEMET_QUOTE, MIN_QUOTE_LEN, fullOcrText, verifications);
 
-      // Skip trivially short fragments — not meaningful clinical citations.
-      if (quote.length < MIN_QUOTE_LEN) return match;
-
-      // STRICT: clean only on a verbatim (exact/normalized) substring match. A
-      // `near` LCS match — where a single clinically-decisive word was altered —
-      // is flagged, never trusted.
-      const level = groundCitation(quote, fullOcrText);
-      const grounded = level === 'exact' || level === 'normalized';
-      verifications.push({ quote, grounded });
-
-      if (grounded) return match;
-
-      // Idempotency: do not append a second marker if one already follows.
-      const rest = full.slice(offset + match.length);
-      if (rest.startsWith(UNVERIFIED_QUOTE_MARKER)) return match;
-
-      return `${match}${UNVERIFIED_QUOTE_MARKER}`;
-    },
-  );
+  if (opts?.annotateStraightQuotes) {
+    annotatedMarkdown = annotateUngroundedQuotes(annotatedMarkdown, STRAIGHT_DOUBLE_QUOTE_INLINE, MIN_STRAIGHT_QUOTE_LEN, fullOcrText, verifications);
+    annotatedMarkdown = annotateUngroundedQuotes(annotatedMarkdown, CURLY_DOUBLE_QUOTE_INLINE, MIN_STRAIGHT_QUOTE_LEN, fullOcrText, verifications);
+  }
 
   const groundedCount = verifications.filter((v) => v.grounded).length;
 
-  // Catch FABRICATED verbatim quotes emitted with the wrong delimiters (they
-  // skipped the grounding above). Idempotent: the note is appended at most once.
-  const nonGuillemetQuotesDetected = hasUnverifiedNonGuillemetQuotes(markdown, fullOcrText);
+  // La nota di sezione per le "..." si applica SOLO quando NON le annotiamo inline
+  // (altrimenti ridondante). doc-sanitaria (opts off) mantiene la nota invariata.
+  const nonGuillemetQuotesDetected = !opts?.annotateStraightQuotes && hasUnverifiedNonGuillemetQuotes(markdown, fullOcrText);
   const withSectionNote =
     nonGuillemetQuotesDetected && !annotatedMarkdown.includes(NON_GUILLEMET_QUOTES_NOTE)
       ? `${annotatedMarkdown}${NON_GUILLEMET_QUOTES_NOTE}`

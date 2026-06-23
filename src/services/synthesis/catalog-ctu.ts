@@ -158,6 +158,7 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
+    verifyQuotes: true,
     condition: 'has-non-medical-docs',
     promptDirective: `Riproduzione FEDELE e VERBATIM dei documenti NON sanitari presenti nel fascicolo, in ordine cronologico:
 ricorsi, memorie difensive, atti di citazione, testimonianze, dichiarazioni, verbali di udienza, provvedimenti del Giudice, clausole di polizza, e la documentazione AMMINISTRATIVA rilevante (contratti di ingresso/ospitalità, fatture, carta dei servizi, schede di valutazione regionali, delibere).
@@ -186,6 +187,7 @@ ${NO_EVN_RULE}`,
     dataSources: ['events-non-medical'],
     contextMaxChars: 500,
     needsOcr: true,
+    verifyQuotes: true,
     condition: 'has-legal-docs',
     promptDirective: `Riproduzione FEDELE e VERBATIM degli atti processuali introduttivi presenti nel fascicolo: ricorso introduttivo (es. ricorso ex art. 696-bis c.p.c.), atto di citazione, memorie difensive e comparse di costituzione.
 Per ogni atto usa la formula di introduzione:
@@ -233,6 +235,7 @@ ${DOCUMENTAZIONE_SANITARIA_EXAMPLE}`,
     dataSources: ['events-perizie'],
     contextMaxChars: 500,
     needsOcr: true,
+    verifyQuotes: true,
     condition: 'has-perizie-docs',
     promptDirective: `Riproduci INTEGRALMENTE ogni parere tecnico precedente (CTP, CTU, perizie di parte): intestazione del parere, ricostruzione della vicenda, esame obiettivo, valutazione medico-legale e conclusioni, conservando le sotto-rubriche originali (es. VISITA DEL DANNEGGIATO, PARERE MEDICO-LEGALE).
 Per le relazioni dei fiduciari assicurativi conserva la struttura a campi del modulo (DATI IDENTIFICATIVI / GENERALITÀ DEL DANNEGGIATO / GIUDIZIO SUL NESSO DI CAUSALITÀ / TIPOLOGIA E LOCALIZZAZIONE DELLE LESIONI / VALUTAZIONE RC / VALUTAZIONE POLIZZA INFORTUNI con tabella di riferimento ANIA/INAIL/di polizza e punteggi / CONGRUITÀ SPESE MEDICHE / FIRMA DEL FIDUCIARIO). Riporta verbatim le clausole di polizza citate nel parere.
