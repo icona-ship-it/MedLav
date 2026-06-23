@@ -761,6 +761,23 @@ describe('section-catalog', () => {
       expect(intestazione).toBeDefined();
       expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
     });
+
+    it('appende le regole RC (PS condensato) SOLO per la stragiudiziale (excludeLabTests); CTU invariato', () => {
+      // CTU: nessuna regola RC.
+      const ctuSelective = buildDocSanitariaSelectiveSpec(baseSpec!);
+      expect(ctuSelective.promptDirective).not.toContain('PERIZIA RC STRAGIUDIZIALE');
+
+      // Stragiudiziale: marker RC presente → regole appese.
+      const stragBase = getSectionSpecById('documentazione_sanitaria', 'stragiudiziale');
+      expect(stragBase?.excludeLabTests).toBe(true);
+      const stragSelective = buildDocSanitariaSelectiveSpec(stragBase!);
+      expect(stragSelective.promptDirective).toContain('PERIZIA RC STRAGIUDIZIALE');
+      expect(stragSelective.promptDirective).toContain('PRONTO SOCCORSO');
+      expect(stragSelective.promptDirective).toContain('SOLO la DIAGNOSI');
+      // mantiene comunque la direttiva selettiva base (grounding «...» + parafrasi del routine).
+      expect(stragSelective.promptDirective).toContain('«...»');
+      expect(stragSelective.excludeLabTests).toBe(true);
+    });
   });
 
   // ── Benchmark gold 2026-06-10 — P0 alignment ──────────────────────

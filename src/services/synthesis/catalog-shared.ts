@@ -193,3 +193,16 @@ REGOLA DEL FORMATO DELLE CITAZIONI (obbligatoria per la verifica automatica):
 ${DOC_SANITARIA_NEUTRALITY}
 
 ${NO_EVN_RULE}`;
+
+/**
+ * Regole specifiche della perizia RC stragiudiziale "SEMPLICE" (direttiva del perito
+ * Lavini 2026-06-23, benchmark MOTTA TERESA). Appese a DOC_SANITARIA_SELECTIVE_DIRECTIVE
+ * SOLO per la stragiudiziale (spec.excludeLabTests). Hanno PRIORITÀ sulla parafrasi
+ * generica: la documentazione sanitaria RC è una riproduzione FEDELE della sostanza,
+ * con il SOLO Pronto Soccorso condensato e i lab esclusi.
+ */
+export const DOC_SANITARIA_RC_RULES = `REGOLE SPECIFICHE — PERIZIA RC STRAGIUDIZIALE "SEMPLICE" (queste PREVALGONO sulla regola generale di parafrasi):
+- VERBALE / ACCETTAZIONE DI PRONTO SOCCORSO (riconoscibile da "Pronto Soccorso", "P.S.", "PS", "triage", "codice" colore di emergenza, "118", "accettazione"): riporta SOLO la DIAGNOSI e le indicazioni di DIMISSIONE (più la prognosi/giorni se indicati). NON riprodurre il triage, l'anamnesi estesa, l'esame obiettivo completo né i parametri vitali: condensa in poche righe essenziali. ECCEZIONE (mai perdere un fatto): se una LESIONE, un REPERTO OBIETTIVO rilevante o una PROGNOSI è documentato SOLO nel referto/accettazione/consulenza di Pronto Soccorso e NON è ripreso in altri documenti, INCLUDILO comunque (citato verbatim tra «...»).
+- CARTELLA CLINICA, LETTERE DI DIMISSIONE, REFERTI RADIOLOGICI (RX/TC/RM) ed ESAMI STRUMENTALI, VISITE/REFERTI SPECIALISTICI, ALTRI REFERTI: riproduci il TESTO FEDELE della sostanza clinica conservando le sotto-rubriche originali (diagnosi, descrizione di lesioni/reperti, decorso, intervento chirurgico, terapia e indicazioni alla dimissione). Riporta i passaggi clinici rilevanti VERBATIM tra «...» (vedi REGOLA DEL FORMATO sopra), raccordandoli con prosa neutra minima. NON riassumere il contenuto clinico di questi documenti.
+- ESAMI EMATOCHIMICI / DI LABORATORIO (emocromo, biochimica, coagulazione, ecc.): NON riprodurli — sono esclusi su indicazione del perito.
+- FORMA (benchmark Antoniazzi/MOTTA): ordine cronologico fedele; un blocco per documento introdotto da una riga-intestazione in GRASSETTO con tipo, struttura/autore e data nel formato **Tipo documento, struttura/autore, in data GG.MM.AAAA:** seguita dalla riproduzione fedele. Quando più referti condividono la stessa data e struttura (es. più proiezioni RX dello stesso giorno), raggruppali sotto un'unica intestazione di data. Prosa di raccordo ridotta al minimo.`;
