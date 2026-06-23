@@ -148,3 +148,25 @@ describe('stripAttiIndex', () => {
     expect(stripAttiIndex(`${idx}\n\nNARRAZIONE`).trim()).toBe('NARRAZIONE');
   });
 });
+
+describe('checkSelectiveCoverage — excludeLabTests (perizia RC: lab esclusi su direttiva Lavini)', () => {
+  it('un lab T1 (esame_ematochimico con diagnosi) assente dalla narrativa NON è "omesso" se excludeLabTests', () => {
+    const events = [ev({ eventType: 'esame_ematochimico', diagnosis: 'Iperglicemia', eventDate: '2024-05-01' })];
+    const content = 'Narrazione clinica senza la data del prelievo.';
+    // Senza opt: è T1 (ha diagnosi) e la data manca → segnalato come omesso.
+    const withLab = checkSelectiveCoverage(content, events);
+    expect(withLab.t1Total).toBe(1);
+    expect(withLab.missing).toHaveLength(1);
+    // Con excludeLabTests: escluso dal conteggio → nessun falso "omesso".
+    const noLab = checkSelectiveCoverage(content, events, { excludeLabTests: true });
+    expect(noLab.t1Total).toBe(0);
+    expect(noLab.missing).toHaveLength(0);
+  });
+
+  it('un evento clinico NON-lab resta coperto/omesso normalmente anche con excludeLabTests', () => {
+    const events = [ev({ eventType: 'diagnosi', eventDate: '2024-05-02' })];
+    const res = checkSelectiveCoverage('Narrazione senza la data.', events, { excludeLabTests: true });
+    expect(res.t1Total).toBe(1);
+    expect(res.missing).toHaveLength(1);
+  });
+});

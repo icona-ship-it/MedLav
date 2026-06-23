@@ -44,6 +44,15 @@ export interface SectionSpec {
    * documentazione_sanitaria selettiva ha il suo gate dedicato («...»).
    */
   verifyQuotes?: boolean;
+  /**
+   * Se true, gli esami EMATOCHIMICI / di laboratorio (eventType 'esame_ematochimico',
+   * documentType 'esame_laboratorio') sono ESCLUSI dalla riproduzione: né nell'OCR
+   * inviato all'LLM, né tra gli eventi del prompt, né nel controllo anti-omissione.
+   * Direttiva del perito Lavini per la perizia RC stragiudiziale ("PERIZIA SEMPLICE":
+   * i pannelli di laboratorio sono rumore; togliendoli si elimina anche il phantom_date
+   * che gonfiava l'HRS). Impostato sulla documentazione_sanitaria stragiudiziale.
+   */
+  excludeLabTests?: boolean;
   /** Condition for inclusion (undefined = always included) */
   condition?: SectionCondition;
   /** Section-specific prompt instructions */

@@ -488,7 +488,9 @@ export const regenerateReport = inngest.createFunction(
     // ogni evento clinicamente rilevante deve comparire nel testo combinato.
     const docSanSection = completedSections.get('documentazione_sanitaria');
     if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
-      const coverage = checkSelectiveCoverage(docSanSection.content, allEvents);
+      const coverage = checkSelectiveCoverage(docSanSection.content, allEvents, {
+        excludeLabTests: prep.metadata.caseRole === 'stragiudiziale',
+      });
       if (coverage.missing.length > 0) {
         completedSections.set('documentazione_sanitaria', {
           ...docSanSection,

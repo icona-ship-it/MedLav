@@ -5,6 +5,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
+import { isLabTestEvent } from '@/lib/event-relevance';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionSpec, GeneratedSection, SectionContext } from './section-generation-types';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
@@ -164,7 +165,9 @@ export function buildSectionUserPrompt(params: {
   if (spec.dataSources.includes('events')) {
     parts.push(`## TUTTI GLI EVENTI CLINICI (${events.length} totali)\n\n${formatEventsForPrompt(events)}\n`);
   } else if (spec.dataSources.includes('events-medical')) {
-    const medical = filterMedicalEvents(events);
+    let medical = filterMedicalEvents(events);
+    // Lavini (perizia RC): esami ematochimici/di laboratorio ESCLUSI dalla riproduzione.
+    if (spec.excludeLabTests) medical = medical.filter((e) => !isLabTestEvent(e));
     parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
   } else if (spec.dataSources.includes('events-non-medical')) {
     const nonMedical = filterNonMedicalEvents(events);
@@ -765,7 +768,11 @@ function filterOcrForSection(
   if (spec.dataSources.includes('events-medical') || spec.id === 'documentazione_sanitaria') {
     // Inclusive approach: include ALL documents EXCEPT known non-medical types.
     // This ensures pronto_soccorso, any new document type, or misclassified docs are never lost.
-    return docs.filter((d) => !EXCLUDED_FROM_MEDICAL.has(d.documentType) || isUniversal(d));
+    // Lavini (perizia RC): se excludeLabTests, scarta anche i referti di laboratorio.
+    return docs.filter((d) =>
+      (!EXCLUDED_FROM_MEDICAL.has(d.documentType) || isUniversal(d)) &&
+      !(spec.excludeLabTests && d.documentType === 'esame_laboratorio'),
+    );
   }
   if (spec.dataSources.includes('events-non-medical') || spec.id === 'documentazione_atti' || spec.id === 'premesse') {
     return docs.filter((d) => NON_MEDICAL_DOC_TYPES.has(d.documentType) || isUniversal(d));

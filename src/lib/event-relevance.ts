@@ -13,6 +13,13 @@
  */
 export type RelevanceTier = 'T1' | 'T2' | 'T3';
 
+/** True per un evento di esame ematochimico / di laboratorio. Usato per ESCLUDERLI
+ * dalla documentazione sanitaria della perizia RC stragiudiziale (direttiva Lavini).
+ * Il consolidatore aggrega questi eventi sotto eventType 'esame_ematochimico'. */
+export function isLabTestEvent(event: { eventType: string }): boolean {
+  return event.eventType === 'esame_ematochimico';
+}
+
 const TIER1_TYPES: ReadonlySet<string> = new Set(['diagnosi', 'intervento', 'ricovero', 'complicanza']);
 const TIER2_TYPES: ReadonlySet<string> = new Set(['visita', 'referto', 'terapia', 'consenso']);
 

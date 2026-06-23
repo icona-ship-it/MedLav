@@ -128,6 +128,10 @@ ${NO_EVN_RULE}`,
     dataSources: [],
     contextMaxChars: 0,
     needsOcr: false,
+    // Lavini (perizia RC "semplice"): gli esami ematochimici/di laboratorio NON
+    // vanno riprodotti. Il flag si propaga alla variante selettiva/integrale
+    // (buildDocSanitaria*Spec fa lo spread di ...spec).
+    excludeLabTests: true,
     // DETERMINISTIC default: verbatim OCR reproduction (no LLM) via the
     // DOC_SANITARIA sentinel; the promptDirective below is the on-demand AI variant.
     isPlaceholder: true,

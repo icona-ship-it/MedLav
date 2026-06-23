@@ -193,7 +193,7 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
     finalContent = checked.annotatedMarkdown;
 
-    const coverage = checkSelectiveCoverage(finalContent, events);
+    const coverage = checkSelectiveCoverage(finalContent, events, { excludeLabTests: spec.excludeLabTests });
     if (coverage.missing.length > 0) {
       finalContent = `${buildOmissionBanner(coverage.missing.length)}\n\n${finalContent}`;
     }

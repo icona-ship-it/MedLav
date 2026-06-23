@@ -22,7 +22,7 @@
  */
 
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
-import { computeRelevanceTier } from '@/lib/event-relevance';
+import { computeRelevanceTier, isLabTestEvent } from '@/lib/event-relevance';
 import { eventDateAppearsInReport } from '../synthesis/report-validator';
 
 const SENTINEL_DATE = '1900-01-01';
@@ -74,6 +74,7 @@ function isT1(event: ConsolidatedEvent): boolean {
 export function checkSelectiveCoverage(
   content: string,
   events: ConsolidatedEvent[],
+  opts?: { excludeLabTests?: boolean },
 ): SelectiveCoverageResult {
   // Misura la copertura sulla SOLA narrazione: l'indice analitico deterministico
   // (se prependuto) elenca ogni data e maschererebbe ogni omissione (#3/#5 panel).
@@ -82,6 +83,9 @@ export function checkSelectiveCoverage(
   const t1Dated = events.filter(
     (e) =>
       isT1(e) &&
+      // Lab esclusi su direttiva (perizia RC): non vanno contati come "omessi"
+      // se sono stati VOLUTAMENTE tolti dalla narrativa (un lab con diagnosi è T1).
+      !(opts?.excludeLabTests && isLabTestEvent(e)) &&
       e.eventDate &&
       e.eventDate !== SENTINEL_DATE &&
       e.datePrecision === 'giorno',

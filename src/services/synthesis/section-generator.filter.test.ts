@@ -277,3 +277,28 @@ describe('filterOcrForSection', () => {
     });
   });
 });
+
+describe('filterOcrForSection — excludeLabTests (perizia RC: Lavini)', () => {
+  const docs = [
+    makeDoc('cartella_clinica'),
+    makeDoc('esame_strumentale'),
+    makeDoc('lettera_dimissione'),
+    makeDoc('esame_laboratorio'),
+  ];
+
+  it('esclude i referti di laboratorio quando excludeLabTests=true', () => {
+    const spec = makeSectionSpec({ id: 'documentazione_sanitaria', dataSources: ['events-medical'], excludeLabTests: true });
+    const types = filterOcrForSection(spec, docs).map((d) => d.documentType);
+    expect(types).not.toContain('esame_laboratorio');
+    // la sostanza resta
+    expect(types).toContain('cartella_clinica');
+    expect(types).toContain('esame_strumentale');
+    expect(types).toContain('lettera_dimissione');
+  });
+
+  it('include i referti di laboratorio quando excludeLabTests è assente (default invariato)', () => {
+    const spec = makeSectionSpec({ id: 'documentazione_sanitaria', dataSources: ['events-medical'] });
+    const types = filterOcrForSection(spec, docs).map((d) => d.documentType);
+    expect(types).toContain('esame_laboratorio');
+  });
+});
