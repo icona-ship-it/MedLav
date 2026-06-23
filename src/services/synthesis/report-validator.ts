@@ -807,6 +807,24 @@ export function getBlockingIssues(validation: ReportValidation): ReportIssue[] {
   );
 }
 
+/**
+ * GDPR Art.9: riassunto one-line degli issue per i LOG — solo tipo + conteggio,
+ * MAI il `message`. I messaggi degli issue possono citare testo clinico del report
+ * (es. `unverified_citation`/`duplicate_content` includono un'anteprima della
+ * citazione/blocco, quindi nomi/diagnosi) e sanitizeLogMessage redige solo
+ * CF/email/telefono. I messaggi completi restano per il perito in UI/DB.
+ */
+export function formatIssuesForLog(issues: ReportIssue[]): string {
+  if (issues.length === 0) return 'none';
+  const counts = new Map<string, number>();
+  for (const issue of issues) {
+    counts.set(issue.type, (counts.get(issue.type) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([type, n]) => `${type}×${n}`)
+    .join(', ');
+}
+
 // ── Sprint 2.4-A2: manual unlock (ignoreValidation) ──────────────────
 //
 // A validator false positive + deterministic generation can permanently kill a

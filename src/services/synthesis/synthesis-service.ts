@@ -25,7 +25,7 @@ import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-ana
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { formatDate } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
-import { validateReport, getBlockingIssues } from './report-validator';
+import { validateReport, getBlockingIssues, formatIssuesForLog } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 import { computeHrs, getHrsLevel } from './hallucination-risk-scorer';
 import { computePromptVersion } from './prompt-version';
@@ -422,11 +422,12 @@ function finalizeReport(
       throw new Error(msg);
     }
 
+    // GDPR Art.9: solo tipo+conteggio nei log (i message possono citare testo clinico).
     if (errors.length > 0) {
-      logger.warn('synthesis', ` Validation errors: ${errors.map((e) => e.message).join('; ')}.`);
+      logger.warn('synthesis', ` Validation errors: ${formatIssuesForLog(errors)}.`);
     }
     if (warnings.length > 0) {
-      logger.info('synthesis', ` Validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
+      logger.info('synthesis', ` Validation warnings: ${formatIssuesForLog(warnings)}`);
     }
 
     // A3: hard-block on any blocking-policy error (centralized in
@@ -436,7 +437,8 @@ function finalizeReport(
     // generate-report.ts so both pipelines refuse unsignable reports.
     const blocking = getBlockingIssues(validation);
     if (blocking.length > 0) {
-      const msg = `Report non valido: ${blocking.map((e) => e.message).join('; ')}. Output non salvato — il sistema ritenterà.`;
+      // GDPR Art.9: tipo+conteggio (l'Error → log/Sentry); dettaglio in UI/metadata.
+      const msg = `Report non valido: ${formatIssuesForLog(blocking)}. Output non salvato — il sistema ritenterà.`;
       logger.error('synthesis', msg);
       throw new Error(msg);
     }

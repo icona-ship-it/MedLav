@@ -235,7 +235,8 @@ function parseExpenseResponse(raw: string): ExpenseExtractionResult {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    logger.error('expense-extractor', `Failed to parse LLM response as JSON: ${raw.slice(0, 200)}`);
+    // GDPR Art.9: niente body LLM grezzo nei log (può contenere nomi/importi/dati).
+    logger.error('expense-extractor', `Failed to parse LLM response as JSON (${raw.length} chars)`);
     return { items: [], totalAmount: null, currency: 'EUR' };
   }
 

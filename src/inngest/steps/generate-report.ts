@@ -371,7 +371,7 @@ export { insertReport as saveReportStep };
 import { resolveSectionPlan } from '@/services/synthesis/section-catalog';
 import { generateSingleSection } from '@/services/synthesis/section-generator';
 import { computeSectionalPromptVersion } from './prompt-version-sectional';
-import { validateReport, getBlockingIssues, partitionBlockingIssues } from '@/services/synthesis/report-validator';
+import { validateReport, getBlockingIssues, partitionBlockingIssues, formatIssuesForLog } from '@/services/synthesis/report-validator';
 import type { ReportValidationContext } from '@/services/synthesis/report-validator';
 import { computeHrs, getHrsLevel } from '@/services/synthesis/hallucination-risk-scorer';
 import type { SectionSpec, GeneratedSection, SectionContext } from '@/services/synthesis/section-generation-types';
@@ -672,11 +672,14 @@ export async function assembleSectionsAndSaveReport(
   if (validation.issues.length > 0) {
     const errors = validation.issues.filter((i) => i.severity === 'error');
     const warnings = validation.issues.filter((i) => i.severity === 'warning');
+    // GDPR Art.9: solo tipo+conteggio nei log — i `message` degli issue possono
+    // citare testo clinico del report (citazioni/blocchi/nomi). I messaggi completi
+    // restano per il perito in UI/DB.
     if (errors.length > 0) {
-      logger.warn('pipeline', `Sectional report validation errors: ${errors.map((e) => e.message).join('; ')}`);
+      logger.warn('pipeline', `Sectional report validation errors: ${formatIssuesForLog(errors)}`);
     }
     if (warnings.length > 0) {
-      logger.info('pipeline', `Sectional report validation warnings: ${warnings.map((w) => w.message).join('; ')}`);
+      logger.info('pipeline', `Sectional report validation warnings: ${formatIssuesForLog(warnings)}`);
     }
 
     // A3: block saving for all blocking-policy errors (centralized in
@@ -689,9 +692,11 @@ export async function assembleSectionsAndSaveReport(
         // leaks (explicit whitelist in report-validator.ts) block ALWAYS.
         const { overridable, nonOverridable } = partitionBlockingIssues(validation);
         if (nonOverridable.length > 0) {
+          // GDPR Art.9: l'Error si propaga a Inngest/Sentry → solo tipo+conteggio,
+          // mai il message (può citare testo clinico). Dettaglio per il perito in UI.
           throw new Error(
             `Report bloccato (controllo NON ignorabile — possibile leak dati/fabbricazione): ` +
-            `${nonOverridable.map((e) => e.message).join('; ')}.`,
+            `${formatIssuesForLog(nonOverridable)}.`,
           );
         }
         overriddenIssues = overridable.map((e) => ({ type: e.type, message: e.message }));
@@ -700,8 +705,9 @@ export async function assembleSectionsAndSaveReport(
           `${overriddenIssues.map((i) => i.type).join(', ')}. Report salvato su richiesta esplicita dell'utente.`,
         );
       } else {
+        // GDPR Art.9: tipo+conteggio nell'Error (→ Inngest/Sentry), non il message clinico.
         throw new Error(
-          `Report non valido: ${criticalErrors.map((e) => e.message).join('; ')}. ` +
+          `Report non valido: ${formatIssuesForLog(criticalErrors)}. ` +
           `Inngest riprovera la generazione.`,
         );
       }

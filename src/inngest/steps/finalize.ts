@@ -87,7 +87,10 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
   }
 
   if (pipelineWarnings.length > 0) {
-    logger.warn('pipeline', `Case ${caseId} completed with ${pipelineWarnings.length} warning(s): ${pipelineWarnings.map((w) => w.message).join('; ')}`);
+    // GDPR Art.9: i `message` includono NOMI FILE (es. "Cartella_Mario_Rossi.pdf")
+    // = dato personale del paziente. Logghiamo solo step/severità; i messaggi
+    // completi restano in perizia_metadata.pipelineWarnings per la UI del perito.
+    logger.warn('pipeline', `Case ${caseId} completed with ${pipelineWarnings.length} warning(s): ${pipelineWarnings.map((w) => `${w.step}/${w.severity}`).join(', ')}`);
   }
 
   // No credit adjustment needed — flat pricing per pipeline mode (no per-page calculation)

@@ -4,6 +4,7 @@ import {
   getBlockingIssues,
   partitionBlockingIssues,
   NON_OVERRIDABLE_ERROR_TYPES,
+  formatIssuesForLog,
 } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
 
@@ -813,5 +814,25 @@ describe('checkRequiredSections — aliasing heading intestazione (fix CRITICAL 
     const report = `## La Documentazione Medica Prodotta\n\n${PARERE_DOC}\n\n## Conclusioni\n\n${PARERE_CONCL}`;
     const result = validateReport(report, 0, { requiredSectionTitles: ['Intestazione'], events: [] });
     expect(result.issues.some((i) => i.type === 'missing_section' && /intestazione/i.test(i.message))).toBe(true);
+  });
+});
+
+describe('formatIssuesForLog — GDPR-safe (solo tipo+conteggio, mai il message clinico)', () => {
+  it('riassume per tipo+conteggio e NON include il message (può citare testo clinico)', () => {
+    const issues: ReportIssue[] = [
+      { type: 'unverified_citation', severity: 'warning', message: 'Quoted text not found in OCR: "Mario Rossi, diagnosi di neoplasia maligna..."' },
+      { type: 'unverified_citation', severity: 'warning', message: 'Quoted text not found in OCR: "frattura scomposta del femore..."' },
+      { type: 'duplicate_content', severity: 'error', message: 'Duplicate block (2x): "il paziente Bianchi presentava..."' },
+    ];
+    const out = formatIssuesForLog(issues);
+    expect(out).toBe('unverified_citation×2, duplicate_content×1');
+    expect(out).not.toContain('Mario Rossi');
+    expect(out).not.toContain('neoplasia');
+    expect(out).not.toContain('femore');
+    expect(out).not.toContain('Bianchi');
+  });
+
+  it('ritorna "none" per lista vuota', () => {
+    expect(formatIssuesForLog([])).toBe('none');
   });
 });

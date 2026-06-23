@@ -555,9 +555,12 @@ function safeJsonParse(raw: string, label: string): unknown {
   // no clinical events when in reality the LLM produced unparseable output.
   // Inngest will retry; if every attempt fails the document lands in
   // processing_status='failed' with a visible error in the UI.
-  const preview = raw.slice(0, 500).replace(/\s+/g, ' ');
+  // GDPR Art.9: NON loggare il body LLM grezzo — contiene nomi/diagnosi (dati
+  // sensibili) e sanitizeLogMessage (logger.ts) redige solo CF/email/telefono.
+  // Solo diagnostica strutturale (lunghezza); l'errore è comunque visibile in UI
+  // (processing_status='failed' dopo i retry Inngest).
   logger.error('extraction',
-    `[${label}] JSON irrecoverable (${raw.length} chars). First 500: ${preview}`,
+    `[${label}] JSON irrecoverable (${raw.length} chars, no parsable events). Inngest will retry.`,
   );
   throw new Error(
     `Estrazione fallita per "${label}": JSON LLM irrecuperabile dopo 3 livelli di fallback. Inngest ritenterà.`,
@@ -595,8 +598,9 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
   }
 
   if (!rawEvents || rawEvents.length === 0) {
-    logger.error('extraction', `No events found. Keys: ${Object.keys(raw).join(', ')}`);
-    logger.error('extraction', `Preview: ${content.slice(0, 500)}`);
+    // GDPR Art.9: le chiavi JSON sono strutturali (safe); il content grezzo NO
+    // (può contenere nomi/diagnosi) → logghiamo solo le chiavi + la lunghezza.
+    logger.error('extraction', `No events found. Keys: ${Object.keys(raw).join(', ')} (${content.length} chars)`);
     return { events: [] };
   }
 

@@ -25,6 +25,7 @@ import {
 } from './extraction-service';
 import type { ExtractedEvent } from './extraction-schemas';
 import { streamMistralChat } from '@/lib/mistral/client';
+import { logger } from '@/lib/logger';
 
 const mockStreamChat = streamMistralChat as Mock;
 
@@ -503,5 +504,50 @@ describe('Audit Ondata 2 — normalizeDateFormat', () => {
   it('returns null for unrecognizable input', () => {
     expect(normalizeDateFormat('not a date')).toBeNull();
     expect(normalizeDateFormat('2024')).toBeNull();
+  });
+});
+
+describe('GDPR Art.9 — i log NON espongono il body LLM grezzo (nomi/diagnosi)', () => {
+  const SECRET = 'PazienteSegretoXYZ';
+  const DIAG = 'neoplasiamalignaSEGRETA';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function allLoggedStrings(): string {
+    const calls = [
+      ...(logger.error as Mock).mock.calls,
+      ...(logger.warn as Mock).mock.calls,
+      ...(logger.info as Mock).mock.calls,
+    ];
+    return calls.flat().filter((a): a is string => typeof a === 'string').join(' || ');
+  }
+
+  it('JSON LLM irrecuperabile: non logga il body grezzo (solo lunghezza)', async () => {
+    mockStreamChat.mockResolvedValue({
+      content: `garbage non-json ${SECRET} ${DIAG} <<< ][ }{ %%%`,
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+    // Può throware (irrecuperabile) o tornare {events:[]} (jsonrepair): in
+    // ENTRAMBI i casi il body grezzo NON deve finire nei log.
+    try {
+      await extractEventsFromChunk({ chunkText: 'x', chunkLabel: 'doc-secret.pdf', documentType: 'altro', caseType: 'generica' });
+    } catch { /* irrecuperabile → ok */ }
+    const logged = allLoggedStrings();
+    expect(logged).not.toContain(SECRET);
+    expect(logged).not.toContain(DIAG);
+  });
+
+  it('JSON valido ma senza eventi: non logga il content grezzo', async () => {
+    mockStreamChat.mockResolvedValue({
+      content: JSON.stringify({ foo: `${SECRET} ${DIAG}`, note: 'referto clinico riservato' }),
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+    const result = await extractEventsFromChunk({ chunkText: 'x', chunkLabel: 'doc-secret2.pdf', documentType: 'altro', caseType: 'generica' });
+    expect(result.events).toHaveLength(0);
+    const logged = allLoggedStrings();
+    expect(logged).not.toContain(SECRET);
+    expect(logged).not.toContain(DIAG);
   });
 });
