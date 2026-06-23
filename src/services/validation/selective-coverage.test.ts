@@ -149,23 +149,20 @@ describe('stripAttiIndex', () => {
   });
 });
 
-describe('checkSelectiveCoverage — excludeLabTests (perizia RC: lab esclusi su direttiva Lavini)', () => {
-  it('un lab T1 (esame_ematochimico con diagnosi) assente dalla narrativa NON è "omesso" se excludeLabTests', () => {
-    const events = [ev({ eventType: 'esame_ematochimico', diagnosis: 'Iperglicemia', eventDate: '2024-05-01' })];
-    const content = 'Narrazione clinica senza la data del prelievo.';
-    // Senza opt: è T1 (ha diagnosi) e la data manca → segnalato come omesso.
-    const withLab = checkSelectiveCoverage(content, events);
-    expect(withLab.t1Total).toBe(1);
-    expect(withLab.missing).toHaveLength(1);
-    // Con excludeLabTests: escluso dal conteggio → nessun falso "omesso".
-    const noLab = checkSelectiveCoverage(content, events, { excludeLabTests: true });
-    expect(noLab.t1Total).toBe(0);
-    expect(noLab.missing).toHaveLength(0);
+describe('checkSelectiveCoverage — lab T1 load-bearing NON soppresso (fix panel 2026-06-24: mai perdere un fatto)', () => {
+  it('un lab T1 (forma REALE: eventType esame + sourceType esame_ematochimico + diagnosi) assente dalla narrativa È segnalato come omesso', () => {
+    // Forma REALE prodotta dalla pipeline (extract-events: "laboratorio"→eventType 'esame',
+    // sourceType 'esame_ematochimico'). Un lab con diagnosi load-bearing (es. D-dimero→TVP)
+    // è T1 e NON va soppresso: se l'LLM lo omette dalla doc-sanitaria, il perito va avvisato.
+    const events = [ev({ eventType: 'esame', sourceType: 'esame_ematochimico', diagnosis: 'sospetta TVP', eventDate: '2024-05-01' })];
+    const res = checkSelectiveCoverage('Narrazione clinica senza la data del prelievo.', events);
+    expect(res.t1Total).toBe(1);
+    expect(res.missing).toHaveLength(1);
   });
 
-  it('un evento clinico NON-lab resta coperto/omesso normalmente anche con excludeLabTests', () => {
+  it('un evento clinico NON-lab resta coperto/omesso normalmente', () => {
     const events = [ev({ eventType: 'diagnosi', eventDate: '2024-05-02' })];
-    const res = checkSelectiveCoverage('Narrazione senza la data.', events, { excludeLabTests: true });
+    const res = checkSelectiveCoverage('Narrazione senza la data.', events);
     expect(res.t1Total).toBe(1);
     expect(res.missing).toHaveLength(1);
   });

@@ -22,7 +22,7 @@
  */
 
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
-import { computeRelevanceTier, isLabTestEvent } from '@/lib/event-relevance';
+import { computeRelevanceTier } from '@/lib/event-relevance';
 import { eventDateAppearsInReport } from '../synthesis/report-validator';
 
 const SENTINEL_DATE = '1900-01-01';
@@ -74,18 +74,18 @@ function isT1(event: ConsolidatedEvent): boolean {
 export function checkSelectiveCoverage(
   content: string,
   events: ConsolidatedEvent[],
-  opts?: { excludeLabTests?: boolean },
 ): SelectiveCoverageResult {
   // Misura la copertura sulla SOLA narrazione: l'indice analitico deterministico
   // (se prependuto) elenca ogni data e maschererebbe ogni omissione (#3/#5 panel).
   const contentLower = stripAttiIndex(content).toLowerCase();
 
+  // NB: nessuna soppressione dei lab. Nella perizia RC i lab di ROUTINE (T2/T3) sono già
+  // tolti a monte dal prompt (isExcludableLabEvent), mentre un lab T1 load-bearing viene
+  // TENUTO → deve restare nella coverage: se l'LLM lo omette, va SEGNALATO (mai perdere
+  // un fatto). Sopprimerlo qui reintrodurrebbe il drop silenzioso (regressione panel).
   const t1Dated = events.filter(
     (e) =>
       isT1(e) &&
-      // Lab esclusi su direttiva (perizia RC): non vanno contati come "omessi"
-      // se sono stati VOLUTAMENTE tolti dalla narrativa (un lab con diagnosi è T1).
-      !(opts?.excludeLabTests && isLabTestEvent(e)) &&
       e.eventDate &&
       e.eventDate !== SENTINEL_DATE &&
       e.datePrecision === 'giorno',

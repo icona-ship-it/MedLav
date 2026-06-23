@@ -1244,11 +1244,9 @@ export const processCase = inngest.createFunction(
     // deve comparire; se manca, banner visibile + warning di pipeline.
     const docSanSection = completedSections.get('documentazione_sanitaria');
     if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
-      // excludeLabTests mirror del flag sullo spec doc-sanitaria stragiudiziale:
-      // i lab esclusi dalla narrativa non vanno segnalati come "omessi".
-      const coverage = checkSelectiveCoverage(docSanSection.content, synthesisParams.events, {
-        excludeLabTests: synthesisParams.caseRole === 'stragiudiziale',
-      });
+      // I lab di routine sono già tolti dal prompt a monte (isExcludableLabEvent); un lab
+      // T1 load-bearing resta e DEVE essere coperto → nessun parametro lab qui.
+      const coverage = checkSelectiveCoverage(docSanSection.content, synthesisParams.events);
       if (coverage.missing.length > 0) {
         completedSections.set('documentazione_sanitaria', {
           ...docSanSection,

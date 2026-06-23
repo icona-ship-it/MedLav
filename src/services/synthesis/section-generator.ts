@@ -5,7 +5,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
-import { isLabTestEvent } from '@/lib/event-relevance';
+import { isExcludableLabEvent } from '@/lib/event-relevance';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionSpec, GeneratedSection, SectionContext } from './section-generation-types';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
@@ -166,8 +166,10 @@ export function buildSectionUserPrompt(params: {
     parts.push(`## TUTTI GLI EVENTI CLINICI (${events.length} totali)\n\n${formatEventsForPrompt(events)}\n`);
   } else if (spec.dataSources.includes('events-medical')) {
     let medical = filterMedicalEvents(events);
-    // Lavini (perizia RC): esami ematochimici/di laboratorio ESCLUSI dalla riproduzione.
-    if (spec.excludeLabTests) medical = medical.filter((e) => !isLabTestEvent(e));
+    // Lavini (perizia RC): esami ematochimici/di laboratorio di ROUTINE esclusi dalla
+    // riproduzione. NB: un lab T1 load-bearing (es. D-dimero→TVP) resta — "mai perdere
+    // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
+    if (spec.excludeLabTests) medical = medical.filter((e) => !isExcludableLabEvent(e));
     parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
   } else if (spec.dataSources.includes('events-non-medical')) {
     const nonMedical = filterNonMedicalEvents(events);
