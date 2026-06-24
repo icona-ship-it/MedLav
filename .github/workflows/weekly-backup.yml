@@ -20,7 +20,7 @@ name: Weekly Off-site Backup (DB + Storage)
 #   R2_ACCESS_KEY              Cloudflare R2 Access Key ID
 #   R2_SECRET_KEY              Cloudflare R2 Secret Access Key
 #   R2_BUCKET                  nome bucket (es. "legmed-backups")
-#   R2_ENDPOINT                endpoint S3 R2 (es. https://<account>.r2.cloudflarestorage.com)
+#   R2_ENDPOINT                endpoint S3 R2 — bucket EU: https://<account>.eu.r2.cloudflarestorage.com (con .eu.)
 #   BACKUP_PASSPHRASE          passphrase gpg simmetrica (generarla lunga e
 #                              conservarla FUORI da GitHub, es. password manager:
 #                              senza questa i backup storage NON sono ripristinabili)

@@ -66,9 +66,9 @@ Workflow: `.github/workflows/weekly-backup.yml` — cron domenica 03:00 UTC + di
 
 ### Setup Cloudflare R2 (una tantum)
 
-1. Cloudflare dashboard → R2 → Create bucket `legmed-backups` (location EU)
+1. Cloudflare dashboard → R2 → Create bucket `legmed-backups` → **Location: "Specify jurisdiction" → EU** (obbligatorio per dati Art. 9; la giurisdizione e' IMMUTABILE dopo la creazione — un bucket non-EU andrebbe ricreato da zero)
 2. R2 API Tokens → Create API Token — Permissions: Object Read & Write, scope: solo `legmed-backups`
-3. Salvare Access Key ID, Secret Access Key, S3 endpoint URL
+3. Salvare Access Key ID, Secret Access Key, S3 endpoint URL. **NB**: per un bucket EU-jurisdiction l'endpoint S3 contiene `.eu.` → `https://<account-id>.eu.r2.cloudflarestorage.com` (l'endpoint senza `.eu.` fallisce su bucket EU)
 
 ### GitHub Secrets richiesti
 
@@ -82,7 +82,7 @@ Repository Settings → Secrets and variables → Actions:
 | `R2_ACCESS_KEY` | Access Key ID da Cloudflare R2 |
 | `R2_SECRET_KEY` | Secret Access Key da Cloudflare R2 |
 | `R2_BUCKET` | `legmed-backups` |
-| `R2_ENDPOINT` | `https://[account-id].r2.cloudflarestorage.com` |
+| `R2_ENDPOINT` | `https://[account-id].eu.r2.cloudflarestorage.com` (con `.eu.` — il bucket e' EU-jurisdiction; l'endpoint senza `.eu.` fallisce) |
 | `BACKUP_PASSPHRASE` | Passphrase gpg lunga e casuale. **Conservarla anche FUORI da GitHub** (password manager): senza passphrase i backup cifrati sono irrecuperabili |
 
 ### Primo test manuale
@@ -99,8 +99,8 @@ Verificare: job verde, su R2 presenti `db/<oggi>...` e `storage/<oggi>.tar.gz.gp
 1. Scaricare il backup piu' recente:
    ```bash
    export AWS_ACCESS_KEY_ID=<R2_ACCESS_KEY> AWS_SECRET_ACCESS_KEY=<R2_SECRET_KEY>
-   aws s3 ls s3://legmed-backups/db/ --endpoint-url=https://<account-id>.r2.cloudflarestorage.com
-   aws s3 cp s3://legmed-backups/db/<latest> . --endpoint-url=https://<account-id>.r2.cloudflarestorage.com
+   aws s3 ls s3://legmed-backups/db/ --endpoint-url=https://<account-id>.eu.r2.cloudflarestorage.com
+   aws s3 cp s3://legmed-backups/db/<latest> . --endpoint-url=https://<account-id>.eu.r2.cloudflarestorage.com
    ```
 2. Se cifrato (`.gpg`), decifrare:
    ```bash
