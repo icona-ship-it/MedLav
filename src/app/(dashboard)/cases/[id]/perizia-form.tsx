@@ -15,6 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { updateCase, getReportSectionOptions, getLastPeritoDefaults } from '../../actions';
 import { ReportSectionsPicker } from './report-sections-picker';
 import { usePeriziaDraft } from './use-perizia-draft';
+import { buildVisibleSections } from './perizia-form-sections';
 import { mergeDraftForm, formatDraftAge, type PeriziaDraft } from '@/lib/perizia-draft-storage';
 import { isValidItalianDate } from '@/lib/validators/date-format';
 import type { CaseData, PeriziaMetadataUI } from './types';
@@ -22,44 +23,8 @@ import { computeBMI } from '@/services/synthesis/anamnesi-template';
 
 // --- Section config ---
 
-interface SectionDef {
-  id: string;
-  title: string;
-  fields: string[];
-}
-
-const SECTIONS: SectionDef[] = [
-  { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
-  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese', 'oggettoIncarico'] },
-  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle', 'coCtuName', 'coCtuTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
-  { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito', 'termineBozza', 'termineOsservazioni'] },
-  { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
-  { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
-];
-
 /** Module id della perizia medico-legale di Responsabilità Civile. */
 const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
-
-/**
- * Sezioni compilate dal perito SOLO per le perizie RC medico-legali.
- * I dati anamnestici e "Il Fatto e la Storia Clinica" confluiscono nel report
- * come testo del perito (deterministico, vedi anamnesi-template + section-catalog).
- */
-const RC_PERITO_SECTIONS: SectionDef[] = [
-  { id: 'ilFatto', title: 'Il Fatto e la Storia Clinica', fields: ['ilFattoEStoriaClinica'] },
-  {
-    id: 'anamnesi',
-    title: 'Dati Anamnestici',
-    fields: [
-      'anamnesiFamiliare', 'anamnesiFisiologica', 'pesoKg', 'altezzaCm',
-      'anamnesiPatologicaRemota', 'anamnesiPatologicaProssima',
-      'anamnesiFarmacologica', 'anamnesiLavorativa',
-    ],
-  },
-];
-
-/** Sezione speciale (sempre presente): selettore delle sezioni del report. */
-const SEZIONI_REPORT_SECTION: SectionDef = { id: 'sezioniReport', title: 'Sezioni del report', fields: [] };
 
 /** Campi data dell'intestazione: testo libero, validati come date reali (1.4). */
 const HEADER_DATE_FIELDS = [
@@ -143,10 +108,13 @@ export function PeriziaMetadataForm({
   const [isPending, startTransition] = useTransition();
   const existing = useMemo(() => caseData.perizia_metadata ?? {}, [caseData.perizia_metadata]);
   const isRC = caseData.module_id === RC_CIVILE_MODULE_ID;
+  // Stragiudiziale (schema Antoniazzi): nessun contesto giudiziario → niente
+  // intestazione del Tribunale, termini processuali o Quesiti del Giudice.
+  const isStragiudiziale = caseData.case_role === 'stragiudiziale';
   // RC perizie collect anamnesi + "Il Fatto" from the perito; other case types don't.
   const sections = useMemo(
-    () => [...(isRC ? [...SECTIONS, ...RC_PERITO_SECTIONS] : SECTIONS), SEZIONI_REPORT_SECTION],
-    [isRC],
+    () => buildVisibleSections({ role: caseData.case_role, isRC }),
+    [isRC, caseData.case_role],
   );
   const [form, setForm] = useState({
     patientFullName: existing.patientFullName ?? '',
@@ -454,7 +422,9 @@ export function PeriziaMetadataForm({
                   ) : (
                     <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 shrink-0" />
                   )}
-                  <span className="text-sm font-semibold">{section.title}</span>
+                  <span className="text-sm font-semibold">
+                    {section.id === 'parti' && isStragiudiziale ? 'Il Perito' : section.title}
+                  </span>
                   {isFilled && (
                     <span className="text-xs text-green-600 dark:text-green-400">Compilato</span>
                   )}
@@ -616,6 +586,9 @@ export function PeriziaMetadataForm({
                         <p className="text-sm text-muted-foreground mt-1">Posta elettronica certificata</p>
                       </div>
                     </div>
+                    {/* Ausiliario / Co-CTU / parti / CTP: solo ambito giudiziario (CTU/CTP) */}
+                    {!isStragiudiziale && (
+                    <>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Ausiliario (nome)</Label>
@@ -658,6 +631,8 @@ export function PeriziaMetadataForm({
                         <Input value={form.ctpResistente} onChange={(e) => setForm({ ...form, ctpResistente: e.target.value })} placeholder="es. Dott. Paolo Esempi" />
                       </div>
                     </div>
+                    </>
+                    )}
                   </div>
                 )}
 
