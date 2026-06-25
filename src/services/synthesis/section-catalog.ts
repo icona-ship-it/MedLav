@@ -105,28 +105,48 @@ export function evaluateCondition(
 const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
 
 /**
+ * Placeholder puliti quando il perito NON compila i campi: la sezione resta un
+ * invito strutturato a compilare, NON una narrazione LLM. Evita il fallback
+ * fuori-stile (tassonomia artificiale + citazioni per tipo-documento [A/B/C/D]
+ * assenti dai gold Lavini) emerso sul caso reale Motta.
+ */
+const IL_FATTO_PERITO_PLACEHOLDER =
+  '*[Il perito ricostruisca qui "Il Fatto e la Storia Clinica" in prosa scorrevole e in terza persona: dinamica dell\'evento (data, luogo, modalità), prime cure e diagnosi iniziale, visite e controlli successivi, interventi e terapie principali, evoluzione clinica fino alla stabilizzazione. — Sezione non compilata nei dati della perizia: inserire il testo nel form "Dati perizia" o scrivere qui direttamente.]*';
+
+const ANAMNESI_PERITO_PLACEHOLDER =
+  '*[Il perito inserisca qui i Dati Anamnestici come scheda a righe brevi: lateralità (destrimane/mancino), patologie pregresse e interventi rilevanti, terapie croniche/attuali, anamnesi familiare se pertinente. — Sezione non compilata nei dati della perizia.]*';
+
+/**
  * Per le perizie RC medico-legali, "Dati Anamnestici" e "Il Fatto e la Storia
- * Clinica" sono compilati dal perito nel form info-perizia. Quando i campi sono
- * valorizzati, trasformiamo quelle sezioni in placeholder DETERMINISTICI (testo
- * del perito, nessuna generazione LLM) — coerente col nord di prodotto: ciò che
- * il perito scrive non viene reinterpretato dall'AI.
- * Se i campi mancano, la sezione resta affidata all'LLM (fallback invariato).
+ * Clinica" sono sezioni del PERITO — coerente col nord di prodotto: ciò che il
+ * perito scrive non viene reinterpretato dall'AI. Le rendiamo SEMPRE deterministiche:
+ * - campo compilato nel form → placeholder col testo del perito;
+ * - campo vuoto → placeholder PULITO che invita a compilare (mai generazione LLM,
+ *   che produrrebbe narrazione fuori-stile su un documento depositabile).
  */
 function applyRcPeritoSections(
   specs: SectionSpec[],
   periziaMetadata?: PeriziaMetadata,
 ): SectionSpec[] {
-  if (!periziaMetadata) return specs;
-
-  const anamnesiMarkdown = renderAnamnesiMarkdown(periziaMetadata);
-  const ilFatto = periziaMetadata.ilFattoEStoriaClinica?.trim();
+  const anamnesiMarkdown = periziaMetadata ? renderAnamnesiMarkdown(periziaMetadata) : '';
+  const ilFatto = periziaMetadata?.ilFattoEStoriaClinica?.trim();
 
   return specs.map((spec) => {
-    if (spec.id === 'anamnesi' && anamnesiMarkdown) {
-      return { ...spec, isPlaceholder: true, maxTokens: TOKENS_NONE, placeholderText: anamnesiMarkdown };
+    if (spec.id === 'anamnesi') {
+      return {
+        ...spec,
+        isPlaceholder: true,
+        maxTokens: TOKENS_NONE,
+        placeholderText: anamnesiMarkdown || ANAMNESI_PERITO_PLACEHOLDER,
+      };
     }
-    if (spec.id === 'il_fatto_e_storia_clinica' && ilFatto) {
-      return { ...spec, isPlaceholder: true, maxTokens: TOKENS_NONE, placeholderText: ilFatto };
+    if (spec.id === 'il_fatto_e_storia_clinica') {
+      return {
+        ...spec,
+        isPlaceholder: true,
+        maxTokens: TOKENS_NONE,
+        placeholderText: ilFatto || IL_FATTO_PERITO_PLACEHOLDER,
+      };
     }
     return spec;
   });
