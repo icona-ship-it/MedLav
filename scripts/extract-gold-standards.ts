@@ -79,6 +79,12 @@ const SOURCES: BenchmarkSource[] = [
     slug: 'tedesco-schoenweger-ctu-rc',
     description: 'CTU RC — paraplegia/parapendio, polizza infortuni (scritta dal Dr. LAVINI)',
   },
+  {
+    source: 'Perizia medico-legale per responsabilità civile generale/MOTTA TERESA_ avv.to Chesini.docx',
+    baseDir: 'benchmark',
+    slug: 'motta-rc-stragiudiziale',
+    description: 'Stragiudiziale RC generale — caduta, frattura femore+olecrano sx (schema Antoniazzi: doc recensita verbatim + visita clinica + epicrisi). Gold "perizia semplice" Lavini.',
+  },
 ];
 
 async function extractDocx(filePath: string): Promise<string> {
