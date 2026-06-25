@@ -49,6 +49,9 @@ Example/
 # Benchmark files — golden examples Lavini anonymized (GDPR Art. 9 sensitive). Local only.
 benchmark/
 
+# Report generati reali da confrontare coi gold (dati paziente Art. 9). Local only.
+Report fatti da confrontare con reali/
+
 # Claude Code internal lock files
 .claude/scheduled_tasks.lock
 
