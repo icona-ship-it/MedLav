@@ -6,6 +6,7 @@ import {
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
 import { isExcludableLabEvent } from '@/lib/event-relevance';
+import { stripLabBlocks } from '@/lib/lab-block-stripper';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionSpec, GeneratedSection, SectionContext } from './section-generation-types';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
@@ -169,7 +170,14 @@ export function buildSectionUserPrompt(params: {
     // Lavini (perizia RC): esami ematochimici/di laboratorio di ROUTINE esclusi dalla
     // riproduzione. NB: un lab T1 load-bearing (es. D-dimero→TVP) resta — "mai perdere
     // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
-    if (spec.excludeLabTests) medical = medical.filter((e) => !isExcludableLabEvent(e));
+    if (spec.excludeLabTests) {
+      medical = medical.filter((e) => !isExcludableLabEvent(e));
+      // I lab restano annegati nel sourceText (citazione verbatim) degli eventi non-lab
+      // sopravvissuti (es. cartella clinica): strip a livello TESTO, tenendo titolo/diagnosi.
+      medical = medical.map((e) =>
+        e.sourceText ? { ...e, sourceText: stripLabBlocks(e.sourceText).text } : e,
+      );
+    }
     parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
   } else if (spec.dataSources.includes('events-non-medical')) {
     const nonMedical = filterNonMedicalEvents(events);
@@ -243,7 +251,10 @@ export function buildSectionUserPrompt(params: {
       if (summaryText) parts.push(summaryText);
     } else if (documentsOcrText && documentsOcrText.length > 0) {
       // Direct OCR mode: filter and include raw OCR text
-      const filteredOcr = filterOcrForSection(spec, documentsOcrText);
+      let filteredOcr = filterOcrForSection(spec, documentsOcrText);
+      // Canale DOMINANTE dei lab (perizia RC): i valori vivono dentro l'OCR grezzo delle
+      // cartelle (non in un documento lab a sé). Strip dei blocchi-lab a livello TESTO.
+      if (spec.excludeLabTests) filteredOcr = filteredOcr.map(stripLabFromOcrContext);
       if (filteredOcr.length > 0) {
         let ocrText = formatDocumentsOcrForPrompt(filteredOcr);
         // Cap OCR text to prevent Vercel timeout on large cases.
@@ -789,8 +800,19 @@ function filterOcrForSection(
   return docs;
 }
 
+/**
+ * Strip dei blocchi-lab da ogni pagina OCR di un documento (perizia RC, excludeLabTests).
+ * Mappa immutabile; ricalcola totalChars così che la truncation a valle usi le lunghezze reali.
+ */
+function stripLabFromOcrContext(doc: DocumentOcrContext): DocumentOcrContext {
+  const pages = doc.pages.map((p) => ({ ...p, ocrText: stripLabBlocks(p.ocrText).text }));
+  const totalChars = pages.reduce((sum, p) => sum + p.ocrText.length, 0);
+  return { ...doc, pages, totalChars };
+}
+
 // Exported for testing only
 export { filterOcrForSection as _filterOcrForSection_test };
+export { stripLabFromOcrContext as _stripLabFromOcrContext_test };
 export { EXCLUDED_FROM_MEDICAL as _EXCLUDED_FROM_MEDICAL_test };
 
 // ── PubMed formatting ─────────────────────────────────────────────
