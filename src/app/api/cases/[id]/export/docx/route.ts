@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
-import { generateDocxReport, generateProfessionalDocxReport } from '@/services/export/docx-export';
+import { generateDocxReport, generateProfessionalDocxReport, validateDepositableExport } from '@/services/export/docx-export';
 import { generateTimelineDocx } from '@/services/export/timeline-export';
 import { generateExpenseDocx } from '@/services/export/expense-export';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
@@ -163,6 +163,18 @@ export async function GET(
     });
 
     const pm = data.periziaMetadata as Record<string, unknown> | null;
+
+    // Blocca un export "depositabile" senza i dati del perito (uscirebbe incompleto via
+    // il flusso basic). In modalità lavoro/bozza i parziali sono ammessi.
+    const depositableError = validateDepositableExport(
+      pm as { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null,
+      data.caseData.case_role as string,
+      exportMode,
+    );
+    if (depositableError) {
+      return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
+    }
+
     const useProfessional = pm && (pm.tribunale || pm.ctuName);
 
     // Resolve ocr-image: placeholders to base64 data URIs

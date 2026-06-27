@@ -238,6 +238,27 @@ function pushDatedSignature(
  * Generate a DOCX report document.
  * Returns a Buffer ready for download.
  */
+/**
+ * Validazione PRE-export. Una perizia "depositabile" senza i dati identificativi del
+ * perito uscirebbe via il flusso BASIC (senza carta intestata né firma) → un documento
+ * incompleto spacciato per depositabile. Blocca con messaggio esplicito; in modalità
+ * "lavoro" (bozza) i dati parziali restano ammessi. Ritorna il messaggio o null.
+ */
+export function validateDepositableExport(
+  pm: { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null | undefined,
+  caseRole: string,
+  exportMode: 'depositabile' | 'lavoro',
+): string | null {
+  if (exportMode !== 'depositabile') return null;
+  if (!pm?.ctuName?.trim()) {
+    return 'Per esportare la perizia in versione depositabile compila almeno il Nome del perito nei "Dati perizia" del caso. Per un documento di lavoro usa l\'esportazione in modalità bozza.';
+  }
+  if ((caseRole === 'ctu' || caseRole === 'ctp') && (!pm.tribunale?.trim() || !pm.rgNumber?.trim())) {
+    return 'Per una perizia giudiziaria depositabile servono anche il Tribunale e il numero di Ruolo Generale (RG) nei "Dati perizia".';
+  }
+  return null;
+}
+
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
   const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
   // QA 2026-06-11: nel depositabile niente carte di lavoro (riepilogo qualità,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart } from './docx-export';
+import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart, validateDepositableExport } from './docx-export';
 
 describe('docx-export — parseMarkdownTable', () => {
   it('parses a standard pipe table, filtering the separator row', () => {
@@ -93,6 +93,27 @@ describe('docx-export — scaleToFit (no distorsione)', () => {
 
   it('dimensioni invalide → fallback al box', () => {
     expect(scaleToFit(0, 0, 450, 600)).toEqual({ width: 450, height: 600 });
+  });
+});
+
+describe('docx-export — validateDepositableExport', () => {
+  it('BLOCCA il depositabile senza nome perito', () => {
+    expect(validateDepositableExport(null, 'stragiudiziale', 'depositabile')).toMatch(/Nome del perito/i);
+    expect(validateDepositableExport({ tribunale: 'Tribunale X' }, 'stragiudiziale', 'depositabile')).toMatch(/Nome del perito/i);
+  });
+
+  it('AMMETTE la stragiudiziale depositabile con il solo nome perito', () => {
+    expect(validateDepositableExport({ ctuName: 'Dott. Rossi' }, 'stragiudiziale', 'depositabile')).toBeNull();
+  });
+
+  it('per CTU/CTP depositabile richiede anche Tribunale e RG', () => {
+    expect(validateDepositableExport({ ctuName: 'Dott. Rossi' }, 'ctu', 'depositabile')).toMatch(/Tribunale.*RG|RG/i);
+    expect(validateDepositableExport({ ctuName: 'Dott. Rossi', tribunale: 'Trib. X', rgNumber: '123/2025' }, 'ctu', 'depositabile')).toBeNull();
+  });
+
+  it('in modalità lavoro (bozza) ammette i dati parziali', () => {
+    expect(validateDepositableExport(null, 'stragiudiziale', 'lavoro')).toBeNull();
+    expect(validateDepositableExport({}, 'ctu', 'lavoro')).toBeNull();
   });
 });
 
