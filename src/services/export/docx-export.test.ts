@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownTable, markdownToDocxParagraphs } from './docx-export';
+import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart } from './docx-export';
 
 describe('docx-export — parseMarkdownTable', () => {
   it('parses a standard pipe table, filtering the separator row', () => {
@@ -43,5 +43,69 @@ describe('docx-export — markdownToDocxParagraphs', () => {
     const out = markdownToDocxParagraphs(md);
     // heading + 2 paragraphs = 3 blocks (empty lines skipped)
     expect(out.length).toBe(3);
+  });
+
+  it('non crasha su un blocco-placeholder multi-riga (lo evidenzia)', () => {
+    const md = '*[Inserire qui i risultati della visita:\n- esame locale\n- deambulazione]*\n\nParagrafo dopo.';
+    const out = markdownToDocxParagraphs(md);
+    expect(out.length).toBeGreaterThan(0); // 3 righe placeholder + 1 paragrafo
+  });
+});
+
+describe('docx-export — getImageDimensions', () => {
+  it('legge le dimensioni reali da un header PNG', () => {
+    const png = Buffer.alloc(24);
+    png.writeUInt32BE(0x89504e47, 0); // firma PNG
+    png.writeUInt32BE(200, 16); // width
+    png.writeUInt32BE(100, 20); // height
+    expect(getImageDimensions(png, 'png')).toEqual({ width: 200, height: 100 });
+  });
+
+  it('legge le dimensioni da un header JPEG (SOF0)', () => {
+    const jpg = Buffer.alloc(13);
+    jpg.writeUInt16BE(0xffd8, 0); // SOI
+    jpg[2] = 0xff; jpg[3] = 0xc0; // SOF0
+    jpg.writeUInt16BE(11, 4); // segment length
+    jpg[6] = 8; // precision
+    jpg.writeUInt16BE(150, 7); // height
+    jpg.writeUInt16BE(300, 9); // width
+    expect(getImageDimensions(jpg, 'jpg')).toEqual({ width: 300, height: 150 });
+  });
+
+  it('ritorna null su buffer non parsabile', () => {
+    expect(getImageDimensions(Buffer.from([1, 2, 3]), 'png')).toBeNull();
+    expect(getImageDimensions(Buffer.alloc(0), 'jpg')).toBeNull();
+  });
+});
+
+describe('docx-export — scaleToFit (no distorsione)', () => {
+  it('scala dentro il box conservando l\'aspect ratio', () => {
+    // 300x150 (2:1) dentro 450x600 → limite è la larghezza → 450x225 (resta 2:1)
+    expect(scaleToFit(300, 150, 450, 600)).toEqual({ width: 450, height: 225 });
+    // 1000x800 (5:4) → scala 0.45 → 450x360
+    expect(scaleToFit(1000, 800, 450, 600)).toEqual({ width: 450, height: 360 });
+  });
+
+  it('immagine verticale: il limite è l\'altezza', () => {
+    // 400x1200 (1:3) dentro 450x600 → limite altezza → 200x600
+    expect(scaleToFit(400, 1200, 450, 600)).toEqual({ width: 200, height: 600 });
+  });
+
+  it('dimensioni invalide → fallback al box', () => {
+    expect(scaleToFit(0, 0, 450, 600)).toEqual({ width: 450, height: 600 });
+  });
+});
+
+describe('docx-export — isPlaceholderBlockStart', () => {
+  it('riconosce i placeholder del perito', () => {
+    expect(isPlaceholderBlockStart('*[Inserire qui i risultati della visita]*')).toBe(true);
+    expect(isPlaceholderBlockStart('[da compilare dal perito]')).toBe(true);
+    expect(isPlaceholderBlockStart('  *[Il perito ricostruisca il fatto]*')).toBe(true);
+  });
+
+  it('NON scambia per placeholder il corsivo o le citazioni normali', () => {
+    expect(isPlaceholderBlockStart('*testo in corsivo*')).toBe(false);
+    expect(isPlaceholderBlockStart('Paragrafo normale.')).toBe(false);
+    expect(isPlaceholderBlockStart('[Ev. 3]')).toBe(false); // bracket senza keyword
   });
 });

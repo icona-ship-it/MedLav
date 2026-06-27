@@ -706,6 +706,53 @@ export function parseMarkdownTable(text: string): string[][] | null {
  * Convert a section's markdown content to DOCX paragraphs.
  * Handles headings, bold/italic, lists, tables, and plain text.
  */
+/**
+ * Dimensioni reali di un'immagine leggendo l'header (sincrono — il renderer DOCX è
+ * sincrono, niente sharp/async). PNG: IHDR; JPEG: marcatori SOF. Null se non parsabile.
+ */
+export function getImageDimensions(buffer: Buffer, type: 'png' | 'jpg'): { width: number; height: number } | null {
+  try {
+    if (type === 'png') {
+      if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) return null;
+      const width = buffer.readUInt32BE(16);
+      const height = buffer.readUInt32BE(20);
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+    // JPEG: scorre i segmenti fino a un marcatore SOF (contiene le dimensioni).
+    if (buffer.length < 4 || buffer.readUInt16BE(0) !== 0xffd8) return null;
+    let offset = 2;
+    while (offset < buffer.length - 8) {
+      if (buffer[offset] !== 0xff) { offset++; continue; }
+      const marker = buffer[offset + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        const height = buffer.readUInt16BE(offset + 5);
+        const width = buffer.readUInt16BE(offset + 7);
+        return width > 0 && height > 0 ? { width, height } : null;
+      }
+      offset += 2 + buffer.readUInt16BE(offset + 2);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Scala (w,h) per stare dentro maxW×maxH conservando l'aspect ratio (no distorsione). */
+export function scaleToFit(
+  width: number, height: number, maxW: number, maxH: number,
+): { width: number; height: number } {
+  if (width <= 0 || height <= 0) return { width: maxW, height: maxH };
+  const scale = Math.min(maxW / width, maxH / height);
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+/** Riga che apre un blocco-placeholder del perito (`*[...]*` o `[da compilare/inserire...]`). */
+export function isPlaceholderBlockStart(line: string): boolean {
+  const t = line.trim();
+  if (t.startsWith('*[')) return true;
+  return t.startsWith('[') && /(da compilare|inserire qui|il perito compil|il perito ricostru|il perito inseri|da verificare)/i.test(t);
+}
+
 export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
   const lines = content.split('\n');
@@ -736,11 +783,14 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
       try {
         const imageBuffer = Buffer.from(base64Data, 'base64');
         const docxImageType = mimeType === 'image/jpeg' || mimeType === 'image/jpg' ? 'jpg' : 'png';
+        // Aspect-ratio reale: niente più 450×350 fisso che stira le RX (#audit DOCX 2026-06-27).
+        const dims = getImageDimensions(imageBuffer, docxImageType);
+        const transformation = dims ? scaleToFit(dims.width, dims.height, 450, 600) : { width: 450, height: 350 };
         result.push(new Paragraph({
           children: [
             new ImageRun({
               data: imageBuffer,
-              transformation: { width: 450, height: 350 },
+              transformation,
               type: docxImageType,
             }),
           ],
@@ -908,6 +958,27 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
         alignment: AlignmentType.JUSTIFIED,
       }));
       i++;
+      continue;
+    }
+
+    // Blocco-placeholder del perito (*[...]* anche multi-riga): evidenziato in GIALLO
+    // così il perito trova subito cosa compilare (#audit DOCX 2026-06-27).
+    if (isPlaceholderBlockStart(line)) {
+      const blockLines: string[] = [];
+      while (i < lines.length && blockLines.length < 40) {
+        blockLines.push(lines[i]);
+        const closes = /\]\*?[.\s]*$/.test(lines[i].trim());
+        i++;
+        if (closes) break;
+      }
+      const inner = blockLines.join('\n').trim().replace(/^\*?\[/, '').replace(/\]\*?\.?$/, '').trim();
+      for (const pl of inner.split('\n')) {
+        result.push(new Paragraph({
+          children: [new TextRun({ text: pl.replace(/^\*|\*$/g, ''), italics: true, highlight: 'yellow', size: 20 })],
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { before: 60, after: 60 },
+        }));
+      }
       continue;
     }
 
