@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL, fidelitySignal, seedForAttempt } from './section-generator';
+import { _filterOcrForSection_test as filterOcrForSection, _EXCLUDED_FROM_MEDICAL_test as EXCLUDED_FROM_MEDICAL, _stripLabFromOcrContext_test as stripLabFromOcrContext, fidelitySignal, seedForAttempt } from './section-generator';
 import { DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import type { SectionSpec } from './section-generation-types';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
@@ -300,5 +300,46 @@ describe('filterOcrForSection — excludeLabTests (perizia RC: Lavini)', () => {
     const spec = makeSectionSpec({ id: 'documentazione_sanitaria', dataSources: ['events-medical'] });
     const types = filterOcrForSection(spec, docs).map((d) => d.documentType);
     expect(types).toContain('esame_laboratorio');
+  });
+});
+
+describe('stripLabFromOcrContext', () => {
+  it('rimuove i blocchi-lab dalle pagine OCR e ricalcola totalChars', () => {
+    const doc: DocumentOcrContext = {
+      documentId: 'd1',
+      fileName: 'cartella.pdf',
+      documentType: 'cartella_clinica',
+      pages: [
+        {
+          pageNumber: 1,
+          ocrText: [
+            'Decorso post-operatorio regolare.',
+            'Emoglobina 100 g/L 120-160',
+            'Ematocrito 0.31 L/L 0.36-0.46',
+            'Globuli bianchi 9.1 10^9/L 4-10',
+            'Dimesso in buone condizioni.',
+          ].join('\n'),
+        },
+      ],
+      totalChars: 0,
+    };
+    const out = stripLabFromOcrContext(doc);
+    expect(out.pages[0].ocrText).not.toMatch(/Emoglobina 100/);
+    expect(out.pages[0].ocrText).toMatch(/Decorso post-operatorio/);
+    expect(out.pages[0].ocrText).toMatch(/Dimesso in buone condizioni/);
+    // totalChars ricalcolato sulle pagine strippate (non lo 0 iniziale né l'originale)
+    expect(out.totalChars).toBe(out.pages.reduce((s, p) => s + p.ocrText.length, 0));
+    expect(out.totalChars).toBeGreaterThan(0);
+  });
+
+  it('è immutabile: non muta il documento originale', () => {
+    const doc: DocumentOcrContext = {
+      documentId: 'd2', fileName: 'c.pdf', documentType: 'cartella_clinica',
+      pages: [{ pageNumber: 1, ocrText: 'Glicemia 95 mg/dL\nCreatinina 0.8 mg/dL\nSodio 140 mmol/L\nNota.' }],
+      totalChars: 50,
+    };
+    const before = doc.pages[0].ocrText;
+    stripLabFromOcrContext(doc);
+    expect(doc.pages[0].ocrText).toBe(before); // originale intatto
   });
 });

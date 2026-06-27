@@ -172,11 +172,15 @@ export function buildSectionUserPrompt(params: {
     // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
     if (spec.excludeLabTests) {
       medical = medical.filter((e) => !isExcludableLabEvent(e));
-      // I lab restano annegati nel sourceText (citazione verbatim) degli eventi non-lab
-      // sopravvissuti (es. cartella clinica): strip a livello TESTO, tenendo titolo/diagnosi.
-      medical = medical.map((e) =>
-        e.sourceText ? { ...e, sourceText: stripLabBlocks(e.sourceText).text } : e,
-      );
+      // I valori lab restano annegati negli eventi sopravvissuti su DUE campi riprodotti
+      // dal prompt: il sourceText (citazione verbatim) E la description. Capita per i lab
+      // T1 tenuti (diagnosi load-bearing) e per le cartelle con lab inline. Strip a livello
+      // TESTO su entrambi: i NUMERI vanno, titolo/diagnosi (= il fatto) restano.
+      medical = medical.map((e) => ({
+        ...e,
+        ...(e.sourceText ? { sourceText: stripLabBlocks(e.sourceText).text } : {}),
+        ...(e.description ? { description: stripLabBlocks(e.description).text } : {}),
+      }));
     }
     parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
   } else if (spec.dataSources.includes('events-non-medical')) {
