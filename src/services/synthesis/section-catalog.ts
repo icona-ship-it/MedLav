@@ -25,7 +25,7 @@ import {
   PREMESSE_ATTI_EXCLUSION,
   PREMESSE_STANDALONE_NOTE,
   DOC_SANITARIA_SELECTIVE_DIRECTIVE,
-  DOC_SANITARIA_RC_RULES,
+  DOC_SANITARIA_RC_DIRECTIVE,
 } from './catalog-shared';
 import {
   CTU_SECTIONS,
@@ -403,11 +403,12 @@ export function buildDocSanitariaSelectiveSpec(spec: SectionSpec): SectionSpec {
     dataSources: ['events-medical', 'image-analysis'],
     contextMaxChars: 1500,
     needsOcr: true,
-    // Perizia RC stragiudiziale (excludeLabTests = marker RC): appende le regole
-    // di Lavini (PS condensato, verbatim della sostanza, lab esclusi). Altri ruoli
-    // (CTU/CTP) usano la direttiva selettiva invariata.
+    // Perizia RC stragiudiziale (excludeLabTests = marker RC): directive DEDICATO
+    // di Lavini (riproduzione VERBATIM del testo del medico, niente inventario né
+    // parafrasi, PS condensato, lab esclusi). Altri ruoli (CTU/CTP) usano la
+    // direttiva selettiva invariata (con elenco analitico + parafrasi del routine).
     promptDirective: spec.excludeLabTests
-      ? `${DOC_SANITARIA_SELECTIVE_DIRECTIVE}\n\n${DOC_SANITARIA_RC_RULES}`
+      ? DOC_SANITARIA_RC_DIRECTIVE
       : DOC_SANITARIA_SELECTIVE_DIRECTIVE,
   };
 }

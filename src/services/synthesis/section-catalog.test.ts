@@ -770,20 +770,24 @@ describe('section-catalog', () => {
       expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
     });
 
-    it('appende le regole RC (PS condensato) SOLO per la stragiudiziale (excludeLabTests); CTU invariato', () => {
-      // CTU: nessuna regola RC.
+    it('RC stragiudiziale: directive DEDICATO verbatim, senza inventario né parafrasi; CTU invariato (con inventario)', () => {
+      // CTU: direttiva selettiva → elenco analitico (inventario) + parafrasi del routine.
       const ctuSelective = buildDocSanitariaSelectiveSpec(baseSpec!);
-      expect(ctuSelective.promptDirective).not.toContain('PERIZIA RC STRAGIUDIZIALE');
+      expect(ctuSelective.promptDirective).toContain('ELENCO ANALITICO');
+      expect(ctuSelective.promptDirective).toContain('PARAFRASI');
+      expect(ctuSelective.promptDirective).not.toContain('RIPRODUZIONE FEDELE');
 
-      // Stragiudiziale: marker RC presente → regole appese.
+      // Stragiudiziale RC: directive dedicato → niente inventario, verbatim-first, no parafrasi.
       const stragBase = getSectionSpecById('documentazione_sanitaria', 'stragiudiziale');
       expect(stragBase?.excludeLabTests).toBe(true);
       const stragSelective = buildDocSanitariaSelectiveSpec(stragBase!);
-      expect(stragSelective.promptDirective).toContain('PERIZIA RC STRAGIUDIZIALE');
-      expect(stragSelective.promptDirective).toContain('PRONTO SOCCORSO');
-      expect(stragSelective.promptDirective).toContain('SOLO la DIAGNOSI');
-      // mantiene comunque la direttiva selettiva base (grounding «...» + parafrasi del routine).
-      expect(stragSelective.promptDirective).toContain('«...»');
+      expect(stragSelective.promptDirective).toContain('RIPRODUZIONE FEDELE');
+      expect(stragSelective.promptDirective).toContain('NIENTE ELENCO'); // no inventario...
+      expect(stragSelective.promptDirective).not.toContain('ELENCO ANALITICO'); // ...l'inventario CTU non c'è
+      expect(stragSelective.promptDirective).toMatch(/NON parafrasare/); // verbatim, no parafrasi
+      expect(stragSelective.promptDirective).toContain('SOLO la DIAGNOSI'); // PS condensato
+      expect(stragSelective.promptDirective).toContain('NON riprodurli'); // lab esclusi
+      expect(stragSelective.promptDirective).toContain('«...»'); // grounding/verifica
       expect(stragSelective.excludeLabTests).toBe(true);
     });
   });

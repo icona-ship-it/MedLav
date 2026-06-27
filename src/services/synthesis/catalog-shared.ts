@@ -195,14 +195,46 @@ ${DOC_SANITARIA_NEUTRALITY}
 ${NO_EVN_RULE}`;
 
 /**
- * Regole specifiche della perizia RC stragiudiziale "SEMPLICE" (direttiva del perito
- * Lavini 2026-06-23, benchmark MOTTA TERESA). Appese a DOC_SANITARIA_SELECTIVE_DIRECTIVE
- * SOLO per la stragiudiziale (spec.excludeLabTests). Hanno PRIORITÀ sulla parafrasi
- * generica: la documentazione sanitaria RC è una riproduzione FEDELE della sostanza,
- * con il SOLO Pronto Soccorso condensato e i lab esclusi.
+ * Directive AUTONOMA per la "Documentazione Medica Prodotta" della perizia RC
+ * stragiudiziale "SEMPLICE" (direttiva del perito Lavini + utente 2026-06-27).
+ *
+ * Differenza chiave vs DOC_SANITARIA_SELECTIVE_DIRECTIVE (CTU/CTP): NIENTE
+ * elenco-inventario degli atti e NIENTE parafrasi/narrazione interpretativa sopra il
+ * testo del medico. Il contenuto clinico scritto dai sanitari va riprodotto VERBATIM,
+ * "esattamente come l'ha scritto il medico". Riusa le stesse regole «...» di formato e
+ * anti-invenzione (verifica automatica vs OCR). Usata SOLO per la stragiudiziale RC.
  */
-export const DOC_SANITARIA_RC_RULES = `REGOLE SPECIFICHE — PERIZIA RC STRAGIUDIZIALE "SEMPLICE" (queste PREVALGONO sulla regola generale di parafrasi):
-- VERBALE / ACCETTAZIONE DI PRONTO SOCCORSO (riconoscibile da "Pronto Soccorso", "P.S.", "PS", "triage", "codice" colore di emergenza, "118", "accettazione"): riporta SOLO la DIAGNOSI e le indicazioni di DIMISSIONE (più la prognosi/giorni se indicati). NON riprodurre il triage, l'anamnesi estesa, l'esame obiettivo completo né i parametri vitali: condensa in poche righe essenziali. ECCEZIONE (mai perdere un fatto): se una LESIONE, un REPERTO OBIETTIVO rilevante o una PROGNOSI è documentato SOLO nel referto/accettazione/consulenza di Pronto Soccorso e NON è ripreso in altri documenti, INCLUDILO comunque (citato verbatim tra «...»).
-- CARTELLA CLINICA, LETTERE DI DIMISSIONE, REFERTI RADIOLOGICI (RX/TC/RM) ed ESAMI STRUMENTALI, VISITE/REFERTI SPECIALISTICI, ALTRI REFERTI: riproduci il TESTO FEDELE della sostanza clinica conservando le sotto-rubriche originali (diagnosi, descrizione di lesioni/reperti, decorso, intervento chirurgico, terapia e indicazioni alla dimissione). Riporta i passaggi clinici rilevanti VERBATIM tra «...» (vedi REGOLA DEL FORMATO sopra), raccordandoli con prosa neutra minima. NON riassumere il contenuto clinico di questi documenti.
-- ESAMI EMATOCHIMICI / DI LABORATORIO (emocromo, biochimica, coagulazione, ecc.): NON riprodurli — sono esclusi su indicazione del perito.
-- FORMA (benchmark Antoniazzi/MOTTA): ordine cronologico fedele; un blocco per documento introdotto da una riga-intestazione in GRASSETTO con tipo, struttura/autore e data nel formato **Tipo documento, struttura/autore, in data GG.MM.AAAA:** seguita dalla riproduzione fedele. Quando più referti condividono la stessa data e struttura (es. più proiezioni RX dello stesso giorno), raggruppali sotto un'unica intestazione di data. Prosa di raccordo ridotta al minimo.`;
+export const DOC_SANITARIA_RC_DIRECTIVE = `Redigi la sezione "La Documentazione Medica Prodotta" come RIPRODUZIONE FEDELE, in ordine cronologico, di ciò che i sanitari hanno scritto nei documenti in atti. NON è una sintesi né una tua rielaborazione: è la documentazione del medico riportata COM'È STATA SCRITTA.
+
+PRINCIPIO (direttiva del perito):
+- Ciò che il medico ha scritto sul paziente (diagnosi, descrizione di lesioni/reperti, decorso, intervento, terapia, indicazioni alla dimissione, prognosi) va riportato VERBATIM, tra «...», esattamente come nel documento. NON parafrasare, NON riassumere, NON aggiungere una narrazione interpretativa sopra il testo del medico.
+- NIENTE ELENCO/INVENTARIO iniziale degli atti: non elencare i documenti esaminati. Vai direttamente, documento per documento in ordine di data, alla riproduzione del loro contenuto clinico.
+- La prosa di raccordo è ridotta al minimo indispensabile (solo per introdurre il documento), MAI una parafrasi del suo contenuto.
+
+STRUTTURA (un blocco per documento, ordine cronologico — benchmark Antoniazzi/MOTTA):
+- Riga-intestazione in GRASSETTO: **Tipo documento, struttura/autore, in data GG.MM.AAAA:**
+- Subito sotto, il contenuto clinico riprodotto VERBATIM tra «...», conservando le sotto-rubriche originali (diagnosi, descrizione lesioni/reperti, decorso, intervento, terapia, dimissione).
+- Più referti con la stessa data e struttura (es. proiezioni RX dello stesso giorno) → un'unica intestazione di data.
+
+CASI SPECIALI:
+- VERBALE / ACCETTAZIONE DI PRONTO SOCCORSO (riconoscibile da "Pronto Soccorso", "P.S.", "PS", "triage", "codice" colore, "118", "accettazione"): riporta SOLO la DIAGNOSI e le indicazioni di DIMISSIONE (più prognosi/giorni se indicati). NON riprodurre triage, anamnesi estesa, esame obiettivo completo né parametri vitali. ECCEZIONE (mai perdere un fatto): se una LESIONE, un REPERTO rilevante o una PROGNOSI è documentato SOLO nel PS e non altrove, includilo comunque, verbatim tra «...».
+- ESAMI EMATOCHIMICI / DI LABORATORIO (emocromo, biochimica, coagulazione): NON riprodurli — esclusi su indicazione del perito.
+
+MAI PERDERE UN FATTO: ogni documento clinico rilevante e ogni reperto/diagnosi/prognosi del medico DEVE comparire. La selettività riguarda SOLO il rumore amministrativo/infermieristico di routine e i lab, MAI un fatto clinico.
+
+REGOLA DELLE CITAZIONI VERBATIM (caporali «...»):
+- USA «...» SOLO ed ESCLUSIVAMENTE per testo COPIATO ALLA LETTERA dal documento originale. Mai parafrasare dentro «...».
+- Riproduci la citazione ESATTAMENTE come nel documento (stesse parole, stessa punteggiatura essenziale). Se è lunga, citala per intero: la fedeltà batte la concisione.
+
+REGOLA ASSOLUTA ANTI-INVENZIONE:
+- Cita SOLO testo realmente presente nei documenti forniti. Se un dato non c'è, NON inventarlo e NON dedurlo.
+- Le «...» che non corrispondono ESATTAMENTE al testo-fonte verranno marcate automaticamente "da verificare": la fabbricazione e l'approssimazione sono sempre controproducenti.
+
+REGOLA DEL FORMATO DELLE CITAZIONI (obbligatoria per la verifica automatica):
+- USA ESCLUSIVAMENTE le caporali «...» per le citazioni verbatim. È VIETATO usare virgolette dritte ("..."), curve o singole: qualsiasi citazione fuori dalle «...» NON viene verificata e va evitata.
+- Dentro «...» copia il testo CARATTERE PER CARATTERE: NUMERI (giorni di prognosi, percentuali, dosaggi, misure), DATE, LATERALITÀ (destro/sinistro, dx/sx), GRAVITÀ (composta/scomposta, completa/parziale) e NEGAZIONI (non, senza, assenza di, nega) sono CRITICI e vanno riprodotti senza alcuna modifica.
+- Cita FRASI CLINICHE COMPLETE: includi sempre negazione e lateralità DENTRO la citazione. Non troncare una proposizione in modo da alterarne il senso.
+
+${DOC_SANITARIA_NEUTRALITY}
+
+${NO_EVN_RULE}`;
