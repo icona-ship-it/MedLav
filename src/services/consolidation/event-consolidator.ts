@@ -46,6 +46,49 @@ function isBrokenOcrEvent(event: ExtractedEvent): boolean {
 }
 
 /**
+ * Minuti-dalla-mezzanotte estratti dal testo dell'evento ("ore 17.40", "alle 16"),
+ * per ordinare gli eventi dello STESSO GIORNO secondo l'orario reale. Null se nessun
+ * orario inequivocabile (stesso regex prudente di getTimeBucket: solo con "ore"/"alle"
+ * per non collidere con titoli/rapporti tipo "h 11", "1:20").
+ */
+export function eventTimeMinutes(
+  event: { title?: string | null; description?: string | null; sourceText?: string | null },
+): number | null {
+  const text = `${event.title ?? ''} ${event.description ?? ''} ${event.sourceText ?? ''}`.toLowerCase();
+  const m = text.match(/\b(?:ore|alle)\s*(\d{1,2})(?:[:.](\d{2}))?\b/);
+  if (!m) return null;
+  const hour = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  if (hour < 0 || hour > 23 || min < 0 || min > 59) return null;
+  return hour * 60 + min;
+}
+
+/**
+ * Rango di SEQUENZA CLINICA per ordinare gli eventi dello stesso giorno quando manca
+ * l'orario: la causa (incidente/trauma) apre la catena, poi accesso PS, ricovero,
+ * consenso, visita/esami, intervento, terapia, e infine la dimissione. Sostituisce il
+ * vecchio admissionRank (che metteva il PS prima della sua stessa causa).
+ */
+export function clinicalDayRank(event: { eventType?: string | null; title?: string | null }): number {
+  const title = (event.title ?? '').toLowerCase();
+  const type = event.eventType ?? '';
+  // 0: evento-causa (l'incidente/trauma che precede l'accesso in PS). NB: pattern a
+  // RADICE senza \b finale, così "sinistro/caduta/investita/infortunio/tamponamento" matchano.
+  if (/\b(incidente|sinistr|trauma|cadut|investit|aggression|infortun|tamponament|ferit[oa])/.test(title)) return 0;
+  if (type === 'ricovero') {
+    if (/\b(dimission|dimess|trasferi)/.test(title)) return 90; // dimissione → fine giornata
+    if (/\b(accesso|giunge|accettazione|pronto soccorso|p\.?s\.?|118|triage)/.test(title)) return 10; // accesso PS
+    return 15; // ammissione / degenza
+  }
+  const RANK: Record<string, number> = {
+    consenso: 20, visita: 30, diagnosi: 35, esame: 40, referto: 40,
+    intervento: 50, complicanza: 55, terapia: 60, prescrizione: 60,
+    'follow-up': 70, certificato: 80, documento_amministrativo: 80, spesa_medica: 85,
+  };
+  return RANK[type] ?? 45; // 'altro' e tipi non mappati: in mezzo
+}
+
+/**
  * Consolidate events from multiple documents into a single chronological timeline.
  * - Drops sentinel-date placeholders and broken-OCR events
  * - Orders events chronologically
@@ -92,15 +135,17 @@ export function consolidateEvents(
     );
   }
 
-  // Sort chronologically, then admission-first intra-day (benchmark gold
-  // passaniti 2026-06-10: l'accesso in PS apre la giornata — coerente con il
-  // rank di lib/event-order usato a display), then by type/title (deterministic).
-  const admissionRank = (e: { eventType?: string | null; title?: string | null }): number =>
-    e.eventType === 'ricovero' && /\b(accesso|giunge|accettazione)\b/i.test(e.title ?? '') ? 0 : 1;
+  // Ordina cronologicamente; nello STESSO GIORNO: prima l'orario reale ("ore 17.40")
+  // quando entrambi ce l'hanno, altrimenti la sequenza clinica (causa→PS→ricovero→...→
+  // dimissione, clinicalDayRank), infine tipo/titolo deterministico. Risolve il caso
+  // "incidente prima del PS" che il vecchio admissionRank invertiva.
   allEvents.sort((a, b) => {
     const dateCompare = (a.eventDate ?? '').localeCompare(b.eventDate ?? '');
     if (dateCompare !== 0) return dateCompare;
-    const rankCompare = admissionRank(a) - admissionRank(b);
+    const ta = eventTimeMinutes(a);
+    const tb = eventTimeMinutes(b);
+    if (ta !== null && tb !== null && ta !== tb) return ta - tb;
+    const rankCompare = clinicalDayRank(a) - clinicalDayRank(b);
     if (rankCompare !== 0) return rankCompare;
     const typeCompare = (a.eventType ?? '').localeCompare(b.eventType ?? '');
     if (typeCompare !== 0) return typeCompare;

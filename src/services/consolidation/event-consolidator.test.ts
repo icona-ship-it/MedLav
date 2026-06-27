@@ -5,6 +5,8 @@ import {
   isSimilarEvent,
   isDuplicateOfExisting,
   computeRelevanceTier,
+  eventTimeMinutes,
+  clinicalDayRank,
 } from './event-consolidator';
 import type { ConsolidatedEvent } from './event-consolidator';
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
@@ -843,5 +845,61 @@ describe('computeRelevanceTier', () => {
       { documentId: 'd1', events: [makeEvent({ eventType: 'intervento', title: 'Spondilodesi' })] },
     ]);
     expect(result[0].relevanceTier).toBe('T1');
+  });
+});
+
+describe('ordinamento same-day — orario reale + sequenza clinica', () => {
+  describe('eventTimeMinutes', () => {
+    it('estrae i minuti da "ore HH.MM" / "alle HH"', () => {
+      expect(eventTimeMinutes({ description: 'investita verso le ore 17.40' })).toBe(17 * 60 + 40);
+      expect(eventTimeMinutes({ title: 'Accesso PS alle 18' })).toBe(18 * 60);
+      expect(eventTimeMinutes({ description: 'ore 8:05' })).toBe(8 * 60 + 5);
+    });
+    it('ritorna null senza orario inequivocabile o con orario invalido', () => {
+      expect(eventTimeMinutes({ description: 'emoglobina h 11, glicemia 1:20' })).toBeNull();
+      expect(eventTimeMinutes({ description: 'nessun orario qui' })).toBeNull();
+      expect(eventTimeMinutes({ description: 'ore 25' })).toBeNull();
+    });
+  });
+
+  describe('clinicalDayRank', () => {
+    it('la causa (incidente/trauma) precede l\'accesso PS', () => {
+      const incidente = clinicalDayRank({ eventType: 'altro', title: 'Incidente stradale, tamponamento' });
+      const accessoPs = clinicalDayRank({ eventType: 'ricovero', title: 'Accesso al Pronto Soccorso' });
+      expect(incidente).toBeLessThan(accessoPs);
+    });
+    it('accesso PS precede visita/esami/intervento; dimissione è ultima', () => {
+      const ps = clinicalDayRank({ eventType: 'ricovero', title: 'Accesso PS' });
+      const visita = clinicalDayRank({ eventType: 'visita', title: 'Visita ortopedica' });
+      const intervento = clinicalDayRank({ eventType: 'intervento', title: 'Osteosintesi' });
+      const dimissione = clinicalDayRank({ eventType: 'ricovero', title: 'Dimissione a domicilio' });
+      expect(ps).toBeLessThan(visita);
+      expect(visita).toBeLessThan(intervento);
+      expect(intervento).toBeLessThan(dimissione);
+    });
+    it('il consenso precede l\'intervento', () => {
+      expect(clinicalDayRank({ eventType: 'consenso', title: 'Consenso informato' }))
+        .toBeLessThan(clinicalDayRank({ eventType: 'intervento', title: 'Intervento' }));
+    });
+  });
+
+  it('INTEGRAZIONE: stesso giorno, l\'incidente precede il Pronto Soccorso (era invertito)', () => {
+    const result = consolidateEvents([
+      { documentId: 'd1', events: [
+        makeEvent({ eventDate: '2024-03-10', eventType: 'ricovero', title: 'Accesso al Pronto Soccorso', description: 'giunge in PS' }),
+        makeEvent({ eventDate: '2024-03-10', eventType: 'altro', title: 'Incidente stradale', description: 'tamponamento' }),
+      ] },
+    ]);
+    expect(result.map((e) => e.title)).toEqual(['Incidente stradale', 'Accesso al Pronto Soccorso']);
+  });
+
+  it('INTEGRAZIONE: stesso giorno con orari, ordina per orario a prescindere dal tipo', () => {
+    const result = consolidateEvents([
+      { documentId: 'd1', events: [
+        makeEvent({ eventDate: '2024-03-10', eventType: 'esame', title: 'TC encefalo', description: 'eseguita alle 14' }),
+        makeEvent({ eventDate: '2024-03-10', eventType: 'visita', title: 'Prima valutazione', description: 'ore 8.30' }),
+      ] },
+    ]);
+    expect(result.map((e) => e.title)).toEqual(['Prima valutazione', 'TC encefalo']);
   });
 });
