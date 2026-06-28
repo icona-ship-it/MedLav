@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
-  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, SplitSquareHorizontal,
+  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, SplitSquareHorizontal, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -152,6 +152,12 @@ export function DocumentsSection({
   const eta = classificationProgress && classificationProgress.status === 'running'
     ? formatEta(classificationProgress, nowTick)
     : null;
+
+  // Documenti la cui categorizzazione AI è INCERTA (confidence < 50): spesso manoscritti
+  // o poco leggibili (OCR scarso) → vanno segnalati con il motivo, non con un conteggio muto.
+  const uncertainCount = documents.filter(
+    (d) => d.classification_metadata != null && d.classification_metadata.confidence < 50,
+  ).length;
 
   const handleRetryDocument = useCallback(async (docId: string) => {
     setRetryingDocId(docId);
@@ -434,6 +440,19 @@ export function DocumentsSection({
               </div>
             )}
 
+            {/* Avviso ESPLICITO sui documenti incerti (manoscritti/illeggibili): prima
+                usciva solo un conteggio muto "N con errori". Visibile anche dopo l'analisi. */}
+            {uncertainCount > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-200">
+                <span className="font-medium">
+                  {uncertainCount} {uncertainCount === 1 ? 'documento con categoria incerta' : 'documenti con categoria incerta'}
+                </span>{' '}
+                — spesso perché <strong>manoscritti o poco leggibili</strong> e l&apos;OCR estrae poco testo. Trovi il
+                motivo sotto ciascuno. In fase di analisi questi documenti potrebbero non essere letti: verifica e, se
+                serve, correggi la categoria a mano.
+              </div>
+            )}
+
             {/* Document cards with inline type + actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {documents.map((doc) => {
@@ -559,6 +578,20 @@ export function DocumentsSection({
                         </SelectContent>
                       </Select>
                       </>
+                    )}
+
+                    {/* Motivo della classificazione AI quando è INCERTA (confidence < 50):
+                        es. documento manoscritto/illeggibile. Prima il "perché" restava nascosto. */}
+                    {(isUploaded || isComplete)
+                      && doc.classification_metadata?.reasoning
+                      && doc.classification_metadata.confidence < 50 && (
+                      <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5 border border-amber-200 dark:border-amber-800">
+                        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                        <span>
+                          <span className="font-medium">Categorizzazione incerta</span> (l&apos;AI non è sicura):{' '}
+                          {doc.classification_metadata.reasoning}
+                        </span>
+                      </p>
                     )}
 
                     {/* Error message */}
