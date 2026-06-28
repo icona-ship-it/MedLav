@@ -1130,8 +1130,12 @@ export const processCase = inngest.createFunction(
       }
 
       // Indice analitico COMPLETO unico in testa + le narrazioni delle finestre.
+      // RC (perizia "semplice"): NIENTE inventario degli atti (il gold Lavini non ce l'ha).
       const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
-      const combinedContent = [buildAttiIndex(synthesisParams.events), ...parts].join('\n\n');
+      const combinedContent = [
+        ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
+        ...parts,
+      ].join('\n\n');
       const contextSummary = spec.contextMaxChars > 0
         ? summarizeForContext(combinedContent, spec.contextMaxChars)
         : '';

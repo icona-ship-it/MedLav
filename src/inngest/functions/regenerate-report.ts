@@ -405,7 +405,12 @@ export const regenerateReport = inngest.createFunction(
       }
 
       const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
-      const combinedContent = [buildAttiIndex(synthesisParams.events), ...parts].join('\n\n');
+      // RC (perizia "semplice"): NIENTE elenco-inventario degli atti (il gold Lavini non
+      // ce l'ha) — era l'"Elenco analitico degli atti (415...)" su Bigon. Altri ruoli invariato.
+      const combinedContent = [
+        ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
+        ...parts,
+      ].join('\n\n');
       return {
         id: spec.id,
         title: spec.title,
