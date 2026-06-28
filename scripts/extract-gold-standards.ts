@@ -85,6 +85,12 @@ const SOURCES: BenchmarkSource[] = [
     slug: 'motta-rc-stragiudiziale',
     description: 'Stragiudiziale RC generale — caduta, frattura femore+olecrano sx (schema Antoniazzi: doc recensita verbatim + visita clinica + epicrisi). Gold "perizia semplice" Lavini.',
   },
+  {
+    source: 'Perizia medico-legale per responsabilità civile generale/Bigon Katia Macrodanno.docx',
+    baseDir: 'benchmark',
+    slug: 'bigon-katia-macrodanno-rc',
+    description: 'Stragiudiziale RC generale — MACRODANNO (danno grave/permanente). Profilo diverso da Motta: utile per validare la generalizzazione della perizia RC su casi gravi.',
+  },
 ];
 
 async function extractDocx(filePath: string): Promise<string> {
