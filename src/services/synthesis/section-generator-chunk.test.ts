@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences } from './section-generator';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -191,6 +191,32 @@ describe('stripBracketedDocRefs — toglie le citazioni [Tipo, data] in prosa (f
 
   it('lo scaffold Epicrisi sopravvive byte-identico (nessun [Parola, data] al suo interno)', () => {
     expect(stripBracketedDocRefs(EPICRISI_COMPLETAMENTO_GUIDE)).toBe(EPICRISI_COMPLETAMENTO_GUIDE);
+  });
+});
+
+describe('stripCodeFences — toglie il code-fence che avvolge una sezione (fix Bigon v4 Epicrisi monospace)', () => {
+  it('toglie il wrapper ``` completo', () => {
+    expect(stripCodeFences('```\nDalla disamina complessiva emerge che...\n```'))
+      .toBe('Dalla disamina complessiva emerge che...');
+  });
+
+  it('toglie il wrapper con language tag', () => {
+    expect(stripCodeFences('```markdown\ntesto del report\n```')).toBe('testo del report');
+  });
+
+  it('toglie fence sparse / non chiuse', () => {
+    expect(stripCodeFences('```\nfoo senza chiusura')).toBe('foo senza chiusura');
+  });
+
+  it('NON tocca prosa normale (nessun fence)', () => {
+    const prosa = 'Dalla documentazione in atti risulta che il periziando...';
+    expect(stripCodeFences(prosa)).toBe(prosa);
+  });
+
+  it('è idempotente (riapplicabile dopo CoVe senza danni)', () => {
+    const fenced = '```\nDalla disamina...\n```';
+    const once = stripCodeFences(fenced);
+    expect(stripCodeFences(once)).toBe(once);
   });
 });
 

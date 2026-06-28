@@ -417,16 +417,11 @@ export async function generateSingleSection(params: {
   }
 
   // QA 2026-06-11: the LLM occasionally wraps the whole section in a markdown
-  // code fence (the Tedesco epicrisi shipped fenced). Strip a full ```-wrapper
-  // and any dangling unclosed opening fence — content is never code.
-  let cleanedContent = content.trim();
-  const fullFence = cleanedContent.match(/^```[a-z]*\n([\s\S]*?)\n?```$/);
-  if (fullFence) {
-    cleanedContent = fullFence[1].trim();
-    logger.warn('section-generator', `Section "${spec.id}": stripped full code-fence wrapper`);
-  } else if (/```/.test(cleanedContent)) {
-    cleanedContent = cleanedContent.replace(/```[a-z]*\n?/g, '').trim();
-    logger.warn('section-generator', `Section "${spec.id}": stripped stray code fences`);
+  // code fence (the Tedesco epicrisi shipped fenced). Una perizia non contiene mai
+  // codice → toglierle è sempre sicuro. (Riapplicato anche DOPO CoVe, vedi sotto.)
+  const cleanedContent = stripCodeFences(content);
+  if (cleanedContent !== content.trim()) {
+    logger.warn('section-generator', `Section "${spec.id}": stripped code fence(s)`);
   }
 
   // Optional Chain-of-Verification post-processing for high-stakes sections.
@@ -488,6 +483,11 @@ export async function generateSingleSection(params: {
       };
     }
   }
+
+  // CoVe può RE-avvolgere la revisione in un code-fence DOPO lo strip iniziale
+  // (bug Bigon v4: l'Epicrisi rivista da CoVe arrivava monospace). Riapplica lo strip
+  // sul risultato post-CoVe, prima delle append deterministiche.
+  finalContent = stripCodeFences(finalContent);
 
   // Sprint 1 S1.1 (Lavini quality, 2026-05-17): output-side cap enforcement.
   // The LLM ignores prompt-level "max N parole" instructions ~40% of the
@@ -672,6 +672,21 @@ export function stripClassifierCodeFromDocSanitariaTitles(markdown: string): str
 const BRACKETED_DOC_REF = /[ \t]?\[[A-ZÀ-Ÿ][^[\]\n]{0,80}?\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}\][ \t]?/g;
 export function stripBracketedDocRefs(text: string): string {
   return text.replace(BRACKETED_DOC_REF, ' ').replace(/[ \t]+([.,;:])/g, '$1');
+}
+
+/**
+ * Toglie un wrapper markdown ``` attorno al contenuto di una sezione: l'LLM a volte
+ * avvolge l'intera sezione in un code-fence → renderizzerebbe monospace (bug Bigon v4
+ * sull'Epicrisi). Gestisce il wrapper completo (```lang\n...\n```) e le fence sparse.
+ * Una perizia non contiene mai codice, quindi toglierle è sempre sicuro. Idempotente —
+ * per questo va riapplicato DOPO CoVe, che può re-introdurre un fence nella revisione.
+ */
+export function stripCodeFences(content: string): string {
+  const trimmed = content.trim();
+  const fullFence = trimmed.match(/^```[a-z]*\n([\s\S]*?)\n?```$/);
+  if (fullFence) return fullFence[1].trim();
+  if (/```/.test(trimmed)) return trimmed.replace(/```[a-z]*\n?/g, '').trim();
+  return trimmed;
 }
 
 /**
