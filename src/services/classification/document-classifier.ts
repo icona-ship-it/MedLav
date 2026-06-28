@@ -73,6 +73,10 @@ Rispondi SOLO in JSON con questo formato esatto:
  * 8K covers header + body + signatures → robust classification. */
 const MAX_CLASSIFICATION_CHARS = 8000;
 
+/** Sotto questa soglia di testo OCR "vero" il documento è di fatto illeggibile
+ * (manoscritto/vuoto): non lo si manda all'LLM, si restituisce un motivo esplicito. */
+const MIN_CLASSIFICATION_CHARS = 25;
+
 export interface ClassificationResult {
   documentType: string;
   confidence: number;
@@ -88,6 +92,18 @@ export async function classifyDocument(
   text: string,
   fileName: string,
 ): Promise<ClassificationResult> {
+  // Guard OCR vuoto/insufficiente: un documento manoscritto/illeggibile produce poco o
+  // nessun testo. Inviarlo all'LLM dà un errore "muto" o una categoria a caso; meglio
+  // restituire un MOTIVO esplicito (così l'utente capisce: non è un bug, è illeggibile).
+  const meaningful = text.replace(/\s+/g, ' ').trim();
+  if (meaningful.length < MIN_CLASSIFICATION_CHARS) {
+    return {
+      documentType: 'altro',
+      confidence: 0,
+      reasoning: 'OCR non ha prodotto testo leggibile sufficiente: il documento è probabilmente manoscritto, illeggibile o vuoto. Non categorizzabile automaticamente — da verificare a mano.',
+    };
+  }
+
   const truncatedText = text.slice(0, MAX_CLASSIFICATION_CHARS);
   const safeFileName = fileName.replace(/[\n\r]/g, ' ').slice(0, 100);
 

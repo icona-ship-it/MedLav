@@ -32,6 +32,29 @@ describe('document-classifier', () => {
     vi.clearAllMocks();
   });
 
+  describe('classifyDocument — guard OCR illeggibile/vuoto', () => {
+    it('OCR vuoto/whitespace → motivo esplicito, SENZA chiamare l\'LLM', async () => {
+      const r = await classifyDocument('   \n\t  ', 'Manoscritto_illeggibile.pdf');
+      expect(r.documentType).toBe('altro');
+      expect(r.confidence).toBe(0);
+      expect(r.reasoning).toMatch(/illeggibil|manoscritt|non.*leggibil/i);
+      expect(mockStreamChat).not.toHaveBeenCalled();
+    });
+
+    it('OCR sotto soglia (frammento minimo) → guard, niente LLM', async () => {
+      const r = await classifyDocument('xq z9', 'scan.pdf');
+      expect(r.confidence).toBe(0);
+      expect(mockStreamChat).not.toHaveBeenCalled();
+    });
+
+    it('OCR sufficiente → procede e chiama l\'LLM', async () => {
+      mockChat(JSON.stringify({ documentType: 'referto_specialistico', confidence: 90, reasoning: 'referto' }));
+      const r = await classifyDocument('REFERTO DI VISITA ORTOPEDICA. Il paziente presenta...', 'referto.pdf');
+      expect(mockStreamChat).toHaveBeenCalledTimes(1);
+      expect(r.documentType).toBe('referto_specialistico');
+    });
+  });
+
   describe('classifyDocument', () => {
     it('should return correct type for valid JSON response with high confidence', async () => {
       // Arrange
@@ -51,7 +74,7 @@ describe('document-classifier', () => {
       mockChat(JSON.stringify({ documentType: 'tipo_inventato', confidence: 90, reasoning: 'Unknown type' }));
 
       // Act
-      const result = await classifyDocument('Testo qualsiasi', 'file.pdf');
+      const result = await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert
       expect(result.documentType).toBe('altro');
@@ -67,7 +90,7 @@ describe('document-classifier', () => {
       mockChat('This is not JSON at all');
 
       // Act
-      const result = await classifyDocument('Testo qualsiasi', 'file.pdf');
+      const result = await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert
       expect(result.documentType).toBe('altro');
@@ -85,7 +108,7 @@ describe('document-classifier', () => {
       mockChat(JSON.stringify({ documentType: 'certificato', confidence: 70, reasoning: 'ok' }));
 
       // Act
-      await classifyDocument('Testo', longName);
+      await classifyDocument('Documento medico con testo sufficiente per la classificazione', longName);
 
       // Assert
       const callArgs = mockStreamChat.mock.calls[0][0];
@@ -116,7 +139,7 @@ describe('document-classifier', () => {
       mockChat(JSON.stringify({ documentType: null, confidence: null, reasoning: null }));
 
       // Act
-      const result = await classifyDocument('Testo', 'file.pdf');
+      const result = await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert
       expect(result.documentType).toBe('altro');
@@ -129,7 +152,7 @@ describe('document-classifier', () => {
       mockChat('[1, 2, 3]');
 
       // Act
-      const result = await classifyDocument('Testo', 'file.pdf');
+      const result = await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert — array is a valid object but not the expected format
       // Our code does String(undefined) -> 'undefined' which is not in valid types
@@ -141,7 +164,7 @@ describe('document-classifier', () => {
       mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
       // Act
-      await classifyDocument('Testo', 'file.pdf');
+      await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert
       const callArgs = mockStreamChat.mock.calls[0][0];
@@ -153,7 +176,7 @@ describe('document-classifier', () => {
       mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
       // Act
-      await classifyDocument('Testo', 'file.pdf');
+      await classifyDocument('Documento medico con testo sufficiente per la classificazione', 'file.pdf');
 
       // Assert: json_schema enforces the shape + the documentType enum at the provider.
       const callArgs = mockStreamChat.mock.calls[0][0];
