@@ -12,7 +12,7 @@ function makeEvent(eventDate: string, eventType: string, title: string, descript
 }
 
 describe('formatRicoveroITTFactsBlock — fatti deterministici Epicrisi (ricovero + durata complessiva)', () => {
-  it('giorni di ricovero (14→22 = 8, esclusivo coerente col modulo) + durata complessiva, MAI etichettati ITT/invalidità', () => {
+  it('giorni di ricovero INCLUSIVI (14→22 = 9, come i benchmark) + durata complessiva, MAI etichettati ITT/invalidità', () => {
     const events = [
       makeEvent('2024-11-14', 'ricovero', 'Ricovero'),
       makeEvent('2024-11-22', 'ricovero', 'Lettera di dimissione', 'dimissione a domicilio'),
@@ -20,7 +20,7 @@ describe('formatRicoveroITTFactsBlock — fatti deterministici Epicrisi (ricover
     ];
     const block = formatRicoveroITTFactsBlock(events);
     expect(block).toContain('Giorni di ricovero');
-    expect(block).toContain('8 (otto)'); // esclusivo, coerente con calculateHospitalDays e la sezione PERIODI
+    expect(block).toContain('9 (nove)'); // inclusivo (gold), coerente con calculateHospitalDays e la sezione PERIODI
     expect(block).toContain('Durata complessiva del periodo di malattia');
     // il numero della durata NON va etichettato come ITT/invalidità (era il bug "448 gg ITT")
     expect(block).not.toMatch(/invalidità temporanea/i);
@@ -82,7 +82,7 @@ describe('calculateMedicoLegalPeriods', () => {
     const total = calcs.find((c) => c.label === 'Periodo totale malattia');
 
     expect(total).toBeDefined();
-    expect(total!.days).toBe(157);
+    expect(total!.days).toBe(158); // inclusivo: 10.01→15.06 conta entrambi gli estremi
     expect(total!.startDate).toBe('2024-01-10');
     expect(total!.endDate).toBe('2024-06-15');
   });
@@ -97,7 +97,7 @@ describe('calculateMedicoLegalPeriods', () => {
     const hospital = calcs.find((c) => c.label === 'Giorni di ricovero');
 
     expect(hospital).toBeDefined();
-    expect(hospital!.days).toBe(8);
+    expect(hospital!.days).toBe(9); // inclusivo: 10.01→18.01 = 9 giorni di degenza (gold)
   });
 
   it('should calculate interval between surgeries', () => {
@@ -136,7 +136,7 @@ describe('calculateMedicoLegalPeriods', () => {
     const itt = calcs.find((c) => c.label.includes('ITT'));
 
     expect(itt).toBeDefined();
-    expect(itt!.days).toBe(10);
+    expect(itt!.days).toBe(11); // inclusivo: 10.01→20.01 = 11 giorni
   });
 });
 
@@ -153,7 +153,7 @@ describe('A2 — graduated ITT/ITP segments', () => {
     const segments = calculateITTITP(events);
     const itt = segments.find((s) => s.percentage === 100);
     expect(itt).toBeDefined();
-    expect(itt!.days).toBe(10);
+    expect(itt!.days).toBe(11); // inclusivo: 10.01→20.01 = 11 giorni di degenza
     expect(itt!.startDate).toBe('2024-01-10');
     expect(itt!.endDate).toBe('2024-01-20');
   });
@@ -262,7 +262,7 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
       makeEvent('2024-03-01', 'follow-up', 'Controllo'),
     ]);
     expect(hospitalRows(calcs)).toHaveLength(1); // discharge paired once
-    expect(ittDays(calcs)).toBe(10); // Jan10→Jan20, not 15
+    expect(ittDays(calcs)).toBe(11); // Jan10→Jan20 inclusivo (= 11), non 15 (niente double-count)
   });
 
   it('detects a discharge NOT labeled "dimissione" ("Relazione di fine ricovero")', () => {
@@ -271,7 +271,7 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
       makeEvent('2024-01-20', 'referto', 'Relazione di fine ricovero', 'Paziente dimesso'),
       makeEvent('2024-03-01', 'follow-up', 'Controllo'),
     ]);
-    expect(ittDays(calcs)).toBe(10); // hospital stay not lost
+    expect(ittDays(calcs)).toBe(11); // hospital stay not lost (Jan10→Jan20 inclusivo)
   });
 
   it('does NOT produce a backward ITP period when the only follow-up precedes the discharge', () => {
@@ -349,7 +349,7 @@ describe('QA 2026-06-11 — dedup ricoveri e sanity check (caso Tedesco, PDF dup
     const calcs = calculateMedicoLegalPeriods(events);
     const ricoveri = calcs.filter((c) => c.label === 'Giorni di ricovero');
     expect(ricoveri).toHaveLength(1);
-    expect(ricoveri[0].days).toBe(10);
+    expect(ricoveri[0].days).toBe(11); // inclusivo: Jan10→Jan20 (dup fusi, contati una volta)
   });
 
   it('should flag DA VERIFICARE when estimated periods exceed the observed interval', () => {

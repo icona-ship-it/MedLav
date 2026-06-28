@@ -158,7 +158,7 @@ describe('expandDeterministicBlocks', () => {
     const out = expandDeterministicBlocks(md, clinical);
     expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS);
     expect(out).toContain('Giorni di ricovero');
-    expect(out).toContain('8 (otto)'); // esclusivo, coerente col resto del modulo calc
+    expect(out).toContain('9 (nove)'); // inclusivo (gold): 14→22.11 conta entrambi i giorni
   });
 
   it('ITT_RICOVERO_FACTS → marker rimosso anche senza dati calcolabili (nessun residuo)', () => {

@@ -226,7 +226,7 @@ export function calculateMedicoLegalPeriods(
   // Sanity check: se la somma ITT+ITP supera l'intervallo osservato, ogni voce
   // viene marcata DA VERIFICARE (mai cap silenzioso: il perito deve vederlo).
   const graduated = calculateGraduatedITTITP(events);
-  const observedDays = daysDiff(events[0].event_date, events[events.length - 1].event_date);
+  const observedDays = inclusiveDays(events[0].event_date, events[events.length - 1].event_date);
   const graduatedTotalDays = graduated.reduce((sum, c) => sum + (c.days ?? 0), 0);
   if (observedDays > 0 && graduatedTotalDays > observedDays * 1.1) {
     const flag = ` [DA VERIFICARE: la somma dei periodi stimati (${graduatedTotalDays} gg) supera l'intervallo documentato (${observedDays} gg) — possibili eventi duplicati o date errate nel fascicolo.]`;
@@ -326,7 +326,7 @@ function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
   }
 
   return merged.map(({ start, end }) => {
-    const days = daysDiff(start, end);
+    const days = inclusiveDays(start, end);
     return {
       label: 'Giorni di ricovero',
       value: `${days} giorni`,
@@ -341,7 +341,7 @@ function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
 function calculateTotalIllnessPeriod(events: CalcEvent[]): MedicoLegalCalculation {
   const firstDate = events[0].event_date;
   const lastDate = events[events.length - 1].event_date;
-  const days = daysDiff(firstDate, lastDate);
+  const days = inclusiveDays(firstDate, lastDate);
 
   return {
     label: 'Periodo totale malattia',
@@ -360,10 +360,10 @@ function calculateTotalIllnessPeriod(events: CalcEvent[]): MedicoLegalCalculatio
  * li rifiutava ("non desumibile") o li sbagliava ("448 gg ITT", lo span totale spacciato
  * per invalidità). Le fasce graduate 75/50/25 NON sono qui: restano scaffold del perito.
  *
- * Conteggio ESCLUSIVO (daysDiff), COERENTE con calculateHospitalDays/TotalIllnessPeriod e
- * con la sezione "PERIODI MEDICO-LEGALI CALCOLATI" + il contesto-prompt: un solo numero per
- * lo stesso fatto in tutto il documento. (La convenzione inclusiva — gold 9 vs 8 — è una
- * decisione di dominio di Lavini che toccherebbe TUTTI i conteggi ITT: fuori da questo fix.)
+ * Conteggio INCLUSIVO (come i benchmark depositati di Lavini: ricovero 14→22.11 = 9),
+ * COERENTE con calculateHospitalDays/TotalIllnessPeriod (entrambe inclusive) e con la
+ * sezione "PERIODI MEDICO-LEGALI CALCOLATI" + il contesto-prompt: un solo numero per lo
+ * stesso fatto in tutto il documento.
  *
  * Usa SOLO eventi a data CERTA (precisione 'giorno', o assente=legacy): le menzioni
  * anno-only/mese-only (anamnesi remota tipo "colecistectomia nel 2002" → 01.01.2002) sono
@@ -476,9 +476,9 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
   let ittStart: string | null = null;
   let ittEnd: string | null = null;
 
-  // Hospital days
+  // Hospital days (INCLUSIVI: ogni degenza conta entrambi i giorni — convenzione gold).
   for (const { admission, discharge } of pairAdmissionsToDischarges(admissions, discharges)) {
-    ittDays += daysDiff(admission.event_date, discharge.event_date);
+    ittDays += inclusiveDays(admission.event_date, discharge.event_date);
     if (!ittStart) ittStart = admission.event_date;
     ittEnd = discharge.event_date;
   }
@@ -489,10 +489,14 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
   // that explicit in the note so the perito can verify/reclassify (it may be ITP).
   let immobNote = '';
   if (immobilizationEvents.length > 0) {
+    const hadHospital = ittEnd !== null;
     const immobStart = ittEnd ?? immobilizationEvents[0].event_date;
     const immobEnd = immobilizationEvents[immobilizationEvents.length - 1].event_date;
     if (immobEnd > immobStart) {
-      const immobDays = daysDiff(immobStart, immobEnd);
+      // Dopo un ricovero: i giorni di immobilizzazione sono quelli SUCCESSIVI alla
+      // dimissione (scarto — il giorno di dimissione è già nei giorni di degenza). Senza
+      // ricovero precedente: l'immobilizzazione è il periodo-ancora → conteggio inclusivo.
+      const immobDays = hadHospital ? daysDiff(immobStart, immobEnd) : inclusiveDays(immobStart, immobEnd);
       ittDays += immobDays;
       if (!ittStart) ittStart = immobStart;
       ittEnd = immobEnd;
@@ -645,5 +649,16 @@ function daysDiff(dateA: string, dateB: string): number {
   const a = new Date(dateA);
   const b = new Date(dateB);
   return Math.round(Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Durata INCLUSIVA di un periodo: conta sia il primo sia l'ultimo giorno — convenzione
+ * medico-legale dei "giorni di degenza"/ITT usata nei benchmark depositati di Lavini
+ * (ricovero 14→22.11 = 9 giorni, non 8). `daysDiff` conta gli SCARTI fra date (le notti);
+ * resta per gli INTERVALLI fra eventi distinti (interventi, diagnosi→trattamento, recovery
+ * gap post-ITT), dove non si ri-conta il giorno-confine già attribuito alla fase precedente.
+ */
+function inclusiveDays(start: string, end: string): number {
+  return daysDiff(start, end) + 1;
 }
 
