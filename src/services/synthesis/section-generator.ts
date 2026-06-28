@@ -14,6 +14,7 @@ import {
   ABSOLUTE_RULES,
   CHRONOLOGY_SOURCES_GUIDE,
   formatEventsForPrompt,
+  formatEventsByDocumentForPrompt,
   formatAnomaliesForPrompt,
   formatMissingDocsForPrompt,
   formatCalculationsForPrompt,
@@ -182,7 +183,13 @@ export function buildSectionUserPrompt(params: {
         ...(e.description ? { description: stripLabBlocks(e.description).text } : {}),
       }));
     }
-    parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
+    // Doc-sanitaria RC: gli eventi vanno RAGGRUPPATI PER DOCUMENTO (un atto = un blocco,
+    // come il gold), non per-evento (564 voci frammentate = il gonfiore 3,7x su Bigon).
+    if (spec.id === 'documentazione_sanitaria') {
+      parts.push(`## DOCUMENTAZIONE SANITARIA RAGGRUPPATA PER DOCUMENTO (${new Set(medical.map((e) => e.documentId)).size} documenti, ${medical.length} reperti)\n\n${formatEventsByDocumentForPrompt(medical)}\n`);
+    } else {
+      parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
+    }
   } else if (spec.dataSources.includes('events-non-medical')) {
     const nonMedical = filterNonMedicalEvents(events);
     if (nonMedical.length > 0) {

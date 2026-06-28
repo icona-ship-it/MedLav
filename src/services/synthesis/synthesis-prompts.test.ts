@@ -9,6 +9,7 @@ import {
   buildChronologyUserPrompt,
   formatAnomaliesForPrompt,
   formatEventsForPrompt,
+  formatEventsByDocumentForPrompt,
 } from './synthesis-prompts';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import type { DocumentSummary } from './document-summarizer';
@@ -36,6 +37,31 @@ function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
     ...overrides,
   };
 }
+
+describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
+  it('raggruppa per documentId: 4 eventi su 2 documenti → 2 blocchi DOCUMENTO, non 4', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'doc-A', eventDate: '2024-03-10', title: 'Accesso', sourceText: 'PS 10/03' }),
+      makeEvent({ documentId: 'doc-A', eventDate: '2024-03-10', title: 'Diagnosi', sourceText: 'frattura femore' }),
+      makeEvent({ documentId: 'doc-A', eventDate: '2024-03-10', title: 'Dimissione', sourceText: 'dimesso' }),
+      makeEvent({ documentId: 'doc-B', eventDate: '2024-04-01', title: 'Controllo', sourceText: 'controllo ok' }),
+    ]);
+    const blocks = out.match(/DOCUMENTO \d+ \|/g) ?? [];
+    expect(blocks).toHaveLength(2); // 2 documenti, non 4 eventi
+    // i 3 reperti del doc-A stanno nello STESSO blocco
+    expect(out).toMatch(/frattura femore/);
+    expect(out).toMatch(/controllo ok/);
+  });
+
+  it('ordina i blocchi-documento per data più antica', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'tardo', eventDate: '2024-06-01', title: 'Tardo', sourceText: 'reperto-tardo' }),
+      makeEvent({ documentId: 'presto', eventDate: '2024-01-01', title: 'Presto', sourceText: 'reperto-presto' }),
+    ]);
+    // il documento più antico (presto) viene prima del più recente (tardo)
+    expect(out.indexOf('reperto-presto')).toBeLessThan(out.indexOf('reperto-tardo'));
+  });
+});
 
 describe('synthesis-prompts', () => {
   describe('buildSynthesisSystemPrompt', () => {

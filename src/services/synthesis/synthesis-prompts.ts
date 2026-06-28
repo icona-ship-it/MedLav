@@ -700,6 +700,37 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
 }
 
 /**
+ * Formatta gli eventi RAGGRUPPATI PER DOCUMENTO fisico (documentId): un ATTO = un blocco,
+ * come nel gold Lavini — invece di un blocco per evento, che frammenta lo stesso documento
+ * (es. una lettera di dimissione) in decine di voci quasi-duplicate. Usato dalla
+ * "Documentazione Medica Prodotta" della perizia RC (driver del gonfiore 3,7x su Bigon).
+ */
+export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): string {
+  const byDoc = new Map<string, ConsolidatedEvent[]>();
+  for (const e of events) {
+    const arr = byDoc.get(e.documentId);
+    if (arr) arr.push(e);
+    else byDoc.set(e.documentId, [e]);
+  }
+  const earliest = (evs: ConsolidatedEvent[]): string =>
+    evs.reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
+  const groups = Array.from(byDoc.values()).sort((a, b) => earliest(a).localeCompare(earliest(b)));
+
+  return groups.map((evs, i) => {
+    const rep = evs.find((e) => e.facility) ?? evs[0];
+    const date = promptEventDate(rep.eventDate);
+    const sourceLabel = SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType;
+    const facility = rep.facility ? ` — ${rep.facility}` : '';
+    const content = evs.map((e) => {
+      const txt = (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();
+      const diag = e.diagnosis ? `\n     [Diagnosi: ${e.diagnosis}]` : '';
+      return `   • ${txt}${diag}`;
+    }).join('\n');
+    return `DOCUMENTO ${i + 1} | ${sourceLabel}${facility} | data ${date}\n(riproduci come UN UNICO blocco verbatim per questo documento, NON una voce per riga; raccordo minimo)\n${content}`;
+  }).join('\n\n');
+}
+
+/**
  * Format a confidence qualifier for events with low OCR confidence.
  * Signals to the LLM that low-confidence events should be treated cautiously.
  */
