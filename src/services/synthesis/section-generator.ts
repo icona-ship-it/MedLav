@@ -34,6 +34,7 @@ import { buildGuidelineContext } from '../rag/retrieval-service';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { formatEuro } from '@/lib/format';
 import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
+import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import {
   HEADER_JSON_SCHEMA_DESCRIPTION,
   parseHeaderData,
@@ -564,6 +565,13 @@ export async function generateSingleSection(params: {
   if (spec.id === 'quesiti') {
     const coda = buildOperativeCodaFromMetadata(synthesisParams.periziaMetadata);
     if (coda) finalContent += `\n\n${coda}`;
+  }
+
+  // Epicrisi (stragiudiziale RC): appendi DETERMINISTICAMENTE lo scaffold di completamento
+  // del perito (nesso, ITT graduata 4 fasce, danno biologico, sofferenza, art.138). Prima
+  // era solo nel prompt come istruzione → l'LLM non lo emetteva (guida_present=0 su Bigon).
+  if (spec.id === 'epicrisi') {
+    finalContent += `\n\n${EPICRISI_COMPLETAMENTO_GUIDE}`;
   }
 
   const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;

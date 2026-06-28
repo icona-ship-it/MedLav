@@ -22,7 +22,6 @@ import {
   EPICRISI_FORMULATIONS,
   EPICRISI_EXAMPLE,
 } from './peritale-formulations';
-import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 
 // ── Stragiudiziale sections (8, shorter structure) ──────────────────
 
@@ -212,8 +211,6 @@ Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno
 
 ${EPICRISI_FORMULATIONS}
 
-${EPICRISI_EXAMPLE}
-
-${EPICRISI_COMPLETAMENTO_GUIDE}`,
+${EPICRISI_EXAMPLE}`,
   },
 ];
