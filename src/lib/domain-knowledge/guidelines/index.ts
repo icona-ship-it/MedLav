@@ -34,15 +34,3 @@ export const CLINICAL_GUIDELINES: readonly GuidelineContent[] = [
 export function getGuidelinesForCaseType(caseType: string): readonly GuidelineContent[] {
   return CLINICAL_GUIDELINES.filter((g) => g.caseTypes.includes(caseType as GuidelineContent['caseTypes'][number]));
 }
-
-/**
- * Format guideline content for LLM prompt injection.
- */
-export function formatGuidelinesForPrompt(caseType: string): string {
-  const guidelines = getGuidelinesForCaseType(caseType);
-  if (guidelines.length === 0) return '';
-
-  return guidelines
-    .map((g) => `## ${g.title} (${g.source}, ${g.year})\n\n${g.content}`)
-    .join('\n\n---\n\n');
-}

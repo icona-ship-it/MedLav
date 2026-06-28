@@ -82,17 +82,6 @@ export function formatTimelinesForPrompt(caseType: CaseType): string {
 }
 
 /**
- * Format key terminology for a case type as prompt text.
- */
-export function formatTerminologyForPrompt(caseType: CaseType): string {
-  const knowledge = getCaseTypeKnowledge(caseType);
-  if (knowledge.keyTerminology.length === 0) return '';
-
-  const lines = knowledge.keyTerminology.map((t) => `- **${t.term}**: ${t.definition}`);
-  return `## TERMINOLOGIA CHIAVE\n${lines.join('\n')}`;
-}
-
-/**
  * Combine domain knowledge from multiple case types.
  * Uses primary type's structure, merges sections/timelines/anomalies from secondaries.
  * Deduplicates sections by id (primary wins).

@@ -61,23 +61,3 @@ export async function withSentryTags<T>(
     return fn();
   });
 }
-
-/**
- * Manually capture an exception with filter tags (use when not in withSentryTags scope).
- * Useful for fire-and-forget error logging.
- */
-export async function captureWithTags(error: unknown, tags: SentryFilterTags): Promise<void> {
-  const hashedTags: Record<string, string> = {};
-  if (tags.caseId) hashedTags['case_hash'] = await shortHash(tags.caseId);
-  if (tags.userId) hashedTags['user_hash'] = await shortHash(tags.userId);
-  if (tags.pipelineMode) hashedTags['pipeline_mode'] = tags.pipelineMode;
-  if (tags.step) hashedTags['step'] = tags.step;
-  if (tags.module) hashedTags['module'] = tags.module;
-
-  Sentry.withScope((scope) => {
-    for (const [key, value] of Object.entries(hashedTags)) {
-      scope.setTag(key, value);
-    }
-    Sentry.captureException(error);
-  });
-}

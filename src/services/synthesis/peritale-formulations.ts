@@ -91,28 +91,6 @@ FORMULAZIONI STANDARD PER L'EPICRISI:
 - "La documentazione consente di ricostruire la seguente sequenza cronologica:..."
 `;
 
-/** Formulations for conclusions and quesiti responses */
-export const CONCLUSIONS_FORMULATIONS = `
-FORMULAZIONI STANDARD PER CONCLUSIONI E RISPOSTE AI QUESITI:
-- "Dalla documentazione in atti risultano i seguenti elementi pertinenti al quesito:..."
-- "Il quadro documentale complessivo consente di individuare i seguenti profili di rilievo:..."
-- "Gli elementi emersi dalla documentazione possono essere cosi' sintetizzati:..."
-- "Sotto il profilo della documentazione sanitaria, si rileva che..."
-- "In relazione al quesito n. [N], dalla documentazione risulta che..."
-- "Le lacune documentali riscontrate riguardano:..."
-- "La documentazione integrativa necessaria per una completa valutazione comprende:..."
-`;
-
-/** Formulations for critical profiles / anomaly discussion */
-export const CRITICAL_PROFILE_FORMULATIONS = `
-FORMULAZIONI STANDARD PER PROFILI CRITICI:
-- "Dalla documentazione emerge un profilo critico relativo a..."
-- "Lo standard di riferimento applicabile, secondo le linee guida [Fonte, Anno], prevede che..."
-- "Gli elementi documentali a supporto di tale profilo critico includono:..."
-- "Gli elementi documentali contrari o attenuanti includono:..."
-- "Le conseguenze cliniche documentate in relazione a tale profilo sono:..."
-`;
-
 /** Few-shot example for Documentazione Sanitaria section — ALL data is fictional */
 export const DOCUMENTAZIONE_SANITARIA_EXAMPLE = `
 ## ESEMPIO DI OUTPUT CORRETTO

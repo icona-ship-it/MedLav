@@ -351,10 +351,5 @@ export function moduleToCategory(id: ModuleId): ModuleCategory {
   return cat;
 }
 
-/** Get all modules for a given category */
-export function getModulesByCategory(categoryId: ModuleCategoryId): ModuleDefinition[] {
-  return MODULE_CATALOG.filter((m) => m.categoryId === categoryId);
-}
-
 /** All valid module IDs */
 export const ALL_MODULE_IDS: readonly ModuleId[] = MODULE_CATALOG.map((m) => m.id);

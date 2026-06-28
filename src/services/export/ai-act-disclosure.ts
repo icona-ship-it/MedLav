@@ -20,11 +20,6 @@ const DISCLOSURE_TEXT =
   'sono attribuibili esclusivamente al medico legale firmatario, che ha verificato e validato ' +
   'integralmente il contenuto. Ai sensi della Legge 132/2025 e del Regolamento UE 2024/1689 (AI Act).';
 
-/** Plain text — for CSV comments, plain-text exports, or programmatic use. */
-export function getAiActDisclosureText(): string {
-  return DISCLOSURE_TEXT;
-}
-
 /**
  * HTML markup — italics, justified, muted color. Designed to render correctly
  * both inline (Cmd+P preview) and on print/PDF. Uses inline styles only to
