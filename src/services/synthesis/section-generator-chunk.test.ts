@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec } from './section-generator';
+import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
 function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
@@ -79,5 +80,41 @@ describe('buildAttiIndex', () => {
     const idx = buildAttiIndex([makeEvent({ eventDate: '1900-01-01', eventType: 'spesa_medica' })]);
     expect(idx).toContain('(s.d.)');
     expect(idx).not.toMatch(/01[./]01[./]1900/);
+  });
+});
+
+describe('chunkEventsByDocument — non spezza i documenti (fix Bigon chunked)', () => {
+  it('impacchetta i gruppi-documento senza spezzarli tra blocchi', () => {
+    const evs = [
+      makeEvent({ documentId: 'A' }), makeEvent({ documentId: 'A' }), makeEvent({ documentId: 'A' }),
+      makeEvent({ documentId: 'B' }), makeEvent({ documentId: 'B' }),
+      makeEvent({ documentId: 'C' }),
+    ];
+    const chunks = chunkEventsByDocument(evs, 4); // soglia 4
+    // ogni documento sta TUTTO in un solo chunk (nessun documentId attraversa due chunk)
+    for (const id of ['A', 'B', 'C']) {
+      const chunksWith = chunks.filter((c) => c.some((e) => e.documentId === id));
+      expect(chunksWith).toHaveLength(1);
+    }
+    // tutti gli eventi sono preservati
+    expect(chunks.flat()).toHaveLength(6);
+  });
+
+  it('input vuoto → un blocco vuoto, non crash', () => {
+    expect(chunkEventsByDocument([], 50)).toEqual([[]]);
+  });
+});
+
+describe('buildDocSanitariaChunkSpec — nota RC vs non-RC', () => {
+  const base = { id: 'documentazione_sanitaria', promptDirective: 'BASE' } as SectionSpec;
+  it('RC (excludeLabTests): nota VERBATIM per-documento, NON "selettiva", niente inventario', () => {
+    const rc = buildDocSanitariaChunkSpec({ ...base, excludeLabTests: true }, 0, 3);
+    expect(rc.promptDirective).toMatch(/VERBATIM/);
+    expect(rc.promptDirective).toMatch(/un blocco per documento/i);
+    expect(rc.promptDirective).not.toMatch(/narrazione cronologica selettiva/i);
+  });
+  it('non-RC: mantiene la nota selettiva storica', () => {
+    const ctu = buildDocSanitariaChunkSpec({ ...base, excludeLabTests: false }, 0, 3);
+    expect(ctu.promptDirective).toMatch(/narrazione cronologica selettiva/i);
   });
 });

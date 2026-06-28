@@ -624,6 +624,29 @@ function isoToItDate(iso: string): string {
  * blocchi LLM omettono l'indice (ne vedrebbero solo una fetta), così l'indice
  * resta completo e accurato senza costare token.
  */
+/**
+ * Chunka gli eventi PER DOCUMENTO senza mai spezzare un documento tra due blocchi
+ * (impacchetta i gruppi-documento fino a ~maxSize eventi). Usato dalla doc-sanitaria RC
+ * voluminosa: così il raggruppamento per-documento regge anche col chunking (Bigon).
+ */
+export function chunkEventsByDocument(events: ConsolidatedEvent[], maxSize: number): ConsolidatedEvent[][] {
+  const byDoc = new Map<string, ConsolidatedEvent[]>();
+  const order: string[] = [];
+  for (const e of events) {
+    if (!byDoc.has(e.documentId)) { byDoc.set(e.documentId, []); order.push(e.documentId); }
+    byDoc.get(e.documentId)!.push(e);
+  }
+  const chunks: ConsolidatedEvent[][] = [];
+  let cur: ConsolidatedEvent[] = [];
+  for (const id of order) {
+    const group = byDoc.get(id) ?? [];
+    if (cur.length > 0 && cur.length + group.length > maxSize) { chunks.push(cur); cur = []; }
+    cur.push(...group);
+  }
+  if (cur.length > 0) chunks.push(cur);
+  return chunks.length > 0 ? chunks : [[]];
+}
+
 export function buildAttiIndex(events: ConsolidatedEvent[]): string {
   const lines = events.map((e) => {
     const who = (e.facility || e.doctor || '').trim();
@@ -635,7 +658,12 @@ export function buildAttiIndex(events: ConsolidatedEvent[]): string {
 
 /** Direttiva per-blocco: niente indice/intestazione, solo narrazione continua. */
 export function buildDocSanitariaChunkSpec(spec: SectionSpec, index: number, total: number): SectionSpec {
-  const note = `\n\nNOTA OPERATIVA (blocco ${index + 1} di ${total}): per la mole documentale questa sezione è prodotta in ${total} blocchi cronologici, poi concatenati. NON produrre l'ELENCO ANALITICO iniziale degli atti (viene aggiunto separatamente) né intestazioni di sezione: redigi SOLO la narrazione cronologica selettiva dei SOLI eventi qui forniti${index > 0 ? ', proseguendo lo stile dei blocchi precedenti senza ripeterli' : ''}.`;
+  const continua = index > 0 ? ', proseguendo senza ripetere i blocchi precedenti' : '';
+  // RC (excludeLabTests): la nota NON deve spingere alla "narrazione selettiva" (= parafrasi),
+  // ma riprodurre VERBATIM un blocco per DOCUMENTO (coerente con DOC_SANITARIA_RC_DIRECTIVE).
+  const note = spec.excludeLabTests
+    ? `\n\nNOTA OPERATIVA (blocco ${index + 1} di ${total}): per la mole documentale la sezione è in ${total} blocchi concatenati. NON produrre alcun elenco/indice degli atti né intestazioni di sezione. Per i SOLI documenti qui forniti riproduci il loro contenuto clinico VERBATIM tra «...», UN blocco per documento (come da direttiva), senza riassumere e senza parafrasare${continua}.`
+    : `\n\nNOTA OPERATIVA (blocco ${index + 1} di ${total}): per la mole documentale questa sezione è prodotta in ${total} blocchi cronologici, poi concatenati. NON produrre l'ELENCO ANALITICO iniziale degli atti (viene aggiunto separatamente) né intestazioni di sezione: redigi SOLO la narrazione cronologica selettiva dei SOLI eventi qui forniti${continua}.`;
   return { ...spec, promptDirective: `${spec.promptDirective}${note}` };
 }
 
@@ -654,7 +682,11 @@ async function generateDocSanitariaChunked(params: {
   attempt?: number;
 }): Promise<GeneratedSection> {
   const { spec, synthesisParams, previousContext, documentsOcrText, attempt } = params;
-  const chunks = chunkArray(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE);
+  // RC: chunk per-DOCUMENTO (un atto non viene spezzato tra blocchi → niente duplicazione);
+  // altri ruoli: chunk per-evento come prima.
+  const chunks = spec.excludeLabTests
+    ? chunkEventsByDocument(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE)
+    : chunkArray(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE);
   logger.info('section-generator', `Doc-sanitaria auto-split: ${synthesisParams.events.length} eventi → ${chunks.length} blocchi`);
 
   const parts: string[] = [];
@@ -693,7 +725,9 @@ async function generateDocSanitariaChunked(params: {
     throw new Error(`Doc-sanitaria auto-split: tutti i ${chunks.length} blocchi falliti`);
   }
 
-  const content = [buildAttiIndex(synthesisParams.events), ...parts].join('\n\n');
+  // RC (perizia "semplice", gold Lavini): NIENTE elenco-inventario degli atti (era
+  // l'"Elenco analitico degli atti sanitari esaminati (415...)" su Bigon). Altri ruoli: invariato.
+  const content = [...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]), ...parts].join('\n\n');
   const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
   const contextSummary = spec.contextMaxChars > 0 ? summarizeForContext(content, spec.contextMaxChars) : '';
   logger.info('section-generator', `Doc-sanitaria auto-split completato: ${okChunks}/${chunks.length} blocchi ok, ${wordCount} parole`);
