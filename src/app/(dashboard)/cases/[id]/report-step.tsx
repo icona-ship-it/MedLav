@@ -4,8 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, AlertTriangle } from 'lucide-react';
-import { InlineAlert } from '@/components/ui/inline-alert';
+import { Loader2, Download, AlertTriangle, RefreshCw, X } from 'lucide-react';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,7 +30,7 @@ import { MissingDocsSection } from './anomalies-section';
 import { RegeneratePanelDialog } from './regenerate-panel-dialog';
 import { ReportA4Viewer } from './report-a4-viewer';
 import { ReportTocSidebar } from './report-toc-sidebar';
-import { QualitySidebar, computeAlertCount } from './quality-sidebar';
+import { QualitySidebar } from './quality-sidebar';
 import { ReportActionBar } from './report-action-bar';
 import type {
   Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
@@ -130,6 +129,9 @@ export function ReportStep({
   // "scegli cosa rigenerare" panel.
   const [mutatedEventTypes, setMutatedEventTypes] = useState<Set<string>>(new Set());
   const [regeneratePanelOpen, setRegeneratePanelOpen] = useState(false);
+  // Pannello "Avvisi" unificato: dettagli per-documento dei problemi di lettura
+  // (stato sollevato qui da PipelineWarningsBanner, così la riga vive nel pannello).
+  const [pipelineDetail, setPipelineDetail] = useState<PipelineWarningItem | null>(null);
 
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
@@ -141,19 +143,17 @@ export function ReportStep({
   const [showVersionCompare, setShowVersionCompare] = useState(false);
   const [versions, setVersions] = useState<ReportRow[]>([]);
 
-  // Alert count for mobile badge
-  const alertCount = report
-    ? computeAlertCount(report, anomalies, missingDocs, documents, events)
-    : 0;
-
-  // UX refactor Ondata 2: anomalie actionable promosse a banner above-fold.
-  // Conteggio separato perche' "actionable" = status detected|llm_confirmed (richiede decisione),
-  // mentre alertCount include anche missing docs e altri segnali aggregati.
+  // Anomalie "actionable" = status detected|llm_confirmed|null (richiedono la decisione del perito).
   const actionableAnomalies = anomalies.filter(
     (a) => a.status === 'detected' || a.status === 'llm_confirmed' || a.status == null,
   );
   const actionableCount = actionableAnomalies.length;
   const missingDocsCount = missingDocs.length;
+  // Conteggio UNICO mostrato sia nel pannello "Avvisi" sia nel badge toolbar "Qualità"
+  // (prima erano due numeri diversi — es. 9 vs 4 — per la stessa preoccupazione: confondeva).
+  const reviewCount = actionableCount + missingDocsCount;
+  // Primo warning di pipeline con documenti falliti → abilita "Vedi dettagli" nel pannello.
+  const drillablePipelineWarning = pipelineWarnings.find((w) => w.failedItems && w.failedItems.length > 0);
 
   const sections = report?.synthesis ? parseSections(report.synthesis) : [];
 
@@ -446,11 +446,6 @@ export function ReportStep({
         </div>
       )}
 
-      {/* Warning banner for pipeline issues */}
-      {pipelineWarnings.length > 0 && (
-        <PipelineWarningsBanner warnings={pipelineWarnings} documents={documents} events={events} />
-      )}
-
       {/* Action bar - toolbar at top for immediate visibility */}
       <ReportActionBar
         caseId={caseId}
@@ -461,7 +456,7 @@ export function ReportStep({
         onRegenerate={handleRegenerate}
         onEdit={() => setEditDialogOpen(true)}
         onVersionsToggle={handleVersionsToggle}
-        alertCount={alertCount}
+        alertCount={reviewCount}
         onOpenQualitySheet={() => setQualitySheetOpen(true)}
         onOpenEventsDrawer={() => setEventsDrawerOpen(true)}
         onOpenPubmedDrawer={pubmedReferences.length > 0 ? () => setPubmedDrawerOpen(true) : undefined}
@@ -475,45 +470,65 @@ export function ReportStep({
           Eliminati i Tabs concorrenti — il Report e' l'unico output principale,
           gli altri sono pannelli di supporto. */}
 
-      {/* UX Ondata 2: banner above-fold per anomalie e doc mancanti. */}
-      {(actionableCount > 0 || missingDocsCount > 0) && (
-        <InlineAlert
-          variant={actionableCount > 0 ? 'warning' : 'info'}
-          title={
-            actionableCount > 0 && missingDocsCount > 0
-              ? `${actionableCount} anomalie cliniche da valutare · ${missingDocsCount} documenti attesi mancanti`
-              : actionableCount > 0
-                ? `${actionableCount} anomalie cliniche da valutare prima del deposito`
-                : `${missingDocsCount} documenti attesi non caricati`
-          }
-          action={{
-            label: 'Apri elenco',
-            onClick: () => setAnomalyDialogOpen(true),
-          }}
-          className="mb-4"
-        >
-          {actionableCount > 0
-            ? 'Conferma o escludi ciascuna anomalia prima di approvare il report.'
-            : 'Carica i documenti mancanti o segnala l\'indisponibilità nel report.'}
-        </InlineAlert>
-      )}
-
-      {/* Sync banner: the perito edited events → some narrative sections may be
-          out of date. Facts (ITT/ITP, spese) auto-update and are NOT listed.
-          The perito chooses what to regenerate (controllo a richiesta). */}
-      {staleForPanel.length > 0 && (
-        <InlineAlert
-          variant="info"
-          title={`Hai modificato degli eventi: ${staleForPanel.length} ${staleForPanel.length === 1 ? 'sezione potrebbe essere' : 'sezioni potrebbero essere'} da aggiornare.`}
-          action={{
-            label: 'Scegli cosa rigenerare',
-            onClick: () => setRegeneratePanelOpen(true),
-          }}
-          onDismiss={() => setMutatedEventTypes(new Set())}
-          className="mb-4"
-        >
-          Le tabelle dei fatti (ITT/ITP, spese) si aggiornano da sole. Per le sezioni descrittive, scegli quali rigenerare.
-        </InlineAlert>
+      {/* Pannello "Da controllare" UNIFICATO (UX declutter): un solo riquadro al posto
+          dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
+          aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
+          resta separato sopra. */}
+      {(actionableCount > 0 || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0) && (
+        <div className="mb-4 rounded-lg border bg-card px-4 py-3">
+          <p className="mb-2 text-sm font-semibold">Da controllare prima del deposito</p>
+          <div className="space-y-2">
+            {(actionableCount > 0 || missingDocsCount > 0) && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="text-sm">
+                    {actionableCount > 0 && `${actionableCount} ${actionableCount === 1 ? 'anomalia clinica da valutare' : 'anomalie cliniche da valutare'}`}
+                    {actionableCount > 0 && missingDocsCount > 0 && ' · '}
+                    {missingDocsCount > 0 && `${missingDocsCount} ${missingDocsCount === 1 ? 'documento atteso mancante' : 'documenti attesi mancanti'}`}
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
+                  Apri elenco
+                </Button>
+              </div>
+            )}
+            {pipelineWarnings.length > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="text-sm">
+                    Alcuni documenti non sono stati letti per intero — conviene verificarli sull&apos;originale.
+                  </span>
+                </div>
+                {drillablePipelineWarning && (
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setPipelineDetail(drillablePipelineWarning)}>
+                    Vedi dettagli
+                  </Button>
+                )}
+              </div>
+            )}
+            {staleForPanel.length > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-sm">
+                    Hai modificato degli eventi: {staleForPanel.length} {staleForPanel.length === 1 ? 'sezione' : 'sezioni'} da aggiornare.{' '}
+                    <span className="text-muted-foreground">Le tabelle (ITT/ITP, spese) si aggiornano da sole.</span>
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setRegeneratePanelOpen(true)}>
+                    Scegli cosa rigenerare
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Ignora" onClick={() => setMutatedEventTypes(new Set())}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="flex gap-6">
@@ -672,6 +687,15 @@ export function ReportStep({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dettaglio "documenti con problemi di lettura" — aperto dal pannello Avvisi
+          (stato sollevato qui da PipelineWarningsBanner per unificare i banner). */}
+      <PipelineWarningDetailDialog
+        warning={pipelineDetail}
+        documents={documents}
+        events={events}
+        onClose={() => setPipelineDetail(null)}
+      />
 
       {/* "Scegli cosa rigenerare" — sezioni interessate dalle modifiche eventi */}
       {report && (
