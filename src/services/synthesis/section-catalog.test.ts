@@ -148,6 +148,14 @@ describe('section-catalog', () => {
       expect(result).toBe(false);
     });
 
+    it('should return FALSE for has-expense-events when the only spese are notifiche-costo SSR (non risarcibili) — sezione Spese OMESSA, non "Nessuna spesa"', () => {
+      const result = evaluateCondition('has-expense-events', {
+        events: [makeEvent({ eventType: 'spesa_medica', title: 'Il SSR ha impiegato euro 1.038,80 per il ricovero' })],
+        documentTypes: [],
+      });
+      expect(result).toBe(false);
+    });
+
     it('should return true for has-perizie-docs with perizia_ctp', () => {
       const result = evaluateCondition('has-perizie-docs', {
         events: [],

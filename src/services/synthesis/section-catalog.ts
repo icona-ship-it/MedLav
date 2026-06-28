@@ -36,6 +36,7 @@ import {
 } from './catalog-ctu';
 import { STRAGIUDIZIALE_SECTIONS } from './catalog-stragiudiziale';
 import { PARERE_PRO_VERITATE_SECTIONS, PARERE_SCOPO_RISERVA_SECTIONS } from './catalog-pareri';
+import { isSsrCostNotification } from '@/services/expenses/expense-analyzer';
 
 // ── Condition evaluation ────────────────────────────────────────────
 
@@ -70,7 +71,13 @@ export function evaluateCondition(
       return ctx.documentTypes.some((t) => LEGAL_DOC_TYPES.has(t));
 
     case 'has-expense-events':
-      return ctx.events.some((e) => EXPENSE_EVENT_TYPES.has(e.eventType));
+      // Spese REALI (out-of-pocket del danneggiato): le notifiche-costo SSR/SSN non sono
+      // risarcibili e vengono escluse dalla tabella (analyzeExpenses) → se restano SOLO
+      // quelle, la sezione Spese sarebbe vuota ("Nessuna spesa documentata"). Meglio
+      // OMETTERE la sezione del tutto (direttiva utente: niente avvisi di assenza).
+      return ctx.events.some((e) =>
+        EXPENSE_EVENT_TYPES.has(e.eventType) && !isSsrCostNotification(e.title, e.description),
+      );
 
     case 'has-perizie-docs':
       return ctx.documentTypes.some((t) => PERIZIA_DOC_TYPES.has(t));
