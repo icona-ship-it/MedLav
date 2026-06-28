@@ -12,8 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { updateCase, getReportSectionOptions, getLastPeritoDefaults } from '../../actions';
-import { ReportSectionsPicker } from './report-sections-picker';
+import { updateCase, getLastPeritoDefaults } from '../../actions';
 import { usePeriziaDraft } from './use-perizia-draft';
 import { buildVisibleSections } from './perizia-form-sections';
 import { mergeDraftForm, formatDraftAge, type PeriziaDraft } from '@/lib/perizia-draft-storage';
@@ -166,17 +165,11 @@ export function PeriziaMetadataForm({
   });
   const [quesiti, setQuesiti] = useState<string[]>(existing.quesiti ?? []);
   const [newQuesito, setNewQuesito] = useState('');
-  // Selettore "Sezioni del report": elenco opzioni (caricato dal server) + sezioni escluse.
-  const [sectionOptions, setSectionOptions] = useState<Array<{ id: string; title: string; mandatory: boolean }>>([]);
+  // Sezioni del report escluse: gestite dal selettore nello step Elaborazione
+  // (processing-section). Qui NON c'è più il picker, ma il valore va preservato:
+  // updateCase riscrive l'intero perizia_metadata, quindi reinseriamo il valore
+  // salvato per non azzerare le esclusioni impostate nello step successivo.
   const [excludedSections, setExcludedSections] = useState<string[]>(existing.excludedReportSections ?? []);
-
-  useEffect(() => {
-    let active = true;
-    getReportSectionOptions(caseId).then((res) => {
-      if (active && res.sections.length > 0) setSectionOptions(res.sections);
-    });
-    return () => { active = false; };
-  }, [caseId]);
 
   // Latest form state for async callbacks (prefill) without stale closures.
   const formRef = useRef(form);
@@ -245,8 +238,6 @@ export function PeriziaMetadataForm({
     for (const section of sections) {
       if (section.id === 'quesiti') {
         filled[section.id] = quesiti.length > 0;
-      } else if (section.id === 'sezioniReport') {
-        filled[section.id] = true; // ha sempre un default valido (tutte attive)
       } else {
         filled[section.id] = section.fields.some((f) => {
           const v = form[f as keyof typeof form];
@@ -820,22 +811,6 @@ export function PeriziaMetadataForm({
                   </div>
                 )}
 
-                {section.id === 'sezioniReport' && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Scegli quali sezioni includere nel report. Quelle obbligatorie ci sono sempre. Le altre puoi spegnerle se non ti servono: il report risulta più mirato e si genera più in fretta.
-                    </p>
-                    <ReportSectionsPicker
-                      options={sectionOptions}
-                      excluded={excludedSections}
-                      onToggle={(id, include) =>
-                        setExcludedSections((prev) =>
-                          include ? prev.filter((x) => x !== id) : [...prev, id],
-                        )
-                      }
-                    />
-                  </div>
-                )}
               </div>
             </CollapsibleContent>
           </Collapsible>

@@ -14,12 +14,22 @@ describe('buildVisibleSections', () => {
     }
   });
 
-  it('should keep paziente, parti, esameObiettivo and report-picker for stragiudiziale', () => {
+  it('should keep paziente, parti and esameObiettivo for stragiudiziale', () => {
     const ids = buildVisibleSections({ role: 'stragiudiziale', isRC: true }).map((s) => s.id);
     expect(ids).toContain('paziente');
     expect(ids).toContain('parti');
     expect(ids).toContain('esameObiettivo');
-    expect(ids).toContain('sezioniReport');
+  });
+
+  it('should NOT include the report-section picker (moved to the Elaborazione step)', () => {
+    for (const params of [
+      { role: 'ctu', isRC: false },
+      { role: 'ctu', isRC: true },
+      { role: 'stragiudiziale', isRC: true },
+    ] as const) {
+      const ids = buildVisibleSections(params).map((s) => s.id);
+      expect(ids).not.toContain('sezioniReport');
+    }
   });
 
   it('should include court-only sections for ctu', () => {
@@ -43,17 +53,6 @@ describe('buildVisibleSections', () => {
     const nonRc = buildVisibleSections({ role: 'ctu', isRC: false }).map((s) => s.id);
     expect(nonRc).not.toContain('ilFatto');
     expect(nonRc).not.toContain('anamnesi');
-  });
-
-  it('should always place the report-section picker last', () => {
-    for (const params of [
-      { role: 'ctu', isRC: false },
-      { role: 'ctu', isRC: true },
-      { role: 'stragiudiziale', isRC: true },
-    ] as const) {
-      const sections = buildVisibleSections(params);
-      expect(sections[sections.length - 1].id).toBe('sezioniReport');
-    }
   });
 
   it('should never mutate the underlying constants (immutability)', () => {

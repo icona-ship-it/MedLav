@@ -15,6 +15,7 @@ import {
   EyeOff,
   Clock,
   Star,
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -155,42 +156,47 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Other categories — compact cards */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Tutti i moduli
-        </h2>
+      {/* Other categories — collapsed behind a disclosure (RC focus first) */}
+      {otherCategories.length > 0 && (
+        <section>
+          <details className="group">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+              Mostra altri moduli ({otherCategories.length})
+            </summary>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {otherCategories.map((cat) => {
-            const Icon = CATEGORY_ICONS[cat.id];
-            const href = getCategoryHref(cat.id);
-            const creditCost = getCategoryCreditCost(cat.id);
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {otherCategories.map((cat) => {
+                const Icon = CATEGORY_ICONS[cat.id];
+                const href = getCategoryHref(cat.id);
+                const creditCost = getCategoryCreditCost(cat.id);
 
-            return (
-              <Link key={cat.id} href={href} className="group block">
-                <Card className="h-full rounded-xl transition-all hover:shadow-md">
-                  <CardContent className="flex items-center gap-4 p-5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold">{cat.label}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">
-                        {cat.description}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                      {creditCost} crediti
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+                return (
+                  <Link key={cat.id} href={href} className="group/card block">
+                    <Card className="h-full rounded-xl transition-all hover:shadow-md">
+                      <CardContent className="flex items-center gap-4 p-5">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/card:bg-primary/10 group-hover/card:text-primary">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold">{cat.label}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">
+                            {cat.description}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 text-xs">
+                          {creditCost} crediti
+                        </Badge>
+                        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover/card:opacity-100 group-hover/card:translate-x-0.5" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </details>
+        </section>
+      )}
 
       {/* Recent cases */}
       <section className="space-y-4">

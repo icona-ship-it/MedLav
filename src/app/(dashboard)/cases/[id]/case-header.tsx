@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Loader2, Trash2, Pencil, ArrowLeft, Archive,
-  RotateCcw, Search, X,
+  RotateCcw, Search, X, MoreHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
+  DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { deleteCase, updateCaseStatus } from '../../actions';
 import { caseTypeLabels, getModuleFullLabel } from '@/lib/constants';
 import type { ModuleId } from '@/types/modules';
@@ -170,45 +174,55 @@ export function CaseHeader({
               )}
             </>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleArchiveToggle}
-            disabled={isArchiving}
-          >
-            {isArchiving ? (
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-            ) : isArchived ? (
-              <RotateCcw className="mr-1 h-3 w-3" />
-            ) : (
-              <Archive className="mr-1 h-3 w-3" />
-            )}
-            {isArchived ? 'Ripristina' : 'Archivia'}
-          </Button>
-          <Dialog open={deleteCaseOpen} onOpenChange={setDeleteCaseOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={hasProcessingDocs}>
-                <Trash2 className="mr-1 h-3 w-3" />Elimina caso
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Altre azioni">
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Eliminare il caso {caseData.code}?</DialogTitle>
-                <DialogDescription>
-                  Tutti i documenti, eventi e report verranno eliminati definitivamente. Questa azione non è reversibile.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDeleteCaseOpen(false)}>Annulla</Button>
-                <Button variant="destructive" onClick={handleDeleteCase} disabled={isDeletingCase}>
-                  {isDeletingCase ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
-                  Elimina definitivamente
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleArchiveToggle} disabled={isArchiving}>
+                {isArchiving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : isArchived ? (
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                ) : (
+                  <Archive className="mr-2 h-4 w-4" />
+                )}
+                {isArchived ? 'Ripristina' : 'Archivia'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteCaseOpen(true)}
+                disabled={hasProcessingDocs}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Elimina caso
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* Delete confirmation (opened from the overflow menu) */}
+      <Dialog open={deleteCaseOpen} onOpenChange={setDeleteCaseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminare il caso {caseData.code}?</DialogTitle>
+            <DialogDescription>
+              Tutti i documenti, eventi e report verranno eliminati definitivamente. Questa azione non è reversibile.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCaseOpen(false)}>Annulla</Button>
+            <Button variant="destructive" onClick={handleDeleteCase} disabled={isDeletingCase}>
+              {isDeletingCase ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+              Elimina definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Demo banner */}
       {caseData.code.startsWith('DEMO-') && (

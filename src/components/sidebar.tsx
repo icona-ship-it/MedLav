@@ -52,7 +52,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       {/* New Case Button */}
       <div className="px-3 pt-4 pb-2">
         <Button asChild className="w-full">
-          <Link href="/">
+          <Link href="/cases/new">
             <Plus className="mr-2 h-4 w-4" />
             Nuovo Caso
           </Link>
@@ -96,29 +96,19 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           <span className="text-xs text-muted-foreground">Tema</span>
           <ThemeToggle />
         </div>
-        <Link
-          href="/help"
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          <HelpCircle className="h-4 w-4" />
-          Aiuto
-        </Link>
-        {isAdmin && (
+        {FOOTER_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
           <Link
-            href="/admin"
-            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/20"
+            key={item.name}
+            href={item.href}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
+              item.className || 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+            )}
           >
-            <ShieldCheck className="h-4 w-4" />
-            Admin
+            <item.icon className="h-4 w-4" />
+            {item.name}
           </Link>
-        )}
-        <Link
-          href="/settings"
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          <Settings className="h-4 w-4" />
-          Impostazioni
-        </Link>
+        ))}
         <form action={signOut}>
           <button
             type="submit"

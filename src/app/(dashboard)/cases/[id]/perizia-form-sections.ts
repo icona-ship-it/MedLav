@@ -46,16 +46,15 @@ export const RC_PERITO_SECTIONS: SectionDef[] = [
   },
 ];
 
-/** Sezione speciale (sempre presente, sempre ultima): selettore delle sezioni del report. */
-export const SEZIONI_REPORT_SECTION: SectionDef = { id: 'sezioniReport', title: 'Sezioni del report', fields: [] };
-
 const COURT_ONLY = new Set<string>(COURT_ONLY_SECTION_IDS);
 
 /**
  * Costruisce l'elenco delle sezioni da mostrare nel form in base al ruolo del caso.
  * - stragiudiziale → niente sezioni giudiziarie (intestazione/date/quesiti)
  * - RC (isRC) → aggiunge le sezioni anamnesi + "Il Fatto"
- * - il selettore "Sezioni del report" è sempre l'ultima.
+ *
+ * La scelta delle sezioni del report NON è più qui: vive nello step Elaborazione
+ * (processing-section), subito prima della generazione.
  *
  * Ritorna sempre un nuovo array (non muta le costanti).
  */
@@ -64,6 +63,5 @@ export function buildVisibleSections(params: { role: string; isRC: boolean }): S
   const base = role === 'stragiudiziale'
     ? BASE_SECTIONS.filter((s) => !COURT_ONLY.has(s.id))
     : BASE_SECTIONS;
-  const withRc = isRC ? [...base, ...RC_PERITO_SECTIONS] : [...base];
-  return [...withRc, SEZIONI_REPORT_SECTION];
+  return isRC ? [...base, ...RC_PERITO_SECTIONS] : [...base];
 }
