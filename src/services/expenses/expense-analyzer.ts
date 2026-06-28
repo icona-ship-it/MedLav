@@ -62,6 +62,10 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
 // ---------------------------------------------------------------------------
 
 const AMOUNT_PATTERNS: RegExp[] = [
+  // Formato anglosassone "euro 1,038.80" / "€ 12,345.67" (virgola-migliaia + punto-decimale)
+  // — PRIMA dei pattern italiani, altrimenti "1,038.80" verrebbe letto come "1,03" (1.03).
+  /(?:€|[Ee]uro|EUR)\s?(\d{1,3}(?:,\d{3})+\.\d{2})/,
+  /(\d{1,3}(?:,\d{3})+\.\d{2})\s?(?:€|[Ee]uro)/,
   // "€ 150,00" or "€150,00" or "€ 1.500,00"
   /€\s?([\d.]+,\d{2})/,
   // "Euro 150,00" or "euro 150"
@@ -91,11 +95,25 @@ export function extractAmount(text: string): number | null {
 }
 
 /**
- * Parse Italian number format (1.500,00 → 1500.00).
+ * Parse di un importo riconoscendo SIA il formato italiano (1.500,00) SIA quello
+ * anglosassone (1,500.00) — alcuni gestionali/SSR emettono importi in formato US
+ * ("euro 1,038.80"), che col vecchio parser italiano dava cifre sbagliate (gonfiava
+ * il totale). Regola: l'ULTIMO separatore è il decimale.
  */
 function parseItalianNumber(raw: string): number | null {
-  // Remove thousands separators (dots), replace comma with decimal dot
-  const normalized = raw.replace(/\./g, '').replace(',', '.');
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  let normalized: string;
+  if (lastComma > lastDot) {
+    // virgola decimale (italiano): i punti sono migliaia
+    normalized = raw.replace(/\./g, '').replace(',', '.');
+  } else if (lastDot > lastComma) {
+    // punto decimale (anglosassone): le virgole sono migliaia
+    normalized = raw.replace(/,/g, '');
+  } else {
+    // un solo tipo di separatore (o nessuno): default italiano (virgola = decimale)
+    normalized = raw.replace(',', '.');
+  }
   const num = parseFloat(normalized);
   return isNaN(num) || num < 0 ? null : num;
 }
@@ -254,6 +272,15 @@ interface AnalyzableEvent {
  * 5. Calculates totals per category
  * 6. Generates a human-readable summary
  */
+/**
+ * Vero se la voce è una NOTIFICA DI COSTO a carico del Servizio Sanitario (SSN/SSR),
+ * non una spesa out-of-pocket del danneggiato → esclusa dalle spese risarcibili.
+ */
+export function isSsrCostNotification(title: string, description?: string | null): boolean {
+  const t = `${title} ${description ?? ''}`.toLowerCase();
+  return /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|il s\.?s\.?r\.? ha (impiegat|sostenut|spes)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t);
+}
+
 export function analyzeExpenses(
   events: AnalyzableEvent[],
 ): ExpenseAnalysisResult {
@@ -266,6 +293,11 @@ export function analyzeExpenses(
   for (const ev of events) {
     // Skip non-string/invalid inputs gracefully
     if (!ev || typeof ev.title !== 'string') continue;
+
+    // NON sono spese risarcibili del danneggiato le notifiche-costo a carico del SSN/SSR
+    // (es. "il SSR ha impiegato euro X", "a carico del Servizio Sanitario"): contarle gonfia
+    // il quantum con costi che il danneggiato non ha sostenuto.
+    if (isSsrCostNotification(ev.title, ev.description)) continue;
 
     const category = inferCategory(ev.event_type, ev.title, ev.description);
     const amount = extractAmount(ev.title) ?? extractAmount(ev.description);

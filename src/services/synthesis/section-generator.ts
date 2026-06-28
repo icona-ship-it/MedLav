@@ -225,7 +225,9 @@ export function buildSectionUserPrompt(params: {
     }));
     const expenseTotal = analyzeExpenses(expenseRows).totalAmount;
     if (expenseTotal !== null && expenseTotal > 0) {
-      parts.push(`TOTALE SPESE MEDICHE DOCUMENTATE (calcolo deterministico, stesso valore della tabella spese): ${formatEuro(expenseTotal)}. Usa ESATTAMENTE questo importo nella riga sulle spese.\n`);
+      parts.push(`TOTALE SPESE MEDICHE DOCUMENTATE (calcolo deterministico, stesso valore della tabella spese): ${formatEuro(expenseTotal)}. Usa ESATTAMENTE questo importo nella riga sulle spese. NON dichiararle "congrue/giustificate" né esprimere giudizi di congruità: è valutazione riservata al perito (lascia eventualmente un placeholder). NON inventare un totale diverso.\n`);
+    } else {
+      parts.push('SPESE MEDICHE: non risultano spese mediche risarcibili documentate (out-of-pocket del danneggiato) nel fascicolo. NON inventare un totale di spesa né dichiarare spese "esibite/congrue": al più rimanda alla tabella spese e lascia che il perito integri eventuali ricevute.\n');
     }
   }
 

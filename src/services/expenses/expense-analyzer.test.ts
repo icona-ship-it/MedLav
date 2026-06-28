@@ -3,6 +3,7 @@ import {
   analyzeExpenses,
   extractAmount,
   inferCategory,
+  isSsrCostNotification,
 } from './expense-analyzer';
 
 // ---------------------------------------------------------------------------
@@ -289,5 +290,32 @@ describe('QA 2026-06-11 — dedup voci di spesa (PDF caricato due volte)', () =>
       makeExpense({ event_date: '2024-07-01', title: 'Fattura visita di controllo € 80,00', description: 'Fattura n. 51/2024, importo 80,00 euro' }),
     ]);
     expect(result.totalItems).toBe(2);
+  });
+});
+
+describe('fix Bigon — parser US + esclusione notifiche SSR', () => {
+  it('extractAmount riconosce il formato anglosassone "euro 1,038.80"', () => {
+    expect(extractAmount('Prestazione euro 1,038.80')).toBeCloseTo(1038.8, 2);
+    expect(extractAmount('Intervento euro 1.038,80')).toBeCloseTo(1038.8, 2);
+  });
+
+  it('isSsrCostNotification riconosce le notifiche-costo a carico del SSN/SSR', () => {
+    expect(isSsrCostNotification('Prestazione', 'il SSR ha impiegato euro 1.038,80')).toBe(true);
+    expect(isSsrCostNotification('Ricovero a carico del SSN')).toBe(true);
+    expect(isSsrCostNotification('Fattura fisioterapia', 'euro 450,00 pagati dal paziente')).toBe(false);
+    expect(isSsrCostNotification('Ticket € 36,15')).toBe(false);
+  });
+
+  it('analyzeExpenses ESCLUDE le notifiche SSR dal totale risarcibile', () => {
+    const ev = (o: Record<string, unknown>) => ({
+      event_type: 'spesa_medica', title: '', description: '', event_date: '2024-06-15',
+      facility: null, source_type: 'spese_mediche', ...o,
+    });
+    const result = analyzeExpenses([
+      ev({ title: 'Costo ricovero', description: 'il SSR ha impiegato euro 50.000,00' }),
+      ev({ title: 'Ticket fisioterapia € 36,15' }),
+    ]);
+    expect(result.totalItems).toBe(1);
+    expect(result.totalAmount).toBeCloseTo(36.15, 2);
   });
 });
