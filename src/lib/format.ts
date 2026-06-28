@@ -17,6 +17,28 @@ export function formatDate(isoDate: string): string {
 }
 
 /**
+ * Formatta una data ISO rispettando la PRECISIONE estratta, così non si stampa MAI
+ * un giorno/mese FABBRICATO quando è noto solo l'anno (es. "colecistectomia nel 2002",
+ * estratto come 2002-01-01 con datePrecision="anno" → "2002", non "01.01.2002": era il
+ * leak su Bigon, menzioni anamnestiche promosse ad atti datati 01.01.20XX).
+ * SOLO la sentinella 1900-01-01 → "s.d." (mai 01.01.1900). NB: un evento davvero
+ * senza data porta SEMPRE la sentinella; "sconosciuta" su una data VALIDA è una data
+ * approssimata desunta dal contesto (inferMissingDates) e va mostrata, non soppressa —
+ * sopprimerla scarterebbe una data reale (regressione vs il comportamento precedente).
+ * Precisione assente/"giorno"/"sconosciuta" → DD.MM.YYYY (un vero 1° gennaio NON viene
+ * ridotto: il gate è la PRECISIONE, mai il literal -01-01).
+ */
+export function formatEventDateByPrecision(isoDate: string, precision?: string): string {
+  if (!isoDate || isoDate.startsWith('1900-01-01')) return 's.d.';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  if (!m) return isoDate;
+  const [, year, month, day] = m;
+  if (precision === 'anno') return year;
+  if (precision === 'mese') return `${month}.${year}`;
+  return `${day}.${month}.${year}`;
+}
+
+/**
  * Format file size in bytes to human-readable string.
  */
 export function formatFileSize(bytes: number): string {

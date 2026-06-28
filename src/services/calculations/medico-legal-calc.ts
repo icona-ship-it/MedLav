@@ -9,6 +9,10 @@ interface CalcEvent {
   event_type: string;
   title: string;
   description: string;
+  /** Precisione della data (giorno|mese|anno|sconosciuta). Opzionale: assente = trattata
+   * come 'giorno' (legacy). Usata per escludere dai FATTI deterministici le menzioni
+   * anno-only (anamnesi remota → 01.01.YYYY fabbricato) che falserebbero ricovero/span. */
+  date_precision?: string | null;
 }
 
 /** Sentinel date written by the extractor when no real date can be inferred. */
@@ -347,6 +351,48 @@ function calculateTotalIllnessPeriod(events: CalcEvent[]): MedicoLegalCalculatio
     endDate: lastDate,
     notes: `Dal primo evento (${formatDate(firstDate)}) all'ultimo evento documentato (${formatDate(lastDate)})`,
   };
+}
+
+/**
+ * Blocco FATTI deterministici per l'Epicrisi RC stragiudiziale: giorni di RICOVERO e
+ * DURATA COMPLESSIVA del periodo di malattia (primo → ultimo evento clinico documentato).
+ * Sono FATTI aritmetici, non giudizi: l'app li ASSERISCE invece di lasciarli all'LLM, che
+ * li rifiutava ("non desumibile") o li sbagliava ("448 gg ITT", lo span totale spacciato
+ * per invalidità). Le fasce graduate 75/50/25 NON sono qui: restano scaffold del perito.
+ *
+ * Conteggio ESCLUSIVO (daysDiff), COERENTE con calculateHospitalDays/TotalIllnessPeriod e
+ * con la sezione "PERIODI MEDICO-LEGALI CALCOLATI" + il contesto-prompt: un solo numero per
+ * lo stesso fatto in tutto il documento. (La convenzione inclusiva — gold 9 vs 8 — è una
+ * decisione di dominio di Lavini che toccherebbe TUTTI i conteggi ITT: fuori da questo fix.)
+ *
+ * Usa SOLO eventi a data CERTA (precisione 'giorno', o assente=legacy): le menzioni
+ * anno-only/mese-only (anamnesi remota tipo "colecistectomia nel 2002" → 01.01.2002) sono
+ * escluse, così non gonfiano lo span né reintroducono il giorno fabbricato.
+ * '' se nulla è calcolabile. Pure + client-safe (espanso a read-time dal marker ITT_RICOVERO_FACTS).
+ */
+export function formatRicoveroITTFactsBlock(events: CalcEvent[]): string {
+  // Escludi le date imprecise (anno/mese/sconosciuta): un FATTO deterministico (giorni
+  // esatti, date esatte) si fonda solo su date a precisione di giorno.
+  const precise = events.filter((e) => e.date_precision == null || e.date_precision === 'giorno');
+  const clinical = clinicalSortedByDate(precise);
+  if (clinical.length === 0) return '';
+  const lines: string[] = [];
+
+  // (1) Giorni di ricovero (esclusivi, come l'intero modulo calc).
+  for (const r of calculateHospitalDays(clinical)) {
+    if (r.days === null || !r.startDate || !r.endDate) continue;
+    lines.push(`- **Giorni di ricovero:** ${r.days} (${numberToItalianWords(r.days)}), dal ${formatDate(r.startDate)} al ${formatDate(r.endDate)}.`);
+  }
+
+  // (2) Durata complessiva del periodo di malattia (intervallo calendariale primo→ultimo
+  // evento). Etichetta esplicita: NON è una valutazione di inabilità (riservata al perito).
+  const span = calculateTotalIllnessPeriod(clinical);
+  if (span.days !== null && span.days > 0 && span.startDate && span.endDate) {
+    lines.push(`- **Durata complessiva del periodo di malattia:** ${span.days} (${numberToItalianWords(span.days)}) giorni, dal primo evento documentato (${formatDate(span.startDate)}) all'ultimo (${formatDate(span.endDate)}) — intervallo calendariale, non una valutazione di inabilità (riservata al perito).`);
+  }
+
+  if (lines.length === 0) return '';
+  return `**Dati medico-legali calcolati (deterministici):**\n${lines.join('\n')}`;
 }
 
 function calculateInterSurgeryIntervals(events: CalcEvent[]): MedicoLegalCalculation[] {

@@ -6,7 +6,7 @@ import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import { calculationsToITTITPSegments, formatITTITPTable } from '../calculations/medico-legal-calc';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { DocumentSummary } from './document-summarizer';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatEventDateByPrecision } from '@/lib/format';
 import { formatRoleDirectiveForPrompt } from './role-prompts';
 import { buildCaseTypeDirective } from './case-type-templates';
 import { formatCausalNexusForPrompt, getCaseTypeKnowledge, getCombinedCaseTypeKnowledge, getGoldenPerizia } from '@/lib/domain-knowledge';
@@ -362,7 +362,7 @@ TIPO CASO: ${caseTypeLabelsText}
 RUOLO PERITO: ${roleLabel}
 PAZIENTE: ${patientInitials || 'N/D'}
 NUMERO EVENTI DOCUMENTATI: ${events.length}
-PERIODO DOCUMENTATO: ${events.length > 0 ? `${promptEventDate(events[0].eventDate)} — ${promptEventDate(events[events.length - 1].eventDate)}` : 'N/D'}
+PERIODO DOCUMENTATO: ${events.length > 0 ? `${formatEventDateByPrecision(events[0].eventDate, events[0].datePrecision)} — ${formatEventDateByPrecision(events[events.length - 1].eventDate, events[events.length - 1].datePrecision)}` : 'N/D'}
 ${periziaSection}
 ## TUTTI GLI EVENTI CLINICI IN ORDINE CRONOLOGICO
 
@@ -669,16 +669,11 @@ export function buildSummaryUserPrompt(params: {
 
 // ── Formatting helpers ──
 
-/** Data per i PROMPT: la sentinella 1900-01-01 (evento senza data) → "s.d.",
- * MAI "Data non documentata" (che formatDate restituisce) — è una stringa che il
- * validator blocca come sentinel_date_leak se l'LLM la copia nel report. */
-function promptEventDate(iso: string): string {
-  return iso === '1900-01-01' ? 's.d.' : formatDate(iso);
-}
-
 export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events.map((e) => {
-    const date = promptEventDate(e.eventDate);
+    // Data PRECISION-AWARE: una menzione "solo anno" non diventa "01.01.YYYY" (fix
+    // Bigon). Gestisce anche la sentinella 1900-01-01 → "s.d." (no sentinel_date_leak).
+    const date = formatEventDateByPrecision(e.eventDate, e.datePrecision);
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
     const reliabilityScore = getSourceReliabilityScore(e.sourceType);
@@ -718,8 +713,12 @@ export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): st
 
   return groups.map((evs, i) => {
     const rep = evs.find((e) => e.facility) ?? evs[0];
-    const date = promptEventDate(rep.eventDate);
-    const sourceLabel = SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType;
+    const date = formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
+    // Il LABEL della doc-sanitaria NON deve portare il codice classificatore (A-/B-/C-/D-):
+    // l'LLM lo copiava nel titolo grassetto del blocco ("**B - Referto...:**" su Bigon).
+    // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP
+    // restano in formatEventsForPrompt / CHRONOLOGY_SOURCES_GUIDE, non toccate.
+    const sourceLabel = (SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType).replace(/^[A-D] - /, '');
     const facility = rep.facility ? ` — ${rep.facility}` : '';
     const content = evs.map((e) => {
       const txt = (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();

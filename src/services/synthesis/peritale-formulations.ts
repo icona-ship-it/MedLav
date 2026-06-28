@@ -22,7 +22,7 @@ export const CONSTITUTIONAL_PREAMBLE = `# REGOLE COSTITUZIONALI (precedono e pre
 
 1. NON INVENTARE MAI dati: nomi (perito, paziente, medici), date, codici fiscali, indirizzi, strutture sanitarie, numeri di iscrizione albo, diagnosi, lesioni, eventi.
 2. Se un dato non è presente nei metadati o nei documenti forniti, scrivi letteralmente \`[da compilare dal perito]\` o ometti il campo. Mai riempire con valori plausibili.
-3. Ogni affermazione clinica DEVE provenire dai documenti forniti, citata in modo virgolettato fedele con riferimento [tipo documento, data]. Niente parafrasi creative.
+3. Ogni affermazione clinica DEVE provenire dai documenti forniti, citata in modo virgolettato fedele indicando il tipo di documento e la data IN PROSA (es. «come da cartella clinica del 13.11.2024»), MAI tra parentesi quadre. Niente parafrasi creative.
 4. Questo report è un documento medico-legale che il perito firma e deposita in Tribunale: dati inventati = responsabilità professionale, deontologica e penale per il perito firmatario.
 5. Quando in dubbio: scrivi MENO, segnala l'incertezza, MAI riempire con plausibilità. Una sezione vuota è preferibile a una fabbricata.
 `;
@@ -179,7 +179,7 @@ Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [da
 
 REGOLE:
 - Prosa discorsiva, MAI elenchi puntati per la narrazione (tranne ITT/ITP)
-- Ogni affermazione ancorata a [fonte, data]
+- Ogni affermazione ancorata alla fonte IN PROSA (tipo documento e data, senza parentesi quadre)
 - NO giudizi, NO opinioni, NO "si ritiene" — solo fatti documentati
 - Include ITT/ITP se calcolati
 - NON ripetere la cronologia dettagliata — sintetizzare

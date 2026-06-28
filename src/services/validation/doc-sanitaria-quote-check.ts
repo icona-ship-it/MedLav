@@ -36,3 +36,25 @@ export function annotateDocSanitariaQuotes(
 ): GeneratedQuotesResult {
   return verifyGeneratedQuotes(content, concatOcrText(documentsOcrText), opts);
 }
+
+/**
+ * Variante GATED per la perizia RC stragiudiziale (excludeLabTests). Decisione di
+ * Lavini (2026-06-28): in un atto FIRMATO non vanno i marker ⚠️ "[citazione da
+ * verificare]" inline (erano ~409 su Bigon, frutto del verificatore strict applicato
+ * a centinaia di citazioni-passaggio verbatim). Per RC il contenuto resta PULITO; il
+ * conteggio delle citazioni non riscontrate è comunque calcolato e restituito, così il
+ * chiamante può loggarlo per audit. Altri ruoli (CTU/CTP): annotazione invariata.
+ */
+export function annotateDocSanitariaQuotesGated(
+  content: string,
+  documentsOcrText: DocumentOcrContext[] | undefined,
+  opts: { excludeLabTests?: boolean } & VerifyQuotesOptions = {},
+): GeneratedQuotesResult {
+  const { excludeLabTests, ...verifyOpts } = opts;
+  const checked = verifyGeneratedQuotes(content, concatOcrText(documentsOcrText), verifyOpts);
+  if (excludeLabTests) {
+    // RC: niente marker inline — il testo resta quello generato; il conteggio serve solo all'audit.
+    return { ...checked, annotatedMarkdown: content };
+  }
+  return checked;
+}

@@ -211,6 +211,7 @@ Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laborat
 - **Data dell'EVENTO CLINICO, non del documento**: usa la data nel contesto testuale immediato dell'evento (quando l'esame/visita/intervento è AVVENUTO). La data di stampa/invio/protocollo/intestazione è METADATO del documento: NON usarla per datare gli eventi clinici, a meno che non coincida realmente con la data dell'evento.
 - Data approssimata e' MOLTO meglio di NULL, MA solo se desunta dal contesto clinico (non dal metadato del documento)
 - "Febbraio 2024" → "2024-02-01", datePrecision="mese"
+- Solo l'ANNO noto (es. "nel 2002", "cesareo del 2013") → "2002-01-01" / "2013-01-01" con datePrecision="anno". È SOLO l'anno: NON spacciarlo per una data precisa (il giorno/mese 01.01 è un riempitivo, non un dato reale).
 - Data relativa → calcola se possibile ("3 giorni dopo l'intervento del 10/05" → 2024-05-13)
 - NESSUN indizio → NULL, datePrecision="sconosciuta"
 - **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese", MA solo se è l'unica menzione di quell'evento (vedi regola RIFERIMENTI sotto).

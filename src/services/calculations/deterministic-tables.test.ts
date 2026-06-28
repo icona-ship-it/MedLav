@@ -149,6 +149,24 @@ describe('expandDeterministicBlocks', () => {
     expect(out).toContain('Autore/Struttura'); // chrono table header
   });
 
+  it('replaces the ITT_RICOVERO_FACTS marker with the deterministic ricovero/durata block (fix Bigon)', () => {
+    const clinical: DeterministicTableEvent[] = [
+      ev({ event_type: 'ricovero', event_date: '2024-11-14', title: 'Ricovero' }),
+      ev({ event_type: 'dimissione', event_date: '2024-11-22', title: 'Dimissione', description: 'lettera di dimissione' }),
+    ];
+    const md = `## Epicrisi\n\n${DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS}`;
+    const out = expandDeterministicBlocks(md, clinical);
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS);
+    expect(out).toContain('Giorni di ricovero');
+    expect(out).toContain('8 (otto)'); // esclusivo, coerente col resto del modulo calc
+  });
+
+  it('ITT_RICOVERO_FACTS → marker rimosso anche senza dati calcolabili (nessun residuo)', () => {
+    const md = DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS;
+    const out = expandDeterministicBlocks(md, []);
+    expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS);
+  });
+
   it('uses a fallback note when the data yields an empty table', () => {
     const md = DETERMINISTIC_MARKERS.SPESE;
     const out = expandDeterministicBlocks(md, []); // no expenses

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
-import { concatOcrText, annotateDocSanitariaQuotes } from './doc-sanitaria-quote-check';
+import { concatOcrText, annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from './doc-sanitaria-quote-check';
 
 function doc(partial: Partial<DocumentOcrContext>): DocumentOcrContext {
   return {
@@ -59,5 +59,31 @@ describe('annotateDocSanitariaQuotes', () => {
     const content = 'Diagnosi «frattura composta del radio distale destro».';
     const res = annotateDocSanitariaQuotes(content, undefined);
     expect(res.ungroundedCount).toBe(1);
+  });
+});
+
+describe('annotateDocSanitariaQuotesGated — RC non renderizza i marker ⚠️ (decisione Lavini 2026-06-28)', () => {
+  const fabricated = 'Diagnosi «rottura del tendine di Achille sinistro» riferita.';
+
+  it('RC (excludeLabTests): contenuto INVARIATO ma conteggio preservato per audit', () => {
+    const res = annotateDocSanitariaQuotesGated(fabricated, DOCS, { excludeLabTests: true });
+    // niente marker inline nel testo della perizia firmata...
+    expect(res.annotatedMarkdown).toBe(fabricated);
+    expect(res.annotatedMarkdown).not.toContain('da verificare');
+    // ...ma il conteggio resta per il logger di audit
+    expect(res.ungroundedCount).toBe(1);
+  });
+
+  it('non-RC (default): annota in place come annotateDocSanitariaQuotes', () => {
+    const res = annotateDocSanitariaQuotesGated(fabricated, DOCS, { excludeLabTests: false });
+    expect(res.annotatedMarkdown).toContain('da verificare sul documento originale');
+    expect(res.ungroundedCount).toBe(1);
+  });
+
+  it('RC: una citazione fondata resta invariata (come prima)', () => {
+    const grounded = 'Il referto descrive una «frattura composta del radio distale destro».';
+    const res = annotateDocSanitariaQuotesGated(grounded, DOCS, { excludeLabTests: true });
+    expect(res.annotatedMarkdown).toBe(grounded);
+    expect(res.ungroundedCount).toBe(0);
   });
 });

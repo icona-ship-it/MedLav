@@ -252,6 +252,14 @@ describe('filterOcrForSection', () => {
       expect(r.note).toBeUndefined();
     });
 
+    it('RC (excludeLabTests): nessuna nota di fedeltà (è falsa: verbatim da OCR, non riassunti) — mode resta', () => {
+      const r = fidelitySignal({ needsOcr: true, sectionId: 'documentazione_sanitaria', summaryCount: 79, truncatedByCap: false, excludeLabTests: true });
+      // la nota "generata da N riassunti automatici" NON va in una perizia RC firmata
+      expect(r.note).toBeUndefined();
+      // ma il mode resta per telemetria/HRS
+      expect(r.mode).toBe('summaries');
+    });
+
     it('sezione senza OCR → nessun segnale', () => {
       const r = fidelitySignal({ needsOcr: false, sectionId: 'considerazioni_ml', summaryCount: 0, truncatedByCap: false });
       expect(r.mode).toBeUndefined();

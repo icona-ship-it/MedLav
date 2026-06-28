@@ -61,6 +61,31 @@ describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
     // il documento più antico (presto) viene prima del più recente (tardo)
     expect(out.indexOf('reperto-presto')).toBeLessThan(out.indexOf('reperto-tardo'));
   });
+
+  // Fix Bigon: il codice classificatore A-/B-/C-/D- (SOURCE_TYPE_LABELS) NON deve
+  // finire nell'intestazione del blocco-documento (l'LLM la copiava nel titolo
+  // grassetto → "**B - Referto...:**"). Lo togliamo alla radice, qui.
+  it('NON espone il codice classificatore A-/B-/C-/D- nell\'intestazione del blocco', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'doc-B', sourceType: 'referto_controllo', title: 'Controllo', sourceText: 'controllo' }),
+      makeEvent({ documentId: 'doc-A', sourceType: 'cartella_clinica', title: 'Cartella', sourceText: 'cartella' }),
+    ]);
+    // il LABEL leggibile resta, il CODICE non c'è
+    expect(out).toContain('REFERTI CONTROLLI MEDICI');
+    expect(out).toContain('CARTELLA CLINICA');
+    expect(out).not.toContain('B - ');
+    expect(out).not.toContain('A - ');
+  });
+
+  // Fix Bigon: una menzione "solo anno" (datePrecision='anno') NON deve mostrare un
+  // giorno/mese fabbricato ("01.01.2002") nell'intestazione del blocco.
+  it('datePrecision "anno" → mostra solo l\'anno, mai il giorno fabbricato', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'doc-2002', eventDate: '2002-01-01', datePrecision: 'anno', title: 'Colecistectomia', sourceText: 'colecistectomia' }),
+    ]);
+    expect(out).toContain('data 2002');
+    expect(out).not.toContain('01.01.2002');
+  });
 });
 
 describe('synthesis-prompts', () => {

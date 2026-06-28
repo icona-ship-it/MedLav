@@ -23,7 +23,7 @@ import type { MissingDocument } from '../validation/missing-doc-detector';
 import type { MedicoLegalCalculation } from '../calculations/medico-legal-calc';
 import type { ImageAnalysisResult } from '../image-analysis/diagnostic-image-analyzer';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatEventDateByPrecision } from '@/lib/format';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { validateReport, getBlockingIssues, formatIssuesForLog } from './report-validator';
 import type { ReportValidationContext, ReportIssue } from './report-validator';
@@ -458,7 +458,8 @@ function finalizeReport(
 function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
   return events
     .map((e, i) => {
-      const date = formatDate(e.eventDate);
+      // Data precision-aware: "solo anno" non diventa "01.01.YYYY" (fix Bigon).
+      const date = formatEventDateByPrecision(e.eventDate, e.datePrecision);
       const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
       const type = e.eventType ?? 'altro';
       const source = e.sourceType ?? '';

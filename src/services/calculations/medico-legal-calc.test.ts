@@ -4,11 +4,68 @@ import {
   calculateITTITP,
   calculationsToITTITPSegments,
   formatITTITPTable,
+  formatRicoveroITTFactsBlock,
 } from './medico-legal-calc';
 
 function makeEvent(eventDate: string, eventType: string, title: string, description = '') {
   return { event_date: eventDate, event_type: eventType, title, description };
 }
+
+describe('formatRicoveroITTFactsBlock — fatti deterministici Epicrisi (ricovero + durata complessiva)', () => {
+  it('giorni di ricovero (14→22 = 8, esclusivo coerente col modulo) + durata complessiva, MAI etichettati ITT/invalidità', () => {
+    const events = [
+      makeEvent('2024-11-14', 'ricovero', 'Ricovero'),
+      makeEvent('2024-11-22', 'ricovero', 'Lettera di dimissione', 'dimissione a domicilio'),
+      makeEvent('2025-01-16', 'follow-up', 'Controllo ortopedico'),
+    ];
+    const block = formatRicoveroITTFactsBlock(events);
+    expect(block).toContain('Giorni di ricovero');
+    expect(block).toContain('8 (otto)'); // esclusivo, coerente con calculateHospitalDays e la sezione PERIODI
+    expect(block).toContain('Durata complessiva del periodo di malattia');
+    // il numero della durata NON va etichettato come ITT/invalidità (era il bug "448 gg ITT")
+    expect(block).not.toMatch(/invalidità temporanea/i);
+    expect(block).not.toContain('ITT');
+  });
+
+  it('esclude le menzioni anno-only dallo span: niente 01.01.YYYY, niente span gonfiato (fix review Bug B)', () => {
+    const events: Array<{ event_date: string; event_type: string; title: string; description: string; date_precision?: string }> = [
+      // anamnesi remota "colecistectomia nel 2002" — data fabbricata 01.01, precisione anno
+      { event_date: '2002-01-01', event_type: 'intervento', title: 'Colecistectomia', description: 'in anamnesi', date_precision: 'anno' },
+      { event_date: '2024-11-14', event_type: 'ricovero', title: 'Ricovero', description: '' },
+      { event_date: '2024-11-22', event_type: 'ricovero', title: 'Dimissione', description: 'lettera di dimissione' },
+    ];
+    const block = formatRicoveroITTFactsBlock(events);
+    // il 2002 NON deve comparire (né come 01.01.2002 né come anno che gonfia lo span)
+    expect(block).not.toContain('2002');
+    // lo span parte dall'evento day-precise (14.11.2024), non dall'anamnesi
+    expect(block).toContain('14.11.2024');
+  });
+
+  it('nessun ricovero → niente riga ricovero, ma la durata complessiva resta', () => {
+    const events = [
+      makeEvent('2024-01-10', 'visita', 'Prima visita'),
+      makeEvent('2024-06-15', 'follow-up', 'Ultimo controllo'),
+    ];
+    const block = formatRicoveroITTFactsBlock(events);
+    expect(block).not.toContain('Giorni di ricovero');
+    expect(block).toContain('Durata complessiva del periodo di malattia');
+  });
+
+  it('fasce graduate 75/50/25 NON incluse (restano scaffold del perito)', () => {
+    const events = [
+      makeEvent('2024-11-14', 'ricovero', 'Ricovero'),
+      makeEvent('2024-11-22', 'ricovero', 'Dimissione', 'dimissione'),
+    ];
+    const block = formatRicoveroITTFactsBlock(events);
+    expect(block).not.toContain('75%');
+    expect(block).not.toContain('50%');
+    expect(block).not.toContain('25%');
+  });
+
+  it('eventi vuoti → stringa vuota', () => {
+    expect(formatRicoveroITTFactsBlock([])).toBe('');
+  });
+});
 
 describe('calculateMedicoLegalPeriods', () => {
   it('should return empty for no events', () => {

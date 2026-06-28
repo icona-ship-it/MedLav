@@ -629,6 +629,7 @@ export async function assembleSectionsAndSaveReport(
   // dinamica a read-time (ITT/ITP/spese sempre in sync con gli eventi correnti).
   const validationEvents = synthesisParams.events.map((e) => ({
     event_date: e.eventDate,
+    date_precision: e.datePrecision,
     event_type: e.eventType,
     title: e.title,
     description: e.description,

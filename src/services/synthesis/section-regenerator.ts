@@ -16,7 +16,7 @@ import { generateSingleSection, summarizeForContext } from './section-generator'
 import { buildPlaceholderContent, stripHallucinatedImageRefs } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
-import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
+import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
 import { checkSelectiveCoverage, buildOmissionBanner } from '../validation/selective-coverage';
 import { logger } from '@/lib/logger';
 
@@ -190,7 +190,10 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     finalContent = finalContent.replace(/^##(\s+)/gm, '####$1');
   }
   if (params.selective && sectionId === 'documentazione_sanitaria') {
-    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
+    // RC (excludeLabTests): niente marker ⚠️ inline nella perizia firmata (Lavini
+    // 2026-06-28); resta solo l'audit log. La rete di OMISSIONE qui sotto ("mai
+    // perdere un fatto") NON è toccata — è un segnale diverso e load-bearing.
+    const checked = annotateDocSanitariaQuotesGated(finalContent, documentsOcrText, { excludeLabTests: spec.excludeLabTests });
     finalContent = checked.annotatedMarkdown;
 
     const coverage = checkSelectiveCoverage(finalContent, events);

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs } from './section-generator';
+import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
@@ -81,6 +82,12 @@ describe('buildAttiIndex', () => {
     expect(idx).toContain('(s.d.)');
     expect(idx).not.toMatch(/01[./]01[./]1900/);
   });
+
+  it('datePrecision "anno" → solo l\'anno, mai il 01.01 fabbricato (fix Bigon)', () => {
+    const idx = buildAttiIndex([makeEvent({ eventDate: '2002-01-01', datePrecision: 'anno' })]);
+    expect(idx).toContain('(2002)');
+    expect(idx).not.toContain('01.01.2002');
+  });
 });
 
 describe('chunkEventsByDocument — non spezza i documenti (fix Bigon chunked)', () => {
@@ -102,6 +109,88 @@ describe('chunkEventsByDocument — non spezza i documenti (fix Bigon chunked)',
 
   it('input vuoto → un blocco vuoto, non crash', () => {
     expect(chunkEventsByDocument([], 50)).toEqual([[]]);
+  });
+});
+
+describe('stripClassifierCodeFromDocSanitariaTitles — toglie il codice A-D dai titoli (fix Bigon tag leak)', () => {
+  it('toglie il codice classificatore in testa a un titolo grassetto', () => {
+    expect(stripClassifierCodeFromDocSanitariaTitles('**B - Referto di controllo medico, in data 01.01.2002:**'))
+      .toBe('**Referto di controllo medico, in data 01.01.2002:**');
+    expect(stripClassifierCodeFromDocSanitariaTitles('**A - Cartella clinica, Ospedale X, in data 14.11.2024:**'))
+      .toBe('**Cartella clinica, Ospedale X, in data 14.11.2024:**');
+  });
+
+  it('tollera en-dash e spazi extra', () => {
+    expect(stripClassifierCodeFromDocSanitariaTitles('**C – Referto RX:**')).toBe('**Referto RX:**');
+    expect(stripClassifierCodeFromDocSanitariaTitles('**D  -  Esame:**')).toBe('**Esame:**');
+  });
+
+  it('NON tocca un titolo grassetto legittimo (nessun codice)', () => {
+    const ok = '**Cartella clinica, Ospedale X, in data 14.11.2024:**';
+    expect(stripClassifierCodeFromDocSanitariaTitles(ok)).toBe(ok);
+    const esame = '**Esame strumentale, in data 12.03.2024:**';
+    expect(stripClassifierCodeFromDocSanitariaTitles(esame)).toBe(esame);
+  });
+
+  it('NON tocca prosa che inizia con una lettera+trattino (non è un titolo grassetto)', () => {
+    const prosa = 'A - destra evidenzia una tumefazione.';
+    expect(stripClassifierCodeFromDocSanitariaTitles(prosa)).toBe(prosa);
+  });
+
+  it('NON tocca lettere fuori dal range A-D (solo i 4 codici)', () => {
+    const e = '**E - Sezione finale:**';
+    expect(stripClassifierCodeFromDocSanitariaTitles(e)).toBe(e);
+  });
+
+  it('agisce su tutte le righe-titolo del blocco (multiline)', () => {
+    const md = '**A - Cartella, in data 14.11.2024:**\n«contenuto»\n**B - Referto, in data 22.11.2024:**\n«altro»';
+    const out = stripClassifierCodeFromDocSanitariaTitles(md);
+    expect(out).not.toContain('A - ');
+    expect(out).not.toContain('B - ');
+    expect(out).toContain('«contenuto»');
+    expect(out).toContain('«altro»');
+  });
+});
+
+describe('stripBracketedDocRefs — toglie le citazioni [Tipo, data] in prosa (fix Bigon Epicrisi ~58)', () => {
+  it('rimuove i riferimenti [Tipo, dd.mm.yyyy]', () => {
+    expect(stripBracketedDocRefs('Il quadro è documentato [Ricovero, 13.11.2024] in cartella.'))
+      .toBe('Il quadro è documentato in cartella.');
+    expect(stripBracketedDocRefs('Ultimo accertamento [Altro, 14.04.2026].'))
+      .toBe('Ultimo accertamento.');
+  });
+
+  it('tollera separatori . / - e i range di date', () => {
+    expect(stripBracketedDocRefs('come da [Visita, 14/04/2026] referto'))
+      .toBe('come da referto');
+    expect(stripBracketedDocRefs('nel periodo [Ricovero, 13.11.2024–20.11.2024] indicato'))
+      .toBe('nel periodo indicato');
+  });
+
+  it('NON tocca i placeholder dello scaffold perito ([N], [DATA], [X], MAIUSCOLO)', () => {
+    for (const ph of ['[N]', '[X]', '[DATA]', '[DIAGNOSI IN MAIUSCOLO]', '[classe/voce]']) {
+      expect(stripBracketedDocRefs(`valore ${ph} qui`)).toBe(`valore ${ph} qui`);
+    }
+  });
+
+  it('NON tocca [da compilare], [DA VERIFICARE], [Sezione non producibile: ...]', () => {
+    for (const ph of ['[da compilare dal perito]', '[DA VERIFICARE]', '[Sezione non producibile: dati insufficienti]']) {
+      expect(stripBracketedDocRefs(`x ${ph} y`)).toBe(`x ${ph} y`);
+    }
+  });
+
+  it('NON tocca le citazioni scientifiche con anno nudo [Autore, Rivista, 2020]', () => {
+    expect(stripBracketedDocRefs('come da [Smith, JBJS, 2020] e [SIMLA, 2016]'))
+      .toBe('come da [Smith, JBJS, 2020] e [SIMLA, 2016]');
+  });
+
+  it('NON tocca i marker deterministici <!--MEDLAV:...-->', () => {
+    const m = 'Tabella: <!--MEDLAV:ITT_ITP--> sotto.';
+    expect(stripBracketedDocRefs(m)).toBe(m);
+  });
+
+  it('lo scaffold Epicrisi sopravvive byte-identico (nessun [Parola, data] al suo interno)', () => {
+    expect(stripBracketedDocRefs(EPICRISI_COMPLETAMENTO_GUIDE)).toBe(EPICRISI_COMPLETAMENTO_GUIDE);
   });
 });
 

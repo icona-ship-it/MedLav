@@ -70,7 +70,7 @@ export const EXPENSE_EVENT_TYPES = new Set([
 
 // ── Shared prompt fragments ─────────────────────────────────────────
 
-export const NO_EVN_RULE = 'Cita i documenti per tipo, autore e data. NON usare riferimenti numerati agli eventi.';
+export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (es. «come da referto ortopedico del 13.11.2024»). NON racchiudere le citazioni tra parentesi quadre: né riferimenti numerati agli eventi né del tipo «tipo, data».';
 
 /**
  * Riga di esclusione della directive premesse quando coesiste (in linea di

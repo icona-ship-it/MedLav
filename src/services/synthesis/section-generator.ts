@@ -32,9 +32,10 @@ import {
 } from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
-import { formatEuro } from '@/lib/format';
-import { annotateDocSanitariaQuotes } from '../validation/doc-sanitaria-quote-check';
+import { formatEuro, formatEventDateByPrecision } from '@/lib/format';
+import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
+import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import {
   HEADER_JSON_SCHEMA_DESCRIPTION,
   parseHeaderData,
@@ -523,6 +524,7 @@ export async function generateSingleSection(params: {
     sectionId: spec.id,
     summaryCount,
     truncatedByCap,
+    excludeLabTests: spec.excludeLabTests,
   });
 
   // Context summary (rolling, per le sezioni successive) calcolato PRIMA di
@@ -533,16 +535,26 @@ export async function generateSingleSection(params: {
 
   if (fidelity.note) finalContent += fidelity.note;
 
+  // Doc-sanitaria (tutti i ruoli): togli il codice classificatore A-/B-/C-/D- che
+  // l'LLM copia nei titoli grassetto dei blocchi-documento (leak su Bigon, ~336).
+  // Backstop deterministico; la radice è già tolta in formatEventsByDocumentForPrompt.
+  if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder) {
+    finalContent = stripClassifierCodeFromDocSanitariaTitles(finalContent);
+  }
+
   // Doc-sanitaria SELETTIVA (default dal 2026-06-12): ogni citazione «...»
   // viene hard-verificata contro l'OCR sorgente — una citazione non riscontrata
   // viene annotata visibilmente, mai consegnata come fedele. Gira in TUTTI i
   // path (pipeline batched, pipeline singola, rigenerazione).
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder
     && documentsOcrText && documentsOcrText.length > 0) {
-    const checked = annotateDocSanitariaQuotes(finalContent, documentsOcrText);
+    // RC (excludeLabTests): NIENTE marker ⚠️ inline nella perizia firmata (Lavini
+    // 2026-06-28) — il contenuto resta pulito, resta solo il log di audit.
+    const checked = annotateDocSanitariaQuotesGated(finalContent, documentsOcrText, { excludeLabTests: spec.excludeLabTests });
     finalContent = checked.annotatedMarkdown;
     if (checked.ungroundedCount > 0) {
-      logger.warn('section-generator', `Doc-sanitaria selettiva: ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR — annotate per il perito`);
+      const auditOnly = spec.excludeLabTests ? ' (audit; marker non renderizzati)' : ' — annotate per il perito';
+      logger.warn('section-generator', `Doc-sanitaria: ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR${auditOnly}`);
     }
   } else if (spec.verifyQuotes && !spec.isPlaceholder
     && documentsOcrText && documentsOcrText.length > 0) {
@@ -557,6 +569,16 @@ export async function generateSingleSection(params: {
     }
   }
 
+  // Citazioni in PROSA (NO_EVN_RULE): togli i riferimenti tra parentesi quadre
+  // `[Tipo, dd.mm.yyyy]` che l'LLM emette in Epicrisi/sezioni analitiche (~58 su Bigon).
+  // Backstop deterministico sul corpo LLM, PRIMA delle append deterministiche (coda
+  // quesiti, scaffold Epicrisi) — così i placeholder [N]/[DATA] dello scaffold restano
+  // intatti. ESCLUSE le sezioni di RIPRODUZIONE VERBATIM (doc-sanitaria, atti/pareri):
+  // lì un `[…]` potrebbe vivere dentro una citazione «…»/"…" fedele.
+  if (spec.id !== 'documentazione_sanitaria' && !spec.verifyQuotes) {
+    finalContent = stripBracketedDocRefs(finalContent);
+  }
+
   // Benchmark gold 2026-06-10 (3/3 CTU-RC): il blocco operativo dell'incarico
   // (CC.TT.P., ausiliario, inizio operazioni, termini, fondo spese,
   // provvedimenti) SEGUE i quesiti — coda deterministica dai metadati
@@ -567,11 +589,13 @@ export async function generateSingleSection(params: {
     if (coda) finalContent += `\n\n${coda}`;
   }
 
-  // Epicrisi (stragiudiziale RC): appendi DETERMINISTICAMENTE lo scaffold di completamento
-  // del perito (nesso, ITT graduata 4 fasce, danno biologico, sofferenza, art.138). Prima
-  // era solo nel prompt come istruzione → l'LLM non lo emetteva (guida_present=0 su Bigon).
+  // Epicrisi (stragiudiziale RC): appendi DETERMINISTICAMENTE (1) i FATTI calcolati
+  // — giorni di ricovero inclusivi + durata complessiva malattia, via marker espanso a
+  // read-time (l'LLM li rifiutava/sbagliava); poi (2) lo scaffold di completamento del
+  // perito (nesso, ITT graduata 4 fasce, danno biologico, sofferenza, art.138). Prima lo
+  // scaffold era solo nel prompt → l'LLM non lo emetteva (guida_present=0 su Bigon).
   if (spec.id === 'epicrisi') {
-    finalContent += `\n\n${EPICRISI_COMPLETAMENTO_GUIDE}`;
+    finalContent += `\n\n${DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS}\n\n${EPICRISI_COMPLETAMENTO_GUIDE}`;
   }
 
   const wordCount = finalContent.split(/\s+/).filter((w) => w.length > 0).length;
@@ -619,6 +643,38 @@ function isoToItDate(iso: string): string {
 }
 
 /**
+ * Backstop deterministico (fix Bigon): toglie il codice classificatore A-/B-/C-/D-
+ * in testa ai titoli GRASSETTO della doc-sanitaria. Il codice arriva da
+ * SOURCE_TYPE_LABELS ("B - REFERTI...") e l'LLM lo copiava nell'intestazione del
+ * blocco ("**B - Referto di controllo medico, in data 01.01.2002:**"). La radice è
+ * già tolta in formatEventsByDocumentForPrompt; questo copre la non-determinismo
+ * dell'LLM e il nudge di CHRONOLOGY_SOURCES_GUIDE.
+ *
+ * Ancorato a: inizio del grassetto (^\*\*) + SOLO i 4 codici [A-D] + separatore
+ * (trattino/en-dash). Non tocca prosa che inizia con "A - ", titoli legittimi
+ * ("**Cartella clinica...**"), né lettere fuori range (E-Z).
+ */
+export function stripClassifierCodeFromDocSanitariaTitles(markdown: string): string {
+  return markdown.replace(/^(\*\*)\s*[A-D]\s*[-–]\s+/gm, '$1');
+}
+
+/**
+ * Backstop deterministico (fix Bigon Epicrisi, ~58): toglie i riferimenti-citazione
+ * tra parentesi quadre del tipo `[Tipo documento, dd.mm.yyyy]` che l'LLM emetteva
+ * (es. "[Ricovero, 13.11.2024]") nonostante la regola "cita in prosa". Il discriminante
+ * è una DATA dd.mm.yyyy DENTRO le parentesi: così risparmia
+ *  - i placeholder dello scaffold perito: [N], [X], [DATA], [DIAGNOSI IN MAIUSCOLO], [classe/voce]
+ *  - [da compilare dal perito], [DA VERIFICARE], [Sezione non producibile: ...]
+ *  - le citazioni scientifiche con anno NUDO: [Autore, Rivista, 2020]
+ *  - i marker deterministici <!--MEDLAV:...--> (sono commenti HTML, non parentesi quadre)
+ * Richiede iniziale MAIUSCOLA (il Tipo documento) e la data completa prima di `]`.
+ */
+const BRACKETED_DOC_REF = /[ \t]?\[[A-ZÀ-Ÿ][^[\]\n]{0,80}?\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}\][ \t]?/g;
+export function stripBracketedDocRefs(text: string): string {
+  return text.replace(BRACKETED_DOC_REF, ' ').replace(/[ \t]+([.,;:])/g, '$1');
+}
+
+/**
  * Elenco analitico COMPLETO degli atti (uno per evento, ordine cronologico),
  * costruito in modo deterministico da TUTTI gli eventi: in split mode i singoli
  * blocchi LLM omettono l'indice (ne vedrebbero solo una fetta), così l'indice
@@ -651,7 +707,8 @@ export function buildAttiIndex(events: ConsolidatedEvent[]): string {
   const lines = events.map((e) => {
     const who = (e.facility || e.doctor || '').trim();
     const tipo = e.eventType ? e.eventType.charAt(0).toUpperCase() + e.eventType.slice(1) : 'Documento';
-    return `- ${tipo}${who ? ` — ${who}` : ''} (${isoToItDate(e.eventDate)})`;
+    // Data precision-aware: una menzione "solo anno" non diventa "01.01.YYYY" (fix Bigon).
+    return `- ${tipo}${who ? ` — ${who}` : ''} (${formatEventDateByPrecision(e.eventDate, e.datePrecision)})`;
   });
   return `**Elenco analitico degli atti sanitari esaminati (${lines.length}, in ordine cronologico):**\n\n${lines.join('\n')}`;
 }
@@ -745,12 +802,17 @@ export function fidelitySignal(params: {
   sectionId: string;
   summaryCount: number;
   truncatedByCap: boolean;
+  /** RC stragiudiziale: sopprime la nota di fedeltà (è falsa — il testo è verbatim da OCR). */
+  excludeLabTests?: boolean;
 }): { mode?: 'ocr_complete' | 'ocr_truncated' | 'summaries'; note?: string } {
   if (!params.needsOcr) return {};
   const usedSummaries = params.summaryCount > 0;
   const mode = usedSummaries ? 'summaries' : (params.truncatedByCap ? 'ocr_truncated' : 'ocr_complete');
   let note: string | undefined;
-  if (usedSummaries && params.sectionId.startsWith('documentazione')) {
+  // RC (perizia firmata, decisione Lavini 2026-06-28): NIENTE nota "generata da N
+  // riassunti automatici". È anche FALSA per RC: la doc-sanitaria è riprodotta verbatim
+  // dall'OCR scoped per-batch, non dai riassunti. Il mode resta per telemetria/HRS.
+  if (usedSummaries && params.sectionId.startsWith('documentazione') && !params.excludeLabTests) {
     note = `\n\n*[⚠️ Nota di fedeltà: per la dimensione del fascicolo questa sezione è stata generata da ${params.summaryCount} riassunti automatici dei documenti, non dalla loro trascrizione integrale. Per la precisione legale delle citazioni virgolettate, fare riferimento ai documenti originali in atti.]*`;
   }
   return { mode, note };

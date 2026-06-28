@@ -13,7 +13,7 @@ import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
-import { calculateITTITP, formatITTITPTable } from './medico-legal-calc';
+import { calculateITTITP, formatITTITPTable, formatRicoveroITTFactsBlock } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
 import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
 
@@ -21,6 +21,9 @@ import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
  * with the DB row (snake_case) and easily mapped from ConsolidatedEvent. */
 export interface DeterministicTableEvent {
   event_date: string;
+  /** Precisione data (giorno|mese|anno|sconosciuta). Serve ai FATTI deterministici
+   * (ricovero/durata) per escludere le menzioni anno-only (anamnesi → 01.01.YYYY). */
+  date_precision?: string | null;
   event_type: string;
   title: string;
   description: string;
@@ -240,6 +243,9 @@ export const DETERMINISTIC_MARKERS = {
   SPESE: '<!--MEDLAV:SPESE-->',
   CRONO: '<!--MEDLAV:CRONO-->',
   DOC_SANITARIA: '<!--MEDLAV:DOC_SANITARIA-->',
+  /** Epicrisi RC: giorni di ricovero (inclusivi) + durata complessiva malattia,
+   * ASSERITI deterministicamente (non più rifiutati/sbagliati dall'LLM). */
+  ITT_RICOVERO_FACTS: '<!--MEDLAV:ITT_RICOVERO_FACTS-->',
 } as const;
 
 const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
@@ -247,6 +253,8 @@ const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
   SPESE: '_Nessuna spesa medica documentata._',
   CRONO: '_Nessun evento clinico in cronologia._',
   DOC_SANITARIA: '_Nessun documento sanitario disponibile._',
+  // Nessun fatto calcolabile → niente blocco (l'LLM ha già scritto la sintesi sopra).
+  ITT_RICOVERO_FACTS: '',
 };
 
 /**
@@ -272,6 +280,7 @@ export function toDeterministicEvents(
 ): DeterministicTableEvent[] {
   return rows.map((e) => ({
     event_date: (e.event_date as string) ?? '',
+    date_precision: (e.date_precision as string | null) ?? null,
     event_type: (e.event_type as string) ?? '',
     title: (e.title as string) ?? '',
     description: (e.description as string) ?? '',
@@ -342,6 +351,7 @@ export function expandDeterministicBlocks(
     [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events)) || EMPTY_FALLBACK.ITT_ITP],
     [DETERMINISTIC_MARKERS.SPESE, formatExpenseTable(events) || EMPTY_FALLBACK.SPESE],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
+    [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatRicoveroITTFactsBlock(events) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
   ];
   replacements.push([
     DETERMINISTIC_MARKERS.DOC_SANITARIA,

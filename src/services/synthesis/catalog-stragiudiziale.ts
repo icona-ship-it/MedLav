@@ -195,7 +195,7 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
 
 Includi:
 1. Sintesi cronologica essenziale dei fatti principali (1-2 paragrafi compatti)
-2. Dati per il danno biologico: periodi ITT/ITP calcolati, esiti documentati
+2. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
 3. Eventuali spese mediche giudicate congrue (1 riga)
 
 NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà nello spazio dedicato in fondo.
