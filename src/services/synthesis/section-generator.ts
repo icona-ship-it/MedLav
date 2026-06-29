@@ -489,6 +489,10 @@ export async function generateSingleSection(params: {
   // (bug Bigon v4: l'Epicrisi rivista da CoVe arrivava monospace). Riapplica lo strip
   // sul risultato post-CoVe, prima delle append deterministiche.
   finalContent = stripCodeFences(finalContent);
+  // Backstop depositabile: il CoVe (o l'LLM) a volte inserisce "[non documentato]" /
+  // "[dato non risultante…]" DENTRO una citazione verbatim «...», rompendone la fedeltà.
+  // Toglili dall'interno delle «...» (la cautela resta valida FUORI dal virgolettato).
+  finalContent = stripGuardMarkersInsideQuotes(finalContent);
 
   // Sprint 1 S1.1 (Lavini quality, 2026-05-17): output-side cap enforcement.
   // The LLM ignores prompt-level "max N parole" instructions ~40% of the
@@ -688,6 +692,20 @@ export function stripCodeFences(content: string): string {
   if (fullFence) return fullFence[1].trim();
   if (/```/.test(trimmed)) return trimmed.replace(/```[a-z]*\n?/g, '').trim();
   return trimmed;
+}
+
+/**
+ * Backstop per l'integrità del virgolettato verbatim: il CoVe (o l'LLM) a volte sostituisce
+ * un dettaglio non supportato con "[non documentato]" / "[dato non risultante…]" ANCHE quando
+ * il dettaglio è DENTRO una citazione «...» — rompendo la riproduzione fedele richiesta in un
+ * atto depositabile. Qui, per ogni blocco «...», si rimuovono SOLO questi marker di cautela
+ * interni (la citazione torna fedele; la cautela del CoVe, se voluta, resta valida fuori dalle
+ * caporali). Non tocca il testo fuori dalle «...». Puro e idempotente.
+ */
+export function stripGuardMarkersInsideQuotes(text: string): string {
+  return text.replace(/«[^»]*»/g, (quote) =>
+    quote.replace(/[ \t]*\[(?:non documentato|dato non risultante[^\]]*|non risultante[^\]]*)\]/gi, ''),
+  );
 }
 
 /**

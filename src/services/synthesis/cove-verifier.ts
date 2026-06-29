@@ -319,7 +319,8 @@ Il tuo compito: produrre una versione revisionata del draft.
 
 Regole:
 - Mantieni la struttura, la prosa e tutti i fatti supportati.
-- Per OGNI fatto non supportato: o rimuovilo, o sostituiscilo con "[non documentato]" o con formulazione cautelativa ("dato non risultante dalla documentazione in atti").
+- VIETATO modificare il testo DENTRO le citazioni verbatim «...»: sono riproduzioni FEDELI del documento originale (atto depositabile). Se un dettaglio non supportato è dentro «...», LASCIA la citazione intatta e metti l'eventuale cautela FUORI, DOPO la »  (es.: «...testo originale...» (dato non riscontrato in altri atti)). MAI inserire "[non documentato]" o simili dentro le «...».
+- Per OGNI fatto non supportato FUORI dalle «...»: o rimuovilo, o sostituiscilo con "[non documentato]" o con formulazione cautelativa ("dato non risultante dalla documentazione in atti").
 - NON inventare nuovi fatti per riempire i vuoti.
 - NON cambiare lo stile o il tono medico-legale.
 - NON aggiungere paragrafi. Mantieni la lunghezza simile al draft (con eventuali rimozioni puntuali).

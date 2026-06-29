@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes } from './section-generator';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -217,6 +217,33 @@ describe('stripCodeFences — toglie il code-fence che avvolge una sezione (fix 
     const fenced = '```\nDalla disamina...\n```';
     const once = stripCodeFences(fenced);
     expect(stripCodeFences(once)).toBe(once);
+  });
+});
+
+describe('stripGuardMarkersInsideQuotes — integrità del virgolettato verbatim (fix depositabile)', () => {
+  it('toglie "[non documentato]" DENTRO le «...»', () => {
+    expect(stripGuardMarkersInsideQuotes('«frattura composta [non documentato] del radio»'))
+      .toBe('«frattura composta del radio»');
+  });
+
+  it('toglie "[dato non risultante…]" dentro le «...»', () => {
+    expect(stripGuardMarkersInsideQuotes('«lesione [dato non risultante dalla documentazione] grave»'))
+      .toBe('«lesione grave»');
+  });
+
+  it('NON tocca i marker FUORI dalle «...» (la cautela resta valida fuori)', () => {
+    const t = '«testo fedele» [non documentato] nel resto della prosa';
+    expect(stripGuardMarkersInsideQuotes(t)).toBe(t);
+  });
+
+  it('NON tocca prosa senza caporali', () => {
+    const t = 'Il dato [non documentato] resta nella prosa normale.';
+    expect(stripGuardMarkersInsideQuotes(t)).toBe(t);
+  });
+
+  it('gestisce più citazioni nello stesso testo', () => {
+    expect(stripGuardMarkersInsideQuotes('«a [non documentato] b» e «c [non documentato] d»'))
+      .toBe('«a b» e «c d»');
   });
 });
 
