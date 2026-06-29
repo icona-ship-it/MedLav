@@ -73,3 +73,6 @@ medlav-log-export-*.json
 # Test documents (sensitive)
 *.pdf
 .claude/worktrees/
+
+# Script usa-e-getta di monitor/diagnostica (mai in repo/prod)
+scripts/*-tmp.ts
