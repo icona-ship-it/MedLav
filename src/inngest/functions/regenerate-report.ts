@@ -24,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, dedupeDocumentsByContent, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -348,9 +348,10 @@ export const regenerateReport = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      // RC (excludeLabTests): per-documento + dedup contenuto identico; altri ruoli per-evento.
+      // RC: dedup contenuto identico + chunking PER-EVENTO (path provato che finalizza —
+      // il per-documento su macrodanno generava troppi batch → reset alla finalizzazione).
       const batches = spec.excludeLabTests
-        ? planDocSanitariaEventBatchesByDocument(synthesisParams.events)
+        ? planDocSanitariaEventBatches(dedupeDocumentsByContent(synthesisParams.events))
         : planDocSanitariaEventBatches(synthesisParams.events);
       const parts: string[] = [];
       let rollingContext = [...previousContext];

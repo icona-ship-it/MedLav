@@ -34,7 +34,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, dedupeDocumentsByContent, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1062,11 +1062,12 @@ export const processCase = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      // RC (excludeLabTests): impacchetta PER-DOCUMENTO (un documento mai spezzato tra
-      // batch → niente ri-narrazione) + dedup documenti a contenuto identico. Altri ruoli:
-      // finestre per-evento come prima.
+      // RC (excludeLabTests): dedup dei documenti a contenuto IDENTICO (anti-duplicazione)
+      // + chunking PER-EVENTO (il path provato che finalizza: il packing per-documento su
+      // un macrodanno produceva troppi batch → stato Inngest pesante → reset alla
+      // finalizzazione). Altri ruoli: per-evento come prima.
       const batches = spec.excludeLabTests
-        ? planDocSanitariaEventBatchesByDocument(synthesisParams.events)
+        ? planDocSanitariaEventBatches(dedupeDocumentsByContent(synthesisParams.events))
         : planDocSanitariaEventBatches(synthesisParams.events);
       const parts: string[] = [];
       let rollingContext = [...previousContext];
