@@ -24,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, dedupeDocumentsByContent, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, dedupeDocumentsByContent, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -413,8 +413,9 @@ export const regenerateReport = inngest.createFunction(
       // ce l'ha) — era l'"Elenco analitico degli atti (415...)" su Bigon. Altri ruoli invariato.
       const combinedContent = [
         ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        // Togli l'intestazione di sezione ri-emessa da ogni batch (canonica aggiunta a valle).
-        ...parts.map((p) => p.replace(/^\s*##\s+[^\n]*\n+/, '')),
+        // Togli l'intestazione di sezione ri-emessa da ogni batch — `## Titolo` o `**Titolo**`
+        // (su Bigon il grassetto ×9); la canonica è aggiunta una volta a valle.
+        ...parts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
       ].join('\n\n');
       return {
         id: spec.id,

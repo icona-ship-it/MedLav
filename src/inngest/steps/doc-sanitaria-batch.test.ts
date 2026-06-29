@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 
@@ -186,5 +186,41 @@ describe('planDocSanitariaEventBatchesByDocument — un documento mai spezzato t
 
   it('input vuoto → nessun batch', () => {
     expect(planDocSanitariaEventBatchesByDocument([], 50)).toEqual([]);
+  });
+});
+
+describe('stripRepeatedSectionHeading — toglie il titolo di sezione ripetuto dai batch', () => {
+  const T = 'La Documentazione Medica Prodotta';
+
+  it('toglie il titolo in GRASSETTO su riga propria (il vero bug Bigon: **Titolo** ×9)', () => {
+    const part = `**${T}**\n\n**Referto 13.11.2024** ...testo...`;
+    const out = stripRepeatedSectionHeading(part, T);
+    expect(out).not.toContain(`**${T}**`);
+    expect(out).toContain('Referto 13.11.2024');
+  });
+
+  it('toglie il titolo come heading ## su riga propria', () => {
+    const out = stripRepeatedSectionHeading(`## ${T}\nfoo`, T);
+    expect(out).not.toContain(`## ${T}`);
+    expect(out).toContain('foo');
+  });
+
+  it('toglie TUTTE le ripetizioni, anche a metà blocco', () => {
+    const part = `prima\n**${T}**\nmezzo\n**${T}**\nfine`;
+    const out = stripRepeatedSectionHeading(part, T);
+    expect(out).not.toContain(`**${T}**`);
+    expect(out).toContain('prima');
+    expect(out).toContain('mezzo');
+    expect(out).toContain('fine');
+  });
+
+  it('NON tocca una menzione del titolo dentro la prosa (non è una riga-titolo)', () => {
+    const part = `Vedi la ${T} riportata sopra per i dettagli.`;
+    expect(stripRepeatedSectionHeading(part, T)).toBe(part);
+  });
+
+  it('blocco senza il titolo resta invariato', () => {
+    const part = '**Referto 17.04.2025**\n«testo verbatim»';
+    expect(stripRepeatedSectionHeading(part, T)).toBe(part);
   });
 });

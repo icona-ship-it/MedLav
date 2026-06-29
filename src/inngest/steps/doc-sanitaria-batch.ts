@@ -126,6 +126,24 @@ export function planDocSanitariaEventBatchesByDocument(
 }
 
 /**
+ * Toglie da un blocco-batch le ripetizioni dell'INTESTAZIONE di sezione che l'LLM
+ * a volte emette su riga propria — come heading `## Titolo` OPPURE in grassetto
+ * `**Titolo**` (il vero caso Bigon: il grassetto compariva 9× perché lo strip
+ * precedente prendeva solo gli `##`) — nonostante la direttiva. L'intestazione
+ * canonica viene aggiunta una sola volta a valle (assembleSectionBlock). Tocca SOLO
+ * righe che sono ESATTAMENTE il titolo (eventuale heading/grassetto), mai le
+ * menzioni del titolo dentro la prosa. Puro e testabile.
+ */
+export function stripRepeatedSectionHeading(part: string, title: string): string {
+  const t = title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex
+  const titleLine = new RegExp(
+    `^[ \\t]*(?:#{1,6}[ \\t]+|\\*\\*[ \\t]*)?${t}(?:[ \\t]*\\*\\*)?[ \\t]*$\\n?`,
+    'gm',
+  );
+  return part.replace(titleLine, '');
+}
+
+/**
  * Restringe l'imageAnalysis ai soli documenti referenziati dalla finestra
  * cronologica: ogni finestra offre all'LLM SOLO le immagini dei propri documenti,
  * evitando che la stessa immagine venga proposta (ed eventualmente incorporata) in

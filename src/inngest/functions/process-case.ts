@@ -34,7 +34,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, dedupeDocumentsByContent, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, dedupeDocumentsByContent, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1140,10 +1140,10 @@ export const processCase = inngest.createFunction(
       const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
       const combinedContent = [
         ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        // Ogni batch a volte ri-emette l'intestazione di sezione (## ...) nonostante la
-        // direttiva → toglila da ogni blocco; quella canonica è aggiunta una volta a valle
-        // (assembleSectionBlock). Evita le "8 ripetizioni" del titolo su Bigon.
-        ...parts.map((p) => p.replace(/^\s*##\s+[^\n]*\n+/, '')),
+        // Ogni batch a volte ri-emette l'intestazione di sezione (## Titolo o **Titolo**)
+        // nonostante la direttiva → toglila da ogni blocco; quella canonica è aggiunta una
+        // volta a valle (assembleSectionBlock). Su Bigon il grassetto compariva 9×.
+        ...parts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
       ].join('\n\n');
       const contextSummary = spec.contextMaxChars > 0
         ? summarizeForContext(combinedContent, spec.contextMaxChars)
