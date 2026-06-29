@@ -34,6 +34,7 @@ import { buildGuidelineContext } from '../rag/retrieval-service';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { formatEuro, formatEventDateByPrecision } from '@/lib/format';
 import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
+import { dedupeDocumentsByContent } from '@/inngest/steps/doc-sanitaria-batch';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import {
@@ -757,7 +758,7 @@ async function generateDocSanitariaChunked(params: {
   // RC: chunk per-DOCUMENTO (un atto non viene spezzato tra blocchi → niente duplicazione);
   // altri ruoli: chunk per-evento come prima.
   const chunks = spec.excludeLabTests
-    ? chunkEventsByDocument(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE)
+    ? chunkEventsByDocument(dedupeDocumentsByContent(synthesisParams.events), DOC_SANITARIA_CHUNK_SIZE)
     : chunkArray(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE);
   logger.info('section-generator', `Doc-sanitaria auto-split: ${synthesisParams.events.length} eventi → ${chunks.length} blocchi`);
 

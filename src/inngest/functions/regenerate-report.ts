@@ -24,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -348,7 +348,10 @@ export const regenerateReport = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      const batches = planDocSanitariaEventBatches(synthesisParams.events);
+      // RC (excludeLabTests): per-documento + dedup contenuto identico; altri ruoli per-evento.
+      const batches = spec.excludeLabTests
+        ? planDocSanitariaEventBatchesByDocument(synthesisParams.events)
+        : planDocSanitariaEventBatches(synthesisParams.events);
       const parts: string[] = [];
       let rollingContext = [...previousContext];
       let promptTokens = 0;
@@ -409,7 +412,8 @@ export const regenerateReport = inngest.createFunction(
       // ce l'ha) — era l'"Elenco analitico degli atti (415...)" su Bigon. Altri ruoli invariato.
       const combinedContent = [
         ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        ...parts,
+        // Togli l'intestazione di sezione ri-emessa da ogni batch (canonica aggiunta a valle).
+        ...parts.map((p) => p.replace(/^\s*##\s+[^\n]*\n+/, '')),
       ].join('\n\n');
       return {
         id: spec.id,

@@ -34,7 +34,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1062,7 +1062,12 @@ export const processCase = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      const batches = planDocSanitariaEventBatches(synthesisParams.events);
+      // RC (excludeLabTests): impacchetta PER-DOCUMENTO (un documento mai spezzato tra
+      // batch → niente ri-narrazione) + dedup documenti a contenuto identico. Altri ruoli:
+      // finestre per-evento come prima.
+      const batches = spec.excludeLabTests
+        ? planDocSanitariaEventBatchesByDocument(synthesisParams.events)
+        : planDocSanitariaEventBatches(synthesisParams.events);
       const parts: string[] = [];
       let rollingContext = [...previousContext];
       let totalPromptTokens = 0;
@@ -1134,7 +1139,10 @@ export const processCase = inngest.createFunction(
       const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
       const combinedContent = [
         ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        ...parts,
+        // Ogni batch a volte ri-emette l'intestazione di sezione (## ...) nonostante la
+        // direttiva → toglila da ogni blocco; quella canonica è aggiunta una volta a valle
+        // (assembleSectionBlock). Evita le "8 ripetizioni" del titolo su Bigon.
+        ...parts.map((p) => p.replace(/^\s*##\s+[^\n]*\n+/, '')),
       ].join('\n\n');
       const contextSummary = spec.contextMaxChars > 0
         ? summarizeForContext(combinedContent, spec.contextMaxChars)

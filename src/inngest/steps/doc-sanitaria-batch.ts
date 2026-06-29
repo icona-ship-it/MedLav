@@ -60,6 +60,71 @@ export function planDocSanitariaEventBatches(
   }));
 }
 
+/** Firma di contenuto di un evento per la dedup: testo riprodotto, normalizzato. */
+function eventContentText(e: ConsolidatedEvent): string {
+  return (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();
+}
+
+/**
+ * Anti-DUPLICAZIONE (perizia RC): lo stesso referto presente in PIÙ PDF sorgente ha più
+ * `documentId` e verrebbe reso più volte nella "Documentazione Medica Prodotta". Qui si
+ * scartano i documenti il cui contenuto è IDENTICO (dopo normalizzazione spazi/maiuscole)
+ * a un documento già tenuto — tenendo il PRIMO. Solo contenuto identico ⇒ un duplicato
+ * esatto non porta alcun fatto nuovo ⇒ "mai perdere un fatto" rispettato. Pura e testabile.
+ */
+export function dedupeDocumentsByContent(events: ConsolidatedEvent[]): ConsolidatedEvent[] {
+  const contentByDoc = new Map<string, string[]>();
+  const order: string[] = [];
+  for (const e of events) {
+    if (!contentByDoc.has(e.documentId)) { contentByDoc.set(e.documentId, []); order.push(e.documentId); }
+    contentByDoc.get(e.documentId)!.push(eventContentText(e));
+  }
+  const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const seen = new Set<string>();
+  const dropped = new Set<string>();
+  for (const id of order) {
+    const sig = norm((contentByDoc.get(id) ?? []).join('\n'));
+    if (sig.length === 0) continue; // contenuto vuoto → non deduplicare (conservativo)
+    if (seen.has(sig)) dropped.add(id);
+    else seen.add(sig);
+  }
+  return dropped.size === 0 ? events : events.filter((e) => !dropped.has(e.documentId));
+}
+
+/**
+ * Variante PER-DOCUMENTO del batch-planner per la perizia RC: prima deduplica i documenti
+ * a contenuto identico, poi impacchetta interi documenti senza spezzarli tra due batch
+ * (un documento i cui eventi scavalcavano una finestra di 50 veniva ri-narrato → era la
+ * causa principale della verbosità ~3× su Bigon). Stesso shape di planDocSanitariaEventBatches.
+ */
+export function planDocSanitariaEventBatchesByDocument(
+  events: ConsolidatedEvent[],
+  size: number = DOC_SANITARIA_EVENT_BATCH_SIZE,
+): DocSanitariaEventBatch[] {
+  const deduped = dedupeDocumentsByContent(events);
+  const byDoc = new Map<string, ConsolidatedEvent[]>();
+  const order: string[] = [];
+  for (const e of deduped) {
+    if (!byDoc.has(e.documentId)) { byDoc.set(e.documentId, []); order.push(e.documentId); }
+    byDoc.get(e.documentId)!.push(e);
+  }
+  const windows: ConsolidatedEvent[][] = [];
+  let cur: ConsolidatedEvent[] = [];
+  for (const id of order) {
+    const group = byDoc.get(id) ?? [];
+    if (size > 0 && cur.length > 0 && cur.length + group.length > size) { windows.push(cur); cur = []; }
+    cur.push(...group);
+  }
+  if (cur.length > 0) windows.push(cur);
+  return windows.map((chunk) => ({
+    events: chunk,
+    docIds: [...new Set(chunk.map((e) => e.documentId))],
+    dateRange: chunk.length > 0
+      ? `${isoToItDate(chunk[0].eventDate)} – ${isoToItDate(chunk[chunk.length - 1].eventDate)}`
+      : '',
+  }));
+}
+
 /**
  * Restringe l'imageAnalysis ai soli documenti referenziati dalla finestra
  * cronologica: ogni finestra offre all'LLM SOLO le immagini dei propri documenti,

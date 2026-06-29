@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 
@@ -115,5 +115,76 @@ describe('planDocSanitariaEventBatches', () => {
   it('exposes a sane default batch size', () => {
     expect(DOC_SANITARIA_EVENT_BATCH_SIZE).toBeGreaterThan(0);
     expect(DOC_SANITARIA_EVENT_BATCH_SIZE).toBeLessThanOrEqual(80);
+  });
+});
+
+describe('dedupeDocumentsByContent — anti-duplicazione (mai perdere un fatto)', () => {
+  it('rimuove un documento a contenuto IDENTICO a uno già tenuto (tiene il primo)', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', sourceText: 'Frattura composta del radio distale destro.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-b', sourceText: 'Frattura composta del radio distale destro.' }), // stesso referto, altro PDF
+      makeEvent({ orderNumber: 3, documentId: 'doc-c', sourceText: 'Lesione osteocondrale del ginocchio sinistro.' }),
+    ];
+    expect([...new Set(dedupeDocumentsByContent(events).map((e) => e.documentId))]).toEqual(['doc-a', 'doc-c']);
+  });
+
+  it('TIENE documenti con stessa data ma contenuto DIVERSO (no fact loss)', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', eventDate: '2024-11-13', sourceText: 'Accesso PS: trauma toracico.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-b', eventDate: '2024-11-13', sourceText: 'SUEM 118: dinamica trauma maggiore.' }),
+    ];
+    expect([...new Set(dedupeDocumentsByContent(events).map((e) => e.documentId))]).toEqual(['doc-a', 'doc-b']);
+  });
+
+  it('normalizza spazi/maiuscole prima del confronto', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', sourceText: 'Frattura  COMPOSTA del radio.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-b', sourceText: 'frattura composta del radio.' }),
+    ];
+    expect([...new Set(dedupeDocumentsByContent(events).map((e) => e.documentId))]).toEqual(['doc-a']);
+  });
+
+  it('confronta il documento INTERO (tutti i suoi eventi), e tiene tutti gli eventi del documento conservato', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', sourceText: 'Diagnosi alla dimissione' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-a', sourceText: 'Terapia domiciliare' }),
+      makeEvent({ orderNumber: 3, documentId: 'doc-b', sourceText: 'Diagnosi alla dimissione' }),
+      makeEvent({ orderNumber: 4, documentId: 'doc-b', sourceText: 'Terapia domiciliare' }), // doc-b identico a doc-a
+    ];
+    const out = dedupeDocumentsByContent(events);
+    expect(out.map((e) => e.orderNumber)).toEqual([1, 2]); // doc-a intero tenuto, doc-b (dup) via
+  });
+
+  it('input vuoto → vuoto', () => {
+    expect(dedupeDocumentsByContent([])).toEqual([]);
+  });
+});
+
+describe('planDocSanitariaEventBatchesByDocument — un documento mai spezzato tra batch + dedup', () => {
+  it('NON spezza un documento tra due batch anche se scavalca la finestra', () => {
+    // doc-A ha 3 eventi sugli indici 4-6: con chunk per-evento (size 4) sarebbe diviso; per-documento NO.
+    const events = [
+      ...Array.from({ length: 4 }, (_, i) => makeEvent({ orderNumber: i + 1, documentId: `d${i}`, sourceText: `t${i}` })),
+      makeEvent({ orderNumber: 5, documentId: 'A', sourceText: 'a1' }),
+      makeEvent({ orderNumber: 6, documentId: 'A', sourceText: 'a2' }),
+      makeEvent({ orderNumber: 7, documentId: 'A', sourceText: 'a3' }),
+    ];
+    const batches = planDocSanitariaEventBatchesByDocument(events, 4);
+    const batchesWithA = batches.filter((b) => b.events.some((e) => e.documentId === 'A'));
+    expect(batchesWithA).toHaveLength(1); // tutto A in UN batch
+    expect(batches.flatMap((b) => b.events)).toHaveLength(7); // niente perso
+  });
+
+  it('applica la dedup per-contenuto prima di impacchettare', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', sourceText: 'referto identico' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-b', sourceText: 'referto identico' }),
+    ];
+    const batches = planDocSanitariaEventBatchesByDocument(events, 50);
+    expect(batches.flatMap((b) => b.events)).toHaveLength(1); // doc-b dup rimosso
+  });
+
+  it('input vuoto → nessun batch', () => {
+    expect(planDocSanitariaEventBatchesByDocument([], 50)).toEqual([]);
   });
 });
