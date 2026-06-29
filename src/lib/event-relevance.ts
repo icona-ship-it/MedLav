@@ -64,3 +64,37 @@ export function isExcludableLabEvent(event: {
     });
   return tier !== 'T1';
 }
+
+/**
+ * Distillazione RC v1 (allowlist derivata dai gold, 2026-06-29): tipi di evento che il gold
+ * OMETTE dalla "Documentazione Medica Prodotta" e che NON portano un fatto-lesione — consensi
+ * informati e documenti amministrativi (impegnative, registri, codici prestazione/ICD). Si
+ * estenderà man mano che Lavini conferma altri tipi (log-terapia, diario infermieristico,
+ * cartella anestesiologica, scale) — quelli però richiedono euristiche di CONTENUTO, non il
+ * solo eventType (finiscono in cartella_clinica), quindi NON sono qui.
+ */
+const DOC_SANITARIA_NOISE_TYPES: ReadonlySet<string> = new Set(['consenso', 'documento_amministrativo']);
+
+/**
+ * True per un evento di RUMORE da escludere dalla riproduzione della doc-sanitaria RC
+ * (consenso/amministrativo). Stessa salvaguardia dei lab: un evento T1 LOAD-BEARING (diagnosi
+ * documentata o fonte DISCORDANTE) NON è escludibile — "mai perdere un fatto" prevale.
+ */
+export function isExcludableNoiseEvent(event: {
+  eventType?: string;
+  sourceType?: string | null;
+  diagnosis?: string | null;
+  discrepancyNote?: string | null;
+  relevanceTier?: RelevanceTier | null;
+}): boolean {
+  if (!DOC_SANITARIA_NOISE_TYPES.has(event.eventType ?? '')) return false;
+  const tier =
+    event.relevanceTier ??
+    computeRelevanceTier({
+      eventType: event.eventType ?? '',
+      diagnosis: event.diagnosis,
+      sourceType: event.sourceType,
+      discrepancyNote: event.discrepancyNote,
+    });
+  return tier !== 'T1';
+}

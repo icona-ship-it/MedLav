@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLabTestEvent, isExcludableLabEvent, computeRelevanceTier } from './event-relevance';
+import { isLabTestEvent, isExcludableLabEvent, isExcludableNoiseEvent, computeRelevanceTier } from './event-relevance';
 
 describe('isLabTestEvent — riconosce la forma REALE della pipeline', () => {
   // La pipeline (extract-events.ts) normalizza "laboratorio"/"ematochimico" a
@@ -47,5 +47,30 @@ describe('isExcludableLabEvent — esclude SOLO i lab di routine, tiene i T1 loa
 
   it('un NON-lab non è mai escludibile (anche se T3)', () => {
     expect(isExcludableLabEvent({ eventType: 'prescrizione', sourceType: 'referto_controllo' })).toBe(false);
+  });
+});
+
+describe('isExcludableNoiseEvent — distillazione RC: consensi/amministrativi, mai i T1', () => {
+  it('esclude un consenso informato (rumore che il gold omette)', () => {
+    expect(isExcludableNoiseEvent({ eventType: 'consenso', sourceType: 'cartella_clinica' })).toBe(true);
+  });
+
+  it('esclude un documento amministrativo', () => {
+    expect(isExcludableNoiseEvent({ eventType: 'documento_amministrativo', sourceType: 'altro' })).toBe(true);
+  });
+
+  it('NON esclude un consenso LOAD-BEARING (con diagnosi documentata → T1, mai perdere un fatto)', () => {
+    expect(isExcludableNoiseEvent({ eventType: 'consenso', sourceType: 'cartella_clinica', diagnosis: 'frattura esposta' })).toBe(false);
+  });
+
+  it('NON esclude un consenso con fonte DISCORDANTE (T1)', () => {
+    expect(isExcludableNoiseEvent({ eventType: 'consenso', sourceType: 'cartella_clinica', discrepancyNote: 'DISCORDANTE: ...' })).toBe(false);
+  });
+
+  it('NON tocca i tipi clinici (referto, visita, intervento, esame strumentale)', () => {
+    expect(isExcludableNoiseEvent({ eventType: 'referto', sourceType: 'referto_controllo' })).toBe(false);
+    expect(isExcludableNoiseEvent({ eventType: 'intervento', sourceType: 'cartella_clinica' })).toBe(false);
+    expect(isExcludableNoiseEvent({ eventType: 'esame', sourceType: 'esame_strumentale' })).toBe(false);
+    expect(isExcludableNoiseEvent({ eventType: 'terapia', sourceType: 'cartella_clinica' })).toBe(false); // terapia → decisione Lavini, non qui
   });
 });

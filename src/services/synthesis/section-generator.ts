@@ -5,7 +5,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
-import { isExcludableLabEvent } from '@/lib/event-relevance';
+import { isExcludableLabEvent, isExcludableNoiseEvent } from '@/lib/event-relevance';
 import { stripLabBlocks } from '@/lib/lab-block-stripper';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionSpec, GeneratedSection, SectionContext } from './section-generation-types';
@@ -176,6 +176,12 @@ export function buildSectionUserPrompt(params: {
     // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
     if (spec.excludeLabTests) {
       medical = medical.filter((e) => !isExcludableLabEvent(e));
+      // Distillazione RC v1: nella sola doc-sanitaria togli il RUMORE che il gold omette
+      // (consensi informati, documenti amministrativi) — mai i T1 load-bearing. Le sezioni
+      // narrative (il_fatto/anamnesi) restano intatte: l'LLM lì ignora già il rumore.
+      if (spec.id === 'documentazione_sanitaria') {
+        medical = medical.filter((e) => !isExcludableNoiseEvent(e));
+      }
       // I valori lab restano annegati negli eventi sopravvissuti su DUE campi riprodotti
       // dal prompt: il sourceText (citazione verbatim) E la description. Capita per i lab
       // T1 tenuti (diagnosi load-bearing) e per le cartelle con lab inline. Strip a livello
