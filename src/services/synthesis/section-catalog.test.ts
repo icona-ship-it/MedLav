@@ -589,9 +589,9 @@ describe('section-catalog', () => {
       expect(fatto?.placeholderText).toBe('In data X la paziente cadeva...');
     });
 
-    it('rende anamnesi/il_fatto placeholder PULITI (mai LLM) per RC quando il perito li lascia vuoti', () => {
-      // Fix bug Motta 2026-06-25: a campi vuoti scattava un fallback LLM fuori-stile.
-      // Ora la sezione è sempre deterministica → placeholder che invita a compilare.
+    it('a campi VUOTI genera la bozza AI dai documenti (spec LLM, non placeholder) per RC', () => {
+      // Decisione utente 2026-06-29: meglio una bozza editabile dai doc (stile benchmark)
+      // che uno scaffold bianco. Il testo del perito, se presente, vince comunque (test sopra).
       const plan = resolveSectionPlan({
         ...STRAGIUDIZIALE_PARAMS,
         moduleId: RC_MODULE,
@@ -599,12 +599,12 @@ describe('section-catalog', () => {
       });
       const anamnesi = plan.find((s) => s.id === 'anamnesi');
       const ilFatto = plan.find((s) => s.id === 'il_fatto_e_storia_clinica');
-      expect(anamnesi?.isPlaceholder).toBe(true);
-      expect(anamnesi?.maxTokens).toBe(0);
-      expect(anamnesi?.placeholderText).toMatch(/perito/i);
-      expect(ilFatto?.isPlaceholder).toBe(true);
-      expect(ilFatto?.maxTokens).toBe(0);
-      expect(ilFatto?.placeholderText).toMatch(/perito/i);
+      expect(anamnesi?.isPlaceholder).toBeFalsy();
+      expect(anamnesi?.maxTokens).toBeGreaterThan(0);
+      expect(anamnesi?.dataSources).toContain('events-medical');
+      expect(ilFatto?.isPlaceholder).toBeFalsy();
+      expect(ilFatto?.maxTokens).toBeGreaterThan(0);
+      expect(ilFatto?.promptDirective).toMatch(/Antoniazzi/);
     });
 
     it('does NOT touch anamnesi/il_fatto for non-RC stragiudiziale even with the same metadata', () => {
