@@ -195,6 +195,15 @@ describe('section-catalog', () => {
       expect(STRAGIUDIZIALE_SECTIONS.map((s) => s.id)).toContain('il_fatto_e_storia_clinica');
     });
 
+    it("l'Epicrisi stragiudiziale NON usa il dataSource 'calculations' (no ITT graduata auto-inventata)", () => {
+      // Bug misurato (Antoniazzi v2): l'Epicrisi emetteva "ITT 57/57/58 [stima non supportata]"
+      // perché formatCalculationsForPrompt iniettava la tabella ITT graduata PROPOSTA. Contraddice
+      // C4 ("ITT graduata = scaffold del perito") e la direttiva Epicrisi. I fatti ricovero+durata
+      // arrivano dal marker deterministico ITT_RICOVERO_FACTS, non da 'calculations'.
+      const epicrisi = STRAGIUDIZIALE_SECTIONS.find((s) => s.id === 'epicrisi');
+      expect(epicrisi?.dataSources).not.toContain('calculations');
+    });
+
     it('should have placeholder sections with isPlaceholder=true and maxTokens=0', () => {
       const placeholders = CTU_SECTIONS.filter((s) => s.isPlaceholder);
       // After benchmark alignment: operazioni_peritali, considerazioni_ml, osservazioni_bozza

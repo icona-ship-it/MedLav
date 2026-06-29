@@ -188,7 +188,13 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     id: 'epicrisi',
     title: 'Epicrisi',
     maxTokens: TOKENS_MEDIUM,
-    dataSources: ['context-summaries', 'calculations', 'pubmed-references'],
+    // NIENTE 'calculations': iniettava la tabella ITT/ITP graduata PROPOSTA
+    // (formatCalculationsForPrompt) → l'LLM emetteva numeri ITT auto-inventati e spesso
+    // errati ("57/57/58 [stima non supportata]" su Antoniazzi, gold 30+30). Contraddice C4
+    // ("ITT graduata = scaffold del perito") e la direttiva qui sotto. I giorni di ricovero e
+    // la durata complessiva (fatti) sono aggiunti DETERMINISTICAMENTE in coda via il marker
+    // ITT_RICOVERO_FACTS; le fasce graduate restano scaffold che compila il perito.
+    dataSources: ['context-summaries', 'pubmed-references'],
     contextMaxChars: 0,
     needsOcr: false,
     promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
