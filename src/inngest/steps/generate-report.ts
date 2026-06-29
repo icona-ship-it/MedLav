@@ -594,9 +594,14 @@ export async function assembleSectionsAndSaveReport(
   // Documentali" section listing each unique document cited in the report.
   // This gives the perito a quick index of the source events without changing
   // the body of the report. Uses date-based matching against synthesisParams.events.
-  const appendix = buildDocumentReferencesAppendix(fullReport, synthesisParams.events);
-  if (appendix) {
-    fullReport = `${fullReport}\n\n${appendix}`;
+  // RC stragiudiziale (perizia "semplice", gold Lavini): NIENTE appendice "Riferimenti
+  // Documentali" — fa trapelare ID interni (ev. #N), tassonomia macchina e i lab esclusi in
+  // un atto depositabile. Gli altri ruoli (CTU/CTP) la tengono come indice di tracciabilità.
+  if (synthesisParams.caseRole !== 'stragiudiziale') {
+    const appendix = buildDocumentReferencesAppendix(fullReport, synthesisParams.events);
+    if (appendix) {
+      fullReport = `${fullReport}\n\n${appendix}`;
+    }
   }
 
   const totalWordCount = sections.reduce((sum, s) => sum + s.wordCount, 0);
