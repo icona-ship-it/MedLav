@@ -225,6 +225,7 @@ MAI PERDERE UN FATTO: ogni documento clinico rilevante e ogni reperto/diagnosi/p
 REGOLA DELLE CITAZIONI VERBATIM (caporali «...»):
 - USA «...» SOLO ed ESCLUSIVAMENTE per testo COPIATO ALLA LETTERA dal documento originale. Mai parafrasare dentro «...».
 - Riproduci la citazione ESATTAMENTE come nel documento (stesse parole, stessa punteggiatura essenziale). Se è lunga, citala per intero: la fedeltà batte la concisione.
+- NON ristrutturare il referto in campi tuoi né riassumerlo. ESEMPIO SBAGLIATO (parafrasi/ristrutturazione): «Clinica: lieve dolore al trocantere. Terapie in corso: FKT da proseguire.» ESEMPIO CORRETTO (verbatim del medico): «Lieve algia a livello del grande trocantere. Si consiglia: proseguire FKT, utile idrokinesiterapia.» Copia ciò che il medico ha scritto, non una tua sintesi etichettata.
 
 REGOLA ASSOLUTA ANTI-INVENZIONE:
 - Cita SOLO testo realmente presente nei documenti forniti. Se un dato non c'è, NON inventarlo e NON dedurlo.
