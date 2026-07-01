@@ -19,6 +19,7 @@
     "benchmark:extract": "tsx scripts/extract-gold-standards.ts",
     "benchmark:diff": "tsx scripts/diff-report-vs-gold.ts",
     "eval:golden": "tsx scripts/eval-golden-harness.ts",
+    "gate:rc": "tsx scripts/rc-gold-gate.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
