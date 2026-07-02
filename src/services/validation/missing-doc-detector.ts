@@ -97,7 +97,9 @@ export function detectMissingDocuments(params: {
   const allExpected: Array<{ name: string; check: keyof DocumentPresence; reason: string }> = [];
 
   for (const ct of effectiveTypes) {
-    const expected = EXPECTED_DOCS_BY_CASE_TYPE[ct];
+    // '?? []': i case_type legacy in DB (previdenziale, inail_*, ...) non sono
+    // più nel Record dopo il prune rc-mvp — senza fallback il for-of esplode.
+    const expected = EXPECTED_DOCS_BY_CASE_TYPE[ct] ?? [];
     for (const doc of expected) {
       if (!seenNames.has(doc.name)) {
         seenNames.add(doc.name);

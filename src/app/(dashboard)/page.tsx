@@ -12,12 +12,11 @@ import { Button } from '@/components/ui/button';
 import { getCases } from './actions';
 import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
-import { MODULE_CATALOG } from '@/types/modules';
+import { RC_MODULE } from '@/types/modules';
 import { getElaborationCost } from '@/services/credits/credit-costs';
 
 // rc-mvp: la dashboard non è più un picker multi-modulo — l'MVP fa UNA cosa:
 // la perizia RC stragiudiziale. CTA unica verso /cases/new.
-const RC_MODULE = MODULE_CATALOG[0];
 
 export default async function DashboardPage() {
   const allCases = await getCases();

@@ -13,6 +13,7 @@ import { isEmptyOrValidItalianDate } from '@/lib/validators/date-format';
 import { z } from 'zod';
 import {
   ALL_MODULE_IDS,
+  RC_MODULE,
   moduleToRole,
   moduleToCaseTypes,
   moduleToPipelineMode,
@@ -39,7 +40,7 @@ const DATE_FORMAT_ERROR = 'Data non valida: usa il formato GG/MM/AAAA (es. 15/01
 const headerDateSchema = z.string().max(20)
   .refine((s) => isEmptyOrValidItalianDate(s), { message: DATE_FORMAT_ERROR });
 
-const periziaMetadataSchema = z.object({
+const periziaMetadataFields = z.object({
   patientFullName: z.string().max(200).optional(),
   patientDateOfBirth: z.string().max(40).optional(),
   patientAddress: z.string().max(300).optional(),
@@ -72,7 +73,20 @@ const periziaMetadataSchema = z.object({
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
-}).strict().nullable().optional();
+}).strict();
+
+const periziaMetadataSchema = periziaMetadataFields.nullable().optional();
+
+/**
+ * Chiavi che il form/schema RC conosce e gestisce (semantica REPLACE: un campo
+ * svuotato nel form sparisce dal payload e quindi dal DB). Le chiavi FUORI da
+ * questo set sono metadata legacy (tribunale, quesiti, CTP... dei casi
+ * CTU/CTP creati prima del pivot rc-mvp): il salvataggio NON deve cancellarle
+ * silenziosamente — vengono preservate com'erano (hide-don't-delete).
+ */
+const PERIZIA_METADATA_KNOWN_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(periziaMetadataFields.shape),
+);
 
 const createCaseSchema = z.object({
   caseType: caseTypeSchema.optional(),
@@ -164,7 +178,7 @@ export async function createCase(formData: FormData) {
 
   // rc-mvp: UNICO flusso — modulo RC stragiudiziale. Il doppio binario
   // module-vs-legacy (fallback caseRole 'ctu') vive su main.
-  const moduleIdValue: ModuleId = (validated.data.moduleId as ModuleId | undefined) ?? 'perizia_ml_rc_civile';
+  const moduleIdValue: ModuleId = (validated.data.moduleId as ModuleId | undefined) ?? RC_MODULE.id;
   const caseRole: string = moduleToRole(moduleIdValue) ?? 'stragiudiziale';
   const legacyTypes = moduleToCaseTypes(moduleIdValue);
   const caseTypes: string[] = validated.data.caseTypes ?? (legacyTypes.length > 0 ? legacyTypes : ['generica']);
@@ -298,10 +312,10 @@ export async function updateCase(params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'Non autenticato' };
 
-  // Verify case ownership
+  // Verify case ownership (+ metadata corrente per il merge-preserving)
   const { data: caseData } = await supabase
     .from('cases')
-    .select('id')
+    .select('id, perizia_metadata')
     .eq('id', params.caseId)
     .eq('user_id', user.id)
     .single();
@@ -318,7 +332,21 @@ export async function updateCase(params: {
   if (params.patientInitials !== undefined) updateFields.patient_initials = params.patientInitials;
   if (params.practiceReference !== undefined) updateFields.practice_reference = params.practiceReference;
   if (params.notes !== undefined) updateFields.notes = params.notes;
-  if (params.periziaMetadata !== undefined) updateFields.perizia_metadata = params.periziaMetadata;
+  if (params.periziaMetadata !== undefined) {
+    // rc-mvp: il payload del form contiene SOLO i campi RC. Un caso legacy
+    // (CTU/CTP pre-pivot) ha nel JSONB chiavi che lo schema non conosce più:
+    // un replace integrale le CANCELLEREBBE in silenzio. Le chiavi sconosciute
+    // si preservano; quelle note seguono la semantica replace del form.
+    if (params.periziaMetadata !== null) {
+      const existingMeta = (caseData.perizia_metadata ?? {}) as Record<string, unknown>;
+      const preservedLegacy = Object.fromEntries(
+        Object.entries(existingMeta).filter(([key]) => !PERIZIA_METADATA_KNOWN_KEYS.has(key)),
+      );
+      updateFields.perizia_metadata = { ...preservedLegacy, ...params.periziaMetadata };
+    } else {
+      updateFields.perizia_metadata = null;
+    }
+  }
 
   const { error } = await supabase
     .from('cases')

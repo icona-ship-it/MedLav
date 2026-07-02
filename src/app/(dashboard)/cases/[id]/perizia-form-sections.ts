@@ -1,12 +1,14 @@
 /**
- * Definizione e selezione per ruolo delle sezioni del form "Dati perizia".
+ * Definizione e selezione delle sezioni del form "Dati perizia".
  *
  * Logica pura (niente React) così è testabile in node: il form (presentazione)
  * importa `buildVisibleSections` e renderizza l'elenco risultante.
  *
- * La stragiudiziale segue lo schema Antoniazzi (perizia di parte): NON ha contesto
- * giudiziario, quindi le sezioni del Tribunale (intestazione), i termini processuali
- * (date) e i Quesiti del Giudice non vanno chieste al perito.
+ * rc-mvp (review 2026-07-03): il form mostra SOLO sezioni i cui campi il
+ * salvataggio persiste davvero (schema zod strict RC). Le sezioni giudiziali
+ * (intestazione del Tribunale, termini processuali, Quesiti del Giudice) e i
+ * campi CTP/co-perito sono spariti dallo schema: renderizzarli — anche per un
+ * caso legacy — significherebbe raccogliere input e buttarlo via in silenzio.
  */
 
 export interface SectionDef {
@@ -15,21 +17,15 @@ export interface SectionDef {
   fields: string[];
 }
 
-/** Sezioni con senso SOLO in ambito giudiziario (CTU/CTP) — nascoste in stragiudiziale. */
-export const COURT_ONLY_SECTION_IDS = ['intestazione', 'date', 'quesiti'] as const;
-
-/** Sezioni base, comuni a tutti i ruoli (poi filtrate per ruolo). */
+/** Sezioni base della perizia RC stragiudiziale. */
 export const BASE_SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
-  { id: 'intestazione', title: 'Intestazione Perizia', fields: ['tribunale', 'sezione', 'rgNumber', 'tipoProcedimento', 'judgeName', 'fondoSpese', 'oggettoIncarico'] },
-  { id: 'parti', title: 'Parti e Consulenti', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle', 'coCtuName', 'coCtuTitle', 'parteRicorrente', 'parteResistente', 'ctpRicorrente', 'ctpResistente'] },
-  { id: 'date', title: 'Date', fields: ['dataIncarico', 'dataOperazioni', 'dataDeposito', 'termineBozza', 'termineOsservazioni'] },
-  { id: 'quesiti', title: 'Quesiti del Giudice', fields: [] }, // special handling
+  { id: 'parti', title: 'Il Perito', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle'] },
   { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
 ];
 
 /**
- * Sezioni compilate dal perito SOLO per le perizie RC medico-legali.
+ * Sezioni compilate dal perito per le perizie RC medico-legali.
  * I dati anamnestici e "Il Fatto e la Storia Clinica" confluiscono nel report
  * come testo del perito (deterministico, vedi anamnesi-template + section-catalog).
  */
@@ -46,22 +42,15 @@ export const RC_PERITO_SECTIONS: SectionDef[] = [
   },
 ];
 
-const COURT_ONLY = new Set<string>(COURT_ONLY_SECTION_IDS);
-
 /**
- * Costruisce l'elenco delle sezioni da mostrare nel form in base al ruolo del caso.
- * - stragiudiziale → niente sezioni giudiziarie (intestazione/date/quesiti)
- * - RC (isRC) → aggiunge le sezioni anamnesi + "Il Fatto"
+ * Costruisce l'elenco delle sezioni da mostrare nel form.
+ * - RC (isRC) → aggiunge le sezioni anamnesi + "Il Fatto".
  *
  * La scelta delle sezioni del report NON è più qui: vive nello step Elaborazione
  * (processing-section), subito prima della generazione.
  *
  * Ritorna sempre un nuovo array (non muta le costanti).
  */
-export function buildVisibleSections(params: { role: string; isRC: boolean }): SectionDef[] {
-  const { role, isRC } = params;
-  const base = role === 'stragiudiziale'
-    ? BASE_SECTIONS.filter((s) => !COURT_ONLY.has(s.id))
-    : BASE_SECTIONS;
-  return isRC ? [...base, ...RC_PERITO_SECTIONS] : [...base];
+export function buildVisibleSections(params: { isRC: boolean }): SectionDef[] {
+  return params.isRC ? [...BASE_SECTIONS, ...RC_PERITO_SECTIONS] : [...BASE_SECTIONS];
 }

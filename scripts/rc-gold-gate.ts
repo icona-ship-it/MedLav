@@ -105,39 +105,46 @@ function buildScorecard(params: {
   return lines.join('\n');
 }
 
+async function loadCaseTexts(slug: string): Promise<{
+  goldText: string;
+  generatedText: string;
+  provenance: { slug: string; gold: string; generated: string };
+}> {
+  const goldPath = path.join(GOLD_DIR, `${slug}.md`);
+  const generatedPath = path.join(GENERATED_DIR, `${slug}.md`);
+  const provenance = {
+    slug,
+    gold: await fileProvenance(goldPath),
+    generated: await fileProvenance(generatedPath),
+  };
+
+  let goldText: string;
+  let generatedText: string;
+  try {
+    goldText = await fs.readFile(goldPath, 'utf-8');
+  } catch {
+    console.error(`❌ Gold mancante: ${goldPath}`);
+    process.exit(1);
+  }
+  try {
+    generatedText = await fs.readFile(generatedPath, 'utf-8');
+  } catch {
+    console.error(`❌ Generato mancante: ${generatedPath} — genera il report dall'app e salvalo lì.`);
+    process.exit(1);
+  }
+  return { goldText, generatedText, provenance };
+}
+
 async function main(): Promise<void> {
   const panel = await readPanelScores();
   const results: RcCaseResult[] = [];
   const provenance: Array<{ slug: string; gold: string; generated: string }> = [];
 
   for (const config of RC_GOLD_CASES) {
-    const goldPath = path.join(GOLD_DIR, `${config.slug}.md`);
-    const generatedPath = path.join(GENERATED_DIR, `${config.slug}.md`);
-    provenance.push({
-      slug: config.slug,
-      gold: await fileProvenance(goldPath),
-      generated: await fileProvenance(generatedPath),
-    });
-
-    let goldText: string;
-    let generatedText: string;
-    try {
-      goldText = await fs.readFile(goldPath, 'utf-8');
-    } catch {
-      console.error(`❌ Gold mancante: ${goldPath}`);
-      process.exit(1);
-      return;
-    }
-    try {
-      generatedText = await fs.readFile(generatedPath, 'utf-8');
-    } catch {
-      console.error(`❌ Generato mancante: ${generatedPath} — genera il report dall'app e salvalo lì.`);
-      process.exit(1);
-      return;
-    }
-
+    const loaded = await loadCaseTexts(config.slug);
+    provenance.push(loaded.provenance);
     const panelScore = panel?.scores?.[config.slug] ?? null;
-    results.push(evaluateRcCase(config, goldText, generatedText, panelScore));
+    results.push(evaluateRcCase(config, loaded.goldText, loaded.generatedText, panelScore));
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

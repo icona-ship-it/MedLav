@@ -475,6 +475,24 @@ function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string;
     entries.push({ name: metadata.collaboratoreName, replacement: '[COLLABORATORE]' });
   }
 
+  // GDPR (review rc-mvp 2026-07-03): i campi giudiziali sono stati rimossi dal
+  // TIPO PeriziaMetadata, ma i JSONB dei casi legacy (CTU/CTP pre-pivot) li
+  // contengono ancora a runtime e i loro report citano quei nomi. L'export
+  // anonimizzato deve continuare a redigerli — si leggono dal record raw.
+  const legacyMeta = metadata as Record<string, unknown>;
+  const legacyNameFields: Array<[string, string]> = [
+    ['judgeName', '[GIUDICE]'],
+    ['ctpRicorrente', '[CTP RICORRENTE]'],
+    ['ctpResistente', '[CTP RESISTENTE]'],
+    ['coCtuName', '[CO-PERITO]'],
+  ];
+  for (const [field, replacement] of legacyNameFields) {
+    const value = legacyMeta[field];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      entries.push({ name: value, replacement });
+    }
+  }
+
   // Sort by name length descending to replace longer names first
   return entries.sort((a, b) => b.name.length - a.name.length);
 }

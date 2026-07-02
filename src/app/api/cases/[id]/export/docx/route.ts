@@ -79,7 +79,10 @@ export async function GET(
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }
 
-    const useProfessional = pm && pm.ctuName;
+    // pm.tribunale non è più nel tipo ma esiste nei JSONB legacy: senza il
+    // check, un caso legacy col solo tribunale perderebbe il layout
+    // professional in mode=lavoro (review 2026-07-03).
+    const useProfessional = pm && (pm.tribunale || pm.ctuName);
 
     // Resolve ocr-image: placeholders to base64 data URIs
     let synthesis = data.report?.synthesis as string | null ?? null;

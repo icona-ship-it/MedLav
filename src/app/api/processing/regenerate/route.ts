@@ -98,6 +98,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
     }
 
+    // rc-mvp: solo perizia RC stragiudiziale — i casi legacy CTU/CTP non sono
+    // rigenerabili (fail-fast, review 2026-07-03).
+    if (((caseRow.case_role as string | null) ?? 'stragiudiziale') !== 'stragiudiziale') {
+      return NextResponse.json(
+        { success: false, error: 'Questo caso è di tipo CTU/CTP (legacy) e non è rigenerabile nell\'MVP RC. Usa la versione completa dell\'app.' },
+        { status: 400 },
+      );
+    }
+
     // Concurrency guard: don't start a regeneration while the pipeline (or another
     // regeneration) is already running on this case.
     const currentStage = (caseRow.processing_stage as string) ?? 'idle';

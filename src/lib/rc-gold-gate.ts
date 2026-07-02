@@ -15,7 +15,7 @@
  * deterministico è affidabile solo sul formato dell'app (header in grassetto).
  */
 
-import { normalize } from './eval-scoring';
+import { countWords, stripAccents } from './eval-scoring';
 
 export type RcFascia = 'semplice' | 'medio' | 'macrodanno';
 
@@ -58,12 +58,8 @@ export const RC_GOLD_CASES: RcGoldCaseConfig[] = [
 // Sezione "Documentazione Sanitaria"
 // ─────────────────────────────────────────────────────────────────────
 
-function stripAccentsLower(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-}
-
 function isDocSanitariaTitle(text: string): boolean {
-  const t = stripAccentsLower(text);
+  const t = stripAccents(text).toLowerCase();
   return t.includes('documentazione') && (t.includes('medica') || t.includes('sanitaria'));
 }
 
@@ -132,7 +128,7 @@ const INVARIANT_PATTERNS: ReadonlyArray<{ id: string; label: string; pattern: Re
   {
     id: 'marker-in-virgolette',
     label: 'Marker di guardia dentro le virgolette «...»',
-    pattern: /«[^»]*\[(?:non documentato|citazione da verificare)\][^»]*»/g,
+    pattern: /«[^»]*\[(?:non documentato|citazione da verificare|(?:dato )?non risultante[^\]]*)\][^»]*»/g,
   },
   {
     id: 'tag-ev',
@@ -141,8 +137,12 @@ const INVARIANT_PATTERNS: ReadonlyArray<{ id: string; label: string; pattern: Re
   },
   {
     id: 'tag-macchina',
-    label: 'Tag macchina ([Diagnosi:], meta-commenti LLM)',
-    pattern: /\[Diagnosi:\]|\[Il resto (?:rimane )?invariato\]/gi,
+    label: 'Tag macchina ([Diagnosi: ...], annotazioni schedate, meta-commenti LLM)',
+    // Review 2026-07-03: le annotazioni reali hanno CONTENUTO dopo i due punti
+    // — la regex deve coprirle, non solo il tag letterale vuoto. Tenere la
+    // lista etichette allineata a stripGuardMarkersInsideQuotes
+    // (section-generator.ts).
+    pattern: /\[(?:Diagnosi|Raccomandazioni|Follow[- ]?up|Terapia|Prognosi|Conclusioni|Clinica)\s*:[^\]]*\]|\[Il resto (?:rimane )?invariato\]/gi,
   },
 ];
 
@@ -174,29 +174,20 @@ export interface RcCaseResult {
   pass: boolean;
 }
 
-function countWords(text: string): number {
-  return normalize(text).split(/\s+/).filter((w) => w.length > 0).length;
-}
-
-export function evaluateRcCase(
-  config: RcGoldCaseConfig,
-  goldText: string,
-  generatedText: string,
-  panelScore: number | null,
-): RcCaseResult {
-  const checks: RcGateCheck[] = [];
-
-  checks.push({
+function buildPanelCheck(config: RcGoldCaseConfig, panelScore: number | null): RcGateCheck {
+  return {
     id: 'panel',
     label: `Punteggio panel ≥ ${config.minPanelScore}`,
     value: panelScore === null ? 'assente' : `${panelScore}/100`,
     pass: panelScore !== null && panelScore >= config.minPanelScore,
-  });
+  };
+}
 
+function buildWordCheck(config: RcGoldCaseConfig, goldText: string, generatedText: string): RcGateCheck {
   const wordsGold = countWords(goldText);
   const wordsGen = countWords(generatedText);
   const wordDeltaPct = wordsGold === 0 ? 0 : ((wordsGen - wordsGold) / wordsGold) * 100;
-  checks.push({
+  return {
     id: 'parole',
     label: config.wordDeltaMaxPct !== undefined
       ? `Parole entro ±${config.wordDeltaMaxPct}% del gold`
@@ -205,11 +196,13 @@ export function evaluateRcCase(
     pass: config.wordDeltaMaxPct !== undefined
       ? Math.abs(wordDeltaPct) <= config.wordDeltaMaxPct
       : null,
-  });
+  };
+}
 
+function buildBlockCheck(config: RcGoldCaseConfig, goldText: string, generatedText: string): RcGateCheck {
   const genBlocks = countGeneratedDocBlocks(generatedText);
   const goldBlocks = config.goldBlocksCalibrated ?? countGeneratedDocBlocks(goldText);
-  checks.push({
+  return {
     id: 'blocchi',
     label: config.blockRatioMax !== undefined
       ? `Blocchi-documento ≤ ${config.blockRatioMax}× gold`
@@ -218,17 +211,33 @@ export function evaluateRcCase(
     pass: config.blockRatioMax !== undefined
       ? genBlocks <= config.blockRatioMax * goldBlocks
       : null,
-  });
+  };
+}
 
+function buildInvariantCheck(generatedText: string): RcGateCheck {
   const violations = findInvariantViolations(generatedText);
-  checks.push({
+  return {
     id: 'invarianti',
     label: 'Invarianti depositabilità (verbatim pulito, no tag macchina)',
     value: violations.length === 0
       ? 'ok'
       : violations.map((v) => `${v.id}×${v.count}`).join(', '),
     pass: violations.length === 0,
-  });
+  };
+}
+
+export function evaluateRcCase(
+  config: RcGoldCaseConfig,
+  goldText: string,
+  generatedText: string,
+  panelScore: number | null,
+): RcCaseResult {
+  const checks: RcGateCheck[] = [
+    buildPanelCheck(config, panelScore),
+    buildWordCheck(config, goldText, generatedText),
+    buildBlockCheck(config, goldText, generatedText),
+    buildInvariantCheck(generatedText),
+  ];
 
   return {
     slug: config.slug,

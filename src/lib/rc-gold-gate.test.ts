@@ -130,6 +130,23 @@ describe('findInvariantViolations', () => {
     expect(ids).toContain('tag-ev');
     expect(ids).toContain('tag-macchina');
   });
+
+  // Review 2026-07-03: le annotazioni schedate REALI hanno contenuto — il gate
+  // deve vederle, non solo il tag letterale vuoto.
+  it('should flag schema annotations WITH content ([Diagnosi: ...], [Raccomandazioni: ...])', () => {
+    const dirty = `${GENERATED_REPORT}\n\nNel referto si legge [Diagnosi: frattura composta] e [Raccomandazioni: controllo a 30 giorni].`;
+    const ids = findInvariantViolations(dirty).map((v) => v.id);
+    expect(ids).toContain('tag-macchina');
+  });
+
+  it('should flag "[dato non risultante...]" markers inside «...» quotes', () => {
+    const dirty = GENERATED_REPORT.replace(
+      '«... diagnosi di frattura composta ...»',
+      '«... diagnosi [dato non risultante dalla documentazione in atti] ...»',
+    );
+    const ids = findInvariantViolations(dirty).map((v) => v.id);
+    expect(ids).toContain('marker-in-virgolette');
+  });
 });
 
 describe('evaluateRcCase', () => {
@@ -205,5 +222,21 @@ describe('RC_GOLD_CASES config', () => {
     expect(bySlug['macrodanno'].minPanelScore).toBe(80);
     expect(bySlug['macrodanno'].blockRatioMax).toBe(1.3);
     expect(bySlug['macrodanno'].goldBlocksCalibrated).toBe(53);
+  });
+
+  // Review 2026-07-03: il workflow panel (.claude/workflows/confronto-rc-gold.js)
+  // duplica slug e soglie — questo test tiene le due fonti allineate finché non
+  // c'è una fonte unica.
+  it('should stay aligned with the panel workflow (slugs + gate thresholds)', async () => {
+    const { promises: fs } = await import('node:fs');
+    const path = await import('node:path');
+    const workflowSource = await fs.readFile(
+      path.resolve(process.cwd(), '.claude/workflows/confronto-rc-gold.js'),
+      'utf-8',
+    );
+    for (const config of RC_GOLD_CASES) {
+      expect(workflowSource).toContain(`'${config.slug}'`);
+      expect(workflowSource).toContain(`gate: ${config.minPanelScore}`);
+    }
   });
 });

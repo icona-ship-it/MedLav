@@ -42,10 +42,16 @@ function EditCaseDialogInner({
 
   const handleSubmit = () => {
     startTransition(async () => {
+      // rc-mvp: su un caso legacy (ruolo/tipo pre-pivot) i valori del DB non
+      // passerebbero lo schema ristretto e bloccherebbero anche il salvataggio
+      // di note/iniziali — si inviano solo se validi per lo schema corrente
+      // (omessi = campo non toccato).
+      const isValidRole = form.caseRole === 'stragiudiziale';
+      const isValidType = CASE_TYPES.some((t) => t.value === form.caseType);
       const result = await updateCase({
         caseId: caseData.id,
-        caseType: form.caseType as CaseType,
-        caseRole: form.caseRole as CaseRole,
+        ...(isValidType ? { caseType: form.caseType as CaseType } : {}),
+        ...(isValidRole ? { caseRole: form.caseRole as CaseRole } : {}),
         patientInitials: form.patientInitials || null,
         practiceReference: form.practiceReference || null,
         notes: form.notes || null,

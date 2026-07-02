@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('id, user_id, processing_stage, pipeline_mode')
+      .select('id, user_id, processing_stage, pipeline_mode, case_role')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -88,6 +88,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Caso non trovato' },
         { status: 404 },
+      );
+    }
+
+    // rc-mvp: la pipeline supporta SOLO la perizia RC stragiudiziale. I casi
+    // legacy (CTU/CTP pre-pivot) restano leggibili/esportabili ma non
+    // rielaborabili qui — fail-fast con messaggio chiaro invece di un
+    // TypeError a metà pipeline (review 2026-07-03).
+    const roleForPipeline = (caseData.case_role as string | null) ?? 'stragiudiziale';
+    if (roleForPipeline !== 'stragiudiziale') {
+      return NextResponse.json(
+        { success: false, error: 'Questo caso è di tipo CTU/CTP (legacy) e non è elaborabile nell\'MVP RC. Usa la versione completa dell\'app.' },
+        { status: 400 },
       );
     }
 

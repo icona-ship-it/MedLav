@@ -95,6 +95,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
     }
 
+    // rc-mvp: solo perizia RC stragiudiziale — le sezioni dei report legacy
+    // CTU/CTP non si rigenerano qui: la spec verrebbe risolta sul catalogo RC
+    // sbagliato (fail-fast PRIMA di scalare crediti, review 2026-07-03).
+    if (((caseRow.case_role as string | null) ?? 'stragiudiziale') !== 'stragiudiziale') {
+      return NextResponse.json(
+        { success: false, error: 'Questo caso è di tipo CTU/CTP (legacy): la rigenerazione di sezione non è disponibile nell\'MVP RC.' },
+        { status: 400 },
+      );
+    }
+
     // Get current report (incl. per-section state)
     const { data: currentReport } = await admin
       .from('reports')

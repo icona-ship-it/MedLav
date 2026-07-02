@@ -111,3 +111,10 @@ export function moduleToCategory(id: ModuleId): ModuleCategory {
 
 /** All valid module IDs */
 export const ALL_MODULE_IDS: readonly ModuleId[] = MODULE_CATALOG.map((m) => m.id);
+
+/**
+ * Il modulo dell'MVP, per nome — NON usare MODULE_CATALOG[0] (posizionale):
+ * alla riespansione del catalogo un riordino creerebbe silenziosamente casi
+ * del modulo sbagliato (review 2026-07-03).
+ */
+export const RC_MODULE: ModuleDefinition = getModule('perizia_ml_rc_civile');

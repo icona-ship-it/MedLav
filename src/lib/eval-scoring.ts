@@ -54,8 +54,13 @@ export interface KeywordCoverage {
 }
 
 /** Rimuove i diacritici (à→a): i benchmark scrivono "invalidità", la keyword è "invalidita". */
-function stripAccents(s: string): string {
+export function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/** Conteggio parole normalizzato — stessa metrica di scoreReport (single source of truth). */
+export function countWords(text: string): number {
+  return normalize(text).split(/\s+/).filter((w) => w.length > 0).length;
 }
 
 export function keywordCoverage(gold: string, generated: string): KeywordCoverage {

@@ -70,16 +70,21 @@ La valutazione di completezza documentale e l'eventuale richiesta di documentazi
 
 /**
  * Get prompt strategy for a specific role.
+ *
+ * Difesa rc-mvp: il case_role arriva dal DB via cast e i casi legacy (ctu/ctp)
+ * esistono ancora — le route di start/rigenerazione li rifiutano a monte, ma
+ * se un ruolo sconosciuto arrivasse fin qui NON deve produrre un TypeError a
+ * metà pipeline: degrada alla strategia stragiudiziale (l'unica del branch).
  */
 export function getRoleStrategy(role: CaseRole): RolePromptStrategy {
-  return ROLE_STRATEGIES[role];
+  return ROLE_STRATEGIES[role] ?? ROLE_STRATEGIES.stragiudiziale;
 }
 
 /**
  * Format the complete role directive for prompt injection.
  */
 export function formatRoleDirectiveForPrompt(role: CaseRole): string {
-  const strategy = ROLE_STRATEGIES[role];
+  const strategy = getRoleStrategy(role);
   return `## RUOLO E PROSPETTIVA
 
 ${strategy.toneDirective}

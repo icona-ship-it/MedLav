@@ -14,12 +14,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { createCase } from '../../actions';
-import { MODULE_CATALOG, MODULE_CATEGORIES } from '@/lib/constants';
+import { MODULE_CATEGORIES } from '@/lib/constants';
+import { RC_MODULE } from '@/types/modules';
 
 // rc-mvp: niente picker per categoria/modulo — l'MVP crea SOLO la perizia RC
 // stragiudiziale. Il vecchio CategoryPicker vive su main e nel tag
 // full-app-2026-07-02.
-const RC_MODULE = MODULE_CATALOG[0];
 const RC_CATEGORY = MODULE_CATEGORIES[0];
 
 export default function NewCasePage() {

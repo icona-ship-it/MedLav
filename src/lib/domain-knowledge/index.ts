@@ -1,5 +1,6 @@
 import type { CaseType } from '@/types';
 import type { CaseTypeKnowledge } from './types';
+import { logger } from '@/lib/logger';
 
 export type { CaseTypeKnowledge, ReportSection, StandardTimeline, CausalNexusCriteria, TermDefinition } from './types';
 export { CAUSAL_NEXUS_CRITERIA, formatCausalNexusForPrompt } from './causal-nexus';
@@ -20,9 +21,17 @@ const CASE_TYPE_KNOWLEDGE: Partial<Record<CaseType, CaseTypeKnowledge>> = {
 
 /**
  * Get domain knowledge for a specific case type (fallback: generica).
+ * Il fallback è loggato: quando la knowledge verrà ricablata nei prompt (D3),
+ * un degrado silenzioso a generica per una specialità clinica selezionabile
+ * sarebbe invisibile e falserebbe il confronto col gate gold.
  */
 export function getCaseTypeKnowledge(caseType: CaseType): CaseTypeKnowledge {
-  return CASE_TYPE_KNOWLEDGE[caseType] ?? GENERICA_KNOWLEDGE;
+  const knowledge = CASE_TYPE_KNOWLEDGE[caseType];
+  if (!knowledge) {
+    logger.warn('domain-knowledge', `Nessuna knowledge per caseType "${caseType}" — fallback a generica`);
+    return GENERICA_KNOWLEDGE;
+  }
+  return knowledge;
 }
 
 /**

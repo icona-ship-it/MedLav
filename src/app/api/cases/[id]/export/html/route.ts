@@ -8,9 +8,7 @@ import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
-import { getModule } from '@/types/modules';
-import type { ModuleId } from '@/types/modules';
+import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import type { PeriziaMetadata } from '@/types';
@@ -84,8 +82,10 @@ export async function GET(
         );
       }
 
-      const moduleId = data.caseData.module_id as ModuleId | null;
-      const moduleName = moduleId ? getModule(moduleId).label : undefined;
+      // rc-mvp: i casi legacy hanno module_id fuori dal catalogo ridotto —
+      // getModule() lancerebbe. Lookup tollerante: label assente per i legacy.
+      const moduleId = data.caseData.module_id as string | null;
+      const moduleName = moduleId ? moduleLabels[moduleId] : undefined;
       const shouldAnonymizeTimeline = request.nextUrl.searchParams.get('anonymize') === 'true';
       const isInlineTimeline = request.nextUrl.searchParams.get('inline') === 'true';
 

@@ -1,65 +1,54 @@
 import { describe, it, expect } from 'vitest';
-import { buildVisibleSections, COURT_ONLY_SECTION_IDS } from './perizia-form-sections';
+import { buildVisibleSections, BASE_SECTIONS } from './perizia-form-sections';
 
 /**
- * La stragiudiziale (schema Antoniazzi) non ha contesto giudiziario: niente
- * giudice/quesiti, niente intestazione del tribunale, niente termini processuali.
- * Questi campi devono sparire dal form quando il ruolo è 'stragiudiziale'.
+ * rc-mvp: il form mostra SOLO sezioni i cui campi lo schema zod strict RC
+ * persiste davvero — niente sezioni giudiziali (tribunale/date/quesiti) né
+ * campi CTP/co-perito, che il salvataggio scarterebbe in silenzio.
  */
 describe('buildVisibleSections', () => {
-  it('should hide court-only sections when role is stragiudiziale', () => {
-    const ids = buildVisibleSections({ role: 'stragiudiziale', isRC: true }).map((s) => s.id);
-    for (const courtId of COURT_ONLY_SECTION_IDS) {
+  it('should never include court-only sections (tribunale/date/quesiti)', () => {
+    const ids = buildVisibleSections({ isRC: true }).map((s) => s.id);
+    for (const courtId of ['intestazione', 'date', 'quesiti']) {
       expect(ids).not.toContain(courtId);
     }
   });
 
-  it('should keep paziente, parti and esameObiettivo for stragiudiziale', () => {
-    const ids = buildVisibleSections({ role: 'stragiudiziale', isRC: true }).map((s) => s.id);
+  it('should keep paziente, parti and esameObiettivo', () => {
+    const ids = buildVisibleSections({ isRC: true }).map((s) => s.id);
     expect(ids).toContain('paziente');
     expect(ids).toContain('parti');
     expect(ids).toContain('esameObiettivo');
   });
 
   it('should NOT include the report-section picker (moved to the Elaborazione step)', () => {
-    for (const params of [
-      { role: 'ctu', isRC: false },
-      { role: 'ctu', isRC: true },
-      { role: 'stragiudiziale', isRC: true },
-    ] as const) {
+    for (const params of [{ isRC: false }, { isRC: true }] as const) {
       const ids = buildVisibleSections(params).map((s) => s.id);
       expect(ids).not.toContain('sezioniReport');
     }
   });
 
-  it('should include court-only sections for ctu', () => {
-    const ids = buildVisibleSections({ role: 'ctu', isRC: true }).map((s) => s.id);
-    expect(ids).toContain('intestazione');
-    expect(ids).toContain('date');
-    expect(ids).toContain('quesiti');
-  });
-
-  it('should include court-only sections for ctp', () => {
-    const ids = buildVisibleSections({ role: 'ctp', isRC: false }).map((s) => s.id);
-    expect(ids).toContain('intestazione');
-    expect(ids).toContain('quesiti');
+  it('should not list CTP/co-perito fields in the parti section (non salvabili)', () => {
+    const parti = BASE_SECTIONS.find((s) => s.id === 'parti')!;
+    for (const removed of ['coCtuName', 'coCtuTitle', 'ctpRicorrente', 'ctpResistente']) {
+      expect(parti.fields).not.toContain(removed);
+    }
   });
 
   it('should append RC perito sections (anamnesi + il fatto) only when isRC', () => {
-    const rc = buildVisibleSections({ role: 'stragiudiziale', isRC: true }).map((s) => s.id);
+    const rc = buildVisibleSections({ isRC: true }).map((s) => s.id);
     expect(rc).toContain('ilFatto');
     expect(rc).toContain('anamnesi');
 
-    const nonRc = buildVisibleSections({ role: 'ctu', isRC: false }).map((s) => s.id);
+    const nonRc = buildVisibleSections({ isRC: false }).map((s) => s.id);
     expect(nonRc).not.toContain('ilFatto');
     expect(nonRc).not.toContain('anamnesi');
   });
 
   it('should never mutate the underlying constants (immutability)', () => {
-    const a = buildVisibleSections({ role: 'ctu', isRC: true });
-    const b = buildVisibleSections({ role: 'stragiudiziale', isRC: true });
-    // CTU is unaffected by a later stragiudiziale build
-    expect(a.map((s) => s.id)).toContain('quesiti');
-    expect(b.map((s) => s.id)).not.toContain('quesiti');
+    const first = buildVisibleSections({ isRC: true });
+    first.pop();
+    const second = buildVisibleSections({ isRC: true });
+    expect(second.length).toBe(BASE_SECTIONS.length + 2);
   });
 });

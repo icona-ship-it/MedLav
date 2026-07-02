@@ -27,7 +27,7 @@ const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
 
 /** Campi data dell'intestazione: testo libero, validati come date reali (1.4). */
 const HEADER_DATE_FIELDS = [
-  'dataIncarico', 'dataOperazioni', 'dataDeposito', 'termineBozza', 'termineOsservazioni',
+  'dataIncarico', 'dataOperazioni', 'dataDeposito',
 ] as const;
 
 const DATE_FORMAT_HINT = 'Data non valida — usa il formato GG/MM/AAAA (es. 15/01/2025)';
@@ -107,13 +107,10 @@ export function PeriziaMetadataForm({
   const [isPending, startTransition] = useTransition();
   const existing = useMemo(() => caseData.perizia_metadata ?? {}, [caseData.perizia_metadata]);
   const isRC = caseData.module_id === RC_CIVILE_MODULE_ID;
-  // Stragiudiziale (schema Antoniazzi): nessun contesto giudiziario → niente
-  // intestazione del Tribunale, termini processuali o Quesiti del Giudice.
-  const isStragiudiziale = caseData.case_role === 'stragiudiziale';
   // RC perizie collect anamnesi + "Il Fatto" from the perito; other case types don't.
   const sections = useMemo(
-    () => buildVisibleSections({ role: caseData.case_role, isRC }),
-    [isRC, caseData.case_role],
+    () => buildVisibleSections({ isRC }),
+    [isRC],
   );
   const [form, setForm] = useState({
     patientFullName: existing.patientFullName ?? '',
@@ -400,7 +397,7 @@ export function PeriziaMetadataForm({
                     <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 shrink-0" />
                   )}
                   <span className="text-sm font-semibold">
-                    {section.id === 'parti' && isStragiudiziale ? 'Il Perito' : section.title}
+                    {section.title}
                   </span>
                   {isFilled && (
                     <span className="text-xs text-green-600 dark:text-green-400">Compilato</span>
@@ -563,53 +560,19 @@ export function PeriziaMetadataForm({
                         <p className="text-sm text-muted-foreground mt-1">Posta elettronica certificata</p>
                       </div>
                     </div>
-                    {/* Ausiliario / Co-CTU / parti / CTP: solo ambito giudiziario (CTU/CTP) */}
-                    {!isStragiudiziale && (
-                    <>
+                    {/* rc-mvp: co-CTU/CTP/parti giudiziali rimossi dallo schema — non
+                        si renderizzano campi che il salvataggio scarterebbe. */}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label>Ausiliario (nome)</Label>
                         <Input value={form.collaboratoreName ?? ''} onChange={(e) => setForm({ ...form, collaboratoreName: e.target.value })} placeholder="es. Dott.ssa Anna Esempi" />
-                        <p className="text-sm text-muted-foreground mt-1">Specialista che assiste il CTU (se nominato)</p>
+                        <p className="text-sm text-muted-foreground mt-1">Specialista che assiste il perito (se nominato)</p>
                       </div>
                       <div>
                         <Label>Ausiliario (specializzazione)</Label>
                         <Input value={form.collaboratoreTitle ?? ''} onChange={(e) => setForm({ ...form, collaboratoreTitle: e.target.value })} placeholder="es. Specialista in Neurologia" />
                       </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <Label>Co-CTU / Collegio (nome)</Label>
-                        <Input value={form.coCtuName ?? ''} onChange={(e) => setForm({ ...form, coCtuName: e.target.value })} placeholder="es. Prof. Secondo Perito" />
-                        <p className="text-sm text-muted-foreground mt-1">Secondo perito PARITETICO del collegio (conferimento plurale e firma collegiale). Diverso dall&apos;ausiliario.</p>
-                      </div>
-                      <div>
-                        <Label>Co-CTU (qualifica)</Label>
-                        <Input value={form.coCtuTitle ?? ''} onChange={(e) => setForm({ ...form, coCtuTitle: e.target.value })} placeholder="es. specialista in Cardiologia" />
-                      </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <Label>Parte Ricorrente</Label>
-                        <Input value={form.parteRicorrente} onChange={(e) => setForm({ ...form, parteRicorrente: e.target.value })} placeholder="Nome parte ricorrente" />
-                      </div>
-                      <div>
-                        <Label>Parte Resistente</Label>
-                        <Input value={form.parteResistente} onChange={(e) => setForm({ ...form, parteResistente: e.target.value })} placeholder="es. Azienda Ospedaliera di Esempio" />
-                      </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <Label>CTP Ricorrente</Label>
-                        <Input value={form.ctpRicorrente} onChange={(e) => setForm({ ...form, ctpRicorrente: e.target.value })} placeholder="es. Dott.ssa Anna Esempi" />
-                      </div>
-                      <div>
-                        <Label>CTP Resistente</Label>
-                        <Input value={form.ctpResistente} onChange={(e) => setForm({ ...form, ctpResistente: e.target.value })} placeholder="es. Dott. Paolo Esempi" />
-                      </div>
-                    </div>
-                    </>
-                    )}
                   </div>
                 )}
 
