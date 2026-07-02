@@ -1,9 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Scale, FileUp, FileText, ArrowRight, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useEffect } from 'react';
+import { Scale, FileUp, FileText, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -15,19 +13,19 @@ const STEPS = [
   {
     icon: Scale,
     title: 'Benvenuto in LegMed',
-    description: 'LegMed ti aiuta ad analizzare la documentazione clinica e a preparare elaborati medico-legali.',
+    description: 'LegMed ti aiuta ad analizzare la documentazione clinica e a preparare la perizia medico-legale.',
     details: [
       'Analisi documentale: estrai la cronistoria degli eventi da qualsiasi documento',
-      'Perizie e CTU: genera bozze di report strutturati per ogni tipo di incarico',
+      'Perizia RC stragiudiziale: genera una bozza strutturata con documentazione sanitaria e spese',
       'Conforme GDPR — dati crittografati, server EU',
     ],
   },
   {
     icon: FileUp,
     title: 'Come funziona',
-    description: 'Tre passi semplici per ottenere il tuo elaborato.',
+    description: 'Tre passi semplici per ottenere la tua bozza di perizia.',
     details: [
-      '1. Scegli il tipo di elaborato dalla dashboard',
+      '1. Crea un nuovo caso dalla dashboard',
       '2. Carica i documenti (PDF, immagini, Word)',
       '3. Avvia l\'elaborazione e attendi il risultato',
     ],
@@ -35,22 +33,18 @@ const STEPS = [
   {
     icon: FileText,
     title: 'Pronto per iniziare',
-    description: 'Dalla dashboard puoi scegliere tra diversi moduli in base al tipo di lavoro che devi fare.',
+    description: 'La bozza riproduce fedelmente la documentazione; visita clinica e giudizi restano al perito.',
     details: [
-      'Analisi documenti sanitari: cronistoria estrattiva dei fatti clinici',
-      'Perizia medico legale: per privati, studi legali, assicurazioni',
-      'CTU/ATP: in ambito civile, previdenziale o INAIL',
-      'E molto altro: pareri, analisi spese, anonimizzazione',
-      'Premendo il pulsante creiamo un caso dimostrativo con dati fittizi, per esplorare l\'app senza rischi.',
+      'Documentazione sanitaria: citazioni testuali fedeli dai documenti, in ordine cronologico',
+      'Spese mediche: tabella deterministica dai giustificativi',
+      'Esporta in DOCX/PDF e rifinisci il testo direttamente nell\'editor',
     ],
   },
 ];
 
 export function OnboardingDialog() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [isCreatingDemo, setIsCreatingDemo] = useState(false);
 
   useEffect(() => {
     // Show only if onboarding not completed
@@ -62,35 +56,17 @@ export function OnboardingDialog() {
     }
   }, []);
 
-  const handleCreateDemo = useCallback(async () => {
-    setIsCreatingDemo(true);
-    try {
-      const response = await fetch('/api/demo', { method: 'POST' });
-      const result = await response.json() as { success: boolean; data?: { caseId: string } };
-      if (result.success) {
-        toast.success('Caso demo creato! Esploralo nella dashboard.');
-      }
-    } catch {
-      // Non-blocking — demo creation failure shouldn't block onboarding
-    } finally {
-      setIsCreatingDemo(false);
-      localStorage.setItem(ONBOARDING_KEY, 'true');
-      setOpen(false);
-      router.refresh();
-    }
-  }, [router]);
+  function handleClose() {
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+    setOpen(false);
+  }
 
   function handleNext() {
     if (step < STEPS.length - 1) {
       setStep(step + 1);
     } else {
-      handleCreateDemo();
+      handleClose();
     }
-  }
-
-  function handleClose() {
-    localStorage.setItem(ONBOARDING_KEY, 'true');
-    setOpen(false);
   }
 
   const currentStep = STEPS[step];
@@ -135,11 +111,9 @@ export function OnboardingDialog() {
           <Button variant="ghost" size="sm" onClick={handleClose}>
             Salta
           </Button>
-          <Button size="sm" onClick={handleNext} disabled={isCreatingDemo}>
-            {isCreatingDemo ? (
-              <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Creazione demo...</>
-            ) : isLast ? (
-              <>Inizia con un esempio<ArrowRight className="ml-1 h-3 w-3" /></>
+          <Button size="sm" onClick={handleNext}>
+            {isLast ? (
+              <>Inizia<ArrowRight className="ml-1 h-3 w-3" /></>
             ) : (
               <>Avanti<ArrowRight className="ml-1 h-3 w-3" /></>
             )}
