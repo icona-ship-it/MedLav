@@ -201,11 +201,6 @@ export function CaseDetailClient({
     } | undefined
   ) ?? null;
 
-  // Extract PubMed references from perizia_metadata (saved after PubMed search step)
-  const pubmedReferences = (
-    (caseData.perizia_metadata as Record<string, unknown> | null)?.pubmedReferences as Array<{ query: string; category: 'diagnosis' | 'treatment' | 'causal_nexus'; articles: Array<{ pmid: string; title: string; authors: string; journal: string; year: string; doi?: string }> }> | undefined
-  ) ?? [];
-
   const autoStep = isAnonymizeOnly
     ? computeAnonymizeAutoStep(localDocuments)
     : (isExtractionOnly || isExpensesOnly)
@@ -424,7 +419,6 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
-                pubmedReferences={[]}
                 pipelineWarnings={pipelineWarnings}
               />
             </div>
@@ -480,7 +474,6 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
-                pubmedReferences={[]}
                 pipelineWarnings={pipelineWarnings}
               />
             </div>
@@ -550,7 +543,6 @@ export function CaseDetailClient({
                 processingStage={processingStage}
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
-                pubmedReferences={pubmedReferences}
                 pipelineWarnings={pipelineWarnings}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
               />

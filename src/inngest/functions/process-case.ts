@@ -23,8 +23,6 @@ import {
 import type { GeneratedSection } from '@/services/synthesis/section-generation-types';
 import { finalizeStep, sendNotificationStep } from '../steps/finalize';
 import type { PipelineWarning } from '../steps/finalize';
-import { enrichWithFullEvidence } from '@/services/pubmed/evidence-enricher';
-import type { PubMedSearchResult } from '@/services/pubmed/evidence-enricher';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
 import { extractExpensesFromOcr } from '@/services/expenses/expense-extractor';
@@ -895,37 +893,16 @@ export const processCase = inngest.createFunction(
       : anomalyResolutionRaw;
     const anomalies = anomalyResolution.anomalies;
 
-    // ── PubMed evidence search (optional, non-blocking) ────────────
-    let pubmedResults: PubMedSearchResult[] = [];
-    try {
-      pubmedResults = await step.run('search-pubmed', () =>
-        enrichWithFullEvidence(allEvents, anomalies, updatedMetadata.caseType),
-      );
-    } catch {
-      logger.warn('pipeline', `PubMed search failed (non-blocking) for case ${caseId}`);
-    }
-
-    // ── Mark generating report + save PubMed results ──────────────
+    // ── Mark generating report ─────────────────────────────────────
+    // rc-mvp: ricerca PubMed parcheggiata in legacy/ (fuori scope RC stragiudiziale).
     await step.run('mark-generazione-report', async () => {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
-
-      // Save PubMed results to perizia_metadata for UI display
-      const { data: caseRow } = await supabase
-        .from('cases')
-        .select('perizia_metadata')
-        .eq('id', caseId)
-        .single();
-      const existingMeta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
 
       await supabase
         .from('cases')
         .update({
           processing_stage: 'generazione_report',
-          perizia_metadata: {
-            ...existingMeta,
-            ...(pubmedResults.length > 0 ? { pubmedReferences: pubmedResults } : {}),
-          },
           updated_at: new Date().toISOString(),
         })
         .eq('id', caseId);
@@ -1008,7 +985,6 @@ export const processCase = inngest.createFunction(
       calculations,
       imageAnalysisResults,
       documentSummaries,
-      pubmedResults,
     );
 
     // ── Sectional report generation ───────────────────────────────

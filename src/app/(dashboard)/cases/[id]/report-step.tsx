@@ -19,8 +19,6 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
-import { PubMedTab } from './pubmed-tab';
-import type { PubMedReference } from './pubmed-tab';
 import { csrfHeaders } from '@/lib/csrf-client';
 import { parseSections } from '@/lib/section-parser-client';
 import { getSectionStatus } from '@/lib/section-state';
@@ -79,7 +77,6 @@ interface ReportStepProps {
   processingStage: string;
   onNavigateToStep: (step: number) => void;
   generationProgress?: GenerationProgress | null;
-  pubmedReferences?: PubMedReference[];
   pipelineWarnings?: PipelineWarningItem[];
   /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
   lastError?: string;
@@ -99,7 +96,6 @@ export function ReportStep({
   processingStage,
   onNavigateToStep,
   generationProgress,
-  pubmedReferences = [],
   pipelineWarnings = [],
   lastError,
 }: ReportStepProps) {
@@ -118,10 +114,9 @@ export function ReportStep({
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [anomalyDialogOpen, setAnomalyDialogOpen] = useState(false);
 
-  // UX Ondata 3-IA Fase A: drawer additivi (eventi/pubmed/ocr).
+  // UX Ondata 3-IA Fase A: drawer additivi (eventi/ocr).
   // Per ora coesistono con i tab esistenti. La Fase B rimuovera' i tab.
   const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
-  const [pubmedDrawerOpen, setPubmedDrawerOpen] = useState(false);
   const [ocrDrawerOpen, setOcrDrawerOpen] = useState(false);
 
   // Track the EVENT TYPES the perito mutated since the report was generated.
@@ -459,10 +454,8 @@ export function ReportStep({
         alertCount={reviewCount}
         onOpenQualitySheet={() => setQualitySheetOpen(true)}
         onOpenEventsDrawer={() => setEventsDrawerOpen(true)}
-        onOpenPubmedDrawer={pubmedReferences.length > 0 ? () => setPubmedDrawerOpen(true) : undefined}
         onOpenOcrDrawer={() => setOcrDrawerOpen(true)}
         eventsCount={events.length}
-        pubmedCount={pubmedReferences.reduce((s, r) => s + r.articles.length, 0)}
       />
 
       {/* UX Ondata 3-IA Fase B: vista SOLA del Report.
@@ -630,16 +623,6 @@ export function ReportStep({
         </SheetContent>
       </Sheet>
 
-      <Sheet open={pubmedDrawerOpen} onOpenChange={setPubmedDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader className="pb-3 border-b">
-            <SheetTitle>Riferimenti scientifici (PubMed)</SheetTitle>
-          </SheetHeader>
-          <div className="py-4">
-            <PubMedTab references={pubmedReferences} />
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <Sheet open={ocrDrawerOpen} onOpenChange={setOcrDrawerOpen}>
         <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">

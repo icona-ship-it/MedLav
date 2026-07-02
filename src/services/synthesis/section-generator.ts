@@ -48,8 +48,6 @@ import { mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calc
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
-import type { PubMedSearchResult } from '../pubmed/evidence-enricher';
-import { formatCausalNexusForPrompt } from '@/lib/domain-knowledge/causal-nexus';
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -299,12 +297,6 @@ export function buildSectionUserPrompt(params: {
     }
   }
 
-  // Add PubMed references
-  if (spec.dataSources.includes('pubmed-references') && synthesisParams.pubmedReferences) {
-    const pubmedText = formatPubMedReferencesForPrompt(synthesisParams.pubmedReferences);
-    if (pubmedText) parts.push(pubmedText);
-  }
-
   // Add guidelines
   if (spec.dataSources.includes('guidelines') && guidelineContext) {
     parts.push(`\n${guidelineContext}\n`);
@@ -333,13 +325,9 @@ export async function generateSingleSection(params: {
   const { spec, synthesisParams, previousContext, documentsOcrText, attempt, disableChunking } = params;
   const startMs = Date.now();
 
-  // Bibliography: fall back to placeholder when no PubMed references available.
-  // Restricted to the bibliografia section: other sections (e.g. epicrisi) list
-  // pubmed-references as an OPTIONAL enrichment data source — they should still
-  // run the LLM even when no PubMed refs are available, otherwise the output
-  // would be an empty section title with no body.
-  if (spec.id === 'bibliografia' &&
-      (!synthesisParams.pubmedReferences || synthesisParams.pubmedReferences.length === 0)) {
+  // Bibliography: sempre placeholder — la ricerca PubMed è parcheggiata in
+  // legacy/ (rc-mvp) e la sezione esiste solo nei cataloghi giudiziali.
+  if (spec.id === 'bibliografia') {
     return {
       id: spec.id,
       title: spec.title,
@@ -971,56 +959,6 @@ function stripLabFromOcrContext(doc: DocumentOcrContext): DocumentOcrContext {
 export { filterOcrForSection as _filterOcrForSection_test };
 export { stripLabFromOcrContext as _stripLabFromOcrContext_test };
 export { EXCLUDED_FROM_MEDICAL as _EXCLUDED_FROM_MEDICAL_test };
-
-// ── PubMed formatting ─────────────────────────────────────────────
-
-const CATEGORY_LABELS: Record<string, string> = {
-  diagnosis: 'Diagnosi e linee guida',
-  treatment: 'Trattamento e outcomes',
-  causal_nexus: 'Nesso causale ed evidenze prognostiche',
-};
-
-function formatPubMedReferencesForPrompt(results: PubMedSearchResult[]): string {
-  if (results.length === 0) return '';
-
-  // Group articles by category
-  const grouped = new Map<string, PubMedSearchResult[]>();
-  for (const result of results) {
-    const key = result.category ?? 'diagnosis';
-    const existing = grouped.get(key) ?? [];
-    existing.push(result);
-    grouped.set(key, existing);
-  }
-
-  const parts: string[] = ['## EVIDENZE SCIENTIFICHE PUBMED\n'];
-  const categoryOrder = ['diagnosis', 'treatment', 'causal_nexus'];
-
-  for (const category of categoryOrder) {
-    const categoryResults = grouped.get(category);
-    if (!categoryResults || categoryResults.length === 0) continue;
-
-    const label = CATEGORY_LABELS[category] ?? category;
-    parts.push(`### ${label}`);
-    for (const result of categoryResults) {
-      parts.push(`Ricerca: "${result.query}"`);
-      for (const article of result.articles) {
-        const doi = article.doi ? ` DOI: ${article.doi}.` : '';
-        parts.push(`- ${article.authors}. ${article.title}. ${article.journal}. ${article.year}.${doi} PMID: ${article.pmid}`);
-      }
-    }
-    parts.push('');
-  }
-
-  // Append causal nexus legal criteria
-  const causalNexusText = formatCausalNexusForPrompt();
-  if (causalNexusText) {
-    parts.push('## CRITERI MEDICO-LEGALI PER IL NESSO CAUSALE');
-    parts.push(causalNexusText);
-    parts.push('');
-  }
-
-  return parts.join('\n');
-}
 
 // ── Structured header generation (Wave 2.1) ──────────────────────────
 //
