@@ -684,11 +684,17 @@ export function stripCodeFences(content: string): string {
  * il dettaglio è DENTRO una citazione «...» — rompendo la riproduzione fedele richiesta in un
  * atto depositabile. Qui, per ogni blocco «...», si rimuovono SOLO questi marker di cautela
  * interni (la citazione torna fedele; la cautela del CoVe, se voluta, resta valida fuori dalle
- * caporali). Non tocca il testo fuori dalle «...». Puro e idempotente.
+ * caporali). Panel RC 2026-07-02 (Motta): rimosse anche le annotazioni editoriali SCHEDATE
+ * "[Diagnosi: …]" / "[Raccomandazioni: …]" ecc. che l'LLM inietta nel virgolettato — solo
+ * etichette-schema note, MAI parentesi quadre generiche (possono essere testo del documento,
+ * es. "[v.n. 4.0-10.0]"). Non tocca il testo fuori dalle «...». Puro e idempotente.
  */
 export function stripGuardMarkersInsideQuotes(text: string): string {
   return text.replace(/«[^»]*»/g, (quote) =>
-    quote.replace(/[ \t]*\[(?:non documentato|dato non risultante[^\]]*|non risultante[^\]]*)\]/gi, ''),
+    quote.replace(
+      /[ \t]*\[(?:non documentato|dato non risultante[^\]]*|non risultante[^\]]*|(?:Diagnosi|Raccomandazioni|Follow[- ]?up|Terapia|Prognosi|Conclusioni|Clinica)\s*:[^\]]*)\]/gi,
+      '',
+    ),
   );
 }
 

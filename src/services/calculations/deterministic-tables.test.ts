@@ -299,6 +299,24 @@ describe('expandDeterministicBlocks — DOC_SANITARIA', () => {
   });
 });
 
+// Panel RC 2026-07-02: gli agenti hanno flaggato i tag <!--MEDLAV:...--> leggendo
+// il markdown GREZZO. L'invariante depositabile è che DOPO l'espansione (che gli
+// export HTML/DOCX/PDF eseguono sempre) NESSUN marker sopravvive — nemmeno con
+// zero eventi e zero documenti (i fallback coprono ogni caso).
+describe('expandDeterministicBlocks — invariante depositabile: nessun residuo MEDLAV', () => {
+  it('espande TUTTI i marker noti senza lasciare residui, anche senza dati', () => {
+    const allMarkers = Object.values(DETERMINISTIC_MARKERS).join('\n\n');
+    const out = expandDeterministicBlocks(allMarkers, [], []);
+    expect(out).not.toContain('<!--MEDLAV');
+  });
+
+  it('espande TUTTI i marker noti senza residui con dati presenti', () => {
+    const allMarkers = Object.values(DETERMINISTIC_MARKERS).join('\n\n');
+    const out = expandDeterministicBlocks(allMarkers, [], [doc({})]);
+    expect(out).not.toContain('<!--MEDLAV');
+  });
+});
+
 describe('toDeterministicDocs (mapping)', () => {
   it('maps id→documentId and preserves pages', () => {
     const out = toDeterministicDocs([

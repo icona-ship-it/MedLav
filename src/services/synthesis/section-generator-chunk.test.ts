@@ -245,6 +245,31 @@ describe('stripGuardMarkersInsideQuotes — integrità del virgolettato verbatim
     expect(stripGuardMarkersInsideQuotes('«a [non documentato] b» e «c [non documentato] d»'))
       .toBe('«a b» e «c d»');
   });
+
+  // Panel RC 2026-07-02 (Motta, P1): annotazioni editoriali schedate tipo
+  // "[Diagnosi: ...]" iniettate dall'LLM DENTRO il virgolettato — testo non
+  // del medico in un atto depositabile.
+  it('toglie le annotazioni schedate "[Diagnosi: ...]" dentro le «...»', () => {
+    expect(stripGuardMarkersInsideQuotes('«rima di frattura in consolidamento [Diagnosi: frattura radio distale]»'))
+      .toBe('«rima di frattura in consolidamento»');
+  });
+
+  it('toglie le etichette-schema note (Raccomandazioni/Follow-up/Terapia/Prognosi) dentro le «...»', () => {
+    expect(stripGuardMarkersInsideQuotes('«prosegue FKT [Raccomandazioni: controllo a 30 giorni] come da programma»'))
+      .toBe('«prosegue FKT come da programma»');
+    expect(stripGuardMarkersInsideQuotes('«quadro stabile [Follow-up: RX di controllo]»'))
+      .toBe('«quadro stabile»');
+  });
+
+  it('NON tocca parentesi quadre generiche dentro le «...» (potrebbero essere del documento)', () => {
+    const t = '«valore fuori range [v.n. 4.0-10.0]»';
+    expect(stripGuardMarkersInsideQuotes(t)).toBe(t);
+  });
+
+  it('NON tocca le annotazioni schedate FUORI dalle «...»', () => {
+    const t = 'Nella prosa [Diagnosi: frattura] resta com\'è.';
+    expect(stripGuardMarkersInsideQuotes(t)).toBe(t);
+  });
 });
 
 describe('buildDocSanitariaChunkSpec — nota RC vs non-RC', () => {
