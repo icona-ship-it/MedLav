@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
-  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, SplitSquareHorizontal, Info,
+  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -90,9 +90,6 @@ function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
 }
 
-function isPdf(fileType: string): boolean {
-  return fileType === 'application/pdf';
-}
 
 // --- Component ---
 
@@ -112,7 +109,6 @@ export function DocumentsSection({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [classifyingDocId, setClassifyingDocId] = useState<string | null>(null);
   const [classifyingAll, setClassifyingAll] = useState(false);
-  const [splittingDocId, setSplittingDocId] = useState<string | null>(null);
   // True between the "Categorizza tutti" dispatch and the FIRST server-side
   // progress write: the user must see feedback INSTANTLY, not after ~10s.
   const [classifyStarting, setClassifyStarting] = useState(false);
@@ -222,28 +218,6 @@ export function DocumentsSection({
       toast.error('Errore nella categorizzazione AI');
     } finally {
       setClassifyingDocId(null);
-    }
-  }, [caseId, router]);
-
-  const handleSplitDocument = useCallback(async (docId: string) => {
-    setSplittingDocId(docId);
-    try {
-      const res = await fetch('/api/processing/split-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-        body: JSON.stringify({ documentId: docId, caseId }),
-      });
-      const data = await res.json() as { success: boolean; data?: { resultingDocs: number; creditsCharged: number }; error?: string };
-      if (!data.success) {
-        toast.error(data.error ?? 'Errore nella divisione');
-      } else {
-        toast.success(`PDF diviso in ${data.data?.resultingDocs ?? '?'} documenti`);
-        router.refresh();
-      }
-    } catch {
-      toast.error('Errore nella divisione del PDF');
-    } finally {
-      setSplittingDocId(null);
     }
   }, [caseId, router]);
 
@@ -526,22 +500,6 @@ export function DocumentsSection({
                                 Categorizza con AI
                                 <span className="ml-auto text-xs text-muted-foreground">
                                   {CREDIT_COSTS.categorizzazione} crediti
-                                </span>
-                              </DropdownMenuItem>
-                            )}
-                            {isUploaded && isPdf(doc.file_type) && (
-                              <DropdownMenuItem
-                                onClick={() => handleSplitDocument(doc.id)}
-                                disabled={splittingDocId === doc.id}
-                              >
-                                {splittingDocId === doc.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
-                                ) : (
-                                  <SplitSquareHorizontal className="h-3.5 w-3.5 mr-2" />
-                                )}
-                                {splittingDocId === doc.id ? 'Divisione in corso...' : 'Dividi PDF'}
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                  {CREDIT_COSTS.split_pdf} crediti/parte
                                 </span>
                               </DropdownMenuItem>
                             )}

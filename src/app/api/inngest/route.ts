@@ -1,6 +1,6 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/lib/inngest/client';
-import { processCase, regenerateReport, dataRetentionCleanup, organizeDocumentsJob, classifyBatchJob } from '@/inngest';
+import { processCase, regenerateReport, dataRetentionCleanup, classifyBatchJob } from '@/inngest';
 
 export const maxDuration = 800;
 
@@ -10,7 +10,6 @@ export const { GET, POST, PUT } = serve({
     processCase,
     regenerateReport,
     dataRetentionCleanup,
-    organizeDocumentsJob,
     classifyBatchJob,
   ],
   serveHost: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://legmed.vercel.app',
