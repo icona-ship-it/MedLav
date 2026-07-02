@@ -1,10 +1,4 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import {
-  generateSynthesis,
-  generateSynthesisChronology,
-  generateSynthesisSummary,
-  shouldSplitSynthesis,
-} from '@/services/synthesis/synthesis-service';
 import type { SynthesisParams } from '@/services/synthesis/synthesis-service';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
@@ -138,35 +132,6 @@ export function buildSynthesisParams(
 }
 
 /**
- * Step 7b: Check if split mode is needed (instant).
- */
-export function checkSynthesisSplit(
-  synthesisParams: SynthesisParams,
-  eventCount: number,
-): boolean {
-  const split = shouldSplitSynthesis(synthesisParams);
-  logger.info('pipeline', ` Step 7: ${eventCount} events, split: ${split}`);
-  return split;
-}
-
-/**
- * Save report to DB with error handling. Throws on failure so Inngest retries.
- */
-async function insertReport(
-  caseId: string,
-  synthesisText: string,
-  wordCount: number,
-  promptVersion?: string,
-): Promise<SynthesisStepResult> {
-  return insertReportWithMetadata(
-    caseId,
-    synthesisText,
-    wordCount,
-    promptVersion ? { promptVersion } : undefined,
-  );
-}
-
-/**
  * Save report to DB with full generation metadata.
  */
 async function insertReportWithMetadata(
@@ -228,141 +193,6 @@ async function insertReportWithMetadata(
 
   return { reportId: report.id, reportVersion: 0, wordCount };
 }
-
-/**
- * Step 7c+f: Generate full synthesis AND save to DB in a single step.
- * The synthesis text stays within the step — never serialized into Inngest step output.
- * Only small metadata is returned (reportId, version, wordCount).
- * Fetches OCR text inside the step to avoid serializing large data between steps.
- */
-export async function generateAndSaveReport(
-  caseId: string,
-  synthesisParams: SynthesisParams,
-): Promise<SynthesisStepResult & { promptVersion?: string }> {
-  const startMs = Date.now();
-
-  // When document summaries are available (map-reduce mode), skip OCR fetch —
-  // summaries already cover 100% of document content and are much smaller.
-  // Otherwise, fetch OCR text inside this step (avoids serialization between Inngest steps).
-  const hasSummaries = synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0;
-  let paramsForSynthesis: SynthesisParams;
-  let ocrChars: number;
-
-  if (hasSummaries) {
-    paramsForSynthesis = synthesisParams;
-    ocrChars = 0;
-    logger.info('pipeline', ` Using ${synthesisParams.documentSummaries!.length} document summaries (skipping OCR fetch)`);
-  } else {
-    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
-    paramsForSynthesis = { ...synthesisParams, documentsOcrText };
-    ocrChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
-  }
-
-  const r = await generateSynthesis(paramsForSynthesis);
-  logger.info('pipeline', ` Synthesis done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars, OCR: ${ocrChars} chars)`);
-
-  const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
-  if (r.hrs !== undefined) {
-    generationMetadata.hrs = r.hrs;
-    generationMetadata.hrsLevel = r.hrsLevel;
-  }
-  if (ocrChars > 0) {
-    generationMetadata.ocrTextProvided = true;
-    generationMetadata.ocrTotalChars = ocrChars;
-  }
-  if (synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0) {
-    generationMetadata.useDocumentSummaries = true;
-    generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
-  }
-
-  // HARD FILTER: Strip hallucinated image references
-  const realPaths = new Set(
-    (synthesisParams.imageAnalysis ?? []).filter((img) => img.storagePath).map((img) => img.storagePath!),
-  );
-  const cleanSynthesis = r.synthesis.replace(
-    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
-    (match, path) => realPaths.has(path) ? match : '',
-  );
-
-  const result = await insertReportWithMetadata(caseId, cleanSynthesis, r.wordCount, generationMetadata);
-  return { ...result, promptVersion: r.promptVersion, usage: r.usage };
-}
-
-/**
- * Step 7d: Generate chronology part (large case, split mode).
- * Returns chronology text — stored in Inngest step output for use by next step.
- * Fetches OCR text inside the step for faithful transcription.
- */
-export async function generateChronologyPart(
-  caseId: string,
-  synthesisParams: SynthesisParams,
-): Promise<{ chronology: string; ocrTotalChars: number; usage?: import('@/services/cost-tracking/cost-calculator').TokenUsage }> {
-  const startMs = Date.now();
-
-  // When document summaries are available (map-reduce mode), skip OCR fetch —
-  // summaries replace OCR text in the prompt.
-  const hasSummaries = synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0;
-  let paramsForChronology: SynthesisParams;
-  let ocrTotalChars: number;
-
-  if (hasSummaries) {
-    paramsForChronology = synthesisParams;
-    ocrTotalChars = 0;
-    logger.info('pipeline', ` Chronology: using ${synthesisParams.documentSummaries!.length} document summaries (skipping OCR fetch)`);
-  } else {
-    const documentsOcrText = await fetchDocumentsOcrContext(caseId);
-    paramsForChronology = { ...synthesisParams, documentsOcrText };
-    ocrTotalChars = documentsOcrText.reduce((sum, d) => sum + d.totalChars, 0);
-  }
-
-  const { chronology, usage } = await generateSynthesisChronology(paramsForChronology);
-  logger.info('pipeline', ` Chronology done in ${Date.now() - startMs}ms (${chronology.length} chars, OCR: ${ocrTotalChars} chars)`);
-  return { chronology, ocrTotalChars, usage };
-}
-
-/**
- * Step 7e+f: Generate summary part AND save to DB in a single step.
- * The final synthesis text stays within the step.
- */
-export async function generateSummaryAndSaveReport(
-  caseId: string,
-  synthesisParams: SynthesisParams,
-  chronology: string,
-  ocrTotalChars?: number,
-): Promise<SynthesisStepResult & { promptVersion?: string }> {
-  const startMs = Date.now();
-  const r = await generateSynthesisSummary({ ...synthesisParams, chronology });
-  logger.info('pipeline', ` Summary done in ${Date.now() - startMs}ms (${r.wordCount} words, ${r.synthesis.length} chars)`);
-
-  const generationMetadata: Record<string, unknown> = { promptVersion: r.promptVersion };
-  if (r.hrs !== undefined) {
-    generationMetadata.hrs = r.hrs;
-    generationMetadata.hrsLevel = r.hrsLevel;
-  }
-  if (ocrTotalChars && ocrTotalChars > 0) {
-    generationMetadata.ocrTextProvided = true;
-    generationMetadata.ocrTotalChars = ocrTotalChars;
-  }
-  if (synthesisParams.documentSummaries && synthesisParams.documentSummaries.length > 0) {
-    generationMetadata.useDocumentSummaries = true;
-    generationMetadata.documentSummaryCount = synthesisParams.documentSummaries.length;
-  }
-
-  // HARD FILTER: Strip hallucinated image references
-  const realPaths2 = new Set(
-    (synthesisParams.imageAnalysis ?? []).filter((img) => img.storagePath).map((img) => img.storagePath!),
-  );
-  const cleanSynthesis = r.synthesis.replace(
-    /!\[[^\]]*\]\(ocr-image:([^)]+)\)\n*/g,
-    (match, path) => realPaths2.has(path) ? match : '',
-  );
-
-  const result = await insertReportWithMetadata(caseId, cleanSynthesis, r.wordCount, generationMetadata);
-  return { ...result, promptVersion: r.promptVersion, usage: r.usage };
-}
-
-// Keep for backward compatibility but mark as deprecated
-export { insertReport as saveReportStep };
 
 // ── Sectional report generation ─────────────────────────────────────
 
