@@ -27,28 +27,11 @@ export {
   type BalthazardStep,
 } from './balthazard';
 
-// Gabrielli formula (preexisting conditions)
-export {
-  calculateGabrielli,
-  type GabrielliResult,
-} from './gabrielli';
-
 // Damage estimator (case-type-based ranges)
 export {
   estimateBiologicalDamage,
   type DamageEstimate,
 } from './damage-estimator';
-
-// SIMLA 2025 BPCA (psychological/psychiatric damage)
-export {
-  calculateBpca,
-  BPCA_DOMAINS,
-  type BpcaDomain,
-  type BpcaSeverity,
-  type BpcaAssessment,
-  type BpcaDomainScore,
-  type BpcaResult,
-} from './simla-bpca';
 
 // Medico-legal period calculations (ITT, ITP, hospital days, etc.)
 export {
