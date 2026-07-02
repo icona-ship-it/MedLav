@@ -73,19 +73,6 @@ export const EXPENSE_EVENT_TYPES = new Set([
 export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (es. «come da referto ortopedico del 13.11.2024»). NON racchiudere le citazioni tra parentesi quadre: né riferimenti numerati agli eventi né del tipo «tipo, data».';
 
 /**
- * Riga di esclusione della directive premesse quando coesiste (in linea di
- * principio) con documentazione_atti; quando premesse resta SOLA nel piano
- * (doc_atti esclusa dal selettore) viene sostituita dalla variante standalone
- * in resolveSectionPlan, altrimenti gli stragiudiziali sparirebbero dal report.
- */
-export const PREMESSE_ATTI_EXCLUSION = '- NON riprodurre qui i documenti stragiudiziali (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze): sono oggetto della sezione "I Dati della Documentazione in Atti".';
-
-export const PREMESSE_STANDALONE_NOTE = '- In questo report la sezione "I Dati della Documentazione in Atti" NON è presente: riproduci qui, oltre agli atti processuali, anche i documenti stragiudiziali e probatori (PEC risarcitorie, corrispondenza, dichiarazioni testimoniali, polizze), in ordine cronologico, con le stesse formule di introduzione.';
-
-export const CITATION_FORMAT = `FORMATO CITAZIONE per ogni documento:
-**Tipo documento, autore/struttura, in data DD.MM.YYYY:** "... contenuto fedele ..."`;
-
-/**
  * Sprint 1 S1.1 + S1.2 (Lavini quality, 2026-05-17): regole anti-verbosità +
  * anti-ripetizione per le sezioni "documentazione_sanitaria" dove il LLM
  * tende a ridondare e ripetere informazioni. Sono regole rinforzate rispetto

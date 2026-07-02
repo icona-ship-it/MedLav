@@ -19,9 +19,8 @@ import { CASE_TYPES } from '@/lib/constants';
 import type { CaseData } from './types';
 import type { CaseType, CaseRole } from '@/types';
 
+// rc-mvp: unico ruolo — nessuna alternativa selezionabile.
 const CASE_ROLES_SHORT = [
-  { value: 'ctu', label: 'CTU' },
-  { value: 'ctp', label: 'CTP' },
   { value: 'stragiudiziale', label: 'Stragiudiziale' },
 ];
 

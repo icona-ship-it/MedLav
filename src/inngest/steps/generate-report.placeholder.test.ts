@@ -1,15 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// generate-report.ts pulls in supabase/mistral/synthesis at import time; stub the
-// heavy chains. buildPlaceholderContent now embeds the ITT/ITP deterministic
+// generate-report.ts pulls in supabase/mistral at import time; stub the heavy
+// chains. buildPlaceholderContent now embeds the ITT/ITP deterministic
 // SENTINEL (B3), expanded at read time — no calculations dependency.
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }));
-vi.mock('@/services/synthesis/synthesis-service', () => ({
-  generateSynthesis: vi.fn(),
-  generateSynthesisChronology: vi.fn(),
-  generateSynthesisSummary: vi.fn(),
-  shouldSplitSynthesis: vi.fn(),
-}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { buildPlaceholderContent, assembleSectionBlock } from './generate-report';
@@ -40,12 +34,6 @@ describe('buildPlaceholderContent — B3 ITT/ITP deterministic sentinel', () => 
     expect(content).toBe(base);
     expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
   });
-
-  it('decesso: NON inietta la tabella ITT/ITP (il deceduto non ha invalidità temporanea da graduare)', () => {
-    const content = buildPlaceholderContent(spec('considerazioni_ml'), { decesso: true });
-    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
-    expect(content).toContain('Inserire qui le considerazioni');
-  });
 });
 
 describe('buildPlaceholderContent — Sprint 4.3 stima tabellare del danno biologico', () => {
@@ -62,19 +50,6 @@ describe('buildPlaceholderContent — Sprint 4.3 stima tabellare del danno biolo
     const content = buildPlaceholderContent(spec('considerazioni_ml'));
     expect(content).toContain(DETERMINISTIC_MARKERS.ITT_ITP);
     expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
-  });
-
-  it('decesso: NON inietta la stima del danno biologico (ITT/IP non si applicano al deceduto)', () => {
-    const content = buildPlaceholderContent(spec('considerazioni_ml'), { decesso: true, caseType: 'ortopedica' });
-    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
-    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
-  });
-
-  it('ambito penale: NON inietta né ITT/ITP né stima (in penale non si valuta il danno civilistico)', () => {
-    const content = buildPlaceholderContent(spec('considerazioni_ml'), { ambitoPenale: true, caseType: 'ortopedica' });
-    expect(content).not.toContain(STIMA_DANNO_MARKER_PREFIX);
-    expect(content).not.toContain(DETERMINISTIC_MARKERS.ITT_ITP);
-    expect(content).toContain('Inserire qui le considerazioni');
   });
 
   it('non-target placeholder sections never receive the stima sentinel', () => {

@@ -257,10 +257,6 @@ const ITT_ITP_PLACEHOLDER_SECTIONS = new Set(['considerazioni_ml']);
 
 /** Options for buildPlaceholderContent — suppression flags + case type. */
 export interface PlaceholderContentOptions {
-  /** Periziando deceduto: ITT/ITP e stima del danno biologico non si applicano. */
-  decesso?: boolean;
-  /** Ambito penale: non si valuta il danno civilistico (no ITT/ITP, no stima). */
-  ambitoPenale?: boolean;
   /** Case type — embedded in the STIMA_DANNO sentinel (Sprint 4.3). */
   caseType?: CaseType;
 }
@@ -279,13 +275,6 @@ export interface PlaceholderContentOptions {
 export function buildPlaceholderContent(spec: SectionSpec, opts?: PlaceholderContentOptions): string {
   const base = spec.placeholderText ?? '';
   if (!ITT_ITP_PLACEHOLDER_SECTIONS.has(spec.id)) {
-    return base;
-  }
-  // Decesso: il deceduto non ha invalidità temporanea da graduare né danno
-  // biologico ITT/IP da stimare — le tabelle sarebbero fuorvianti (benchmark
-  // gold 2026-06-10). Ambito penale: il danno civilistico non si valuta (il
-  // piano penale usa già considerazioni_penale; guardia esplicita di difesa).
-  if (opts?.decesso || opts?.ambitoPenale) {
     return base;
   }
   // Guida di conversione (benchmark gold 2026-06-10): nei depositati i periodi
@@ -315,8 +304,6 @@ export async function generateSectionStep(
       id: spec.id,
       title: spec.title,
       content: buildPlaceholderContent(spec, {
-        decesso: synthesisParams.periziaMetadata?.decesso,
-        ambitoPenale: synthesisParams.periziaMetadata?.ambitoPenale,
         caseType: synthesisParams.caseType,
       }),
       contextSummary: '',

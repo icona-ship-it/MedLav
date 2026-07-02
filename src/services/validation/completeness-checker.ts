@@ -56,56 +56,6 @@ const REQUIREMENTS_BY_CASE_TYPE: Record<CaseType, CompletenessRequirement[]> = {
     { name: 'Imaging post-trauma', category: 'obbligatorio', searchKeywords: ['rx', 'tac', 'rm', 'radiografia', 'imaging'], eventTypes: ['esame'] },
     { name: 'Dinamica sinistro', category: 'raccomandato', searchKeywords: ['dinamica', 'sinistro', 'incidente', 'impatto', 'collisione'] },
   ],
-  previdenziale: [
-    { name: 'Certificati specialistici', category: 'obbligatorio', searchKeywords: ['certificato', 'specialistico', 'visita specialistica', 'consulenza'], eventTypes: ['visita'] },
-    { name: 'Esami diagnostici', category: 'obbligatorio', searchKeywords: ['esame', 'diagnostico', 'accertamento'], eventTypes: ['esame'] },
-    { name: 'Terapie in corso', category: 'raccomandato', searchKeywords: ['terapia in corso', 'trattamento in corso', 'farmacologica'], eventTypes: ['terapia'] },
-  ],
-  previdenziale_dlgs62: [
-    { name: 'Verbale commissione multidisciplinare', category: 'obbligatorio', searchKeywords: ['verbale', 'commissione', 'multidisciplinare', 'accertamento disabilità'] },
-    { name: 'Documentazione clinica specialistica', category: 'obbligatorio', searchKeywords: ['certificato', 'specialistico', 'visita specialistica'], eventTypes: ['visita'] },
-    { name: 'Valutazione ICF', category: 'raccomandato', searchKeywords: ['icf', 'funzionamento', 'partecipazione', 'attività'] },
-    { name: 'Progetto di vita', category: 'raccomandato', searchKeywords: ['progetto di vita', 'progetto individuale', 'sostegno'] },
-  ],
-  previdenziale_inv_civile: [
-    { name: 'Verbale commissione medica ASL/INPS', category: 'obbligatorio', searchKeywords: ['verbale', 'commissione', 'invalidità', 'inps', 'asl'] },
-    { name: 'Certificati specialistici', category: 'obbligatorio', searchKeywords: ['certificato', 'specialistico', 'visita specialistica', 'consulenza'], eventTypes: ['visita'] },
-    { name: 'Esami diagnostici', category: 'obbligatorio', searchKeywords: ['esame', 'diagnostico', 'accertamento'], eventTypes: ['esame'] },
-    { name: 'Terapie in corso', category: 'raccomandato', searchKeywords: ['terapia in corso', 'trattamento in corso', 'farmacologica'], eventTypes: ['terapia'] },
-  ],
-  infortuni: [
-    { name: 'Certificato INAIL', category: 'obbligatorio', searchKeywords: ['inail', 'certificato inail', 'denuncia infortunio'] },
-    { name: 'Denuncia infortunio', category: 'obbligatorio', searchKeywords: ['denuncia infortunio', 'denuncia di infortunio', 'rapporto infortunio'] },
-    { name: 'Certificati continuazione', category: 'raccomandato', searchKeywords: ['continuazione', 'certificato continuazione', 'prosecuzione'] },
-  ],
-  inail_malattia_prof: [
-    { name: 'Denuncia malattia professionale', category: 'obbligatorio', searchKeywords: ['denuncia malattia professionale', 'denuncia mp', 'malattia professionale'] },
-    { name: 'Certificato medico malattia professionale', category: 'obbligatorio', searchKeywords: ['certificato', 'malattia professionale', 'inail'] },
-    { name: 'Documentazione esposizione lavorativa', category: 'obbligatorio', searchKeywords: ['esposizione', 'rischio', 'dvr', 'valutazione rischi', 'mansione'] },
-    { name: 'Sorveglianza sanitaria', category: 'raccomandato', searchKeywords: ['sorveglianza sanitaria', 'medico competente', 'cartella sanitaria'] },
-  ],
-  inail_infortunio: [
-    { name: 'Certificato medico iniziale INAIL', category: 'obbligatorio', searchKeywords: ['certificato iniziale', 'inail', 'certificato inail'] },
-    { name: 'Denuncia infortunio', category: 'obbligatorio', searchKeywords: ['denuncia infortunio', 'denuncia di infortunio'] },
-    { name: 'Certificati di continuazione', category: 'raccomandato', searchKeywords: ['continuazione', 'certificato continuazione', 'prosecuzione'] },
-    { name: 'Documentazione dinamica infortunio', category: 'obbligatorio', searchKeywords: ['dinamica', 'infortunio', 'relazione', 'testimoni'] },
-  ],
-  perizia_assicurativa: [
-    { name: 'Verbale Pronto Soccorso', category: 'obbligatorio', searchKeywords: ['pronto soccorso', 'ps', 'verbale ps', 'accesso ps'], eventTypes: ['visita', 'ricovero'] },
-    { name: 'Imaging post-trauma', category: 'obbligatorio', searchKeywords: ['rx', 'tac', 'rm', 'radiografia', 'imaging'], eventTypes: ['esame'] },
-    { name: 'Documentazione spese mediche', category: 'raccomandato', searchKeywords: ['fattura', 'ricevuta', 'spese mediche', 'nota spese', 'preventivo'] },
-    { name: 'Dinamica sinistro', category: 'raccomandato', searchKeywords: ['dinamica', 'sinistro', 'incidente', 'impatto', 'collisione'] },
-  ],
-  analisi_spese_mediche: [
-    { name: 'Fatture e ricevute delle prestazioni', category: 'obbligatorio', searchKeywords: ['fattura', 'ricevuta', 'nota spese', 'parcella', 'notula'] },
-    { name: 'Prescrizioni mediche correlate', category: 'obbligatorio', searchKeywords: ['prescrizione', 'ricetta', 'impegnativa', 'piano terapeutico'], eventTypes: ['prescrizione'] },
-    { name: 'Documentazione clinica del quadro patologico', category: 'obbligatorio', searchKeywords: ['referto', 'diagnosi', 'cartella clinica', 'visita'], eventTypes: ['diagnosi', 'visita'] },
-  ],
-  opinione_prognostica: [
-    { name: 'Documentazione clinica recente', category: 'obbligatorio', searchKeywords: ['referto', 'visita', 'controllo', 'follow-up'], eventTypes: ['visita', 'follow-up'] },
-    { name: 'Imaging diagnostico recente', category: 'obbligatorio', searchKeywords: ['rx', 'tac', 'rm', 'radiografia', 'imaging', 'ecografia'], eventTypes: ['esame'] },
-    { name: 'Documentazione trattamenti effettuati', category: 'obbligatorio', searchKeywords: ['terapia', 'fisioterapia', 'riabilitazione', 'intervento', 'trattamento'], eventTypes: ['terapia', 'intervento'] },
-  ],
   generica: [
     { name: 'Consenso informato', category: 'raccomandato', searchKeywords: ['consenso informato', 'consenso'], eventTypes: ['consenso'] },
     { name: 'Lettera di dimissione', category: 'raccomandato', searchKeywords: ['dimissione', 'lettera dimissione', 'lettera di dimissione'] },

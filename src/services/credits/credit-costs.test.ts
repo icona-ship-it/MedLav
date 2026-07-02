@@ -12,9 +12,8 @@ describe('CREDIT_COSTS', () => {
   it('should define the newly-metered free endpoints', () => {
     // These operations used to be free (denial-of-wallet vectors) and are now
     // billed — regressing them to 0 / removing them would re-open the hole.
-    expect(CREDIT_COSTS.quesito).toBe(1);
-    expect(CREDIT_COSTS.organizzazione_documenti).toBe(1);
     expect(CREDIT_COSTS.rigenerazione_report).toBeGreaterThan(0);
+    expect(CREDIT_COSTS.rigenerazione_sezione).toBeGreaterThan(0);
   });
 });
 

@@ -49,32 +49,9 @@ organizzati in modo che il medico legale possa formulare autonomamente le propri
 Usa formule come: "Dalla documentazione in atti risultano i seguenti elementi rilevanti...",
 "Il quadro documentale presenta le seguenti criticità...", "Si segnalano le seguenti lacune documentali..."`;
 
+// rc-mvp: solo la strategia stragiudiziale — le strategie ctu/ctp vivono su
+// main e nel tag full-app-2026-07-02.
 export const ROLE_STRATEGIES: Record<CaseRole, RolePromptStrategy> = {
-  ctu: {
-    role: 'ctu',
-    toneDirective: `${OBJECTIVE_TONE}
-Il report è destinato al Giudice tramite il CTU. Presenta i fatti in modo equilibrato, con evidenze per entrambe le parti.`,
-    emphasisDirective: `${OBJECTIVE_EMPHASIS}
-Per ogni fatto rilevante, evidenzia sia la prospettiva documentale del ricorrente sia quella del resistente, SENZA favorire nessuna delle due.`,
-    anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,
-    extraSections: '',
-    conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
-Organizza gli elementi documentali per facilitare la risposta ai quesiti del Giudice.
-Per ogni quesito, elenca i FATTI DOCUMENTALI pertinenti [documento, data] — il CTU formulerà le risposte.`,
-  },
-
-  ctp: {
-    role: 'ctp',
-    toneDirective: `${OBJECTIVE_TONE}
-Il report è destinato al CTP. Presenta TUTTI i fatti documentati in modo completo e oggettivo, senza selezionare a favore o contro.`,
-    emphasisDirective: `${OBJECTIVE_EMPHASIS}
-Per ogni fatto rilevante, evidenzia sia gli elementi che supportano la pretesa sia quelli che la indeboliscono, SENZA favorire nessuna delle due posizioni.`,
-    anomalyFraming: OBJECTIVE_ANOMALY_FRAMING,
-    extraSections: '',
-    conclusionGuidance: `${OBJECTIVE_CONCLUSION_GUIDANCE}
-Il CTP formulerà autonomamente le proprie valutazioni professionali sulla base degli elementi documentali presentati.`,
-  },
-
   stragiudiziale: {
     role: 'stragiudiziale',
     toneDirective: `${OBJECTIVE_TONE}

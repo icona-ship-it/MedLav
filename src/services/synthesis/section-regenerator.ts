@@ -70,11 +70,11 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   const {
     sectionId, currentSynthesis, caseType, caseTypes, caseRole,
     events, anomalies, missingDocuments, calculations, userInstruction,
-    periziaMetadata, documentsOcrText, moduleId, patientInitials,
+    periziaMetadata, documentsOcrText, patientInitials,
   } = params;
 
   // Resolve the CANONICAL spec from the catalog (same source as generation).
-  let spec = getSectionSpecById(sectionId, caseRole, moduleId, periziaMetadata);
+  let spec = getSectionSpecById(sectionId, periziaMetadata);
   if (!spec) {
     throw new Error(`Sezione non riconosciuta per la rigenerazione: ${sectionId}`);
   }
@@ -117,11 +117,8 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   // LLM. The AI must not author or rewrite them (VINCOLO #1: oggettività assoluta).
   // Re-emit the deterministic placeholder content (keeps the ITT/ITP sentinel).
   if (spec.isPlaceholder) {
-    // Same opts as the main pipeline: decesso/penale suppress the ITT/ITP and
-    // stima-danno sentinels; caseType parameterizes the stima marker (4.3).
+    // Same opts as the main pipeline: caseType parameterizes the stima marker (4.3).
     return replaceSectionContent(currentSynthesis, sectionId, buildPlaceholderContent(spec, {
-      decesso: periziaMetadata?.decesso,
-      ambitoPenale: periziaMetadata?.ambitoPenale,
       caseType,
     }));
   }

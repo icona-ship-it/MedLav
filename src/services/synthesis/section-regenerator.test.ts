@@ -18,10 +18,10 @@ const mockGenerate = vi.mocked(generateSingleSection);
 // documentazione_sanitaria is now a deterministic placeholder.
 function baseParams(overrides: Record<string, unknown> = {}) {
   return {
-    sectionId: 'documentazione_atti',
-    currentSynthesis: '## I Dati della Documentazione in Atti\nVecchio contenuto.\n\n## Epicrisi\nAltro.\n',
+    sectionId: 'il_fatto_e_storia_clinica',
+    currentSynthesis: '## Il Fatto e la Storia Clinica\nVecchio contenuto.\n\n## Epicrisi\nAltro.\n',
     caseType: 'ortopedica' as CaseType,
-    caseRole: 'ctu' as CaseRole,
+    caseRole: 'stragiudiziale' as CaseRole,
     events: [],
     anomalies: [],
     missingDocuments: [],
@@ -30,21 +30,15 @@ function baseParams(overrides: Record<string, unknown> = {}) {
 }
 
 describe('getSectionSpecById', () => {
-  it('resolves the canonical CTU spec with a non-empty promptDirective', () => {
-    const spec = getSectionSpecById('documentazione_sanitaria', 'ctu');
+  it('resolves the canonical stragiudiziale spec with a non-empty promptDirective', () => {
+    const spec = getSectionSpecById('documentazione_sanitaria');
     expect(spec).toBeDefined();
     expect(spec?.id).toBe('documentazione_sanitaria');
     expect((spec?.promptDirective ?? '').length).toBeGreaterThan(0);
   });
 
-  it('resolves the PENALE valuation spec when ambitoPenale is set', () => {
-    const penale = getSectionSpecById('considerazioni_penale', 'ctu', undefined, { ambitoPenale: true });
-    expect(penale).toBeDefined();
-    expect(penale?.id).toBe('considerazioni_penale');
-  });
-
   it('returns undefined for an unknown section id', () => {
-    expect(getSectionSpecById('sezione_inesistente', 'ctu')).toBeUndefined();
+    expect(getSectionSpecById('sezione_inesistente')).toBeUndefined();
   });
 });
 
@@ -52,8 +46,8 @@ describe('regenerateSection — parity with generation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGenerate.mockResolvedValue({
-      id: 'documentazione_atti',
-      title: 'I Dati della Documentazione in Atti',
+      id: 'il_fatto_e_storia_clinica',
+      title: 'Il Fatto e la Storia Clinica',
       content: 'NUOVO CONTENUTO RIGENERATO',
       contextSummary: '',
       wordCount: 3,
@@ -67,7 +61,7 @@ describe('regenerateSection — parity with generation', () => {
     const arg = mockGenerate.mock.calls[0][0];
     // The spec must come from the catalog (carries the load-bearing promptDirective),
     // NOT a weak ad-hoc prompt.
-    expect(arg.spec.id).toBe('documentazione_atti');
+    expect(arg.spec.id).toBe('il_fatto_e_storia_clinica');
     expect(arg.spec.promptDirective.length).toBeGreaterThan(0);
     expect(result).toContain('NUOVO CONTENUTO RIGENERATO');
   });
@@ -84,7 +78,7 @@ describe('regenerateSection — parity with generation', () => {
     await regenerateSection(baseParams());
     const arg = mockGenerate.mock.calls[0][0];
     const ctxIds = arg.previousContext.map((c) => c.id);
-    expect(ctxIds).not.toContain('documentazione_atti');
+    expect(ctxIds).not.toContain('il_fatto_e_storia_clinica');
     expect(ctxIds).toContain('epicrisi');
   });
 
@@ -96,8 +90,8 @@ describe('regenerateSection — parity with generation', () => {
   it('strips hallucinated ocr-image refs but keeps the real ones (HARD FILTER parity)', async () => {
     const real = 'ocr-images/doc-a/p3-f0.png';
     mockGenerate.mockResolvedValueOnce({
-      id: 'documentazione_atti',
-      title: 'I Dati della Documentazione in Atti',
+      id: 'il_fatto_e_storia_clinica',
+      title: 'Il Fatto e la Storia Clinica',
       content: `Testo.\n\n![Fig. 1](ocr-image:${real})\n\n![Fig. 2](ocr-image:ocr-images/fake/p9-f0.png)`,
       contextSummary: '',
       wordCount: 3,
@@ -111,16 +105,16 @@ describe('regenerateSection — parity with generation', () => {
     expect(result).not.toContain('fake/p9-f0.png');
   });
 
-  it('NEVER sends a PLACEHOLDER section (medico-legal valuation) to the LLM', async () => {
-    // considerazioni_ml is isPlaceholder: the AI must not author the valuation —
-    // it stays a deterministic placeholder for the perito (VINCOLO oggettività).
+  it('NEVER sends a PLACEHOLDER section (deterministic table) to the LLM', async () => {
+    // spese_mediche is isPlaceholder: the table is rendered deterministically from
+    // the expense events — the AI must not author it (VINCOLO oggettività).
     const result = await regenerateSection(baseParams({
-      sectionId: 'considerazioni_ml',
-      currentSynthesis: '## Considerazioni Medico-Legali\nDa compilare.\n\n## Epicrisi\nAltro.\n',
+      sectionId: 'spese_mediche',
+      currentSynthesis: '## Spese Mediche\nDa compilare.\n\n## Epicrisi\nAltro.\n',
     }));
 
     expect(mockGenerate).not.toHaveBeenCalled();
     // Re-emits the deterministic placeholder text, not LLM prose.
-    expect(result).toContain('Inserire qui le considerazioni medico-legali');
+    expect(result).toContain('Le spese mediche documentate sono riepilogate nella tabella seguente');
   });
 });

@@ -47,7 +47,7 @@ describe('adversarial: header schema + template', () => {
       giudiziale: null,
     };
 
-    const md = renderHeaderMarkdown(data, { variant: 'stragiudiziale' });
+    const md = renderHeaderMarkdown(data);
 
     expect(md).toContain('REGNOTO VALERIA');
     expect(md).toContain('11/08/1962');
@@ -88,7 +88,7 @@ describe('adversarial: header schema + template', () => {
       giudiziale: null,
     };
 
-    const md = renderHeaderMarkdown(data, { variant: 'stragiudiziale' });
+    const md = renderHeaderMarkdown(data);
 
     // Multiple [da compilare] markers — every nullable field surfaces it
     const tbdCount = (md.match(/\[da compilare dal perito\]/g) ?? []).length;

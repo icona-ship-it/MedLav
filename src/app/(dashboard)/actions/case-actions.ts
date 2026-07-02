@@ -25,7 +25,7 @@ import type { ModuleId } from '@/types/modules';
 const validCaseTypes = CASE_TYPES.map((t) => t.value);
 
 const caseTypeSchema = z.enum(validCaseTypes as [string, ...string[]]);
-const caseRoleSchema = z.enum(['ctu', 'ctp', 'stragiudiziale']);
+const caseRoleSchema = z.enum(['stragiudiziale']);
 const caseStatusSchema = z.enum(['bozza', 'in_revisione', 'definitivo', 'archiviato']);
 const moduleIdSchema = z.enum(ALL_MODULE_IDS as unknown as [string, ...string[]]);
 
@@ -49,30 +49,15 @@ const periziaMetadataSchema = z.object({
   alboNumber: z.string().max(80).optional(),
   ctuEmail: z.string().max(200).optional(),
   ctuPec: z.string().max(200).optional(),
-  tribunale: z.string().max(200).optional(),
-  sezione: z.string().max(200).optional(),
-  rgNumber: z.string().max(50).optional(),
-  tipoProcedimento: z.string().max(200).optional(),
-  judgeName: z.string().max(100).optional(),
-  giudiceQualifica: z.string().max(60).optional(),
   ctuName: z.string().max(100).optional(),
   ctuTitle: z.string().max(200).optional(),
   collaboratoreName: z.string().max(100).optional(),
   collaboratoreTitle: z.string().max(200).optional(),
-  coCtuName: z.string().max(100).optional(),
-  coCtuTitle: z.string().max(200).optional(),
-  oggettoIncarico: z.string().max(300).optional(),
-  ctpRicorrente: z.string().max(100).optional(),
-  ctpResistente: z.string().max(100).optional(),
   parteRicorrente: z.string().max(200).optional(),
   parteResistente: z.string().max(200).optional(),
   dataIncarico: headerDateSchema.optional(),
   dataOperazioni: headerDateSchema.optional(),
   dataDeposito: headerDateSchema.optional(),
-  termineBozza: headerDateSchema.optional(),
-  termineOsservazioni: headerDateSchema.optional(),
-  provvedimentiOrdinanza: z.string().max(3000).optional(),
-  quesiti: z.array(z.string().max(2000)).max(20).optional(),
   speseMediche: z.string().max(5000).optional(),
   esameObiettivo: z.string().max(10000).optional(),
   fondoSpese: z.string().max(100).optional(),
@@ -87,8 +72,6 @@ const periziaMetadataSchema = z.object({
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
-  ambitoPenale: z.boolean().optional(),
-  decesso: z.boolean().optional(),
 }).strict().nullable().optional();
 
 const createCaseSchema = z.object({
@@ -179,32 +162,14 @@ export async function createCase(formData: FormData) {
 
   const { patientInitials, practiceReference, notes, periziaMetadata } = validated.data;
 
-  // Derive role, type(s), and pipeline mode from module or legacy fields
-  let caseRole: string;
-  let caseType: string;
-  let caseTypes: string[];
-  let moduleIdValue: ModuleId | undefined;
-  let moduleCategoryValue: number | undefined;
-  let pipelineModeValue: string = 'full';
-
-  if (validated.data.moduleId) {
-    const mid = validated.data.moduleId as ModuleId;
-    moduleIdValue = mid;
-    caseRole = moduleToRole(mid) ?? 'ctu';
-    const legacyTypes = moduleToCaseTypes(mid);
-    caseType = legacyTypes[0] ?? 'generica';
-    caseTypes = legacyTypes.length > 0 ? legacyTypes : ['generica'];
-    pipelineModeValue = moduleToPipelineMode(mid);
-    moduleCategoryValue = moduleToCategory(mid).id;
-  } else {
-    // Legacy flow — require caseType and caseRole
-    if (!validated.data.caseType || !validated.data.caseRole) {
-      return { error: 'Dati non validi. Verifica tipo caso e tipo incarico.' };
-    }
-    caseRole = validated.data.caseRole;
-    caseType = validated.data.caseType;
-    caseTypes = validated.data.caseTypes ?? [caseType];
-  }
+  // rc-mvp: UNICO flusso — modulo RC stragiudiziale. Il doppio binario
+  // module-vs-legacy (fallback caseRole 'ctu') vive su main.
+  const moduleIdValue: ModuleId = (validated.data.moduleId as ModuleId | undefined) ?? 'perizia_ml_rc_civile';
+  const caseRole: string = moduleToRole(moduleIdValue) ?? 'stragiudiziale';
+  const legacyTypes = moduleToCaseTypes(moduleIdValue);
+  const caseTypes: string[] = validated.data.caseTypes ?? (legacyTypes.length > 0 ? legacyTypes : ['generica']);
+  const pipelineModeValue: string = moduleToPipelineMode(moduleIdValue);
+  const moduleCategoryValue: number = moduleToCategory(moduleIdValue).id;
 
   // Generate unique case code with retry on collision
   const year = new Date().getFullYear();
@@ -246,14 +211,9 @@ export async function createCase(formData: FormData) {
         perizia_metadata: periziaMetadata,
         status: 'bozza',
         document_count: 0,
-        ...(moduleIdValue ? {
-          module_id: moduleIdValue,
-          module_category: moduleCategoryValue,
-          pipeline_mode: pipelineModeValue,
-        } : {
-          // Auto-derive pipeline_mode from case_type for legacy case creation (no module selected)
-          ...(caseType === 'analisi_spese_mediche' ? { pipeline_mode: 'expenses_only' } : {}),
-        }),
+        module_id: moduleIdValue,
+        module_category: moduleCategoryValue,
+        pipeline_mode: pipelineModeValue,
       })
       .select('id')
       .single();
@@ -573,12 +533,7 @@ export async function getReportSectionOptions(
     .single();
   if (!caseRow) return { sections: [], error: 'Caso non trovato' };
 
-  const ambitoPenale = (caseRow.perizia_metadata as PeriziaMetadata | null)?.ambitoPenale ?? false;
-  const sections = getSelectableSections(
-    (caseRow.case_role as CaseRole) ?? 'ctu',
-    (caseRow.module_id as string | null) ?? undefined,
-    ambitoPenale,
-  );
+  const sections = getSelectableSections();
   return { sections };
 }
 

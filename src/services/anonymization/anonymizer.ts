@@ -458,12 +458,9 @@ function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string;
   const entries: Array<{ name: string; replacement: string }> = [];
 
   // patientFullName entra nel prompt di sintesi (etichettato AUTORITATIVO) → puo'
-  // comparire nel report in forma narrativa: va redatto. coCtuName idem.
+  // comparire nel report in forma narrativa: va redatto.
   if (metadata.patientFullName) {
     entries.push({ name: metadata.patientFullName, replacement: '[PAZIENTE]' });
-  }
-  if (metadata.coCtuName) {
-    entries.push({ name: metadata.coCtuName, replacement: '[CO-CTU]' });
   }
   if (metadata.parteRicorrente) {
     entries.push({ name: metadata.parteRicorrente, replacement: 'PARTE RICORRENTE' });
@@ -472,19 +469,10 @@ function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string;
     entries.push({ name: metadata.parteResistente, replacement: 'PARTE RESISTENTE' });
   }
   if (metadata.ctuName) {
-    entries.push({ name: metadata.ctuName, replacement: '[CTU]' });
-  }
-  if (metadata.ctpRicorrente) {
-    entries.push({ name: metadata.ctpRicorrente, replacement: '[CTP RICORRENTE]' });
-  }
-  if (metadata.ctpResistente) {
-    entries.push({ name: metadata.ctpResistente, replacement: '[CTP RESISTENTE]' });
-  }
-  if (metadata.judgeName) {
-    entries.push({ name: metadata.judgeName, replacement: '[GIUDICE]' });
+    entries.push({ name: metadata.ctuName, replacement: '[PERITO]' });
   }
   if (metadata.collaboratoreName) {
-    entries.push({ name: metadata.collaboratoreName, replacement: '[COLLABORATORE CTU]' });
+    entries.push({ name: metadata.collaboratoreName, replacement: '[COLLABORATORE]' });
   }
 
   // Sort by name length descending to replace longer names first

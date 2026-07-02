@@ -3,15 +3,13 @@ import { ROLE_STRATEGIES, formatRoleDirectiveForPrompt, getRoleStrategy } from '
 
 describe('role-prompts', () => {
   describe('OBJECTIVE_ANOMALY_FRAMING placement constraint', () => {
-    it('every role anomalyFraming must restrict the FATTO/STANDARD pattern to dedicated sections', () => {
+    it('the anomalyFraming must restrict the FATTO/STANDARD pattern to dedicated sections', () => {
       // Regression: the anomaly framing pattern leaked into documentazione_sanitaria
       // and produced biased "Profili critici" sub-sections inside the chronology.
       // The framing must explicitly state it's only for anomaly/considerazioni sections.
-      for (const role of ['ctu', 'ctp', 'stragiudiziale'] as const) {
-        const framing = ROLE_STRATEGIES[role].anomalyFraming;
-        expect(framing).toMatch(/VINCOLO DI POSIZIONAMENTO/);
-        expect(framing).toMatch(/VIETATO usarlo nella sezione "Documentazione Sanitaria"/i);
-      }
+      const framing = ROLE_STRATEGIES.stragiudiziale.anomalyFraming;
+      expect(framing).toMatch(/VINCOLO DI POSIZIONAMENTO/);
+      expect(framing).toMatch(/VIETATO usarlo nella sezione "Documentazione Sanitaria"/i);
     });
   });
 
@@ -29,21 +27,17 @@ describe('role-prompts', () => {
       expect(directive).not.toMatch(/SEZIONI AGGIUNTIVE RICHIESTE/);
     });
 
-    it('produces a non-empty directive for every role', () => {
-      for (const role of ['ctu', 'ctp', 'stragiudiziale'] as const) {
-        const out = formatRoleDirectiveForPrompt(role);
-        expect(out.length).toBeGreaterThan(200);
-        expect(out).toContain('## RUOLO E PROSPETTIVA');
-        expect(out).toContain('## CRITERI DI ENFASI');
-        expect(out).toContain('## COME PRESENTARE I PROFILI CRITICI');
-      }
+    it('produces a non-empty directive', () => {
+      const out = formatRoleDirectiveForPrompt('stragiudiziale');
+      expect(out.length).toBeGreaterThan(200);
+      expect(out).toContain('## RUOLO E PROSPETTIVA');
+      expect(out).toContain('## CRITERI DI ENFASI');
+      expect(out).toContain('## COME PRESENTARE I PROFILI CRITICI');
     });
   });
 
   describe('getRoleStrategy', () => {
     it('returns the correct strategy per role', () => {
-      expect(getRoleStrategy('ctu').role).toBe('ctu');
-      expect(getRoleStrategy('ctp').role).toBe('ctp');
       expect(getRoleStrategy('stragiudiziale').role).toBe('stragiudiziale');
     });
   });

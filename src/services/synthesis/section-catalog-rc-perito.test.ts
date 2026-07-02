@@ -11,12 +11,10 @@ import type { PeriziaMetadata } from '@/types';
  * (Decisione utente 2026-06-29: prima il ramo "vuoto" lasciava la sezione bianca; il
  * fuori-stile che l'aveva motivata — tag [A/B/C/D] + tassonomia — è risolto dai cleanup C1/C5.)
  */
-const RC = 'perizia_ml_rc_civile';
-
 describe('applyRcPeritoSections (via getSectionSpecById) — sezioni perito RC', () => {
   it('compilato → usa il TESTO del perito come placeholder ("Il Fatto")', () => {
     const meta = { ilFattoEStoriaClinica: 'In data 10.03.2024 la paziente cadeva...' } as PeriziaMetadata;
-    const spec = getSectionSpecById('il_fatto_e_storia_clinica', 'stragiudiziale', RC, meta);
+    const spec = getSectionSpecById('il_fatto_e_storia_clinica', meta);
     expect(spec?.isPlaceholder).toBe(true);
     expect(spec?.placeholderText).toContain('In data 10.03.2024');
     expect(spec?.maxTokens).toBe(0);
@@ -24,7 +22,7 @@ describe('applyRcPeritoSections (via getSectionSpecById) — sezioni perito RC',
 
   it('VUOTO → bozza AI dai documenti ("Il Fatto"): spec LLM, non placeholder', () => {
     const meta = { patientFullName: 'Mario Esempi' } as PeriziaMetadata;
-    const spec = getSectionSpecById('il_fatto_e_storia_clinica', 'stragiudiziale', RC, meta);
+    const spec = getSectionSpecById('il_fatto_e_storia_clinica', meta);
     expect(spec?.isPlaceholder).toBeFalsy();
     expect(spec?.maxTokens).toBeGreaterThan(0);
     expect(spec?.dataSources).toContain('events-medical');
@@ -33,7 +31,7 @@ describe('applyRcPeritoSections (via getSectionSpecById) — sezioni perito RC',
 
   it('VUOTO → bozza AI dai documenti ("Dati Anamnestici"): spec LLM, non placeholder', () => {
     const meta = { patientFullName: 'Mario Esempi' } as PeriziaMetadata;
-    const spec = getSectionSpecById('anamnesi', 'stragiudiziale', RC, meta);
+    const spec = getSectionSpecById('anamnesi', meta);
     expect(spec?.isPlaceholder).toBeFalsy();
     expect(spec?.maxTokens).toBeGreaterThan(0);
     expect(spec?.dataSources).toContain('events-medical');
@@ -41,14 +39,14 @@ describe('applyRcPeritoSections (via getSectionSpecById) — sezioni perito RC',
 
   it('La Visita Clinica resta SEMPRE placeholder (visita in presenza, non nei doc)', () => {
     const meta = { patientFullName: 'Mario Esempi' } as PeriziaMetadata;
-    const spec = getSectionSpecById('visita_clinica', 'stragiudiziale', RC, meta);
+    const spec = getSectionSpecById('visita_clinica', meta);
     expect(spec?.isPlaceholder).toBe(true);
     expect(spec?.placeholderText).toMatch(/SOGGETTIVAMENTE/);
   });
 
   it('placeholder col testo del perito NON deve contenere tag di citazione [A/B...]', () => {
     const meta = { ilFattoEStoriaClinica: 'Narrazione pulita del perito.' } as PeriziaMetadata;
-    const il = getSectionSpecById('il_fatto_e_storia_clinica', 'stragiudiziale', RC, meta);
+    const il = getSectionSpecById('il_fatto_e_storia_clinica', meta);
     expect(il?.placeholderText).not.toMatch(/\[[A-D]\s*[-–]/);
   });
 });

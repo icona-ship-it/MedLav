@@ -51,8 +51,6 @@ interface SharedCaseViewProps {
 }
 
 const roleLabels: Record<string, string> = {
-  ctu: 'CTU',
-  ctp: 'CTP',
   stragiudiziale: 'Stragiudiziale',
 };
 

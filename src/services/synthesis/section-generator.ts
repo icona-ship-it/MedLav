@@ -42,7 +42,7 @@ import {
   parseHeaderData,
   type HeaderData,
 } from './header-schema';
-import { renderHeaderMarkdown, variantForSectionId, overlayGiudizialeFromMetadata, buildOperativeCodaFromMetadata } from './header-template';
+import { renderHeaderMarkdown } from './header-template';
 import { buildTailPrioritizedOcrInput } from './document-summarizer';
 import { mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
@@ -578,16 +578,6 @@ export async function generateSingleSection(params: {
     finalContent = stripBracketedDocRefs(finalContent);
   }
 
-  // Benchmark gold 2026-06-10 (3/3 CTU-RC): il blocco operativo dell'incarico
-  // (CC.TT.P., ausiliario, inizio operazioni, termini, fondo spese,
-  // provvedimenti) SEGUE i quesiti — coda deterministica dai metadati
-  // autoritativi. L'intestazione lo omette quando la sezione Quesiti è nel
-  // piano (renderGiudizialeHeader, quesitiInPlan).
-  if (spec.id === 'quesiti') {
-    const coda = buildOperativeCodaFromMetadata(synthesisParams.periziaMetadata);
-    if (coda) finalContent += `\n\n${coda}`;
-  }
-
   // Epicrisi (stragiudiziale RC): appendi DETERMINISTICAMENTE (1) i FATTI calcolati
   // — giorni di ricovero inclusivi + durata complessiva malattia, via marker espanso a
   // read-time (l'LLM li rifiutava/sbagliava); poi (2) lo scaffold di completamento del
@@ -1009,8 +999,6 @@ async function generateHeaderSection(params: {
   const { spec, synthesisParams, attempt } = params;
   const startMs = Date.now();
 
-  const variant = variantForSectionId(spec.id, synthesisParams.caseRole) ?? 'stragiudiziale';
-
   const systemPrompt = buildHeaderSystemPrompt();
 
   // User prompt: feed the perizia metadata + medical events (light projection)
@@ -1046,24 +1034,7 @@ async function generateHeaderSection(params: {
     headerData = parsed.data;
   }
 
-  // CTU/CTP: i campi formali d'incarico (tribunale, R.G., giudice, CC.TT.P., date
-  // operazioni, fondo spese, tipo procedimento) provengono dai metadati che il
-  // perito ha compilato — autoritativi e non fabbricabili. Sovrapponili sull'estratto
-  // LLM così l'intestazione Del Porto è completa e deterministica.
-  if (variant === 'ctu' || variant === 'ctp') {
-    headerData = overlayGiudizialeFromMetadata(headerData, synthesisParams.periziaMetadata);
-  }
-
-  // Benchmark gold 2026-06-10: il template conosce l'ambito (penale vs civile)
-  // e se la sezione Quesiti segue nel piano (formula-ponte vs rinvio ordinanza).
-  const pm = synthesisParams.periziaMetadata;
-  const markdown = renderHeaderMarkdown(headerData, {
-    variant,
-    ambitoPenale: pm?.ambitoPenale,
-    quesitiInPlan:
-      (pm?.quesiti?.length ?? 0) > 0 &&
-      !(pm?.excludedReportSections ?? []).includes('quesiti'),
-  });
+  const markdown = renderHeaderMarkdown(headerData);
   const wordCount = markdown.split(/\s+/).filter((w) => w.length > 0).length;
 
   const elapsed = Date.now() - startMs;

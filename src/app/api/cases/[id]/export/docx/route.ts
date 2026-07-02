@@ -4,13 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport, validateDepositableExport } from '@/services/export/docx-export';
-import { generateTimelineDocx } from '@/services/export/timeline-export';
-import { generateExpenseDocx } from '@/services/export/expense-export';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
-import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer';
-import { getModule } from '@/types/modules';
-import type { ModuleId } from '@/types/modules';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { logAccess } from '@/lib/audit';
@@ -51,99 +45,9 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Non autorizzato o caso non trovato' }, { status: 401 });
     }
 
-    // --- Timeline / Expense export for extraction_only / expenses_only pipelines ---
-    const pipelineMode = (data.caseData.pipeline_mode as string | null) ?? 'full';
-    if (pipelineMode === 'extraction_only' || pipelineMode === 'expenses_only') {
-      if (!data.events || data.events.length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'Nessun evento trovato per questo caso. Impossibile generare il documento.' },
-          { status: 404 },
-        );
-      }
-
-      const moduleId = data.caseData.module_id as ModuleId | null;
-      const moduleName = moduleId ? getModule(moduleId).label : undefined;
-
-      const shouldAnonymizeTimeline = _request.nextUrl.searchParams.get('anonymize') === 'true';
-
-      // Cronistoria DOCUMENTALE: solo eventi CLINICI. Ticket SSN, avvisi di
-      // pagamento, certificati amministrativi, costi procedure — tutti
-      // bureaucratico/finanziari — NON appartengono alla cronistoria medica
-      // (feedback perito Lavini, caso CASO-2026-154).
-      // Le voci di spesa effettivamente sostenute dal paziente vanno gestite
-      // nella sezione dedicata "Spese Mediche" via expenses_only pipeline.
-      const timelineEvents = data.events
-        .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
-        .map((e: Record<string, unknown>) => ({
-          order_number: (e.order_number as number) ?? 0,
-          event_date: (e.event_date as string) ?? '',
-          event_type: (e.event_type as string) ?? 'altro',
-          title: (e.title as string) ?? '',
-          description: (e.description as string) ?? '',
-          source_type: (e.source_type as string) ?? 'altro',
-          doctor: (e.doctor as string | null) ?? null,
-          facility: (e.facility as string | null) ?? null,
-          confidence: typeof e.confidence === 'number' ? e.confidence : undefined,
-          requires_verification: e.requires_verification === true,
-          diagnosis: (e.diagnosis as string | null) ?? null,
-          is_relevant_for_chronology: e.is_relevant_for_chronology !== false,
-        }));
-
-      // For expenses_only, use dedicated expense export if analysis data is available
-      if (pipelineMode === 'expenses_only') {
-        const periziaMetaRaw = (data.periziaMetadata ?? {}) as Record<string, unknown>;
-        const expenseResult = periziaMetaRaw.expenseAnalysis as ExpenseAnalysisResult | undefined;
-
-        if (expenseResult && expenseResult.items) {
-          logAccess({
-            userId: user.id,
-            action: 'report.exported',
-            entityType: 'case',
-            entityId: caseId,
-            metadata: { format: 'docx-expenses', anonymized: shouldAnonymizeTimeline },
-          });
-
-          const expenseBuffer = await generateExpenseDocx({
-            caseCode: data.caseData.code as string,
-            patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
-            expenseResult,
-            events: timelineEvents,
-            moduleName,
-          });
-
-          return new NextResponse(new Uint8Array(expenseBuffer), {
-            headers: {
-              'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              'Content-Disposition': `attachment; filename="spese-mediche-${data.caseData.code}.docx"`,
-            },
-          });
-        }
-        // Fallback to timeline export if no expense analysis data
-      }
-
-      logAccess({
-        userId: user.id,
-        action: 'report.exported',
-        entityType: 'case',
-        entityId: caseId,
-        metadata: { format: 'docx-timeline', anonymized: shouldAnonymizeTimeline },
-      });
-
-      const timelineBuffer = await generateTimelineDocx({
-        caseCode: data.caseData.code as string,
-        patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
-        events: timelineEvents,
-        moduleName,
-      });
-
-      return new NextResponse(new Uint8Array(timelineBuffer), {
-        headers: {
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'Content-Disposition': `attachment; filename="cronistoria-${data.caseData.code}.docx"`,
-        },
-      });
-    }
-
+    // rc-mvp: le pipeline extraction_only/expenses_only (cronistoria e analisi
+    // spese standalone) sono parcheggiate in legacy/ — qui resta solo la
+    // perizia RC (pipeline 'full').
     const shouldAnonymize = _request.nextUrl.searchParams.get('anonymize') === 'true';
     // QA 2026-06-11: default DEPOSITABILE (solo perizia, come i gold);
     // ?mode=lavoro per il fascicolo completo con le carte di lavoro.
@@ -175,7 +79,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }
 
-    const useProfessional = pm && (pm.tribunale || pm.ctuName);
+    const useProfessional = pm && pm.ctuName;
 
     // Resolve ocr-image: placeholders to base64 data URIs
     let synthesis = data.report?.synthesis as string | null ?? null;

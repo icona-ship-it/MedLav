@@ -4,18 +4,7 @@ import Link from 'next/link';
 import {
   FileText,
   ArrowRight,
-  Search,
-  Shield,
-  Scale,
-  Gavel,
-  Briefcase,
-  BookOpen,
-  ClipboardList,
-  Receipt,
-  EyeOff,
   Clock,
-  Star,
-  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,180 +12,63 @@ import { Button } from '@/components/ui/button';
 import { getCases } from './actions';
 import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
-import { MODULE_CATEGORIES, MODULE_CATALOG } from '@/types/modules';
-import type { ModuleCategoryId } from '@/types/modules';
+import { MODULE_CATALOG } from '@/types/modules';
 import { getElaborationCost } from '@/services/credits/credit-costs';
 
-// ---------------------------------------------------------------------------
-// Icon + color mapping per category
-// ---------------------------------------------------------------------------
-
-const CATEGORY_ICONS: Record<ModuleCategoryId, React.ElementType> = {
-  1: FileText,
-  2: Scale,
-  3: Gavel,
-  4: Briefcase,
-  5: BookOpen,
-  6: ClipboardList,
-  7: Search,
-  8: Shield,
-  9: Receipt,
-  10: EyeOff,
-};
-
-const PRIORITY_CATEGORY_IDS: ReadonlySet<ModuleCategoryId> = new Set([1, 7, 8]);
-
-/** Visible (non-hidden) modules for a category */
-function getVisibleModules(categoryId: ModuleCategoryId) {
-  return MODULE_CATALOG.filter((m) => m.categoryId === categoryId && !m.hidden);
-}
-
-/** Count of visible sub-modules per category */
-function getModuleCount(categoryId: ModuleCategoryId): number {
-  return getVisibleModules(categoryId).length;
-}
-
-/** For single-module categories, return the direct module link */
-function getCategoryHref(categoryId: ModuleCategoryId): string {
-  const modules = getVisibleModules(categoryId);
-  if (modules.length === 1) {
-    return `/cases/new?module=${modules[0].id}`;
-  }
-  // Multi-module: go to category picker page
-  return `/cases/new?category=${categoryId}`;
-}
-
-/** True if category has at least one visible module */
-function isCategoryVisible(categoryId: ModuleCategoryId): boolean {
-  return getVisibleModules(categoryId).length > 0;
-}
-
-/** Credit cost for a category (uses pipelineMode of first module) */
-function getCategoryCreditCost(categoryId: ModuleCategoryId): number {
-  const modules = getVisibleModules(categoryId);
-  if (modules.length === 0) return 0;
-  return getElaborationCost(modules[0].pipelineMode);
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+// rc-mvp: la dashboard non è più un picker multi-modulo — l'MVP fa UNA cosa:
+// la perizia RC stragiudiziale. CTA unica verso /cases/new.
+const RC_MODULE = MODULE_CATALOG[0];
 
 export default async function DashboardPage() {
   const allCases = await getCases();
   const cases = allCases.filter((c) => c.status !== 'archiviato');
   const recentCases = cases.slice(0, 5);
-
-  const priorityCategories = MODULE_CATEGORIES.filter((c) => PRIORITY_CATEGORY_IDS.has(c.id) && isCategoryVisible(c.id));
-  const otherCategories = MODULE_CATEGORIES.filter((c) => !PRIORITY_CATEGORY_IDS.has(c.id) && isCategoryVisible(c.id));
+  const creditCost = getElaborationCost(RC_MODULE.pipelineMode);
 
   return (
     <div className="space-y-10">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Cosa vuoi fare?
+          Perizia medico-legale RC
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Scegli un modulo, carica i documenti e otterrai il risultato in pochi minuti.
+          Carica la documentazione clinica e ottieni la bozza di perizia in pochi minuti.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
           I crediti si usano solo quando avvii un&apos;elaborazione — creare un caso e caricare documenti è gratis.
         </p>
       </div>
 
-      {/* Priority categories — large cards */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Star className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-primary">
-            I più utilizzati
-          </h2>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {priorityCategories.map((cat) => {
-            const Icon = CATEGORY_ICONS[cat.id];
-            const count = getModuleCount(cat.id);
-            const href = getCategoryHref(cat.id);
-            const creditCost = getCategoryCreditCost(cat.id);
-
-            return (
-              <Link key={cat.id} href={href} className="group block">
-                <Card className="h-full rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
-                  <CardContent className="flex flex-col gap-4 p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <Badge variant="secondary" className="text-xs font-semibold">
-                        {creditCost} crediti
-                      </Badge>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold">{cat.label}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                        {cat.description}
-                      </p>
-                    </div>
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      {count > 1 && (
-                        <span className="text-xs text-muted-foreground">{count} varianti</span>
-                      )}
-                      <span className="ml-auto flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
-                        {count === 1 ? 'Inizia' : 'Scegli'}
-                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+      {/* CTA unica — modulo RC */}
+      <section>
+        <Link href="/cases/new" className="group block max-w-xl">
+          <Card className="rounded-2xl border-primary/20 bg-primary/5 dark:bg-primary/10 transition-all hover:border-primary/40 hover:shadow-lg">
+            <CardContent className="flex flex-col gap-4 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                  <FileText className="h-6 w-6" />
+                </div>
+                <Badge variant="secondary" className="text-xs font-semibold">
+                  {creditCost} crediti
+                </Badge>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">{RC_MODULE.label}</h3>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                  {RC_MODULE.description}: documentazione sanitaria fedele, spese mediche e struttura pronta per la visita.
+                </p>
+              </div>
+              <div className="mt-auto flex items-center justify-end pt-2">
+                <span className="flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
+                  Nuovo caso
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </section>
-
-      {/* Other categories — collapsed behind a disclosure (RC focus first) */}
-      {otherCategories.length > 0 && (
-        <section>
-          <details className="group">
-            <summary className="flex w-fit cursor-pointer list-none items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
-              Mostra altri moduli ({otherCategories.length})
-            </summary>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {otherCategories.map((cat) => {
-                const Icon = CATEGORY_ICONS[cat.id];
-                const href = getCategoryHref(cat.id);
-                const creditCost = getCategoryCreditCost(cat.id);
-
-                return (
-                  <Link key={cat.id} href={href} className="group/card block">
-                    <Card className="h-full rounded-xl transition-all hover:shadow-md">
-                      <CardContent className="flex items-center gap-4 p-5">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/card:bg-primary/10 group-hover/card:text-primary">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold">{cat.label}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">
-                            {cat.description}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                          {creditCost} crediti
-                        </Badge>
-                        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover/card:opacity-100 group-hover/card:translate-x-0.5" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </details>
-        </section>
-      )}
 
       {/* Recent cases */}
       <section className="space-y-4">
@@ -219,7 +91,7 @@ export default async function DashboardPage() {
           <Card className="rounded-xl">
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
-                Non hai ancora elaborati. Scegli un modulo sopra per iniziare!
+                Non hai ancora elaborati. Crea il primo caso per iniziare!
               </p>
             </CardContent>
           </Card>

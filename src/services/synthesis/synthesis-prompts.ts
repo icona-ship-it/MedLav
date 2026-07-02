@@ -17,15 +17,6 @@ const CASE_TYPE_LABELS: Record<CaseType, string> = {
   infezione_nosocomiale: 'Infezione Nosocomiale',
   errore_diagnostico: 'Errore Diagnostico',
   rc_auto: 'RC Auto — Lesioni da Sinistro Stradale',
-  previdenziale: 'Invalidità Previdenziale',
-  previdenziale_dlgs62: 'Condizione di Disabilità — D.Lgs. 62/2024',
-  previdenziale_inv_civile: 'Invalidità Civile / Accompagnamento / L. 104 / L. 222',
-  infortuni: 'Infortunio sul Lavoro / Malattia Professionale',
-  inail_malattia_prof: 'Malattia Professionale INAIL',
-  inail_infortunio: 'Infortunio sul Lavoro INAIL',
-  perizia_assicurativa: 'Perizia Assicurativa',
-  analisi_spese_mediche: 'Analisi Spese Mediche',
-  opinione_prognostica: 'Opinione Prognostica',
   generica: 'Responsabilità Professionale Generica',
 };
 
@@ -255,28 +246,14 @@ export function formatPeriziaMetadataForPrompt(periziaMetadata?: PeriziaMetadata
   if (periziaMetadata.patientFiscalCode) lines.push(`PAZIENTE — codice fiscale: ${periziaMetadata.patientFiscalCode}`);
   if (periziaMetadata.patientPhone) lines.push(`PAZIENTE — telefono: ${periziaMetadata.patientPhone}`);
 
-  if (periziaMetadata.tribunale) lines.push(`TRIBUNALE: ${periziaMetadata.tribunale}`);
-  if (periziaMetadata.sezione) lines.push(`SEZIONE: ${periziaMetadata.sezione}`);
-  if (periziaMetadata.rgNumber) lines.push(`N. RG: ${periziaMetadata.rgNumber}`);
-  if (periziaMetadata.judgeName) lines.push(`GIUDICE: ${periziaMetadata.judgeName}`);
   if (periziaMetadata.ctuName) lines.push(`CTU: ${periziaMetadata.ctuName}`);
   if (periziaMetadata.ctuTitle) lines.push(`QUALIFICA CTU: ${periziaMetadata.ctuTitle}`);
-  if (periziaMetadata.ctpRicorrente) lines.push(`CTP RICORRENTE: ${periziaMetadata.ctpRicorrente}`);
-  if (periziaMetadata.ctpResistente) lines.push(`CTP RESISTENTE: ${periziaMetadata.ctpResistente}`);
   if (periziaMetadata.parteRicorrente) lines.push(`PARTE RICORRENTE: ${periziaMetadata.parteRicorrente}`);
   if (periziaMetadata.parteResistente) lines.push(`PARTE RESISTENTE: ${periziaMetadata.parteResistente}`);
   if (periziaMetadata.dataIncarico) lines.push(`DATA INCARICO: ${periziaMetadata.dataIncarico}`);
   if (periziaMetadata.dataOperazioni) lines.push(`DATA OPERAZIONI: ${periziaMetadata.dataOperazioni}`);
   if (periziaMetadata.dataDeposito) lines.push(`TERMINE DEPOSITO: ${periziaMetadata.dataDeposito}`);
   if (periziaMetadata.fondoSpese) lines.push(`FONDO SPESE: ${periziaMetadata.fondoSpese}`);
-
-  if (periziaMetadata.quesiti && periziaMetadata.quesiti.length > 0) {
-    lines.push('');
-    lines.push('QUESITI DEL GIUDICE:');
-    periziaMetadata.quesiti.forEach((q, i) => {
-      lines.push(`${i + 1}. ${q}`);
-    });
-  }
 
   if (periziaMetadata.esameObiettivo) {
     lines.push('');

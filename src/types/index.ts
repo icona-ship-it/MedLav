@@ -1,4 +1,6 @@
-// Case types
+// Case types — rc-mvp: solo il tipo del modulo RC (rc_auto), il fallback
+// (generica) e le specialità cliniche che un caso RC può assumere.
+// I tipi previdenziali/INAIL/assicurativi vivono in legacy/ (pivot 2026-07-02).
 export type CaseType =
   | 'ortopedica'
   | 'oncologica'
@@ -7,18 +9,11 @@ export type CaseType =
   | 'infezione_nosocomiale'
   | 'errore_diagnostico'
   | 'rc_auto'
-  | 'previdenziale'
-  | 'previdenziale_dlgs62'
-  | 'previdenziale_inv_civile'
-  | 'infortuni'
-  | 'inail_malattia_prof'
-  | 'inail_infortunio'
-  | 'perizia_assicurativa'
-  | 'analisi_spese_mediche'
-  | 'opinione_prognostica'
   | 'generica';
 
-export type CaseRole = 'ctu' | 'ctp' | 'stragiudiziale';
+// rc-mvp: l'MVP fa SOLO la perizia RC stragiudiziale. I ruoli ctu/ctp sono
+// parcheggiati con i loro cataloghi in legacy/.
+export type CaseRole = 'stragiudiziale';
 
 export type CaseStatus = 'bozza' | 'in_revisione' | 'definitivo' | 'archiviato';
 
@@ -85,16 +80,7 @@ export interface PeriziaMetadata {
   patientAddress?: string;     // es. "via degli Esempi 1, 00000 Città"
   patientFiscalCode?: string;  // es. "XXXXXX00X00X000X" (formato 16 caratteri)
   patientPhone?: string;       // telefono paziente
-  // Court/proceeding data
-  tribunale?: string;          // "Tribunale Ordinario di Brescia"
-  sezione?: string;            // "Sezione Centrale Civile"
-  rgNumber?: string;           // es. "1234/2025"
-  tipoProcedimento?: string;   // "Accertamento tecnico preventivo (ex art. 696 bis c.p.c.)"
-  judgeName?: string;           // es. "Dott. Mario Esempi" (dato fittizio)
-  // Qualifica del giudice nel destinatario ("Giudice Delegato"/"Giudice Istruttore"/
-  // "Giudice Onorario"...). I gold ATP confliggono → campo del perito; fallback:
-  // euristica (Delegato per ATP, Istruttore altrimenti).
-  giudiceQualifica?: string;
+  // Perito (carta intestata stragiudiziale — i nomi-campo ctu* sono storici)
   ctuName?: string;            // es. "Dott. Mario Esempi" (dato fittizio)
   ctuTitle?: string;           // "medico legale presso..." (qualifica nel conferimento)
   specialita?: string;         // specializzazioni per la carta intestata (una per riga / separate da ;)
@@ -103,30 +89,11 @@ export interface PeriziaMetadata {
   ctuPec?: string;             // PEC perito (carta intestata)
   collaboratoreName?: string;  // ausiliario: es. "Dott.ssa Anna Esempi" (dato fittizio)
   collaboratoreTitle?: string; // ausiliario: "Specialista in Neurologia"
-  // Collegio di CC.TT.U. / co-perito PARITETICO (benchmark gold 2026-06-10): distinto
-  // dall'ausiliario (subordinato). Attiva conferimento plurale "conferiva ai sottoscritti",
-  // doppia carta intestata e firma collegiale.
-  coCtuName?: string;          // co-perito: "Dott. ..."
-  coCtuTitle?: string;         // co-perito: "specialista in Cardiologia"
-  // Oggetto dell'incarico custom nel conferimento, al posto di "alla vicenda clinica":
-  // es. "alla vicenda clinica e alle cause del decesso" (decesso) o "alla natura delle
-  // prestazioni erogate" (casi qualificatori RSA/LEA). Deve iniziare con la preposizione.
-  oggettoIncarico?: string;
-  ctpRicorrente?: string;      // es. "Dott.ssa Anna Esempi" (dato fittizio)
-  ctpResistente?: string;      // es. "Dott. Paolo Esempi" (dato fittizio)
-  parteRicorrente?: string;    // nome parte ricorrente
-  parteResistente?: string;    // nome parte resistente (ASST, ospedale, etc.)
+  parteRicorrente?: string;    // nome parte assistita
+  parteResistente?: string;    // nome controparte (ASST, ospedale, assicurazione, etc.)
   dataIncarico?: string;       // data conferimento incarico
-  dataOperazioni?: string;     // data inizio operazioni peritali
-  dataDeposito?: string;       // termine deposito relazione
-  // Termini multi-fase dell'ordinanza (benchmark gold 2026-06-10): bozza ai
-  // CC.TT.P. → osservazioni → deposito (dataDeposito).
-  termineBozza?: string;        // termine inoltro bozza ai consulenti di parte
-  termineOsservazioni?: string; // termine osservazioni dei CC.TT.P.
-  // Provvedimenti dell'ordinanza riprodotti nell'intestazione (testo libero:
-  // autorizzazioni del Giudice, istruzioni di liquidazione D.P.R. 115/2002...).
-  provvedimentiOrdinanza?: string;
-  quesiti?: string[];          // array di quesiti del giudice
+  dataOperazioni?: string;     // data visita/operazioni
+  dataDeposito?: string;       // termine consegna elaborato
   speseMediche?: string;       // testo libero spese mediche
   esameObiettivo?: string;     // testo libero esame del paziente
   fondoSpese?: string;         // "Euro 1.800,00"
@@ -148,14 +115,6 @@ export interface PeriziaMetadata {
   // significativi (citazioni hard-verificate vs OCR) e parafrasa la routine;
   // 'integrale' = riproduzione verbatim completa (sentinella deterministica).
   docSanitariaMode?: 'selettiva' | 'integrale';
-  // Ambito penale (CTU/CTP): true = responsabilità penale (causa morte + colpa, niente
-  // ITT/ITP/SIMLA); false/undefined = civile (default).
-  ambitoPenale?: boolean;
-  // Periziando deceduto (CTU/CTP civile): variante considerazioni ML (causa del decesso,
-  // nesso "più probabile che non", danno iure proprio/hereditatis — NO ITT/ITP/SIMLA sul
-  // deceduto) e operazioni peritali senza visita (riunione tecnica). In ambito penale la
-  // morte è già il fulcro di considerazioni_penale, quindi il flag non vi si applica.
-  decesso?: boolean;
   // ── Tracking operativo retention (NON contenuto della perizia) ──
   // Scritti dal cron data-retention quando invia l'email di preavviso 30 giorni
   // prima dell'eliminazione automatica del caso archiviato (GDPR Art. 5(1)(e)).

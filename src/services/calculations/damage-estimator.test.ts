@@ -179,9 +179,7 @@ describe('damage-estimator', () => {
       // Arrange
       const allTypes: CaseType[] = [
         'ortopedica', 'oncologica', 'ostetrica', 'anestesiologica',
-        'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto',
-        'previdenziale', 'infortuni', 'perizia_assicurativa',
-        'analisi_spese_mediche', 'opinione_prognostica', 'generica',
+        'infezione_nosocomiale', 'errore_diagnostico', 'rc_auto', 'generica',
       ];
       const events = [makeCalcEvent()];
 

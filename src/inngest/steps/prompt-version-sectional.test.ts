@@ -34,7 +34,7 @@ function placeholderSpec(overrides: Partial<SectionSpec> = {}): SectionSpec {
 
 const base = {
   caseType: 'ortopedica' as CaseType,
-  caseRole: 'ctu' as CaseRole,
+  caseRole: 'stragiudiziale' as CaseRole,
 };
 
 describe('computeSectionalPromptVersion — hashes the REAL prompts (Sprint 2.3)', () => {
@@ -72,22 +72,16 @@ describe('computeSectionalPromptVersion — hashes the REAL prompts (Sprint 2.3)
     expect(after).not.toBe(before);
   });
 
-  it('should change when the case role changes (role directive is part of the prompt)', () => {
-    const ctu = computeSectionalPromptVersion({ ...base, caseRole: 'ctu', sections: [llmSpec()] });
-    const ctp = computeSectionalPromptVersion({ ...base, caseRole: 'ctp', sections: [llmSpec()] });
-    expect(ctu).not.toBe(ctp);
-  });
-
   it('should change when the section set changes', () => {
     const one = computeSectionalPromptVersion({ ...base, sections: [llmSpec()] });
     const two = computeSectionalPromptVersion({ ...base, sections: [llmSpec(), placeholderSpec()] });
     expect(one).not.toBe(two);
   });
 
-  it('real catalog: a mutated directive in the resolved CTU plan changes the hash', () => {
+  it('real catalog: a mutated directive in the resolved stragiudiziale plan changes the hash', () => {
     const plan = resolveSectionPlan({
       caseType: 'ortopedica',
-      caseRole: 'ctu',
+      caseRole: 'stragiudiziale',
       events: [],
       documentTypes: ['cartella_clinica'],
     });

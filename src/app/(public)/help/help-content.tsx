@@ -28,9 +28,8 @@ const FAQ_ITEMS = [
   {
     question: 'Come vengono generati i report?',
     answer:
-      'I report sono generati utilizzando AI Mistral (server europei, Parigi). Il sistema adatta automaticamente tono e struttura in base al ruolo selezionato: ' +
-      'CTU (tono neutrale e bilanciato), CTP (assertivo e pro-paziente), o Stragiudiziale (pragmatico e realistico). ' +
-      'Il report include cronistoria, analisi delle anomalie, calcoli medico-legali (ITT/ITP) e conclusioni.',
+      'I report sono generati utilizzando AI Mistral (server europei, Parigi). La bozza di perizia RC stragiudiziale riproduce fedelmente la documentazione sanitaria ' +
+      'e include cronistoria, analisi delle anomalie, calcoli medico-legali (ITT/ITP) e la struttura per le conclusioni del perito.',
   },
   {
     question: 'Posso modificare il report generato?',
@@ -56,7 +55,7 @@ const GUIDE_STEPS = [
   {
     step: 2,
     title: 'Crea un caso',
-    description: 'Dalla dashboard, clicca "Nuovo Caso". Inserisci il codice caso, seleziona il tipo di perizia (ortopedica, oncologica, etc.) e il tuo ruolo (CTU, CTP, stragiudiziale).',
+    description: 'Dalla dashboard, clicca "Nuovo Caso" e inserisci le informazioni della pratica (iniziali paziente, riferimento). Il caso è una perizia medico-legale RC stragiudiziale.',
   },
   {
     step: 3,
@@ -77,12 +76,8 @@ const GUIDE_STEPS = [
 
 const GLOSSARY_TERMS = [
   {
-    term: 'CTU',
-    definition: 'Consulente Tecnico d\'Ufficio. Perito nominato dal giudice con il compito di fornire una valutazione imparziale e tecnica su questioni mediche.',
-  },
-  {
-    term: 'CTP',
-    definition: 'Consulente Tecnico di Parte. Perito nominato da una delle parti in causa per supportare la propria posizione con argomentazioni tecniche.',
+    term: 'Perizia stragiudiziale',
+    definition: 'Valutazione medico-legale svolta fuori dal processo, su incarico di parte (privato, studio legale, assicurazione), tipicamente in ambito di responsabilità civile.',
   },
   {
     term: 'ITT',

@@ -35,6 +35,8 @@ export function getModuleFullLabel(moduleId: ModuleId): string {
 
 // --- Case Types ---
 
+// rc-mvp: solo il tipo del modulo RC, il fallback e le specialità cliniche
+// che un caso RC può assumere (allineato a CaseType in src/types).
 export const CASE_TYPES = [
   { value: 'ortopedica', label: 'Malasanità Ortopedica' },
   { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
@@ -43,11 +45,6 @@ export const CASE_TYPES = [
   { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
   { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
   { value: 'rc_auto', label: 'RC Auto — Responsabilità Civile Automobilistica' },
-  { value: 'previdenziale', label: 'Previdenziale — Invalidità Civile / Pensionistica' },
-  { value: 'infortuni', label: 'Infortuni — Infortuni sul Lavoro e Malattia Professionale' },
-  { value: 'perizia_assicurativa', label: 'Perizia Assicurativa — Valutazione Medico-Legale per Compagnia' },
-  { value: 'analisi_spese_mediche', label: 'Analisi Spese Mediche — Congruità e Rimborsabilità' },
-  { value: 'opinione_prognostica', label: 'Opinione Prognostica — Prognosi e Riserva Assicurativa' },
   { value: 'generica', label: 'Responsabilità Professionale Generica' },
 ] as const;
 
@@ -58,8 +55,6 @@ export const caseTypeLabels: Record<string, string> = Object.fromEntries(
 // --- Case Roles ---
 
 export const CASE_ROLES = [
-  { value: 'ctu', label: 'CTU - Consulente Tecnico d\'Ufficio' },
-  { value: 'ctp', label: 'CTP - Consulente Tecnico di Parte' },
   { value: 'stragiudiziale', label: 'Perito Stragiudiziale' },
 ] as const;
 

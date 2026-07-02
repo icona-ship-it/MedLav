@@ -25,12 +25,6 @@ export const CREDIT_COSTS = {
   rigenerazione_sezione: 5,
   /** Regenerate the entire report */
   rigenerazione_report: 20,
-  /** Split a mixed PDF (per resulting document) */
-  split_pdf: 3,
-  /** Map a legal question (quesito) to events/anomalies — single Mistral Large call */
-  quesito: 1,
-  /** AI document organization/analysis (per document analyzed) */
-  organizzazione_documenti: 1,
 } as const;
 
 export type CreditOperation = keyof typeof CREDIT_COSTS;
