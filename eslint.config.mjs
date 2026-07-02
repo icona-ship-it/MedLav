@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // rc-mvp: codice parcheggiato dal prune RC-only (vedi legacy/README.md)
+    "legacy/**",
   ]),
 ]);
 
