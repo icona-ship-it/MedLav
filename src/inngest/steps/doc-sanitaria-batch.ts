@@ -1,6 +1,8 @@
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import { chunkArray } from '@/lib/array-utils';
+import { isExcludableLabEvent, isExcludableNoiseEvent } from '@/lib/event-relevance';
+import { distillDocSanitariaEvents, type DistillStats } from '@/services/synthesis/selettivita-policy';
 
 /**
  * Documentazione sanitaria SELETTIVA su casi voluminosi: batching per FINESTRE
@@ -157,4 +159,68 @@ export function filterImagesForBatch(
 ): ImageAnalysisResult[] | undefined {
   if (!imageAnalysis) return undefined;
   return imageAnalysis.filter((img) => img.documentId !== undefined && docIds.includes(img.documentId));
+}
+
+// ── Distillazione v2 + planner RC (review 2026-07-04) ────────────────
+
+/**
+ * Filtro COMPLETO della doc-sanitaria RC, applicato PRIMA della pianificazione
+ * delle finestre: lab di routine + consensi/amministrativi (v1) + categorie
+ * della SelettivitàPolicy (log-terapia, diario infermieristico, cartella
+ * anestesiologica, scale, trasfusioni — default gold-osservato). Filtrare a
+ * monte fa due cose: (1) meno eventi → meno finestre → meno chiamate LLM;
+ * (2) rende di nuovo percorribile il packing PER-DOCUMENTO (il motivo storico
+ * del revert era il numero di batch sul macrodanno). Gli eventi T1
+ * load-bearing non sono MAI omessi (salvaguardia in ogni filtro).
+ */
+export function distillRcDocSanitariaEvents(
+  events: ConsolidatedEvent[],
+): { kept: ConsolidatedEvent[]; stats: DistillStats } {
+  const withoutLabNoise = events.filter(
+    (e) => !isExcludableLabEvent(e) && !isExcludableNoiseEvent(e),
+  );
+  const { kept, stats } = distillDocSanitariaEvents(withoutLabNoise);
+  return {
+    kept,
+    stats: {
+      total: events.length,
+      omitted: events.length - kept.length,
+      byCategory: {
+        ...stats.byCategory,
+        ...(events.length - withoutLabNoise.length > 0
+          ? { lab_o_noise: events.length - withoutLabNoise.length }
+          : {}),
+      },
+    },
+  };
+}
+
+/** Tetto di finestre doc-sanitaria: oltre, lo stato Inngest accumulato dai
+ * batch rompeva la finalizzazione sul macrodanno (reset di connessione,
+ * 2026-06-29). Meglio finestre più larghe che più finestre. */
+export const DOC_SANITARIA_MAX_BATCHES = 12;
+
+/**
+ * Planner della doc-sanitaria RC: distilla, poi impacchetta PER-DOCUMENTO
+ * (mai spezzare un documento tra due finestre = niente ri-narrazione), con un
+ * CAP sul numero di finestre: se il piano supera `maxBatches`, la size cresce
+ * finché il piano rientra (le finestre si allargano, gli eventi non si
+ * perdono mai). Puro e testabile.
+ */
+export function planRcDocSanitariaBatches(
+  events: ConsolidatedEvent[],
+  size: number = DOC_SANITARIA_EVENT_BATCH_SIZE,
+  maxBatches: number = DOC_SANITARIA_MAX_BATCHES,
+): { batches: DocSanitariaEventBatch[]; stats: DistillStats } {
+  const { kept, stats } = distillRcDocSanitariaEvents(events);
+  let windowSize = Math.max(1, size);
+  let batches = planDocSanitariaEventBatchesByDocument(kept, windowSize);
+  // Il packing per-documento può sforare per overhead di impacchettamento:
+  // allarga la finestra finché il piano rientra nel cap (bounded: al più
+  // fino a una finestra unica con tutti gli eventi).
+  while (batches.length > maxBatches && windowSize < kept.length) {
+    windowSize = Math.min(kept.length, Math.ceil(windowSize * 1.5));
+    batches = planDocSanitariaEventBatchesByDocument(kept, windowSize);
+  }
+  return { batches, stats };
 }

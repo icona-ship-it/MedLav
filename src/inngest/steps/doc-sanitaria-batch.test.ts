@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch, distillRcDocSanitariaEvents, planRcDocSanitariaBatches } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 
@@ -222,5 +222,76 @@ describe('stripRepeatedSectionHeading — toglie il titolo di sezione ripetuto d
   it('blocco senza il titolo resta invariato', () => {
     const part = '**Referto 17.04.2025**\n«testo verbatim»';
     expect(stripRepeatedSectionHeading(part, T)).toBe(part);
+  });
+});
+
+// ── Distillazione v2 + planner RC con cap (review 2026-07-04) ─────────
+
+describe('distillRcDocSanitariaEvents — filtro completo RC (lab + noise + policy)', () => {
+  it('toglie lab di routine, consensi/amministrativi e categorie della policy; tiene il clinico', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, title: 'Referto RX bacino', description: 'Frattura composta ramo ileo-ischio-pubico.' }),
+      makeEvent({ orderNumber: 2, eventType: 'esame', sourceType: 'esame_ematochimico', title: 'Emocromo', description: 'Hb 12.1' }),
+      makeEvent({ orderNumber: 3, eventType: 'consenso', title: 'Consenso informato anestesia', description: 'Firmato.' }),
+      makeEvent({ orderNumber: 4, eventType: 'terapia', title: 'Somministrazione terapia', description: 'Foglio unico di terapia, schema giornaliero.' }),
+      makeEvent({ orderNumber: 5, title: 'Diario infermieristico', description: 'Consegne infermieristiche del turno.' }),
+    ];
+    const { kept, stats } = distillRcDocSanitariaEvents(events);
+    expect(kept.map((e) => e.orderNumber)).toEqual([1]);
+    expect(stats.total).toBe(5);
+    expect(stats.omitted).toBe(4);
+  });
+
+  it('NON toglie mai un evento T1 load-bearing, qualunque sia la categoria', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, eventType: 'esame', sourceType: 'esame_ematochimico', title: 'D-dimero', description: 'Elevato', diagnosis: 'TVP arto inferiore sinistro' }),
+      makeEvent({ orderNumber: 2, title: 'Diario infermieristico', description: 'Consegne.', diagnosis: 'Trombosi venosa profonda' }),
+    ];
+    const { kept } = distillRcDocSanitariaEvents(events);
+    expect(kept).toHaveLength(2);
+  });
+});
+
+describe('planRcDocSanitariaBatches — per-documento con cap sul numero di finestre', () => {
+  it('distilla PRIMA di pianificare (meno eventi → meno finestre)', () => {
+    // 60 eventi clinici + 60 log-terapia: senza distillazione 120 eventi (3 finestre da 50),
+    // con distillazione 60 (2 finestre).
+    const clinici = Array.from({ length: 60 }, (_, i) =>
+      makeEvent({ orderNumber: i + 1, documentId: `doc-${Math.floor(i / 10)}`, title: `Referto ${i}`, description: `Reperto clinico ${i}.`, sourceText: `testo ${i}` }));
+    const logs = Array.from({ length: 60 }, (_, i) =>
+      makeEvent({ orderNumber: 100 + i, documentId: `doc-${Math.floor(i / 10)}`, eventType: 'terapia', title: 'Somministrazione terapia', description: `Foglio unico di terapia ${i}.`, sourceText: `fut ${i}` }));
+    const { batches, stats } = planRcDocSanitariaBatches([...clinici, ...logs], 50);
+    expect(stats.omitted).toBe(60);
+    expect(batches.length).toBeLessThanOrEqual(2);
+    const totalPlanned = batches.reduce((s, b) => s + b.events.length, 0);
+    expect(totalPlanned).toBe(60);
+  });
+
+  it('non spezza mai un documento tra due finestre (no straddle → no ri-narrazione)', () => {
+    // 3 documenti da 30 eventi: con size 50 il packing per-documento fa [30, 30+? no: 30+30>50] → [doc1],[doc2],[doc3]? 30+30=60>50 → finestre [30],[30],[30].
+    const events = Array.from({ length: 90 }, (_, i) =>
+      makeEvent({ orderNumber: i + 1, documentId: `doc-${Math.floor(i / 30)}`, title: `Referto ${i}`, description: `Reperto ${i}.`, sourceText: `testo ${i}` }));
+    const { batches } = planRcDocSanitariaBatches(events, 50);
+    for (const batch of batches) {
+      // ogni documento compare in UNA sola finestra
+      for (const id of batch.docIds) {
+        const elsewhere = batches.filter((b) => b !== batch && b.docIds.includes(id));
+        expect(elsewhere).toHaveLength(0);
+      }
+    }
+  });
+
+  it('rispetta il cap: su un macrodanno il numero di finestre non supera maxBatches (finestre più larghe, non di più)', () => {
+    // 900 eventi clinici su 90 documenti: con size 50 sarebbero ~18 finestre → cap 12.
+    const events = Array.from({ length: 900 }, (_, i) =>
+      makeEvent({ orderNumber: i + 1, documentId: `doc-${Math.floor(i / 10)}`, title: `Referto ${i}`, description: `Reperto ${i}.`, sourceText: `testo ${i}` }));
+    const { batches } = planRcDocSanitariaBatches(events, 50, 12);
+    expect(batches.length).toBeLessThanOrEqual(12);
+    const totalPlanned = batches.reduce((s, b) => s + b.events.length, 0);
+    expect(totalPlanned).toBe(900); // il cap allarga le finestre, NON perde eventi
+  });
+
+  it('lista vuota → nessuna finestra', () => {
+    expect(planRcDocSanitariaBatches([], 50).batches).toEqual([]);
   });
 });

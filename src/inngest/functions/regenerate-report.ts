@@ -24,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, dedupeDocumentsByContent, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -348,11 +348,18 @@ export const regenerateReport = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      // RC: dedup contenuto identico + chunking PER-EVENTO (path provato che finalizza —
-      // il per-documento su macrodanno generava troppi batch → reset alla finalizzazione).
-      const batches = spec.excludeLabTests
-        ? planDocSanitariaEventBatches(dedupeDocumentsByContent(synthesisParams.events))
-        : planDocSanitariaEventBatches(synthesisParams.events);
+      // RC — distillazione v2 (2026-07-04): filtro completo (lab + noise +
+      // SelettivitàPolicy) PRIMA della pianificazione, poi packing PER-DOCUMENTO
+      // con CAP sulle finestre (il per-documento senza cap rompeva la
+      // finalizzazione sul macrodanno). Altri ruoli: per-evento come prima.
+      let batches: ReturnType<typeof planDocSanitariaEventBatches>;
+      if (spec.excludeLabTests) {
+        const rcPlan = planRcDocSanitariaBatches(synthesisParams.events);
+        batches = rcPlan.batches;
+        logger.info('pipeline', `Doc-sanitaria RC distillata (regen): ${rcPlan.stats.omitted}/${rcPlan.stats.total} eventi omessi (${Object.entries(rcPlan.stats.byCategory).map(([k, v]) => `${k}:${v}`).join(', ') || 'nessuno'}), ${batches.length} finestre`);
+      } else {
+        batches = planDocSanitariaEventBatches(synthesisParams.events);
+      }
       const parts: string[] = [];
       let rollingContext = [...previousContext];
       let promptTokens = 0;

@@ -34,7 +34,8 @@ import { buildGuidelineContext } from '../rag/retrieval-service';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
 import { formatEuro, formatEventDateByPrecision } from '@/lib/format';
 import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
-import { dedupeDocumentsByContent } from '@/inngest/steps/doc-sanitaria-batch';
+import { distillRcDocSanitariaEvents } from '@/inngest/steps/doc-sanitaria-batch';
+import { isExcludableByPolicy } from './selettivita-policy';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 import {
@@ -174,11 +175,13 @@ export function buildSectionUserPrompt(params: {
     // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
     if (spec.excludeLabTests) {
       medical = medical.filter((e) => !isExcludableLabEvent(e));
-      // Distillazione RC v1: nella sola doc-sanitaria togli il RUMORE che il gold omette
-      // (consensi informati, documenti amministrativi) — mai i T1 load-bearing. Le sezioni
-      // narrative (il_fatto/anamnesi) restano intatte: l'LLM lì ignora già il rumore.
+      // Distillazione RC: nella sola doc-sanitaria togli il RUMORE che il gold omette —
+      // v1: consensi informati, documenti amministrativi; v2 (SelettivitàPolicy,
+      // default gold-osservato): log-terapia, diario infermieristico, cartella
+      // anestesiologica, scale di valutazione, trasfusioni. Mai i T1 load-bearing.
+      // Le sezioni narrative (il_fatto/anamnesi) restano intatte: l'LLM lì ignora già il rumore.
       if (spec.id === 'documentazione_sanitaria') {
-        medical = medical.filter((e) => !isExcludableNoiseEvent(e));
+        medical = medical.filter((e) => !isExcludableNoiseEvent(e) && !isExcludableByPolicy(e));
       }
       // I valori lab restano annegati negli eventi sopravvissuti su DUE campi riprodotti
       // dal prompt: il sourceText (citazione verbatim) E la description. Capita per i lab
@@ -763,10 +766,11 @@ async function generateDocSanitariaChunked(params: {
   attempt?: number;
 }): Promise<GeneratedSection> {
   const { spec, synthesisParams, previousContext, documentsOcrText, attempt } = params;
-  // RC: chunk per-DOCUMENTO (un atto non viene spezzato tra blocchi → niente duplicazione);
-  // altri ruoli: chunk per-evento come prima.
+  // RC: distillazione v2 (lab + noise + SelettivitàPolicy, con dedup per-contenuto)
+  // PRIMA del chunking, poi chunk per-DOCUMENTO (un atto non viene spezzato tra
+  // blocchi → niente duplicazione); altri ruoli: chunk per-evento come prima.
   const chunks = spec.excludeLabTests
-    ? chunkEventsByDocument(dedupeDocumentsByContent(synthesisParams.events), DOC_SANITARIA_CHUNK_SIZE)
+    ? chunkEventsByDocument(distillRcDocSanitariaEvents(synthesisParams.events).kept, DOC_SANITARIA_CHUNK_SIZE)
     : chunkArray(synthesisParams.events, DOC_SANITARIA_CHUNK_SIZE);
   logger.info('section-generator', `Doc-sanitaria auto-split: ${synthesisParams.events.length} eventi → ${chunks.length} blocchi`);
 

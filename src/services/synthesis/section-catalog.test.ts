@@ -480,17 +480,22 @@ describe('section-catalog', () => {
       expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
     });
 
-    it('RC stragiudiziale: directive DEDICATO verbatim, senza inventario né parafrasi', () => {
-      // Stragiudiziale RC: directive dedicato → niente inventario, verbatim-first, no parafrasi.
+    it('RC stragiudiziale: directive DEDICATO distillato (citazioni-chiave verbatim, un blocco per documento)', () => {
+      // Distillazione v2 (default gold-osservato): un blocco per documento con
+      // citazioni-chiave verbatim, niente inventario, niente parafrasi, niente
+      // riproduzione integrale, categorie escluse (log-terapia, diario, scale...).
       const stragBase = getSectionSpecById('documentazione_sanitaria');
       expect(stragBase?.excludeLabTests).toBe(true);
       const stragSelective = buildDocSanitariaSelectiveSpec(stragBase!);
-      expect(stragSelective.promptDirective).toContain('RIPRODUZIONE FEDELE');
+      expect(stragSelective.promptDirective).toContain('RECENSIONE FEDELE E SELETTIVA');
+      expect(stragSelective.promptDirective).toContain('UN SOLO blocco'); // 1 blocco/documento (Domanda 1, opzione A)
+      expect(stragSelective.promptDirective).toContain('NON riprodurre integralmente'); // distillazione
       expect(stragSelective.promptDirective).toContain('NIENTE ELENCO'); // no inventario...
       expect(stragSelective.promptDirective).not.toContain('ELENCO ANALITICO'); // ...l'inventario CTU non c'è
       expect(stragSelective.promptDirective).toMatch(/NON parafrasare/); // verbatim, no parafrasi
       expect(stragSelective.promptDirective).toContain('SOLO la DIAGNOSI'); // PS condensato
       expect(stragSelective.promptDirective).toContain('NON riprodurli'); // lab esclusi
+      expect(stragSelective.promptDirective).toContain('diario/consegne infermieristiche'); // categorie policy nel prompt
       expect(stragSelective.promptDirective).toContain('«...»'); // grounding/verifica
       expect(stragSelective.excludeLabTests).toBe(true);
     });

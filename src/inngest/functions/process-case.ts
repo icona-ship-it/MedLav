@@ -32,7 +32,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, dedupeDocumentsByContent, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1038,13 +1038,20 @@ export const processCase = inngest.createFunction(
       planIndex: number,
       previousContext: Array<{ id: string; title: string; contextSummary: string }>,
     ): Promise<GeneratedSection> => {
-      // RC (excludeLabTests): dedup dei documenti a contenuto IDENTICO (anti-duplicazione)
-      // + chunking PER-EVENTO (il path provato che finalizza: il packing per-documento su
-      // un macrodanno produceva troppi batch → stato Inngest pesante → reset alla
-      // finalizzazione). Altri ruoli: per-evento come prima.
-      const batches = spec.excludeLabTests
-        ? planDocSanitariaEventBatches(dedupeDocumentsByContent(synthesisParams.events))
-        : planDocSanitariaEventBatches(synthesisParams.events);
+      // RC (excludeLabTests) — distillazione v2 (2026-07-04): filtro completo
+      // (lab + noise + SelettivitàPolicy) PRIMA della pianificazione, poi packing
+      // PER-DOCUMENTO (mai spezzare un documento = niente ri-narrazione) con CAP
+      // sul numero di finestre — il per-documento senza cap produceva troppi
+      // batch sul macrodanno → reset alla finalizzazione (motivo del revert
+      // 2026-06-29). Altri ruoli: per-evento come prima.
+      let batches: ReturnType<typeof planDocSanitariaEventBatches>;
+      if (spec.excludeLabTests) {
+        const rcPlan = planRcDocSanitariaBatches(synthesisParams.events);
+        batches = rcPlan.batches;
+        logger.info('pipeline', `Doc-sanitaria RC distillata: ${rcPlan.stats.omitted}/${rcPlan.stats.total} eventi omessi (${Object.entries(rcPlan.stats.byCategory).map(([k, v]) => `${k}:${v}`).join(', ') || 'nessuno'}), ${batches.length} finestre`);
+      } else {
+        batches = planDocSanitariaEventBatches(synthesisParams.events);
+      }
       const parts: string[] = [];
       let rollingContext = [...previousContext];
       let totalPromptTokens = 0;
