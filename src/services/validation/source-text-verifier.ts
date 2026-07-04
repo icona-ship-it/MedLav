@@ -34,6 +34,16 @@ const LCS_THRESHOLD = 0.80;
 const LCS_WINDOW_MULTIPLIER = 3;
 
 /**
+ * GATE (ricerca 2026-07-04, "cita la fonte o taci"): un evento il cui anchor
+ * non è riscontrabile nell'OCR non può presentarsi come affidabile — il flag
+ * da solo non basta (l'evento arrivava comunque in sintesi a confidence piena).
+ * L'evento resta (mai perdere un fatto), ma declassato sotto la soglia di
+ * fiducia: allineato ai cap esistenti (date inferite 25%, diagnosi discordanti
+ * 30%, pagine OCR sporche 40%).
+ */
+export const SOURCE_UNVERIFIED_CONFIDENCE_CAP = 30;
+
+/**
  * Verify that each event's sourceText actually exists in the OCR text.
  * Returns events with requiresVerification updated for unverified ones.
  */
@@ -61,6 +71,7 @@ export function verifySourceTexts(
       });
       updatedEvents.push({
         ...event,
+        confidence: Math.min(event.confidence, SOURCE_UNVERIFIED_CONFIDENCE_CAP),
         requiresVerification: true,
         reliabilityNotes: appendNote(event.reliabilityNotes, 'Testo sorgente assente — verificare.'),
       });
@@ -80,6 +91,7 @@ export function verifySourceTexts(
     if (!verification.verified) {
       updatedEvents.push({
         ...event,
+        confidence: Math.min(event.confidence, SOURCE_UNVERIFIED_CONFIDENCE_CAP),
         requiresVerification: true,
         reliabilityNotes: appendNote(
           event.reliabilityNotes,

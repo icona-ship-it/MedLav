@@ -147,3 +147,45 @@ describe('verifySourceTexts', () => {
     expect(result.events[0].reliabilityNotes).toBeNull();
   });
 });
+
+describe('verifySourceTexts — gate di confidenza (anchor non riscontrato)', () => {
+  it('should cap confidence for an event whose sourceText is absent from the OCR', () => {
+    const events = [makeEvent({
+      confidence: 90,
+      sourceText: 'citazione completamente inventata che non esiste nel documento originale',
+    })];
+
+    const result = verifySourceTexts(events, FULL_TEXT);
+
+    expect(result.unverifiedCount).toBe(1);
+    expect(result.events[0].confidence).toBeLessThanOrEqual(30);
+    expect(result.events[0].requiresVerification).toBe(true);
+  });
+
+  it('should cap confidence when sourceText is empty', () => {
+    const events = [makeEvent({ confidence: 85, sourceText: '' })];
+
+    const result = verifySourceTexts(events, FULL_TEXT);
+
+    expect(result.events[0].confidence).toBeLessThanOrEqual(30);
+  });
+
+  it('should not raise a confidence already below the cap', () => {
+    const events = [makeEvent({ confidence: 15, sourceText: 'testo inventato mai presente nel documento sorgente' })];
+
+    const result = verifySourceTexts(events, FULL_TEXT);
+
+    expect(result.events[0].confidence).toBe(15);
+  });
+
+  it('should NOT touch confidence of verified events', () => {
+    const events = [makeEvent({
+      confidence: 90,
+      sourceText: 'Paziente si presenta con dolore al ginocchio sinistro.',
+    })];
+
+    const result = verifySourceTexts(events, FULL_TEXT);
+
+    expect(result.events[0].confidence).toBe(90);
+  });
+});

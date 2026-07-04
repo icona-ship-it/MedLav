@@ -253,7 +253,8 @@ export async function withMistralRetry<T>(fn: () => Promise<T>, label: string): 
 type JsonObjectFormat = { type: 'json_object' | 'text' };
 type JsonSchemaFormat = {
   type: 'json_schema';
-  jsonSchema: { name: string; schemaDefinition: Record<string, unknown> };
+  /** strict: true → constrained decoding sullo schema (il default Mistral è best-effort). */
+  jsonSchema: { name: string; schemaDefinition: Record<string, unknown>; strict?: boolean };
 };
 export type MistralResponseFormat = JsonObjectFormat | JsonSchemaFormat;
 

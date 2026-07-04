@@ -16,6 +16,10 @@ const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
   type: 'json_schema',
   jsonSchema: {
     name: 'extraction_response',
+    // strict: constrained decoding (il default Mistral è best-effort). Richiede
+    // lo shape rigido: tutti i campi required (i nullable via type union) e
+    // additionalProperties: false a ogni livello.
+    strict: true,
     schemaDefinition: {
       type: 'object',
       properties: {
@@ -65,9 +69,11 @@ const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
             },
             required: [
               'extraction_reasoning', 'eventDate', 'datePrecision', 'eventType',
-              'title', 'description', 'sourceType', 'confidence',
-              'requiresVerification', 'sourceText', 'sourcePages',
+              'title', 'description', 'sourceType', 'diagnosis', 'doctor',
+              'facility', 'confidence', 'requiresVerification',
+              'reliabilityNotes', 'sourceText', 'sourcePages',
             ],
+            additionalProperties: false,
           },
         },
         abbreviations: {
@@ -79,10 +85,12 @@ const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
               expansion: { type: 'string' },
             },
             required: ['abbreviation', 'expansion'],
+            additionalProperties: false,
           },
         },
       },
-      required: ['events'],
+      required: ['events', 'abbreviations'],
+      additionalProperties: false,
     },
   },
 };
