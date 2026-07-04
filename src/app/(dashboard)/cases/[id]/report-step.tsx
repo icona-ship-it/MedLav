@@ -144,9 +144,12 @@ export function ReportStep({
   );
   const actionableCount = actionableAnomalies.length;
   const missingDocsCount = missingDocs.length;
+  // Claim non supportati/verificabili dal verifier indipendente (anti-misgrounded):
+  // lista "da verificare" scritta dalla pipeline nei metadata del report.
+  const claimFindings = report?.generation_metadata?.claimVerification?.findings ?? [];
   // Conteggio UNICO mostrato sia nel pannello "Avvisi" sia nel badge toolbar "Qualità"
   // (prima erano due numeri diversi — es. 9 vs 4 — per la stessa preoccupazione: confondeva).
-  const reviewCount = actionableCount + missingDocsCount;
+  const reviewCount = actionableCount + missingDocsCount + claimFindings.length;
   // Primo warning di pipeline con documenti falliti → abilita "Vedi dettagli" nel pannello.
   const drillablePipelineWarning = pipelineWarnings.find((w) => w.failedItems && w.failedItems.length > 0);
 
@@ -467,10 +470,30 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(actionableCount > 0 || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0) && (
+      {(actionableCount > 0 || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <p className="mb-2 text-sm font-semibold">Da controllare prima del deposito</p>
           <div className="space-y-2">
+            {claimFindings.length > 0 && (
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="text-sm">
+                    {claimFindings.length} {claimFindings.length === 1 ? 'affermazione del report da verificare' : 'affermazioni del report da verificare'} sui documenti
+                    {' '}<span className="text-muted-foreground">(controllo automatico indipendente — apri l&apos;elenco)</span>
+                  </span>
+                </summary>
+                <ul className="mt-2 ml-6 space-y-1.5 border-l pl-3">
+                  {claimFindings.map((f, idx) => (
+                    <li key={idx} className="text-sm">
+                      <span className="font-medium">{f.sectionTitle}:</span>{' '}
+                      «{f.claim}»
+                      {' '}<span className="text-muted-foreground">— {f.verdict === 'non_supportato' ? 'non risulta dai documenti' : 'da verificare sull’originale'}{f.motivo ? ` (${f.motivo})` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {(actionableCount > 0 || missingDocsCount > 0) && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">

@@ -1353,6 +1353,18 @@ export const processCase = inngest.createFunction(
 
     const synthesisWordCount = synthesisResult.wordCount;
 
+    // Verifica claim-level anti-misgrounded (judge Medium ≠ generatore Large):
+    // scrive la lista "da verificare" nei metadata del report. MAI bloccante
+    // (runClaimVerification ingoia ogni errore) — ritorna solo conteggi (O(1)).
+    const claimVerify = await step.run('claim-verify-report', async () => {
+      const { runClaimVerification, toClaimEventDigest } = await import('@/inngest/steps/claim-verify');
+      return runClaimVerification({
+        caseId,
+        reportId: synthesisResult.reportId,
+        events: toClaimEventDigest(synthesisParams.events),
+      });
+    });
+
     // ── Build pipeline cost summary ──────────────────────────────
     const costSteps: CostStep[] = [];
     const totalOcrPages = ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0);
@@ -1364,6 +1376,16 @@ export const processCase = inngest.createFunction(
         promptTokens: synthesisResult.usage.promptTokens,
         completionTokens: synthesisResult.usage.completionTokens,
         costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_LARGE, synthesisResult.usage),
+      });
+    }
+
+    if (claimVerify.usage && claimVerify.usage.totalTokens > 0) {
+      costSteps.push({
+        step: 'claim-verify',
+        model: MISTRAL_MODELS.MISTRAL_MEDIUM,
+        promptTokens: claimVerify.usage.promptTokens,
+        completionTokens: claimVerify.usage.completionTokens,
+        costUSD: calculateTokenCost(MISTRAL_MODELS.MISTRAL_MEDIUM, claimVerify.usage),
       });
     }
 

@@ -39,6 +39,9 @@ export const MISTRAL_MODELS = {
   PIXTRAL_LARGE: 'mistral-large-2512',
   /** Large model for complex reasoning (synthesis, review) */
   MISTRAL_LARGE: 'mistral-large-2512',
+  /** Judge indipendente per la verifica claim-level (modello ≠ generatore:
+   * il self-preference bias dei judge è misurato) + 50 req/s di headroom. */
+  MISTRAL_MEDIUM: 'mistral-medium-latest',
   /** Small model for fast structured extraction */
   MISTRAL_SMALL: 'mistral-small-2603',
   /** Dedicated OCR model for document text extraction */

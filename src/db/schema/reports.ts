@@ -57,6 +57,23 @@ export interface ReportGenerationMetadata {
     synthesisSha256: string;
     confirmedSectionIds: string[];
   };
+  /** Verifica claim-level anti-misgrounded (judge mistral-medium ≠ generatore):
+   * claim non supportati dagli eventi → lista "da verificare" per il perito. */
+  claimVerification?: {
+    checkedAt: string;
+    model: string;
+    sectionsChecked: number;
+    supportedCount: number;
+    unverifiableCount: number;
+    unsupportedCount: number;
+    findings: Array<{
+      sectionId: string;
+      sectionTitle: string;
+      claim: string;
+      verdict: 'non_supportato' | 'non_verificabile';
+      motivo: string;
+    }>;
+  };
   hrs?: number; // Hallucination Risk Score 0-100
   hrsLevel?: 'eccellente' | 'buono' | 'da_rivedere' | 'critico';
   eventCoverage?: number;

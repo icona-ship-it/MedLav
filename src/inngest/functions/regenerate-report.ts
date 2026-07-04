@@ -585,12 +585,23 @@ export const regenerateReport = inngest.createFunction(
     // Save the report (partial or complete) — new version, deterministic facts.
     // sectionPlan → real-prompt version hash (2.3); ignoreValidation → manual
     // unlock with audit trail (2.4-A2, GDPR leaks never overridable).
-    await step.run('regen-assemble-and-save', () =>
+    const regenSynthesisResult = await step.run('regen-assemble-and-save', () =>
       assembleSectionsAndSaveReport(caseId, accumulatedSections, synthesisParams, sectionPlan, {
         ignoreValidation: ignoreValidation === true,
         userId,
       }),
     );
+
+    // Verifica claim-level anti-misgrounded (come in process-case): judge
+    // Medium ≠ generatore, mai bloccante, ritorna solo conteggi.
+    await step.run('regen-claim-verify', async () => {
+      const { runClaimVerification, toClaimEventDigest } = await import('../steps/claim-verify');
+      return runClaimVerification({
+        caseId,
+        reportId: regenSynthesisResult.reportId,
+        events: toClaimEventDigest(synthesisParams.events),
+      });
+    });
 
     // Sections that failed degrade to explicit markers (regenerable one-by-one)
     // — the run completes normally so the user gets the report; Sentry tracks

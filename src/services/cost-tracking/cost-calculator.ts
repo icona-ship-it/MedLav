@@ -33,6 +33,10 @@ export interface PipelineCostSummary {
 const PRICING: Record<string, { input: number; output: number }> = {
   'mistral-large-latest': { input: 0.5, output: 1.5 },
   'mistral-large-2512': { input: 0.5, output: 1.5 },
+  // Medium (judge claim-verify) — listino storico Medium 3.x; il pricing
+  // per-modello 2026 non è esposto in chiaro sulla pagina pubblica: da
+  // RIVERIFICARE in console col prossimo check trimestrale (2026-09).
+  'mistral-medium-latest': { input: 0.4, output: 2.0 },
   'mistral-small-latest': { input: 0.1, output: 0.3 },
   'mistral-small-2603': { input: 0.1, output: 0.3 },
   'mistral-embed': { input: 0.1, output: 0 },
