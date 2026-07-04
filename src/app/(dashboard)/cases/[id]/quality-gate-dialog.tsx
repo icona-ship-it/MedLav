@@ -6,6 +6,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import {
+  ATTESTATION_DECLARATION,
+  type RequiredAttestationSection,
+} from '@/lib/attestation-shared';
 
 // --- Types ---
 
@@ -14,7 +18,10 @@ interface QualityGateDialogProps {
   onOpenChange: (open: boolean) => void;
   anomalyCount: number;
   missingDocsCount: number;
-  onConfirm: () => void;
+  /** Sezioni ad alto rischio presenti nel report — ognuna richiede spunta esplicita. */
+  requiredSections: RequiredAttestationSection[];
+  /** Riceve gli id canonici delle sezioni confermate (per l'attestazione server). */
+  onConfirm: (confirmedSectionIds: string[]) => void;
 }
 
 // --- Component ---
@@ -24,15 +31,19 @@ export function QualityGateDialog({
   onOpenChange,
   anomalyCount,
   missingDocsCount,
+  requiredSections,
   onConfirm,
 }: QualityGateDialogProps) {
   const [checks, setChecks] = useState({
     anomaliesReviewed: false,
     missingDocsNoted: false,
-    reportRead: false,
+    declaration: false,
   });
+  const [sectionChecks, setSectionChecks] = useState<Record<string, boolean>>({});
 
-  const allChecked = checks.reportRead
+  const allSectionsChecked = requiredSections.every((s) => sectionChecks[s.canonicalId]);
+  const allChecked = checks.declaration
+    && allSectionsChecked
     && (anomalyCount === 0 || checks.anomaliesReviewed)
     && (missingDocsCount === 0 || checks.missingDocsNoted);
 
@@ -40,11 +51,16 @@ export function QualityGateDialog({
     setChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleSectionToggle = (canonicalId: string) => {
+    setSectionChecks((prev) => ({ ...prev, [canonicalId]: !prev[canonicalId] }));
+  };
+
   const handleConfirm = () => {
-    onConfirm();
+    onConfirm(requiredSections.map((s) => s.canonicalId));
     onOpenChange(false);
     // Reset for next use
-    setChecks({ anomaliesReviewed: false, missingDocsNoted: false, reportRead: false });
+    setChecks({ anomaliesReviewed: false, missingDocsNoted: false, declaration: false });
+    setSectionChecks({});
   };
 
   return (
@@ -58,19 +74,24 @@ export function QualityGateDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Prima di approvare il report come definitivo, verifica di aver controllato tutti i punti:
+          Prima di approvare il report come definitivo, conferma la revisione delle
+          sezioni a maggior rischio e degli avvisi:
         </p>
 
         <div className="space-y-3 py-2">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={checks.reportRead}
-              onChange={() => handleToggle('reportRead')}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
-            />
-            <span className="text-sm">Ho letto e revisionato il report</span>
-          </label>
+          {requiredSections.map((section) => (
+            <label key={section.canonicalId} className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(sectionChecks[section.canonicalId])}
+                onChange={() => handleSectionToggle(section.canonicalId)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm">
+                Ho verificato la sezione <strong>{section.title}</strong> (citazioni, date, importi)
+              </span>
+            </label>
+          ))}
 
           {anomalyCount > 0 && (
             <label className="flex items-start gap-3 cursor-pointer">
@@ -99,6 +120,16 @@ export function QualityGateDialog({
               </span>
             </label>
           )}
+
+          <label className="flex items-start gap-3 cursor-pointer border-t pt-3">
+            <input
+              type="checkbox"
+              checked={checks.declaration}
+              onChange={() => handleToggle('declaration')}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+            />
+            <span className="text-sm font-medium">{ATTESTATION_DECLARATION}</span>
+          </label>
         </div>
 
         <DialogFooter>

@@ -136,6 +136,14 @@ export async function GET(
     // QA 2026-06-11: default DEPOSITABILE; ?mode=lavoro per le carte di lavoro.
     const exportMode = request.nextUrl.searchParams.get('mode') === 'lavoro' ? 'lavoro' as const : 'depositabile' as const;
 
+    // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
+    // dopo l'approvazione non esce come depositabile finché non viene riapprovato.
+    const { checkDepositableAttestation } = await import('@/services/export/attestation');
+    const attestationCheck = checkDepositableAttestation(data.report, exportMode);
+    if (!attestationCheck.ok) {
+      return NextResponse.json({ success: false, error: attestationCheck.message }, { status: 428 });
+    }
+
     logAccess({
       userId: user.id,
       action: 'report.exported',

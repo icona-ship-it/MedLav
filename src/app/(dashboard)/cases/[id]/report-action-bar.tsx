@@ -19,8 +19,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { updateReportStatus, getCaseReportVersions, getLastExport } from '../../actions';
+import { updateReportStatus, getCaseReportVersions, getLastExport, attestAndApproveReport } from '../../actions';
 import { QualityGateDialog } from './quality-gate-dialog';
+import { getRequiredAttestationSections } from '@/lib/attestation-shared';
 import type { ReportRow } from './types';
 
 // --- Helpers ---
@@ -91,6 +92,22 @@ export function ReportActionBar({
   const handleStatusChange = useCallback((newStatus: string) => {
     startTransition(async () => {
       await updateReportStatus({ caseId, reportId: report.id, newStatus });
+      router.refresh();
+    });
+  }, [caseId, report.id, router]);
+
+  // Attestazione "verify before sign": approvazione = attestazione con hash
+  // del contenuto. Le sezioni ad alto rischio presenti nel report richiedono
+  // spunta esplicita nel dialog.
+  const requiredSections = getRequiredAttestationSections(report.synthesis);
+  const handleAttestAndApprove = useCallback((confirmedSectionIds: string[]) => {
+    startTransition(async () => {
+      const result = await attestAndApproveReport({ caseId, reportId: report.id, confirmedSectionIds });
+      if (result && 'error' in result && result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Report approvato e attestato');
       router.refresh();
     });
   }, [caseId, report.id, router]);
@@ -377,7 +394,8 @@ export function ReportActionBar({
         onOpenChange={setQualityGateOpen}
         anomalyCount={anomalyCount}
         missingDocsCount={missingDocsCount}
-        onConfirm={() => handleStatusChange('definitivo')}
+        requiredSections={requiredSections}
+        onConfirm={handleAttestAndApprove}
       />
 
     </>

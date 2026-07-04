@@ -67,6 +67,16 @@ export async function GET(
 
     if (!htmlResp.ok) {
       const body = await htmlResp.text().catch(() => '');
+      // 428 = gate attestazione dall'export HTML interno: inoltra il messaggio
+      // reale invece del generico "riprova" (l'utente deve riapprovare, non riprovare).
+      if (htmlResp.status === 428) {
+        let innerError = 'Attestazione richiesta: riapprova il report prima dell\'export depositabile.';
+        try {
+          const parsed = JSON.parse(body) as { error?: string };
+          if (parsed.error) innerError = parsed.error;
+        } catch { /* body non-JSON: tieni il messaggio di default */ }
+        return NextResponse.json({ success: false, error: innerError }, { status: 428 });
+      }
       logger.error(TAG, 'Inner HTML export failed', {
         caseId,
         status: htmlResp.status,

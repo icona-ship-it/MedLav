@@ -49,6 +49,14 @@ export interface ReportGenerationMetadata {
    * bozza→firmato. `synthesis` viene editata in place dal perito; questa no.
    * Le rigenerazioni di sezione la aggiornano per la sola sezione rigenerata. */
   originalSynthesis?: string;
+  /** Attestazione di revisione ("verify before sign"): legata allo sha256 del
+   * synthesis attestato — un edit successivo la invalida. Vedi services/export/attestation.ts. */
+  attestation?: {
+    attestedAt: string;
+    attestedBy: string;
+    synthesisSha256: string;
+    confirmedSectionIds: string[];
+  };
   hrs?: number; // Hallucination Risk Score 0-100
   hrsLevel?: 'eccellente' | 'buono' | 'da_rivedere' | 'critico';
   eventCoverage?: number;

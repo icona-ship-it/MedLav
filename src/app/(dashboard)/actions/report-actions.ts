@@ -78,6 +78,76 @@ export async function updateReportStatus(params: {
 }
 
 /**
+ * Attesta il report ("verify before sign") e lo approva come definitivo.
+ * L'attestazione lega la conferma allo sha256 del synthesis corrente: ogni
+ * modifica successiva la invalida e l'export depositabile chiede di riapprovare.
+ */
+export async function attestAndApproveReport(params: {
+  caseId: string;
+  reportId: string;
+  confirmedSectionIds: string[];
+}) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Non autenticato' };
+
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('id')
+    .eq('id', params.caseId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!caseData) return { error: 'Caso non trovato' };
+
+  const { data: report } = await supabase
+    .from('reports')
+    .select('synthesis, generation_metadata')
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId)
+    .single();
+
+  if (!report?.synthesis) return { error: 'Report non trovato' };
+
+  const { buildReportAttestation } = await import('@/services/export/attestation');
+  const result = buildReportAttestation({
+    userId: user.id,
+    synthesis: report.synthesis,
+    confirmedSectionIds: params.confirmedSectionIds,
+  });
+  if ('error' in result) return { error: result.error };
+
+  const metadata = (report.generation_metadata ?? {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from('reports')
+    .update({
+      report_status: 'definitivo',
+      generation_metadata: { ...metadata, attestation: result.attestation },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId);
+
+  if (error) return { error: 'Errore durante l\'approvazione' };
+
+  await supabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'report.attested',
+    entity_type: 'report',
+    entity_id: params.reportId,
+    metadata: {
+      caseId: params.caseId,
+      confirmedSectionIds: result.attestation.confirmedSectionIds,
+      synthesisSha256: result.attestation.synthesisSha256,
+    },
+  });
+
+  revalidateCase(params.caseId);
+  return { success: true };
+}
+
+/**
  * Update report synthesis text in-place (no new version).
  */
 export async function updateReportSynthesis(params: {

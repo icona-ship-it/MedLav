@@ -79,6 +79,14 @@ export async function GET(
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }
 
+    // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
+    // dopo l'approvazione non esce come depositabile finché non viene riapprovato.
+    const { checkDepositableAttestation } = await import('@/services/export/attestation');
+    const attestationCheck = checkDepositableAttestation(data.report, exportMode);
+    if (!attestationCheck.ok) {
+      return NextResponse.json({ success: false, error: attestationCheck.message }, { status: 428 });
+    }
+
     // pm.tribunale non è più nel tipo ma esiste nei JSONB legacy: senza il
     // check, un caso legacy col solo tribunale perderebbe il layout
     // professional in mode=lavoro (review 2026-07-03).
