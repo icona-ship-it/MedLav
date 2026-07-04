@@ -141,11 +141,13 @@ export const regenerateReport = inngest.createFunction(
     // gestita, invece di sommarsi contro i rate limit del workspace. + LOCK
     // PER-CASO (no race sui report, no doppio costo, copre i retry).
     concurrency: [
-      { scope: 'account', key: '"mistral-pool"', limit: 8 },
+      // Stesso pool di process-case, tarato sui limiti reali del workspace
+      // (large-2512: 1M TPM, 1,25 RPS — console 2026-07-04).
+      { scope: 'account', key: '"mistral-pool"', limit: 12 },
       { limit: 1, key: 'event.data.caseId' },
     ],
     // Throttle degli AVVII di rigenerazione (coda, non errori).
-    throttle: { limit: 6, period: '1m', burst: 3 },
+    throttle: { limit: 8, period: '1m', burst: 4 },
     cancelOn: [{ event: 'case/pipeline.cancelled', match: 'data.caseId' }],
     onFailure: async ({ event }) => restoreCompletatoOnFailure(event),
   },

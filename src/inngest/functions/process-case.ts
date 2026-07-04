@@ -222,19 +222,20 @@ export const processCase = inngest.createFunction(
     //    regenerate-report): max N STEP in esecuzione simultanea tra tutte le
     //    pipeline = semaforo distribuito gestito sulle chiamate LLM. Gli step
     //    eccedenti restano IN CODA FIFO (non falliscono, non consumano compute).
-    //    Il collo reale è il TPM di mistral-large del workspace: 8 è la partenza
-    //    conservativa per tier bassi — alzare DOPO aver letto i limiti reali in
-    //    admin.mistral.ai → Limits (ogni step ≈ 1-3 chiamate per i Promise.all
-    //    interni, quindi 8 step ≈ 8-24 chiamate in volo).
+    //    Tarato sui limiti REALI del workspace (admin console, 2026-07-04):
+    //    mistral-large-2512 = 1M token/min e 1,25 req/sec. 12 step in volo con
+    //    chiamate lunghe (30-60s) ≈ 15-25 chiamate/min ≈ 500-800K TPM: dentro
+    //    con margine per CoVe/header. Il vincolo stretto è l'RPS sulle chiamate
+    //    BREVI (classify, cap dedicato più sotto nel suo job).
     // 2) LOCK PER-CASO: mai due pipeline sullo stesso caso (race/audit).
     concurrency: [
-      { scope: 'account', key: '"mistral-pool"', limit: 8 },
+      { scope: 'account', key: '"mistral-pool"', limit: 12 },
       { limit: 1, key: 'event.data.caseId' },
     ],
     // Coda ordinata degli AVVII: 100 utenti che lanciano insieme = 100 run
-    // accodati a 6/min (burst 3), non 100 pipeline che si contendono l'API.
+    // accodati a 10/min (burst 5), non 100 pipeline che si contendono l'API.
     // L'attesa avviene nella coda Inngest, non in una lambda Vercel.
-    throttle: { limit: 6, period: '1m', burst: 3 },
+    throttle: { limit: 10, period: '1m', burst: 5 },
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
     ],

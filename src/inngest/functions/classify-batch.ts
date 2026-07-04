@@ -17,10 +17,13 @@ export const classifyBatchJob = inngest.createFunction(
     retries: 2,
     concurrency: [
       // Fuori dal pool "mistral-pool" (le classificazioni sono leggere sul TPM
-      // e non devono rubare slot alle pipeline), ma il cap globale protegge
-      // l'RPS del workspace Mistral — tarare coi limiti reali della console.
-      { limit: 20 },
-      { limit: 10, key: 'event.data.userId' },    // per-user — classify is lightweight (3K char input, 256 token output)
+      // e non devono rubare slot alle pipeline). Il vincolo REALE del workspace
+      // è l'RPS di mistral-large: 1,25 req/sec (console 2026-07-04) — con
+      // chiamate brevi (~3s) il throughput sostenibile è ~4 concorrenti; 6 con
+      // il retry/Retry-After come ammortizzatore. Nota futura: spostare la
+      // classificazione su mistral-medium (50 req/sec) e alzare il cap.
+      { limit: 6 },
+      { limit: 4, key: 'event.data.userId' },
     ],
     onFailure: async ({ event }) => {
       try {
