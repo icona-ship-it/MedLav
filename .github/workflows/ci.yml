@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, rc-mvp]
   pull_request:
-    branches: [main]
+    branches: [main, rc-mvp]
 
 # Stub env (no real secrets) — shared by the test/build steps.
 env:
