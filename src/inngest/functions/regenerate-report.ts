@@ -135,19 +135,17 @@ export const regenerateReport = inngest.createFunction(
   {
     id: 'regenerate-report',
     retries: 2,
-    // Inngest accetta max 2 entry concurrency. Teniamo cap GLOBALE (protegge
-    // Mistral/Vercel quando molti utenti rigenerano insieme) + LOCK PER-CASO
-    // (due rigenerazioni dello stesso caso non girano mai insieme: no race sui
-    // report, no doppio costo, copre i retry). La fairness per-utente la dà il
-    // throttle sotto + il rate-limit della route.
+    // AFFIDABILITÀ SOTTO CARICO (2026-07-04): stesso POOL GLOBALE MISTRAL di
+    // process-case (scope account, chiave statica condivisa) — pipeline e
+    // rigenerazioni si contendono la STESSA capacità LLM in una coda FIFO
+    // gestita, invece di sommarsi contro i rate limit del workspace. + LOCK
+    // PER-CASO (no race sui report, no doppio costo, copre i retry).
     concurrency: [
-      { limit: 50 },
+      { scope: 'account', key: '"mistral-pool"', limit: 8 },
       { limit: 1, key: 'event.data.caseId' },
     ],
-    // Throttle globale: limita gli AVVII di rigenerazione/min per smussare i burst
-    // (molti utenti insieme). NB: è a livello di RUN (non per-chiamata-LLM) → da
-    // tarare sul rate-limit Mistral EU; il cap LLM globale vero è P2.
-    throttle: { limit: 8, period: '1m' },
+    // Throttle degli AVVII di rigenerazione (coda, non errori).
+    throttle: { limit: 6, period: '1m', burst: 3 },
     cancelOn: [{ event: 'case/pipeline.cancelled', match: 'data.caseId' }],
     onFailure: async ({ event }) => restoreCompletatoOnFailure(event),
   },
@@ -360,7 +358,10 @@ export const regenerateReport = inngest.createFunction(
       } else {
         batches = planDocSanitariaEventBatches(synthesisParams.events);
       }
-      const parts: string[] = [];
+      // AFFIDABILITÀ (2026-07-04): come in process-case — le finestre salvano il
+      // testo su Storage e ritornano puntatore+meta; lo stato Inngest resta O(1)
+      // rispetto alla dimensione del fascicolo (tetto body Vercel ~4,5MB).
+      const batchMetas: Array<{ partPath: string | null; fallbackText?: string }> = [];
       let rollingContext = [...previousContext];
       let promptTokens = 0;
       let completionTokens = 0;
@@ -378,7 +379,7 @@ export const regenerateReport = inngest.createFunction(
             const batchOcr = await fetchDocumentsOcrContext(caseId, batch.docIds);
             const { generateSingleSection, buildDocSanitariaChunkSpec } = await import('@/services/synthesis/section-generator');
             // 2.4-A1: vary seed per Inngest retry so a blocked report isn't reproduced byte-identical.
-            return generateSingleSection({
+            const generated = await generateSingleSection({
               spec: buildDocSanitariaChunkSpec(spec, b, batches.length),
               synthesisParams: {
                 ...synthesisParams,
@@ -392,10 +393,16 @@ export const regenerateReport = inngest.createFunction(
               attempt,
               disableChunking: true,
             });
+            const body = generated.content?.trim() ?? '';
+            if (body.length === 0) {
+              return { partPath: null as string | null, contextSummary: '', usage: generated.usage };
+            }
+            const { saveSectionPart } = await import('../steps/section-part-store');
+            const partPath = await saveSectionPart(caseId, spec.id, `batch-${b}`, body);
+            return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
           });
-          const body = batchResult.content?.trim() ?? '';
-          if (body.length > 0) {
-            parts.push(body);
+          if (batchResult.partPath) {
+            batchMetas.push({ partPath: batchResult.partPath });
             rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
             okBatches++;
           } else {
@@ -407,7 +414,7 @@ export const regenerateReport = inngest.createFunction(
           }
         } catch (batchError) {
           logger.error('regenerate-report', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
-          parts.push(`*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*`);
+          batchMetas.push({ partPath: null, fallbackText: `*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*` });
         }
       }
 
@@ -415,21 +422,62 @@ export const regenerateReport = inngest.createFunction(
         throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
       }
 
-      const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
-      // RC (perizia "semplice"): NIENTE elenco-inventario degli atti (il gold Lavini non
-      // ce l'ha) — era l'"Elenco analitico degli atti (415...)" su Bigon. Altri ruoli invariato.
-      const combinedContent = [
-        ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        // Togli l'intestazione di sezione ri-emessa da ogni batch — `## Titolo` o `**Titolo**`
-        // (su Bigon il grassetto ×9); la canonica è aggiunta una volta a valle.
-        ...parts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
-      ].join('\n\n');
+      // COMBINE dentro uno step (testo su Storage, coverage inclusa — il
+      // contenuto non transita nello stato del run).
+      const combineResult = await step.run('regen-section-documentazione_sanitaria-combine', async () => {
+        const { loadSectionPart, saveSectionPart } = await import('../steps/section-part-store');
+        const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
+        const texts: string[] = [];
+        for (const meta of batchMetas) {
+          if (meta.partPath) {
+            try {
+              texts.push(await loadSectionPart(meta.partPath));
+            } catch (loadError) {
+              logger.error('regenerate-report', `Doc-sanitaria: parte ${meta.partPath} non recuperata: ${loadError instanceof Error ? loadError.message : 'unknown'}`, { caseId });
+              texts.push('*[⚠ Blocco non recuperato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*');
+            }
+          } else if (meta.fallbackText) {
+            texts.push(meta.fallbackText);
+          }
+        }
+        // RC (perizia "semplice"): NIENTE elenco-inventario degli atti (il gold Lavini non
+        // ce l'ha) — era l'"Elenco analitico degli atti (415...)" su Bigon. Altri ruoli invariato.
+        const combinedContent = [
+          ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
+          // Togli l'intestazione di sezione ri-emessa da ogni batch — `## Titolo` o `**Titolo**`
+          // (su Bigon il grassetto ×9); la canonica è aggiunta una volta a valle.
+          ...texts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
+        ].join('\n\n');
+
+        let finalContent = combinedContent;
+        let coverageMissing = 0;
+        let coverageT1 = 0;
+        if (!combinedContent.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+          const coverage = checkSelectiveCoverage(combinedContent, allEvents);
+          coverageMissing = coverage.missing.length;
+          coverageT1 = coverage.t1Total;
+          if (coverageMissing > 0) {
+            finalContent = `${buildOmissionBanner(coverageMissing)}\n\n${combinedContent}`;
+          }
+        }
+
+        const contentPath = await saveSectionPart(caseId, spec.id, 'combined', finalContent);
+        return {
+          contentPath,
+          contextSummary: spec.contextMaxChars > 0 ? summarizeForContext(finalContent, spec.contextMaxChars) : '',
+          wordCount: finalContent.split(/\s+/).filter((w) => w.length > 0).length,
+          coverageMissing,
+          coverageT1,
+        };
+      });
+
       return {
         id: spec.id,
         title: spec.title,
-        content: combinedContent,
-        contextSummary: spec.contextMaxChars > 0 ? summarizeForContext(combinedContent, spec.contextMaxChars) : '',
-        wordCount: combinedContent.split(/\s+/).filter((w) => w.length > 0).length,
+        content: '',
+        contentPath: combineResult.contentPath,
+        contextSummary: combineResult.contextSummary,
+        wordCount: combineResult.wordCount,
         usage: promptTokens > 0 ? { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } : undefined,
       };
     };
@@ -502,10 +550,12 @@ export const regenerateReport = inngest.createFunction(
       }
     }
 
-    // Copertura T1 della doc-sanitaria selettiva (mirrors process-case):
-    // ogni evento clinicamente rilevante deve comparire nel testo combinato.
+    // Copertura T1 della doc-sanitaria selettiva (mirrors process-case).
+    // Path BATCHED: la coverage vive nello step '-combine' (contenuto su
+    // Storage, contentPath) — qui si copre solo il path non-batched inline.
     const docSanSection = completedSections.get('documentazione_sanitaria');
-    if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+    if (docSanSection && docSanSection.content.length > 0 && !docSanSection.contentPath
+      && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
       const coverage = checkSelectiveCoverage(docSanSection.content, allEvents);
       if (coverage.missing.length > 0) {
         completedSections.set('documentazione_sanitaria', {

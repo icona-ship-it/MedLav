@@ -48,6 +48,12 @@ export async function finalizeStep(params: FinalizeParams): Promise<void> {
 
   logger.info('pipeline', ` Step 8: Finalizing`);
 
+  // Cleanup best-effort delle parti di sezione transitorie su Storage: il
+  // report finale è già salvato nella tabella reports. Un residuo non rompe
+  // nulla (upsert idempotente + cancellazione garantita con il caso).
+  const { deleteCaseSectionParts } = await import('./section-part-store');
+  await deleteCaseSectionParts(caseId);
+
   // Mark all processed documents as completed (batched for scalability)
   const docIds = extractionResults.map((r) => r.documentId);
   const BATCH_SIZE = 500;

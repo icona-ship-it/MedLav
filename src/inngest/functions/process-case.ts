@@ -217,14 +217,24 @@ export const processCase = inngest.createFunction(
   {
     id: 'process-case',
     retries: 3,
-    // Inngest accetta max 2 entry concurrency: cap GLOBALE + LOCK PER-CASO (no
-    // pipeline concorrenti sullo stesso caso → niente race/eventi duplicati,
-    // audit finding). Il per-utente è stato rimosso a favore del lock per-caso;
-    // un caso = un run, quindi la parallelizzazione interna (waves) è invariata.
+    // AFFIDABILITÀ SOTTO CARICO (2026-07-04) — Inngest accetta max 2 entry:
+    // 1) POOL GLOBALE MISTRAL (scope account, chiave statica condivisa con
+    //    regenerate-report): max N STEP in esecuzione simultanea tra tutte le
+    //    pipeline = semaforo distribuito gestito sulle chiamate LLM. Gli step
+    //    eccedenti restano IN CODA FIFO (non falliscono, non consumano compute).
+    //    Il collo reale è il TPM di mistral-large del workspace: 8 è la partenza
+    //    conservativa per tier bassi — alzare DOPO aver letto i limiti reali in
+    //    admin.mistral.ai → Limits (ogni step ≈ 1-3 chiamate per i Promise.all
+    //    interni, quindi 8 step ≈ 8-24 chiamate in volo).
+    // 2) LOCK PER-CASO: mai due pipeline sullo stesso caso (race/audit).
     concurrency: [
-      { limit: 100 },
+      { scope: 'account', key: '"mistral-pool"', limit: 8 },
       { limit: 1, key: 'event.data.caseId' },
     ],
+    // Coda ordinata degli AVVII: 100 utenti che lanciano insieme = 100 run
+    // accodati a 6/min (burst 3), non 100 pipeline che si contendono l'API.
+    // L'attesa avviene nella coda Inngest, non in una lambda Vercel.
+    throttle: { limit: 6, period: '1m', burst: 3 },
     cancelOn: [
       { event: 'case/pipeline.cancelled', match: 'data.caseId' },
     ],
@@ -1052,7 +1062,13 @@ export const processCase = inngest.createFunction(
       } else {
         batches = planDocSanitariaEventBatches(synthesisParams.events);
       }
-      const parts: string[] = [];
+      // AFFIDABILITÀ (2026-07-04): ogni finestra salva il TESTO su Supabase
+      // Storage e ritorna solo puntatore+meta. Lo stato memoizzato Inngest
+      // viaggia nel body HTTP a ogni step (tetto Vercel ~4,5MB → 413): coi
+      // testi inline lo stato cresceva col fascicolo ed era la causa del reset
+      // in finalizzazione sul macrodanno. Ora è O(1): la pipeline arriva in
+      // fondo a prescindere dalla dimensione del caso.
+      const batchMetas: Array<{ partPath: string | null; fallbackText?: string }> = [];
       let rollingContext = [...previousContext];
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
@@ -1077,7 +1093,7 @@ export const processCase = inngest.createFunction(
             // retry after a validator block produces a real variant.
             // disableChunking: la finestra è già ≤ un blocco cronologico → niente
             // auto-split annidato.
-            return generateSingleSection({
+            const generated = await generateSingleSection({
               spec: buildDocSanitariaChunkSpec(spec, b, batches.length),
               synthesisParams: {
                 ...synthesisParams,
@@ -1091,11 +1107,17 @@ export const processCase = inngest.createFunction(
               attempt,
               disableChunking: true,
             });
+            const body = generated.content?.trim() ?? '';
+            if (body.length === 0) {
+              return { partPath: null as string | null, contextSummary: '', usage: generated.usage };
+            }
+            const { saveSectionPart } = await import('../steps/section-part-store');
+            const partPath = await saveSectionPart(caseId, spec.id, `batch-${b}`, body);
+            return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
           });
 
-          const body = batchResult.content?.trim() ?? '';
-          if (body.length > 0) {
-            parts.push(body);
+          if (batchResult.partPath) {
+            batchMetas.push({ partPath: batchResult.partPath });
             rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
             okBatches++;
           } else {
@@ -1110,7 +1132,7 @@ export const processCase = inngest.createFunction(
           // fallita lascia un marker localizzato e si prosegue; si rilancia solo
           // se TUTTE falliscono (→ fallback esterno di sezione).
           logger.error('pipeline', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
-          parts.push(`*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*`);
+          batchMetas.push({ partPath: null, fallbackText: `*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*` });
         }
       }
 
@@ -1118,26 +1140,76 @@ export const processCase = inngest.createFunction(
         throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
       }
 
-      // Indice analitico COMPLETO unico in testa + le narrazioni delle finestre.
-      // RC (perizia "semplice"): NIENTE inventario degli atti (il gold Lavini non ce l'ha).
-      const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
-      const combinedContent = [
-        ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
-        // Ogni batch a volte ri-emette l'intestazione di sezione (## Titolo o **Titolo**)
-        // nonostante la direttiva → toglila da ogni blocco; quella canonica è aggiunta una
-        // volta a valle (assembleSectionBlock). Su Bigon il grassetto compariva 9×.
-        ...parts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
-      ].join('\n\n');
-      const contextSummary = spec.contextMaxChars > 0
-        ? summarizeForContext(combinedContent, spec.contextMaxChars)
-        : '';
+      // COMBINE dentro uno step: legge le parti da Storage, unisce, applica il
+      // check di copertura (che prima viveva nell'orchestratore: ora il testo
+      // combinato non transita più nello stato del run) e salva il combinato.
+      const combineResult = await step.run('gen-section-documentazione_sanitaria-combine', async () => {
+        const { loadSectionPart, saveSectionPart } = await import('../steps/section-part-store');
+        const { buildAttiIndex, summarizeForContext } = await import('@/services/synthesis/section-generator');
+        const texts: string[] = [];
+        for (const meta of batchMetas) {
+          if (meta.partPath) {
+            try {
+              texts.push(await loadSectionPart(meta.partPath));
+            } catch (loadError) {
+              logger.error('pipeline', `Doc-sanitaria: parte ${meta.partPath} non recuperata: ${loadError instanceof Error ? loadError.message : 'unknown'}`, { caseId });
+              texts.push('*[⚠ Blocco non recuperato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*');
+            }
+          } else if (meta.fallbackText) {
+            texts.push(meta.fallbackText);
+          }
+        }
+        // Indice analitico COMPLETO unico in testa + le narrazioni delle finestre.
+        // RC (perizia "semplice"): NIENTE inventario degli atti (il gold Lavini non ce l'ha).
+        const combinedContent = [
+          ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
+          // Ogni batch a volte ri-emette l'intestazione di sezione (## Titolo o **Titolo**)
+          // nonostante la direttiva → toglila da ogni blocco; quella canonica è aggiunta una
+          // volta a valle (assembleSectionBlock). Su Bigon il grassetto compariva 9×.
+          ...texts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
+        ].join('\n\n');
+
+        // Garanzia di completezza della doc-sanitaria SELETTIVA (decisione medici
+        // 2026-06-12): ogni evento T1 deve comparire; se manca, banner + warning.
+        let finalContent = combinedContent;
+        let coverageMissing = 0;
+        let coverageT1 = 0;
+        if (!combinedContent.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+          const coverage = checkSelectiveCoverage(combinedContent, synthesisParams.events);
+          coverageMissing = coverage.missing.length;
+          coverageT1 = coverage.t1Total;
+          if (coverageMissing > 0) {
+            finalContent = `${buildOmissionBanner(coverageMissing)}\n\n${combinedContent}`;
+          }
+        }
+
+        const contentPath = await saveSectionPart(caseId, spec.id, 'combined', finalContent);
+        return {
+          contentPath,
+          contextSummary: spec.contextMaxChars > 0 ? summarizeForContext(finalContent, spec.contextMaxChars) : '',
+          wordCount: finalContent.split(/\s+/).filter((w) => w.length > 0).length,
+          coverageMissing,
+          coverageT1,
+        };
+      });
+
+      if (combineResult.coverageMissing > 0) {
+        pipelineWarnings.push({
+          step: 'synthesis',
+          severity: 'warning',
+          message: `Documentazione sanitaria selettiva: ${combineResult.coverageMissing} ${combineResult.coverageMissing === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${combineResult.coverageT1} verificati). Banner di verifica inserito nella sezione.`,
+          failedCount: combineResult.coverageMissing,
+          totalCount: combineResult.coverageT1,
+        });
+      }
 
       return {
         id: spec.id,
         title: spec.title,
-        content: combinedContent,
-        contextSummary,
-        wordCount: combinedContent.split(/\s+/).filter((w) => w.length > 0).length,
+        content: '',
+        contentPath: combineResult.contentPath,
+        contextSummary: combineResult.contextSummary,
+        wordCount: combineResult.wordCount,
         usage: totalPromptTokens > 0 ? {
           promptTokens: totalPromptTokens,
           completionTokens: totalCompletionTokens,
@@ -1234,14 +1306,15 @@ export const processCase = inngest.createFunction(
       });
     }
 
-    // Garanzia di completezza della doc-sanitaria SELETTIVA (decisione medici
-    // 2026-06-12): "solo ciò che interessa" non può mai diventare "ho perso una
-    // diagnosi". Check deterministico sul contenuto COMBINATO: ogni evento T1
-    // deve comparire; se manca, banner visibile + warning di pipeline.
+    // NB: il check di copertura della doc-sanitaria selettiva (banner T1) vive
+    // ORA dentro lo step 'gen-section-documentazione_sanitaria-combine' — il
+    // contenuto combinato sta su Storage e non transita più nello stato del run.
+    // Sezioni non-batched (casi piccoli): coprono via generateSingleSection.
     const docSanSection = completedSections.get('documentazione_sanitaria');
-    if (docSanSection && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
-      // I lab di routine sono già tolti dal prompt a monte (isExcludableLabEvent); un lab
-      // T1 load-bearing resta e DEVE essere coperto → nessun parametro lab qui.
+    if (docSanSection && docSanSection.content.length > 0 && !docSanSection.contentPath
+      && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
+      // Path NON-batched (sezione generata in un solo step, contenuto inline):
+      // stesso check di completezza di prima.
       const coverage = checkSelectiveCoverage(docSanSection.content, synthesisParams.events);
       if (coverage.missing.length > 0) {
         completedSections.set('documentazione_sanitaria', {

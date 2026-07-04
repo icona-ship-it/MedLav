@@ -68,6 +68,12 @@ export async function deleteCaseAndRelatedData(
     }
   }
 
+  // Remove transient section parts (GDPR Art. 9 — testi di sezione generati,
+  // bucket section-parts; scritti dalla pipeline, il report finale vive in
+  // reports). Cancellazione GARANTITA con il caso.
+  const { deleteCaseSectionParts } = await import('@/inngest/steps/section-part-store');
+  await deleteCaseSectionParts(caseId);
+
   // 3. Delete remaining related tables
   await supabase.from('events').delete().eq('case_id', caseId);
   await supabase.from('anomalies').delete().eq('case_id', caseId);

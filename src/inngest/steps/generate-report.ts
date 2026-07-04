@@ -382,11 +382,18 @@ export function stripHallucinatedImageRefs(report: string, realImagePaths: Set<s
  */
 export async function assembleSectionsAndSaveReport(
   caseId: string,
-  sections: GeneratedSection[],
+  sectionsInput: GeneratedSection[],
   synthesisParams: SynthesisParams,
   sectionPlan: SectionSpec[],
   options?: AssembleReportOptions,
 ): Promise<SynthesisStepResult & { promptVersion?: string }> {
+  // Affidabilità (2026-07-04): le sezioni voluminose (doc-sanitaria batched)
+  // arrivano con contentPath (testo su Storage) e content vuoto — si risolvono
+  // QUI, dentro lo step di assemble, così il testo non transita mai nello
+  // stato del run Inngest (tetto body Vercel ~4,5MB).
+  const { resolveSectionContents } = await import('./section-part-store');
+  const sections = await resolveSectionContents(sectionsInput);
+
   // Assemble full report markdown.
   // Strip ANY leading ## heading the content may already carry (the LLM despite
   // instructions, o il template intestazione che emette il proprio titolo es.

@@ -16,8 +16,11 @@ export const classifyBatchJob = inngest.createFunction(
     id: 'classify-batch',
     retries: 2,
     concurrency: [
-      { limit: 50 },                              // global cap on Inngest Pro
-      { limit: 30, key: 'event.data.userId' },    // per-user — classify is lightweight (3K char input, 256 token output), parallelize aggressively
+      // Fuori dal pool "mistral-pool" (le classificazioni sono leggere sul TPM
+      // e non devono rubare slot alle pipeline), ma il cap globale protegge
+      // l'RPS del workspace Mistral — tarare coi limiti reali della console.
+      { limit: 20 },
+      { limit: 10, key: 'event.data.userId' },    // per-user — classify is lightweight (3K char input, 256 token output)
     ],
     onFailure: async ({ event }) => {
       try {

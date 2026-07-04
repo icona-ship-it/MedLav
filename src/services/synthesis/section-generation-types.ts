@@ -91,6 +91,14 @@ export interface GeneratedSection {
   title: string;
   /** Generated markdown content (without ## heading) */
   content: string;
+  /**
+   * Affidabilità (2026-07-04): per le sezioni voluminose (doc-sanitaria
+   * batched) il contenuto vive su Supabase Storage e qui viaggia solo il
+   * puntatore — lo stato Inngest resta O(1) rispetto alla dimensione del
+   * fascicolo (il body Vercel ha un tetto di ~4,5MB). Quando presente e
+   * content è vuoto, assembleSectionsAndSaveReport risolve dal path.
+   */
+  contentPath?: string;
   /** Compressed summary for passing to subsequent sections */
   contextSummary: string;
   /** Word count of generated content */
