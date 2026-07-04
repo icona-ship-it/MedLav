@@ -12,6 +12,7 @@
  */
 
 import { Paragraph, TextRun, AlignmentType } from 'docx';
+import { PDFDocument } from 'pdf-lib';
 
 /** Single source of truth for the disclosure wording. */
 const DISCLOSURE_TEXT =
@@ -27,6 +28,69 @@ const DISCLOSURE_TEXT =
  */
 export function getAiActDisclosureHtml(): string {
   return `<div class="ai-act-disclosure" style="margin-top:30px;padding:14px 18px;border-top:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-style:italic;line-height:1.55;text-align:justify">${DISCLOSURE_TEXT}</div>`;
+}
+
+/**
+ * Marcatura MACHINE-READABLE ex art. 50(2) AI Act (in applicazione dal
+ * 2/8/2026): oltre alla dicitura visibile, l'output generato deve essere
+ * "marked in a machine-readable format and detectable as artificially
+ * generated". Non esiste ancora uno standard armonizzato per il testo
+ * (codice di buone pratiche art. 50(7) in lavorazione): usiamo le
+ * convenzioni di fatto — meta tag HTML, core/custom properties DOCX,
+ * metadati XMP/Info PDF — così ogni formato esportato porta il marker.
+ */
+
+function escapeHtmlAttribute(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Meta tag per l'<head> degli export HTML (entrambe le varianti). */
+export function getAiActHtmlMetaTags(): string {
+  const disclosure = escapeHtmlAttribute(DISCLOSURE_TEXT);
+  return [
+    '<meta name="generator" content="LegMed — bozza assistita da sistema di IA (Mistral AI EU)">',
+    '<meta name="ai-generated" content="true">',
+    `<meta name="ai-disclosure" content="${disclosure}">`,
+  ].join('\n');
+}
+
+/** Shape strutturalmente compatibile con le opzioni del Document docx.js. */
+export interface AiActDocxMetadata {
+  creator: string;
+  description: string;
+  keywords: string;
+  customProperties: Array<{ name: string; value: string }>;
+}
+
+/** Core + custom properties da spargere nel costruttore `new Document({...})`. */
+export function getAiActDocxMetadata(): AiActDocxMetadata {
+  return {
+    creator: 'LegMed — bozza assistita da sistema di IA',
+    description: DISCLOSURE_TEXT,
+    keywords: 'ai-generated; LegMed; Reg. UE 2024/1689 art. 50',
+    customProperties: [
+      { name: 'AIGenerated', value: 'true' },
+      { name: 'AISystem', value: 'LegMed (Mistral AI EU)' },
+      { name: 'AIDisclosure', value: DISCLOSURE_TEXT },
+    ],
+  };
+}
+
+/**
+ * Post-processa un PDF già renderizzato (Chromium non consente di impostare
+ * metadati custom) marcandolo nei campi Info: Producer/Creator/Subject/Keywords.
+ */
+export async function applyAiActPdfMetadata(pdf: Buffer): Promise<Buffer> {
+  // updateMetadata:false — pdf-lib altrimenti sovrascrive Producer/date al load.
+  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  doc.setProducer('LegMed — bozza assistita da sistema di IA (Mistral AI EU)');
+  doc.setCreator('LegMed');
+  doc.setSubject(DISCLOSURE_TEXT);
+  doc.setKeywords(['ai-generated', 'LegMed', 'Reg. UE 2024/1689 art. 50']);
+  return Buffer.from(await doc.save());
 }
 
 /**

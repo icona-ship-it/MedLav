@@ -9,7 +9,7 @@ import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
-import { getAiActDisclosureDocxParagraphs } from './ai-act-disclosure';
+import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
   ctu: 'CTU - Consulente Tecnico d\'Ufficio (prospettiva neutrale)',
@@ -640,6 +640,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   }
 
   const doc = new Document({
+    ...getAiActDocxMetadata(), // marcatura machine-readable art. 50(2) AI Act
     styles: {
       default: {
         document: {
@@ -1296,6 +1297,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
   }));
 
   const doc = new Document({
+    ...getAiActDocxMetadata(), // marcatura machine-readable art. 50(2) AI Act
     styles: {
       default: {
         document: {

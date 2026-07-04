@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { htmlToPdfBuffer } from '@/lib/pdf-generator';
+import { applyAiActPdfMetadata } from '@/services/export/ai-act-disclosure';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 
@@ -87,11 +88,14 @@ export async function GET(
 
     const reportStatus = htmlResp.headers.get('x-report-status') ?? 'bozza';
 
-    const pdfBuffer = await htmlToPdfBuffer(html, {
+    const renderedPdf = await htmlToPdfBuffer(html, {
       format: 'A4',
       margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
       printBackground: true,
     });
+    // Marcatura machine-readable art. 50(2) AI Act nei metadati del PDF
+    // (Chromium non permette di impostarli in fase di render).
+    const pdfBuffer = await applyAiActPdfMetadata(renderedPdf);
 
     logAccess({
       userId: user.id,

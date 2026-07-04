@@ -4,7 +4,7 @@ import type { MedicoLegalCalculation } from '@/services/calculations/medico-lega
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { markdownToHtml } from './markdown-to-html';
-import { getAiActDisclosureHtml } from './ai-act-disclosure';
+import { getAiActDisclosureHtml, getAiActHtmlMetaTags } from './ai-act-disclosure';
 
 interface ExportEvent {
   order_number: number;
@@ -229,6 +229,7 @@ export function generateHtmlReport(params: HtmlExportParams): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+${getAiActHtmlMetaTags()}
 <title>Report Medico-Legale - ${escapeHtml(caseCode)}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -562,6 +563,7 @@ export function generateProfessionalHtmlReport(params: ProfessionalHtmlExportPar
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+${getAiActHtmlMetaTags()}
 <title>${escapeHtmlPro(roleTitle)} - ${escapeHtmlPro(nrgInfo)}</title>
 <style>
   /* ══════════════════════════════════════════════════════
