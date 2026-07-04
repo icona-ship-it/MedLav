@@ -22,7 +22,11 @@ export async function fetchAllEventsForCase(caseId: string): Promise<Consolidate
     .eq('is_deleted', false)
     .order('event_date', { ascending: true })
     .order('event_type', { ascending: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    // Tiebreak DETERMINISTICO (review affidabilità 2026-07-04): gli insert bulk
+    // condividono lo stesso created_at → senza id l'ordine dei pari può cambiare
+    // tra due fetch e far slittare le finestre doc-sanitaria tra invocazioni.
+    .order('id', { ascending: true });
 
   if (error) throw new Error(`Failed to fetch events for case ${caseId}: ${error.message}`);
   if (!rows || rows.length === 0) return [];
@@ -74,7 +78,11 @@ export async function consolidateEventsStep(
     .eq('is_deleted', false)
     .order('event_date', { ascending: true })
     .order('event_type', { ascending: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    // Tiebreak DETERMINISTICO (review affidabilità 2026-07-04): gli insert bulk
+    // condividono lo stesso created_at → senza id l'ordine dei pari può cambiare
+    // tra due fetch e far slittare le finestre doc-sanitaria tra invocazioni.
+    .order('id', { ascending: true });
 
   // Group events by document for cross-document deduplication
   const docEventsMap = new Map<string, DocumentEvents>();

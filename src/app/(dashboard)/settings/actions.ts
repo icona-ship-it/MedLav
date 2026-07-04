@@ -467,6 +467,12 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
         await removeStoragePrefix(`doc-summaries/${docId}`);
       }
     }
+    // GDPR Art. 9 (review 2026-07-04): parti di sezione transitorie del bucket
+    // section-parts — vanno rimosse anche alla cancellazione dell'account.
+    const { deleteCaseSectionParts } = await import('@/inngest/steps/section-part-store');
+    for (const cId of caseIds) {
+      await deleteCaseSectionParts(cId);
+    }
     for (let i = 0; i < caseIds.length; i += BATCH) {
       const batch = caseIds.slice(i, i + BATCH);
       await admin.from('documents').delete().in('case_id', batch);

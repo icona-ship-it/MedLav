@@ -33,7 +33,11 @@ async function ensureBucket(supabase: ReturnType<typeof createAdminClient>): Pro
   // createBucket fallisce se esiste già: è il caso normale, non un errore.
   const { error } = await supabase.storage.createBucket(SECTION_PARTS_BUCKET, { public: false });
   if (error && !/already exists|duplicate/i.test(error.message)) {
-    logger.warn('section-part-store', `createBucket: ${error.message} (continuo: probabilmente esiste)`);
+    // Errore REALE (non "esiste già"): NON marcare ensured — su un'istanza warm
+    // il prossimo tentativo deve riprovare la creazione, non fallire a vuoto
+    // su "Bucket not found" (review 2026-07-04).
+    logger.warn('section-part-store', `createBucket: ${error.message} — riproverò al prossimo uso`);
+    return;
   }
   bucketEnsured = true;
 }
@@ -99,7 +103,9 @@ export async function deleteCaseSectionParts(caseId: string): Promise<void> {
   const supabase = createAdminClient();
   try {
     // list è per-cartella: raccogli i file di ogni sezione del caso.
-    const { data: sectionDirs } = await supabase.storage.from(SECTION_PARTS_BUCKET).list(caseId);
+    // limit esplicito (default 100): la garanzia GDPR non deve rompersi in
+    // silenzio se il numero di parti cresce (review 2026-07-04).
+    const { data: sectionDirs } = await supabase.storage.from(SECTION_PARTS_BUCKET).list(caseId, { limit: 1000 });
     if (!sectionDirs || sectionDirs.length === 0) return;
     const paths: string[] = [];
     for (const dir of sectionDirs) {
@@ -107,7 +113,7 @@ export async function deleteCaseSectionParts(caseId: string): Promise<void> {
         // sottocartella (sectionId) → lista i file dentro
         const { data: files } = await supabase.storage
           .from(SECTION_PARTS_BUCKET)
-          .list(`${caseId}/${dir.name}`);
+          .list(`${caseId}/${dir.name}`, { limit: 1000 });
         for (const f of files ?? []) paths.push(`${caseId}/${dir.name}/${f.name}`);
       } else if (dir.name) {
         paths.push(`${caseId}/${dir.name}`);

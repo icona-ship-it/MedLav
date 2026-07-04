@@ -1116,8 +1116,16 @@ export const processCase = inngest.createFunction(
             return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
           });
 
+          const legacyInline = (batchResult as { content?: string }).content?.trim() ?? '';
           if (batchResult.partPath) {
             batchMetas.push({ partPath: batchResult.partPath });
+            rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
+            okBatches++;
+          } else if (legacyInline.length > 0) {
+            // BACK-COMPAT deploy: run in flight con step memoizzati nel VECCHIO
+            // formato (content inline, senza partPath) — il testo già generato
+            // (e pagato) NON si scarta: entra nel combine come inline.
+            batchMetas.push({ partPath: null, fallbackText: legacyInline });
             rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
             okBatches++;
           } else {

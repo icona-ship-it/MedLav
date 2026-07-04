@@ -242,8 +242,10 @@ export const regenerateReport = inngest.createFunction(
     // P1 SCALA: l'array eventi cresce col caso (a ~3000+ eventi supera i 4MB di
     // un Inngest step-output → fallimento netto). Letto nel BODY (non come step),
     // ri-eseguito a ogni invocazione: e' solo una DB read, cheap, e identico a
-    // come fa process-case.ts. Il lock per-caso (concurrency key=caseId) garantisce
-    // che gli eventi non mutino a meta' run → deterministico tra i replay.
+    // come fa process-case.ts. Determinismo tra i replay: il lock per-caso
+    // esclude ALTRI run; le edit UI degli eventi sono bloccate a pipeline in
+    // corso dalla guardia su processing_stage in event-actions (2026-07-04) e
+    // l'ordine dei pari è stabilizzato dal tiebreak .order('id').
     const allEvents: ConsolidatedEvent[] = await fetchAllEventsForCase(caseId);
     if (allEvents.length === 0) {
       throw new Error('Nessun evento disponibile per la rigenerazione del report');
@@ -401,8 +403,15 @@ export const regenerateReport = inngest.createFunction(
             const partPath = await saveSectionPart(caseId, spec.id, `batch-${b}`, body);
             return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
           });
+          const legacyInline = (batchResult as { content?: string }).content?.trim() ?? '';
           if (batchResult.partPath) {
             batchMetas.push({ partPath: batchResult.partPath });
+            rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
+            okBatches++;
+          } else if (legacyInline.length > 0) {
+            // BACK-COMPAT deploy: step memoizzati pre-refactor (content inline)
+            // — il testo già generato non si scarta.
+            batchMetas.push({ partPath: null, fallbackText: legacyInline });
             rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: batchResult.contextSummary }];
             okBatches++;
           } else {
@@ -603,6 +612,10 @@ export const regenerateReport = inngest.createFunction(
         perizia_metadata: cleaned,
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
+      // Cleanup best-effort delle parti di sezione transitorie (il report è
+      // già salvato in reports; residui comunque cancellati col caso).
+      const { deleteCaseSectionParts } = await import('../steps/section-part-store');
+      await deleteCaseSectionParts(caseId);
     });
 
     return { caseId, sections: accumulatedSections.length };

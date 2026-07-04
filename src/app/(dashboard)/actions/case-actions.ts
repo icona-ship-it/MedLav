@@ -477,6 +477,12 @@ export async function deleteCase(caseId: string) {
     await admin.storage.from('documents').remove(imagePaths);
   }
 
+  // GDPR Art. 9 (review 2026-07-04): rimuovi anche le parti di sezione
+  // transitorie (bucket section-parts) — la cancellazione del caso deve
+  // coprirle SEMPRE, anche per run falliti/cancellati che non hanno pulito.
+  const { deleteCaseSectionParts } = await import('@/inngest/steps/section-part-store');
+  await deleteCaseSectionParts(caseId);
+
   // Delete case from DB (cascade handles everything)
   const { error } = await supabase
     .from('cases')

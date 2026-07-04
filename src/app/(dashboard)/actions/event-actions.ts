@@ -50,12 +50,22 @@ export async function updateEvent(params: {
   // Verify case ownership
   const { data: caseData } = await supabase
     .from('cases')
-    .select('id')
+    .select('id, processing_stage')
     .eq('id', params.caseId)
     .eq('user_id', user.id)
     .single();
 
   if (!caseData) return { error: 'Caso non trovato' };
+
+  // Affidabilità (2026-07-04): mentre la pipeline gira, il piano delle finestre
+  // doc-sanitaria viene ricalcolato dagli eventi a ogni invocazione Inngest —
+  // un evento modificato a metà run farebbe slittare le finestre (contenuti
+  // duplicati/persi in silenzio). Il lock per-caso copre solo altri run, non
+  // le edit UI: si blocca qui, con messaggio chiaro.
+  const stage = caseData.processing_stage as string | null;
+  if (stage === 'elaborazione' || stage === 'generazione_report') {
+    return { error: 'Elaborazione in corso: gli eventi non sono modificabili finché il report non è completato.' };
+  }
 
   const updateFields: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -111,12 +121,18 @@ export async function deleteEvent(params: { eventId: string; caseId: string }) {
 
   const { data: caseData } = await supabase
     .from('cases')
-    .select('id')
+    .select('id, processing_stage')
     .eq('id', params.caseId)
     .eq('user_id', user.id)
     .single();
 
   if (!caseData) return { error: 'Caso non trovato' };
+
+  // Stessa guardia di updateEvent: niente modifiche agli eventi a pipeline in corso.
+  const stage = caseData.processing_stage as string | null;
+  if (stage === 'elaborazione' || stage === 'generazione_report') {
+    return { error: 'Elaborazione in corso: gli eventi non sono modificabili finché il report non è completato.' };
+  }
 
   const { error } = await supabase
     .from('events')
