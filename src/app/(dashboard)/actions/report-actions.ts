@@ -99,10 +99,29 @@ export async function updateReportSynthesis(params: {
 
   if (!caseData) return { error: 'Caso non trovato' };
 
+  // Diff bozza→firmato sull'intero report (baseline: originalSynthesis, se presente).
+  const { data: currentReport } = await supabase
+    .from('reports')
+    .select('generation_metadata')
+    .eq('id', params.reportId)
+    .eq('case_id', params.caseId)
+    .single();
+  const metadata = (currentReport?.generation_metadata ?? null) as { originalSynthesis?: string } | null;
+  let metadataUpdate: Record<string, unknown> | undefined;
+  if (metadata?.originalSynthesis) {
+    const { computeEditRatePercent } = await import('@/lib/edit-metrics');
+    metadataUpdate = {
+      ...metadata,
+      overallEditRatePercent: computeEditRatePercent(metadata.originalSynthesis, params.synthesis),
+      lastFullEditAt: new Date().toISOString(),
+    };
+  }
+
   const { error } = await supabase
     .from('reports')
     .update({
       synthesis: params.synthesis,
+      ...(metadataUpdate ? { generation_metadata: metadataUpdate } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.reportId)
@@ -177,6 +196,21 @@ export async function updateReportSection(params: {
     return { error: 'Sezione non trovata nel report. Ricarica la pagina e riprova.' };
   }
 
+  // Diff bozza→firmato: scostamento della sezione editata dalla bozza AI
+  // (baseline: generation_metadata.originalSynthesis, assente sui report
+  // legacy → metrica omessa, mai inventata).
+  let editRatePercent: number | undefined;
+  const originalSynthesis = (report.generation_metadata as { originalSynthesis?: string } | null)?.originalSynthesis;
+  if (originalSynthesis && params.sectionCanonicalId) {
+    const { parseSections } = await import('@/lib/section-parser-client');
+    const { computeEditRatePercent } = await import('@/lib/edit-metrics');
+    const originalSection = parseSections(originalSynthesis)
+      .find((s) => s.canonicalId === params.sectionCanonicalId || s.id === params.sectionId);
+    if (originalSection) {
+      editRatePercent = computeEditRatePercent(originalSection.content, params.sectionContent);
+    }
+  }
+
   // Mark the section as manually edited so regeneration won't silently
   // overwrite it. A locked section stays locked (max protection).
   const nextMetadata = markSectionState(
@@ -186,6 +220,7 @@ export async function updateReportSection(params: {
       ...prev,
       status: prev?.status === 'locked' ? 'locked' : 'edited',
       editedAt: new Date().toISOString(),
+      ...(editRatePercent !== undefined ? { editRatePercent } : {}),
     }),
   );
 

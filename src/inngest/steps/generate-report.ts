@@ -10,7 +10,7 @@ import type { DetectedAnomaly } from '@/services/validation/anomaly-detector';
 import type { MissingDocument } from '@/services/validation/missing-doc-detector';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 import type { CaseMetadata, SynthesisStepResult, DocumentOcrContext } from './types';
-import { MISTRAL_MODELS } from '@/lib/mistral/client';
+import { MISTRAL_MODELS, DETERMINISTIC_SEED } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
 /**
@@ -560,8 +560,22 @@ export async function assembleSectionsAndSaveReport(
     .map((s) => ({ id: s.id, reason: s.coveFailureReason ?? 'unknown' }));
 
   // Build generation metadata
+  const { sha256Hex, stableEventsFingerprint } = await import('@/lib/edit-metrics');
   const generationMetadata: Record<string, unknown> = {
     promptVersion,
+    // Fascicolo di generazione: la ri-generazione su API hosted non è
+    // riproducibile (nemmeno a temperature 0) — lo snapshot con gli hash di
+    // input/output è ciò che difende il perito se l'atto viene contestato.
+    generationSnapshot: {
+      generatedAt: new Date().toISOString(),
+      reportSha256: sha256Hex(fullReport),
+      eventsFingerprint: stableEventsFingerprint(synthesisParams.events),
+      eventCount: synthesisParams.events.length,
+      seed: DETERMINISTIC_SEED,
+    },
+    // Baseline del diff bozza→firmato: synthesis viene editata in place dal
+    // perito, questa copia resta la bozza AI integrale.
+    originalSynthesis: fullReport,
     // Audit trail (perizie depositabili): which model id was REQUESTED for the
     // LLM sections. Today this is the '-latest' alias — record it with the
     // date so a silent alias remap (already happened once: Pixtral → Large 3)

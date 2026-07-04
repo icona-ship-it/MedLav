@@ -20,13 +20,35 @@ export interface SectionState {
   lockedAt?: string;
   /** SHA-256 (truncated) of the section's inputs at generation time (v2 staleness). */
   inputsHash?: string;
+  /** Scostamento 0-100 dalla bozza AI (diff vs originalSynthesis) all'ultimo edit. */
+  editRatePercent?: number;
 }
 
 export type ReportSectionStates = Record<string, SectionState>;
 
+/** Snapshot immutabile della generazione ("fascicolo di generazione").
+ * La ri-generazione su API hosted non è riproducibile: questo snapshot è ciò
+ * che prova cosa fu generato, da quale stato del fascicolo, con quale prompt. */
+export interface GenerationSnapshot {
+  generatedAt: string;
+  /** sha256 del markdown generato (prima di ogni edit del perito). */
+  reportSha256: string;
+  /** sha256 stabile degli eventi consolidati usati come input della sintesi. */
+  eventsFingerprint: string;
+  eventCount: number;
+  /** Seed deterministico richiesto al modello. */
+  seed: number;
+}
+
 /** Shape of reports.generation_metadata (JSONB). */
 export interface ReportGenerationMetadata {
   promptVersion?: string;
+  /** Fascicolo di generazione (audit trail difensivo). */
+  generationSnapshot?: GenerationSnapshot;
+  /** La bozza AI integrale al momento della generazione — baseline del diff
+   * bozza→firmato. `synthesis` viene editata in place dal perito; questa no.
+   * Le rigenerazioni di sezione la aggiornano per la sola sezione rigenerata. */
+  originalSynthesis?: string;
   hrs?: number; // Hallucination Risk Score 0-100
   hrsLevel?: 'eccellente' | 'buono' | 'da_rivedere' | 'critico';
   eventCoverage?: number;

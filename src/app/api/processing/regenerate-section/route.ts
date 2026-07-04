@@ -274,11 +274,27 @@ export async function POST(request: NextRequest) {
     const newVersion = ((currentReport.version as number) ?? 0) + 1;
     const baseMetadata = markSectionState(currentMetadata, sectionId, () => ({ status: 'auto' }))
       ?? currentMetadata ?? undefined;
+    // Baseline del diff bozza→firmato: la sezione rigenerata è NUOVA bozza AI →
+    // aggiorna originalSynthesis per quella sola sezione (le altre restano la
+    // baseline della generazione precedente, gli edit del perito non vi entrano).
+    let metadataWithBaseline = baseMetadata;
+    const previousOriginal = (currentMetadata as { originalSynthesis?: string } | null)?.originalSynthesis;
+    if (previousOriginal && metadataWithBaseline) {
+      const { parseSections, replaceSectionContent } = await import('@/lib/section-parser-client');
+      const regenerated = parseSections(updatedSynthesis).find((s) => s.canonicalId === sectionId);
+      const originalTarget = parseSections(previousOriginal).find((s) => s.canonicalId === sectionId);
+      if (regenerated && originalTarget) {
+        metadataWithBaseline = {
+          ...metadataWithBaseline,
+          originalSynthesis: replaceSectionContent(previousOriginal, originalTarget.id, regenerated.content),
+        };
+      }
+    }
     // Persist a freshly-recomputed imageAnalysis (legacy-report fallback) so later
     // regenerations skip Pixtral.
     const newMetadata = (imageAnalysis && imageAnalysis.length > 0)
-      ? { ...(baseMetadata ?? {}), imageAnalysis }
-      : baseMetadata;
+      ? { ...(metadataWithBaseline ?? {}), imageAnalysis }
+      : metadataWithBaseline;
 
     const { error: insertError } = await admin.from('reports').insert({
       case_id: caseId,

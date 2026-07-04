@@ -11,6 +11,7 @@
  */
 
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
+import { lcsWordLength } from '@/lib/lcs';
 
 type MatchLevel = 'exact' | 'normalized' | 'lcs' | 'unverified';
 
@@ -262,32 +263,6 @@ function slidingWindowLcsRatio(
   }
 
   return bestRatio;
-}
-
-/**
- * Longest Common Subsequence on word arrays.
- * Uses space-optimized DP (two rows).
- */
-function lcsWordLength(a: string[], b: string[]): number {
-  const m = a.length;
-  const n = b.length;
-
-  let prev = new Array<number>(n + 1).fill(0);
-  let curr = new Array<number>(n + 1).fill(0);
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        curr[j] = prev[j - 1] + 1;
-      } else {
-        curr[j] = Math.max(prev[j], curr[j - 1]);
-      }
-    }
-    [prev, curr] = [curr, prev];
-    curr.fill(0);
-  }
-
-  return prev[n];
 }
 
 /**
