@@ -18,6 +18,8 @@ export interface OcrPageResult {
   footer?: string;
   /** HTML tables captured by Mistral OCR 3 (tableFormat: 'html'). Same data is also embedded inline in `text` between [TABLE_HTML_START]/[TABLE_HTML_END] markers for synthesis consumption. */
   htmlTables?: string[];
+  /** Parole sostituite con [ILLEGGIBILE] dal gate qualità OCR 4 (word confidence sotto soglia). */
+  illegibleWordCount?: number;
 }
 
 export interface OcrDocumentResult {

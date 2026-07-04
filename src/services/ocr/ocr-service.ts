@@ -1,6 +1,12 @@
 import { getMistralClient, MISTRAL_MODELS, withMistralRetry, TIMEOUT_OCR } from '@/lib/mistral/client';
 import type { OcrPageResult, OcrDocumentResult, OcrImageResult } from './ocr-types';
 import { logger } from '@/lib/logger';
+import {
+  redactLowConfidenceWords,
+  computePageQualityScore,
+  PAGE_LOW_QUALITY_THRESHOLD,
+  type OcrWordScore,
+} from './page-quality';
 
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
 const SUPPORTED_PDF_TYPES = ['application/pdf'];
@@ -70,6 +76,12 @@ interface OcrRawPage {
   tables?: Array<string | Record<string, unknown>>;
   header?: string;
   footer?: string;
+  /** OCR 4 (confidence_scores_granularity: 'word'): confidenza per pagina e parola. */
+  confidenceScores?: {
+    wordConfidenceScores?: OcrWordScore[] | null;
+    averagePageConfidenceScore?: number;
+    minimumPageConfidenceScore?: number;
+  } | null;
 }
 
 /**
@@ -144,6 +156,17 @@ function mapOcrResponseToResult(params: {
   const pages: OcrPageResult[] = rawPages.map((page) => {
     let text = page.markdown ?? '';
 
+    // Gate qualità (OCR 4): le parole sotto soglia di confidenza diventano
+    // [ILLEGGIBILE] PRIMA di ogni uso a valle — l'estrazione non deve mai
+    // "interpretare" testo che il modello OCR stesso non ha saputo leggere.
+    const wordScores = page.confidenceScores?.wordConfidenceScores ?? [];
+    let illegibleWordCount = 0;
+    if (wordScores.length > 0) {
+      const redaction = redactLowConfidenceWords(text, wordScores);
+      text = redaction.text;
+      illegibleWordCount = redaction.replacedCount;
+    }
+
     // Coerce tables to HTML strings (defensive against Mistral API shape changes).
     // Filters out empty strings (pages with no tables, or unknown shapes).
     const htmlTables: string[] | undefined = page.tables && page.tables.length > 0
@@ -187,15 +210,28 @@ function mapOcrResponseToResult(params: {
     return {
       pageNumber,
       text,
-      confidence: estimateConfidence(text),
+      confidence: computePageQualityScore(text, page.confidenceScores?.averagePageConfidenceScore),
       hasHandwriting: handwritingInfo.hasHandwriting,
       handwritingConfidence: handwritingInfo.confidence,
       images: pageImages,
       header: page.headerText || undefined,
       footer: page.footerText || undefined,
       htmlTables,
+      illegibleWordCount: illegibleWordCount > 0 ? illegibleWordCount : undefined,
     };
   });
+
+  // Trasparenza (solo numeri, GDPR): quante parole redatte e quante pagine sotto soglia.
+  const totalRedacted = pages.reduce((sum, p) => sum + (p.illegibleWordCount ?? 0), 0);
+  const lowQualityPages = pages.filter((p) => p.confidence < PAGE_LOW_QUALITY_THRESHOLD).length;
+  if (totalRedacted > 0 || lowQualityPages > 0) {
+    logger.info('ocr', 'Gate qualità pagine', {
+      documentId,
+      pages: pages.length,
+      redactedWords: totalRedacted,
+      lowQualityPages,
+    });
+  }
 
   // Full text with page markers for source anchoring
   const fullText = pages.map((p) =>
@@ -321,8 +357,11 @@ async function ocrPdf(params: {
         documentUrl: signedUrl,
       },
       includeImageBase64: true,
-      // OCR 3 features (cast for SDK compatibility)
-      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
+      tableFormat: 'html',
+      extractHeader: true,
+      extractFooter: true,
+      // OCR 4: confidenza per parola/pagina → gate qualità deterministico
+      confidenceScoresGranularity: 'word',
     }),
     'ocr-pdf',
   );
@@ -354,7 +393,10 @@ async function ocrImage(params: {
         imageUrl: signedUrl,
       },
       includeImageBase64: true,
-      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
+      tableFormat: 'html',
+      extractHeader: true,
+      extractFooter: true,
+      confidenceScoresGranularity: 'word',
     }),
     'ocr-image',
   );
@@ -385,7 +427,10 @@ async function ocrDocx(params: {
         documentUrl: signedUrl,
       },
       includeImageBase64: true,
-      ...({ tableFormat: 'html', extractHeader: true, extractFooter: true } as Record<string, unknown>),
+      tableFormat: 'html',
+      extractHeader: true,
+      extractFooter: true,
+      confidenceScoresGranularity: 'word',
     }),
     'ocr-docx',
   );
@@ -423,23 +468,6 @@ function detectHandwriting(text: string): {
   return { hasHandwriting: 'partial', confidence: 70 };
 }
 
-/**
- * Estimate OCR confidence based on text quality indicators.
- * Higher confidence for clean text, lower for text with many illegible markers.
- */
-function estimateConfidence(text: string): number {
-  if (!text || text.length < 10) return 0;
-
-  const illegibleCount = (text.match(/\[ILLEGGIBILE\]/gi) ?? []).length;
-  const totalWords = text.split(/\s+/).length;
-
-  if (totalWords === 0) return 0;
-
-  // Each illegible marker reduces confidence
-  const illegiblePenalty = Math.min(illegibleCount * 5, 40);
-
-  // Short text may indicate poor OCR
-  const lengthBonus = Math.min(totalWords / 10, 10);
-
-  return Math.max(Math.min(Math.round(90 - illegiblePenalty + lengthBonus), 100), 10);
-}
+// La stima euristica di confidenza (ex estimateConfidence) vive ora in
+// page-quality.ts (estimateHeuristicConfidence), combinata con la confidenza
+// del modello OCR in computePageQualityScore.

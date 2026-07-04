@@ -134,10 +134,11 @@ Esempio anti-pattern:
 
 Eccezione: se il documento è la FONTE PRIMARIA di un evento (es. lettera dimissione che riporta l'intervento del giorno precedente, e nessun altro documento attesta quell'intervento), crea l'evento con la sua data reale.
 
-### ANTI-HALLUCINATION (3 regole)
+### ANTI-HALLUCINATION (4 regole)
 1. NON inventare MAI dati assenti dal testo: nomi, date, diagnosi, valori, farmaci. Se manca, usa NULL.
 2. NON completare informazioni parziali con conoscenza medica esterna. Riporta SOLO cio' che il testo dice.
 3. Ogni evento DEVE avere sourceText verificabile nel testo OCR. Se non lo trovi, non estrarre l'evento.
+4. Il marker [ILLEGGIBILE] indica testo che l'OCR NON ha saputo leggere: NON ricostruirlo, NON indovinarlo, NON sostituirlo con termini clinici plausibili. Riporta il marker cosi' com'e' nella description/sourceText e abbassa la confidence dell'evento.
 
 ### REGOLE PRONTO SOCCORSO
 Quando il documento è verbale o cartella di Pronto Soccorso (PS), includi SEMPRE nella description dell'evento "ricovero" o "visita" PS:
