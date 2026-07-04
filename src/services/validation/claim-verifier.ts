@@ -25,9 +25,13 @@ import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
 /** Sezioni narrative dove il misgrounding si nasconde (la doc-sanitaria è già
- * coperta dall'hard-verify verbatim; qui vanno le sezioni SINTETIZZATE). */
+ * coperta dall'hard-verify verbatim; qui vanno le sezioni SINTETIZZATE).
+ * NB: l'anamnesi RC ha heading "I Dati Anamnestici" → canonicalId slug
+ * 'i_dati_anamnestici' (nessun pattern in SECTION_ID_MAP); 'anamnesi' resta
+ * per heading generici (review 2026-07-04: senza lo slug era sempre no-op). */
 export const CLAIM_VERIFY_SECTION_IDS: readonly string[] = [
   'anamnesi',
+  'i_dati_anamnestici',
   'il_fatto_e_storia_clinica',
   'epicrisi',
 ];

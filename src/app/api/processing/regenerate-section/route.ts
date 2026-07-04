@@ -284,11 +284,33 @@ export async function POST(request: NextRequest) {
       const regenerated = parseSections(updatedSynthesis).find((s) => s.canonicalId === sectionId);
       const originalTarget = parseSections(previousOriginal).find((s) => s.canonicalId === sectionId);
       if (regenerated && originalTarget) {
+        const newOriginal = replaceSectionContent(previousOriginal, originalTarget.id, regenerated.content);
+        const { sha256Hex } = await import('@/lib/edit-metrics');
+        const prevSnapshot = metadataWithBaseline.generationSnapshot;
         metadataWithBaseline = {
           ...metadataWithBaseline,
-          originalSynthesis: replaceSectionContent(previousOriginal, originalTarget.id, regenerated.content),
+          originalSynthesis: newOriginal,
+          // Il fascicolo di generazione deve attestare la baseline CORRENTE:
+          // senza il refresh, reportSha256 restava quello della versione
+          // precedente e non combaciava con nulla (review 2026-07-04).
+          ...(prevSnapshot
+            ? {
+                generationSnapshot: {
+                  ...prevSnapshot,
+                  reportSha256: sha256Hex(newOriginal),
+                  generatedAt: new Date().toISOString(),
+                },
+              }
+            : {}),
         };
       }
+    }
+    // I finding claim-level calcolati sulla bozza PRECEDENTE non valgono più
+    // per la sezione rigenerata: rimuovili (gli altri restano). Senza pruning
+    // il pannello "Da controllare" citava claim di testo che non esiste più.
+    if (metadataWithBaseline) {
+      const { pruneClaimFindingsForSection } = await import('@/lib/section-state');
+      metadataWithBaseline = pruneClaimFindingsForSection(metadataWithBaseline, sectionId) ?? metadataWithBaseline;
     }
     // Persist a freshly-recomputed imageAnalysis (legacy-report fallback) so later
     // regenerations skip Pixtral.

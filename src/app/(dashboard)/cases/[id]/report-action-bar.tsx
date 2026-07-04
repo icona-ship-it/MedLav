@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useTransition, useState, useEffect } from 'react';
+import { useCallback, useTransition, useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Download, Pencil, Printer, GitCompare, ShieldCheck,
@@ -98,8 +98,12 @@ export function ReportActionBar({
 
   // Attestazione "verify before sign": approvazione = attestazione con hash
   // del contenuto. Le sezioni ad alto rischio presenti nel report richiedono
-  // spunta esplicita nel dialog.
-  const requiredSections = getRequiredAttestationSections(report.synthesis);
+  // spunta esplicita nel dialog. useMemo: parseSections su ~100KB non deve
+  // rigirare a ogni re-render della barra.
+  const requiredSections = useMemo(
+    () => getRequiredAttestationSections(report.synthesis),
+    [report.synthesis],
+  );
   const handleAttestAndApprove = useCallback((confirmedSectionIds: string[]) => {
     startTransition(async () => {
       const result = await attestAndApproveReport({ caseId, reportId: report.id, confirmedSectionIds });

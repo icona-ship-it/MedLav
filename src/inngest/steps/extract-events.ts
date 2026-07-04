@@ -410,6 +410,21 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       ? `${ocrResult.fileName} [pag ${range.start}-${range.end}]`
       : ocrResult.fileName;
 
+    // Catena di guardie UNICA per main e retry path (review 2026-07-04: due
+    // copie divergono al primo guard nuovo, e il retry è il ramo meno esercitato):
+    // verify sourceText (skip su chunk troncato) → cap pagine OCR sotto soglia.
+    const gateChunkEvents = (
+      events: Parameters<typeof verifySourceTexts>[0],
+      label: string,
+    ): typeof events => {
+      const verified = truncationWarning ? events : verifySourceTexts(events, chunkText).events;
+      const guard = capEventsFromLowQualityPages(verified, lowQualityPages);
+      if (guard.cappedCount > 0) {
+        logger.info('pipeline', ` Chunk ${chunkIndex + 1}${label}: ${guard.cappedCount} eventi cappati (pagine OCR sotto soglia)`);
+      }
+      return guard.events;
+    };
+
     const result = await extractEventsFromChunk({
       chunkText,
       chunkLabel,
@@ -471,12 +486,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         // Verbatim safety net: flag events whose sourceText isn't found in the
         // chunk OCR (deterministic cross-check, non-blocking → requiresVerification).
         // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
-        const retryVerifiedRaw = truncationWarning ? retryResult.events : verifySourceTexts(retryResult.events, chunkText).events;
-        const retryGuard = capEventsFromLowQualityPages(retryVerifiedRaw, lowQualityPages);
-        if (retryGuard.cappedCount > 0) {
-          logger.info('pipeline', ` Chunk ${chunkIndex + 1} [retry]: ${retryGuard.cappedCount} eventi cappati (pagine OCR sotto soglia)`);
-        }
-        const retryVerified = retryGuard.events;
+        const retryVerified = gateChunkEvents(retryResult.events, ' [retry]');
         const retryRows = retryVerified.map((e, idx) => ({
           case_id: caseId,
           document_id: ocrResult.documentId,
@@ -542,12 +552,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     // Verbatim safety net: flag events whose sourceText isn't found in the chunk
     // OCR (deterministic cross-check, non-blocking → requiresVerification + note).
     // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
-    const verifiedRaw = truncationWarning ? result.events : verifySourceTexts(result.events, chunkText).events;
-    const guard = capEventsFromLowQualityPages(verifiedRaw, lowQualityPages);
-    if (guard.cappedCount > 0) {
-      logger.info('pipeline', ` Chunk ${chunkIndex + 1}: ${guard.cappedCount} eventi cappati (pagine OCR sotto soglia)`);
-    }
-    const verifiedEvents = guard.events;
+    const verifiedEvents = gateChunkEvents(result.events, '');
 
     // Save events directly to DB with enum normalization
     const eventRows = verifiedEvents.map((e, idx) => ({

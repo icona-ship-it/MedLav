@@ -11,6 +11,7 @@ import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs }
 import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { checkDepositableAttestation } from '@/services/export/attestation';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -138,7 +139,6 @@ export async function GET(
 
     // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
     // dopo l'approvazione non esce come depositabile finché non viene riapprovato.
-    const { checkDepositableAttestation } = await import('@/services/export/attestation');
     const attestationCheck = checkDepositableAttestation(data.report, exportMode);
     if (!attestationCheck.ok) {
       return NextResponse.json({ success: false, error: attestationCheck.message }, { status: 428 });

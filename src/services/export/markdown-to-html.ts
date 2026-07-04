@@ -4,7 +4,9 @@
  * No external dependencies.
  */
 
-function escapeHtml(text: string): string {
+/** Escaping HTML condiviso (testo E attributi: &<>" coperti). Esportato per
+ * riuso — il codebase ne aveva già 4 copie locali (review 2026-07-04). */
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

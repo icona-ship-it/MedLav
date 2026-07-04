@@ -104,8 +104,19 @@ export async function GET(
       printBackground: true,
     });
     // Marcatura machine-readable art. 50(2) AI Act nei metadati del PDF
-    // (Chromium non permette di impostarli in fase di render).
-    const pdfBuffer = await applyAiActPdfMetadata(renderedPdf);
+    // (Chromium non permette di impostarli in fase di render). Best-effort:
+    // se pdf-lib fallisce (PDF enorme/edge-case di parsing) esce il PDF NON
+    // marcato — la dicitura visibile è comunque nel contenuto renderizzato,
+    // e negare il documento per la sola marcatura sarebbe peggio (review 2026-07-04).
+    let pdfBuffer = renderedPdf;
+    try {
+      pdfBuffer = await applyAiActPdfMetadata(renderedPdf);
+    } catch (markErr) {
+      logger.warn(TAG, 'Marcatura AI Act sul PDF fallita — esce il PDF non marcato', {
+        caseId,
+        error: markErr instanceof Error ? markErr.message : 'unknown',
+      });
+    }
 
     logAccess({
       userId: user.id,

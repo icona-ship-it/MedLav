@@ -10,6 +10,7 @@ import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs }
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
+import { checkDepositableAttestation } from '@/services/export/attestation';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -53,19 +54,6 @@ export async function GET(
     // ?mode=lavoro per il fascicolo completo con le carte di lavoro.
     const exportMode = _request.nextUrl.searchParams.get('mode') === 'lavoro' ? 'lavoro' as const : 'depositabile' as const;
 
-    logAccess({
-      userId: user.id,
-      action: 'report.exported',
-      entityType: 'case',
-      entityId: caseId,
-      metadata: {
-        format: 'docx',
-        anonymized: shouldAnonymize,
-        reportVersion: data.report?.version ?? null,
-        reportStatus: data.report?.report_status ?? null,
-      },
-    });
-
     const pm = data.periziaMetadata as Record<string, unknown> | null;
 
     // Blocca un export "depositabile" senza i dati del perito (uscirebbe incompleto via
@@ -79,13 +67,25 @@ export async function GET(
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }
 
-    // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
-    // dopo l'approvazione non esce come depositabile finché non viene riapprovato.
-    const { checkDepositableAttestation } = await import('@/services/export/attestation');
+    // Gate attestazione ("verify before sign") PRIMA dell'audit: un export
+    // bloccato non deve risultare 'report.exported' nel trail (review 2026-07-04).
     const attestationCheck = checkDepositableAttestation(data.report, exportMode);
     if (!attestationCheck.ok) {
       return NextResponse.json({ success: false, error: attestationCheck.message }, { status: 428 });
     }
+
+    logAccess({
+      userId: user.id,
+      action: 'report.exported',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: {
+        format: 'docx',
+        anonymized: shouldAnonymize,
+        reportVersion: data.report?.version ?? null,
+        reportStatus: data.report?.report_status ?? null,
+      },
+    });
 
     // pm.tribunale non è più nel tipo ma esiste nei JSONB legacy: senza il
     // check, un caso legacy col solo tribunale perderebbe il layout

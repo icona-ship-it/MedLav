@@ -22,23 +22,12 @@ import { logger } from '@/lib/logger';
 /** Cap sulla lista mostrata al perito (attenzione finita: i primi sono i più utili). */
 const MAX_FINDINGS = 40;
 
-export interface ClaimVerificationFinding {
-  sectionId: string;
-  sectionTitle: string;
-  claim: string;
-  verdict: 'non_supportato' | 'non_verificabile';
-  motivo: string;
-}
-
-export interface ClaimVerificationSummary {
-  checkedAt: string;
-  model: string;
-  sectionsChecked: number;
-  supportedCount: number;
-  unverifiableCount: number;
-  unsupportedCount: number;
-  findings: ClaimVerificationFinding[];
-}
+// UNICA fonte di verità dei tipi: lo schema (writer qui, reader in UI —
+// due copie strutturali divergerebbero in silenzio; review 2026-07-04).
+export type ClaimVerificationSummary = NonNullable<
+  import('@/db/schema/reports').ReportGenerationMetadata['claimVerification']
+>;
+export type ClaimVerificationFinding = ClaimVerificationSummary['findings'][number];
 
 export interface ClaimVerifyStepResult {
   sectionsChecked: number;
@@ -80,34 +69,41 @@ export async function runClaimVerification(params: {
     let supportedCount = 0;
     const findings: ClaimVerificationFinding[] = [];
 
-    // Sequenziale: poche sezioni (≤3), zero pressione sul rate limit.
-    for (const section of targets) {
-      try {
-        const result = await verifySectionClaims({
+    // In parallelo: ≤4 sezioni, mistral-medium ha ampio headroom RPS e il
+    // wall-time scende a ~1/3 (review 2026-07-04). Errore per-sezione → skip.
+    const settled = await Promise.allSettled(
+      targets.map((section) =>
+        verifySectionClaims({
           sectionId: section.canonicalId,
           sectionTitle: section.title,
           sectionContent: section.content,
           events: params.events,
-        });
-        usage = mergeUsage(usage, result.usage);
-        for (const verdict of result.verdicts) {
-          if (verdict.verdict === 'supportato') {
-            supportedCount += 1;
-            continue;
-          }
-          findings.push({
-            sectionId: section.canonicalId,
-            sectionTitle: section.title,
-            claim: verdict.claim,
-            verdict: verdict.verdict,
-            motivo: verdict.motivo,
-          });
-        }
-      } catch (err) {
+        }),
+      ),
+    );
+    settled.forEach((outcome, idx) => {
+      const section = targets[idx];
+      if (outcome.status === 'rejected') {
         // GDPR: solo id sezione, mai contenuto clinico nei log.
-        logger.warn('claim-verify', `Sezione ${section.canonicalId} saltata: ${err instanceof Error ? err.message : 'unknown'}`);
+        const message = outcome.reason instanceof Error ? outcome.reason.message : 'unknown';
+        logger.warn('claim-verify', `Sezione ${section.canonicalId} saltata: ${message}`);
+        return;
       }
-    }
+      usage = mergeUsage(usage, outcome.value.usage);
+      for (const verdict of outcome.value.verdicts) {
+        if (verdict.verdict === 'supportato') {
+          supportedCount += 1;
+          continue;
+        }
+        findings.push({
+          sectionId: section.canonicalId,
+          sectionTitle: section.title,
+          claim: verdict.claim,
+          verdict: verdict.verdict,
+          motivo: verdict.motivo,
+        });
+      }
+    });
 
     const summary: ClaimVerificationSummary = {
       checkedAt: new Date().toISOString(),
@@ -119,7 +115,17 @@ export async function runClaimVerification(params: {
       findings: findings.slice(0, MAX_FINDINGS),
     };
 
-    const metadata = (report.generation_metadata ?? {}) as Record<string, unknown>;
+    // RI-LEGGI i metadata SUBITO prima dell'update: il loop judge dura decine
+    // di secondi e nel frattempo il perito può aver scritto sections/attestation
+    // (review 2026-07-04: lo spread della copia stantia li cancellava). Resta
+    // una finestra di pochi ms — accettabile senza RPC di merge (migration bloccata).
+    const { data: freshReport } = await supabase
+      .from('reports')
+      .select('generation_metadata')
+      .eq('id', params.reportId)
+      .eq('case_id', params.caseId)
+      .single();
+    const metadata = (freshReport?.generation_metadata ?? report.generation_metadata ?? {}) as Record<string, unknown>;
     const { error } = await supabase
       .from('reports')
       .update({

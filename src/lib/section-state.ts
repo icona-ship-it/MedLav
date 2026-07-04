@@ -31,6 +31,30 @@ export function markSectionState(
   return { ...base, sections };
 }
 
+/**
+ * Rimuove i finding claim-level di UNA sezione (edit o rigenerazione della
+ * sezione → i claim citavano testo che non esiste più) aggiornando i conteggi.
+ * Immutabile; ritorna il metadata invariato se non c'è nulla da rimuovere.
+ */
+export function pruneClaimFindingsForSection(
+  metadata: ReportGenerationMetadata | null | undefined,
+  canonicalId: string | null | undefined,
+): ReportGenerationMetadata | null | undefined {
+  const cv = metadata?.claimVerification;
+  if (!metadata || !canonicalId || !cv?.findings?.length) return metadata;
+  const findings = cv.findings.filter((f) => f.sectionId !== canonicalId);
+  if (findings.length === cv.findings.length) return metadata;
+  return {
+    ...metadata,
+    claimVerification: {
+      ...cv,
+      findings,
+      unsupportedCount: findings.filter((f) => f.verdict === 'non_supportato').length,
+      unverifiableCount: findings.filter((f) => f.verdict === 'non_verificabile').length,
+    },
+  };
+}
+
 /** Read the persisted status for a section (default 'auto'). */
 export function getSectionStatus(
   metadata: ReportGenerationMetadata | null | undefined,

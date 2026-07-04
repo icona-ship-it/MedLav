@@ -41,11 +41,35 @@ function isRedactableToken(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
 }
 
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/** true se [start, end) non taglia una parola: i caratteri adiacenti non sono lettere/cifre. */
+function hasCleanWordBoundaries(text: string, start: number, end: number): boolean {
+  const before = start > 0 ? text[start - 1] : '';
+  const after = end < text.length ? text[end] : '';
+  return (before === '' || !WORD_CHAR.test(before)) && (after === '' || !WORD_CHAR.test(after));
+}
+
+/**
+ * Prima occorrenza di `word` con confini di parola puliti entro ± finestra da
+ * approxIndex. -1 se non esiste — un match a metà parola ('la' dentro
+ * 'clavicola') NON è un match (review 2026-07-04: corrompeva l'evidenza).
+ */
+function findWordOccurrenceNear(text: string, word: string, approxIndex: number): number {
+  const from = Math.max(0, approxIndex - INDEX_SEARCH_WINDOW);
+  let idx = text.indexOf(word, from);
+  while (idx !== -1 && idx <= approxIndex + INDEX_SEARCH_WINDOW) {
+    if (hasCleanWordBoundaries(text, idx, idx + word.length)) return idx;
+    idx = text.indexOf(word, idx + 1);
+  }
+  return -1;
+}
+
 /**
  * Sostituisce con [ILLEGGIBILE] le parole sotto soglia di confidenza.
- * Conservativo: se la parola non si trova dove il modello dice (± finestra),
- * NON tocca il testo (mai corrompere l'evidenza). Run adiacenti di marker
- * vengono collassati in uno solo.
+ * Conservativo: se la parola non si trova COME PAROLA INTERA dove il modello
+ * dice (± finestra, confini di parola verificati), NON tocca il testo — mai
+ * corrompere l'evidenza. Run adiacenti di marker vengono collassati in uno.
  */
 export function redactLowConfidenceWords(
   markdown: string,
@@ -62,16 +86,15 @@ export function redactLowConfidenceWords(
 
   for (const word of candidates) {
     let at = -1;
-    if (text.startsWith(word.text, word.startIndex)) {
+    if (
+      text.startsWith(word.text, word.startIndex)
+      && hasCleanWordBoundaries(text, word.startIndex, word.startIndex + word.text.length)
+    ) {
       at = word.startIndex;
     } else {
-      const from = Math.max(0, word.startIndex - INDEX_SEARCH_WINDOW);
-      const found = text.indexOf(word.text, from);
-      if (found !== -1 && Math.abs(found - word.startIndex) <= INDEX_SEARCH_WINDOW) {
-        at = found;
-      }
+      at = findWordOccurrenceNear(text, word.text, word.startIndex);
     }
-    if (at === -1) continue; // introvabile: non toccare l'evidenza
+    if (at === -1) continue; // introvabile come parola intera: non toccare l'evidenza
     text = text.slice(0, at) + ILLEGIBLE_MARKER + text.slice(at + word.text.length);
     replacedCount += 1;
   }

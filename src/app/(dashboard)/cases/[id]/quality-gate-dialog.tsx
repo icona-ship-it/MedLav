@@ -41,6 +41,18 @@ export function QualityGateDialog({
   });
   const [sectionChecks, setSectionChecks] = useState<Record<string, boolean>>({});
 
+  // Le spunte NON sopravvivono ad Annulla/chiusura: un'attestazione con
+  // checkbox pre-spuntate su contenuto nel frattempo cambiato dichiarerebbe
+  // verifiche mai fatte (review 2026-07-04). Reset nell'handler di chiusura,
+  // non in un effect (lint react-hooks/set-state-in-effect).
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setChecks({ anomaliesReviewed: false, missingDocsNoted: false, declaration: false });
+      setSectionChecks({});
+    }
+    onOpenChange(next);
+  };
+
   const allSectionsChecked = requiredSections.every((s) => sectionChecks[s.canonicalId]);
   const allChecked = checks.declaration
     && allSectionsChecked
@@ -57,14 +69,11 @@ export function QualityGateDialog({
 
   const handleConfirm = () => {
     onConfirm(requiredSections.map((s) => s.canonicalId));
-    onOpenChange(false);
-    // Reset for next use
-    setChecks({ anomaliesReviewed: false, missingDocsNoted: false, declaration: false });
-    setSectionChecks({});
+    handleOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -133,7 +142,7 @@ export function QualityGateDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Annulla
           </Button>
           <Button onClick={handleConfirm} disabled={!allChecked}>

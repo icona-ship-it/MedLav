@@ -12,14 +12,11 @@ import {
   getRequiredAttestationSections,
 } from '@/lib/attestation-shared';
 
-export interface ReportAttestation {
-  attestedAt: string;
-  /** userId del perito che ha attestato (mai nome in chiaro nei metadati). */
-  attestedBy: string;
-  /** sha256 del synthesis al momento dell'attestazione. */
-  synthesisSha256: string;
-  confirmedSectionIds: string[];
-}
+// UNICA fonte di verità del tipo: lo schema reports (writer qui, reader in
+// export/UI — copie strutturali divergerebbero in silenzio).
+export type ReportAttestation = NonNullable<
+  import('@/db/schema/reports').ReportGenerationMetadata['attestation']
+>;
 
 export type BuildAttestationResult =
   | { attestation: ReportAttestation }

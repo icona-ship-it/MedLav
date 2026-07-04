@@ -339,6 +339,21 @@ function filterRepetitiveHeadersFooters(
 }
 
 /**
+ * Opzioni CONDIVISE delle chiamate OCR (pdf/immagine/docx): un'opzione
+ * aggiunta in un solo punto vale per tutti i formati — la review 2026-07-04
+ * ha trovato 3 copie identiche, dove dimenticarne una avrebbe silenziosamente
+ * spento il gate qualità (word confidence) per quel formato.
+ */
+const OCR_PROCESS_OPTIONS = {
+  includeImageBase64: true,
+  tableFormat: 'html',
+  extractHeader: true,
+  extractFooter: true,
+  // OCR 4: confidenza per parola/pagina → gate qualità deterministico
+  confidenceScoresGranularity: 'word',
+} as const;
+
+/**
  * OCR a PDF document using Mistral OCR API.
  */
 async function ocrPdf(params: {
@@ -356,12 +371,7 @@ async function ocrPdf(params: {
         type: 'document_url',
         documentUrl: signedUrl,
       },
-      includeImageBase64: true,
-      tableFormat: 'html',
-      extractHeader: true,
-      extractFooter: true,
-      // OCR 4: confidenza per parola/pagina → gate qualità deterministico
-      confidenceScoresGranularity: 'word',
+      ...OCR_PROCESS_OPTIONS,
     }),
     'ocr-pdf',
   );
@@ -392,11 +402,7 @@ async function ocrImage(params: {
         type: 'image_url',
         imageUrl: signedUrl,
       },
-      includeImageBase64: true,
-      tableFormat: 'html',
-      extractHeader: true,
-      extractFooter: true,
-      confidenceScoresGranularity: 'word',
+      ...OCR_PROCESS_OPTIONS,
     }),
     'ocr-image',
   );
@@ -426,11 +432,7 @@ async function ocrDocx(params: {
         type: 'document_url',
         documentUrl: signedUrl,
       },
-      includeImageBase64: true,
-      tableFormat: 'html',
-      extractHeader: true,
-      extractFooter: true,
-      confidenceScoresGranularity: 'word',
+      ...OCR_PROCESS_OPTIONS,
     }),
     'ocr-docx',
   );

@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidateCase } from '@/lib/cache';
-import { replaceSectionContent } from '@/lib/section-parser-client';
-import { markSectionState } from '@/lib/section-state';
+import { replaceSectionContent, parseSections } from '@/lib/section-parser-client';
+import { markSectionState, pruneClaimFindingsForSection } from '@/lib/section-state';
+import { computeEditRatePercent } from '@/lib/edit-metrics';
 import { logger } from '@/lib/logger';
 
 /**
@@ -78,76 +79,6 @@ export async function updateReportStatus(params: {
 }
 
 /**
- * Attesta il report ("verify before sign") e lo approva come definitivo.
- * L'attestazione lega la conferma allo sha256 del synthesis corrente: ogni
- * modifica successiva la invalida e l'export depositabile chiede di riapprovare.
- */
-export async function attestAndApproveReport(params: {
-  caseId: string;
-  reportId: string;
-  confirmedSectionIds: string[];
-}) {
-  const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Non autenticato' };
-
-  const { data: caseData } = await supabase
-    .from('cases')
-    .select('id')
-    .eq('id', params.caseId)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!caseData) return { error: 'Caso non trovato' };
-
-  const { data: report } = await supabase
-    .from('reports')
-    .select('synthesis, generation_metadata')
-    .eq('id', params.reportId)
-    .eq('case_id', params.caseId)
-    .single();
-
-  if (!report?.synthesis) return { error: 'Report non trovato' };
-
-  const { buildReportAttestation } = await import('@/services/export/attestation');
-  const result = buildReportAttestation({
-    userId: user.id,
-    synthesis: report.synthesis,
-    confirmedSectionIds: params.confirmedSectionIds,
-  });
-  if ('error' in result) return { error: result.error };
-
-  const metadata = (report.generation_metadata ?? {}) as Record<string, unknown>;
-  const { error } = await supabase
-    .from('reports')
-    .update({
-      report_status: 'definitivo',
-      generation_metadata: { ...metadata, attestation: result.attestation },
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.reportId)
-    .eq('case_id', params.caseId);
-
-  if (error) return { error: 'Errore durante l\'approvazione' };
-
-  await supabase.from('audit_log').insert({
-    user_id: user.id,
-    action: 'report.attested',
-    entity_type: 'report',
-    entity_id: params.reportId,
-    metadata: {
-      caseId: params.caseId,
-      confirmedSectionIds: result.attestation.confirmedSectionIds,
-      synthesisSha256: result.attestation.synthesisSha256,
-    },
-  });
-
-  revalidateCase(params.caseId);
-  return { success: true };
-}
-
-/**
  * Update report synthesis text in-place (no new version).
  */
 export async function updateReportSynthesis(params: {
@@ -172,26 +103,39 @@ export async function updateReportSynthesis(params: {
   // Diff bozza→firmato sull'intero report (baseline: originalSynthesis, se presente).
   const { data: currentReport } = await supabase
     .from('reports')
-    .select('generation_metadata')
+    .select('report_status, generation_metadata')
     .eq('id', params.reportId)
     .eq('case_id', params.caseId)
     .single();
-  const metadata = (currentReport?.generation_metadata ?? null) as { originalSynthesis?: string } | null;
+  const metadata = (currentReport?.generation_metadata ?? null) as
+    | ({ originalSynthesis?: string; claimVerification?: unknown } & Record<string, unknown>)
+    | null;
   let metadataUpdate: Record<string, unknown> | undefined;
   if (metadata?.originalSynthesis) {
-    const { computeEditRatePercent } = await import('@/lib/edit-metrics');
     metadataUpdate = {
       ...metadata,
       overallEditRatePercent: computeEditRatePercent(metadata.originalSynthesis, params.synthesis),
       lastFullEditAt: new Date().toISOString(),
     };
   }
+  // L'edit integrale invalida i finding claim-level (citano testo che può non
+  // esistere più) — senza pruning il pannello mostrerebbe avvisi fantasma.
+  if (metadata?.claimVerification) {
+    metadataUpdate = { ...(metadataUpdate ?? metadata) };
+    delete metadataUpdate.claimVerification;
+  }
+  // Un DEFINITIVO modificato torna BOZZA: l'attestazione non copre più il
+  // contenuto e il pulsante Approva (solo bozza) deve ricomparire —
+  // review 2026-07-04: senza questo, l'export depositabile finiva in un
+  // vicolo cieco (428 che citava un pulsante non renderizzato).
+  const wasDefinitivo = currentReport?.report_status === 'definitivo';
 
   const { error } = await supabase
     .from('reports')
     .update({
       synthesis: params.synthesis,
       ...(metadataUpdate ? { generation_metadata: metadataUpdate } : {}),
+      ...(wasDefinitivo ? { report_status: 'bozza' } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.reportId)
@@ -240,7 +184,7 @@ export async function updateReportSection(params: {
   // Fetch current report to get full synthesis + per-section state
   const { data: report } = await supabase
     .from('reports')
-    .select('synthesis, updated_at, generation_metadata')
+    .select('synthesis, updated_at, report_status, generation_metadata')
     .eq('id', params.reportId)
     .eq('case_id', params.caseId)
     .single();
@@ -272,8 +216,6 @@ export async function updateReportSection(params: {
   let editRatePercent: number | undefined;
   const originalSynthesis = (report.generation_metadata as { originalSynthesis?: string } | null)?.originalSynthesis;
   if (originalSynthesis && params.sectionCanonicalId) {
-    const { parseSections } = await import('@/lib/section-parser-client');
-    const { computeEditRatePercent } = await import('@/lib/edit-metrics');
     const originalSection = parseSections(originalSynthesis)
       .find((s) => s.canonicalId === params.sectionCanonicalId || s.id === params.sectionId);
     if (originalSection) {
@@ -283,7 +225,7 @@ export async function updateReportSection(params: {
 
   // Mark the section as manually edited so regeneration won't silently
   // overwrite it. A locked section stays locked (max protection).
-  const nextMetadata = markSectionState(
+  const markedMetadata = markSectionState(
     report.generation_metadata,
     params.sectionCanonicalId,
     (prev) => ({
@@ -293,12 +235,23 @@ export async function updateReportSection(params: {
       ...(editRatePercent !== undefined ? { editRatePercent } : {}),
     }),
   );
+  // I finding claim-level della sezione editata citano testo che può non
+  // esistere più: rimuovili (gli altri restano).
+  const nextMetadata = pruneClaimFindingsForSection(
+    markedMetadata ?? report.generation_metadata,
+    params.sectionCanonicalId,
+  );
+
+  // Un DEFINITIVO modificato torna BOZZA (attestazione non più valida;
+  // il pulsante Approva deve ricomparire — review 2026-07-04).
+  const wasDefinitivo = report.report_status === 'definitivo';
 
   const { error } = await supabase
     .from('reports')
     .update({
       synthesis: updatedSynthesis,
       ...(nextMetadata ? { generation_metadata: nextMetadata } : {}),
+      ...(wasDefinitivo ? { report_status: 'bozza' } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.reportId)

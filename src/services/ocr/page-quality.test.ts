@@ -152,3 +152,29 @@ describe('page-quality — estimateHeuristicConfidence (compat con la vecchia st
     expect(v).toBeLessThanOrEqual(100);
   });
 });
+
+describe('page-quality — redactLowConfidenceWords: confini di parola (review 2026-07-04)', () => {
+  it('non deve corrompere una parola integra agganciando una SOTTOSTRINGA nel fallback', () => {
+    // repro review: 'la' low-conf con startIndex driftato; 'la' esiste dentro 'clavicola'
+    const md = 'frattura clavicola la cui rima';
+    const result = redactLowConfidenceWords(md, [{ text: 'la', confidence: 0.3, startIndex: 16 }]);
+    expect(result.text).toBe('frattura clavicola [ILLEGGIBILE] cui rima');
+    expect(result.replacedCount).toBe(1);
+  });
+
+  it('non deve troncare "della" quando il token low-conf è "del"', () => {
+    const md = 'referto della spalla';
+    const result = redactLowConfidenceWords(md, [{ text: 'del', confidence: 0.2, startIndex: 8 }]);
+    // 'del' non esiste come parola standalone → nessuna sostituzione
+    expect(result.text).toBe(md);
+    expect(result.replacedCount).toBe(0);
+  });
+
+  it('non deve sostituire a metà parola nemmeno quando startIndex API punta dentro una parola', () => {
+    // API startIndex che (per drift) punta dentro 'clavicola' dove slice combacia
+    const md = 'frattura clavicola composta';
+    const result = redactLowConfidenceWords(md, [{ text: 'la', confidence: 0.3, startIndex: 12 }]);
+    expect(result.text).toBe(md);
+    expect(result.replacedCount).toBe(0);
+  });
+});

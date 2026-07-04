@@ -13,6 +13,7 @@
 
 import { Paragraph, TextRun, AlignmentType } from 'docx';
 import { PDFDocument } from 'pdf-lib';
+import { escapeHtml } from './markdown-to-html';
 
 /** Single source of truth for the disclosure wording. */
 const DISCLOSURE_TEXT =
@@ -40,16 +41,9 @@ export function getAiActDisclosureHtml(): string {
  * metadati XMP/Info PDF — così ogni formato esportato porta il marker.
  */
 
-function escapeHtmlAttribute(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/"/g, '&quot;');
-}
-
 /** Meta tag per l'<head> degli export HTML (entrambe le varianti). */
 export function getAiActHtmlMetaTags(): string {
-  const disclosure = escapeHtmlAttribute(DISCLOSURE_TEXT);
+  const disclosure = escapeHtml(DISCLOSURE_TEXT);
   return [
     '<meta name="generator" content="LegMed — bozza assistita da sistema di IA (Mistral AI EU)">',
     '<meta name="ai-generated" content="true">',

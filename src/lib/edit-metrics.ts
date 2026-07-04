@@ -23,16 +23,41 @@ function tokenizeWords(text: string): string[] {
     .filter((w) => w.length > 0);
 }
 
+/** Oltre questo prodotto |A|·|B| la DP LCS bloccherebbe l'event-loop per
+ * secondi (un macrodanno da 25K parole = ~600M celle): si passa al fallback
+ * bag-of-words O(n). ~4M celle ≈ pochi ms. */
+const LCS_CELL_BUDGET = 4_000_000;
+
+/** Approssimazione O(n): 1 − similarità multinsieme delle parole. Ordina-insensibile
+ * (sottostima gli spostamenti), ma su testi enormi è il compromesso giusto. */
+function bagOfWordsEditRate(a: string[], b: string[]): number {
+  const counts = new Map<string, number>();
+  for (const w of a) counts.set(w, (counts.get(w) ?? 0) + 1);
+  let common = 0;
+  for (const w of b) {
+    const c = counts.get(w) ?? 0;
+    if (c > 0) {
+      common += 1;
+      counts.set(w, c - 1);
+    }
+  }
+  const similarity = (2 * common) / (a.length + b.length);
+  return Math.round((1 - similarity) * 100);
+}
+
 /**
  * Quanto il testo firmato si discosta dalla bozza generata, 0-100.
  * 0 = identico (a meno di whitespace), 100 = riscritto integralmente.
- * Basato su LCS word-level: 1 − 2·LCS/(|A|+|B|).
+ * Basato su LCS word-level: 1 − 2·LCS/(|A|+|B|); oltre il budget di celle
+ * (testi enormi) degrada al bag-of-words O(n) — review 2026-07-04.
  */
 export function computeEditRatePercent(original: string, edited: string): number {
+  if (original === edited) return 0; // fast-path: salvataggio senza modifiche
   const a = tokenizeWords(original);
   const b = tokenizeWords(edited);
   if (a.length === 0 && b.length === 0) return 0;
   if (a.length === 0 || b.length === 0) return 100;
+  if (a.length * b.length > LCS_CELL_BUDGET) return bagOfWordsEditRate(a, b);
   const lcs = lcsWordLength(a, b);
   const similarity = (2 * lcs) / (a.length + b.length);
   return Math.round((1 - similarity) * 100);

@@ -484,8 +484,8 @@ export function ReportStep({
                   </span>
                 </summary>
                 <ul className="mt-2 ml-6 space-y-1.5 border-l pl-3">
-                  {claimFindings.map((f, idx) => (
-                    <li key={idx} className="text-sm">
+                  {claimFindings.map((f) => (
+                    <li key={`${f.sectionId}:${f.claim}`} className="text-sm">
                       <span className="font-medium">{f.sectionTitle}:</span>{' '}
                       «{f.claim}»
                       {' '}<span className="text-muted-foreground">— {f.verdict === 'non_supportato' ? 'non risulta dai documenti' : 'da verificare sull’originale'}{f.motivo ? ` (${f.motivo})` : ''}</span>

@@ -70,3 +70,23 @@ describe('edit-metrics — stableEventsFingerprint', () => {
     expect(stableEventsFingerprint(withExtra)).toBe(stableEventsFingerprint(events));
   });
 });
+
+describe('edit-metrics — budget LCS su testi enormi (review 2026-07-04)', () => {
+  it('should stay fast and sane on very large texts (fallback bag-of-words)', () => {
+    const words = Array.from({ length: 30_000 }, (_, i) => `parola${i % 500}`);
+    const original = words.join(' ');
+    const edited = [...words.slice(0, 15_000), 'INSERTO', ...words.slice(15_000)].join(' ');
+    const start = Date.now();
+    const rate = computeEditRatePercent(original, edited);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(rate).toBeGreaterThanOrEqual(0);
+    expect(rate).toBeLessThan(5);
+  });
+
+  it('should short-circuit identical large texts to 0 instantly', () => {
+    const text = Array.from({ length: 50_000 }, (_, i) => `w${i}`).join(' ');
+    const start = Date.now();
+    expect(computeEditRatePercent(text, text)).toBe(0);
+    expect(Date.now() - start).toBeLessThan(100);
+  });
+});
