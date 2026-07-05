@@ -196,7 +196,10 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     // ("ITT graduata = scaffold del perito") e la direttiva qui sotto. I giorni di ricovero e
     // la durata complessiva (fatti) sono aggiunti DETERMINISTICAMENTE in coda via il marker
     // ITT_RICOVERO_FACTS; le fasce graduate restano scaffold che compila il perito.
-    dataSources: ['context-summaries'],
+    // 'events-medical' (Lavini 2026-07-05): l'Epicrisi ora narra il DECORSO CLINICO
+    // (spostato qui da "Il Fatto") → deve ricevere gli eventi medici, non solo i
+    // riassunti delle sezioni precedenti, altrimenti il decorso sparirebbe o sarebbe inventato.
+    dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 0,
     needsOcr: false,
     promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
