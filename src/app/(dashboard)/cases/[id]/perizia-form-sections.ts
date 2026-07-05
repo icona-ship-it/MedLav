@@ -46,11 +46,18 @@ export const RC_PERITO_SECTIONS: SectionDef[] = [
  * Costruisce l'elenco delle sezioni da mostrare nel form.
  * - RC (isRC) → aggiunge le sezioni anamnesi + "Il Fatto".
  *
+ * Ordine RC (Lavini 2026-07-05): i Dati Anamnestici sono la PRIMA cosa da
+ * compilare → in cima; seguono i dati identificativi, l'esame obiettivo e
+ * "Il Fatto e la Storia Clinica" in coda.
+ *
  * La scelta delle sezioni del report NON è più qui: vive nello step Elaborazione
  * (processing-section), subito prima della generazione.
  *
  * Ritorna sempre un nuovo array (non muta le costanti).
  */
 export function buildVisibleSections(params: { isRC: boolean }): SectionDef[] {
-  return params.isRC ? [...BASE_SECTIONS, ...RC_PERITO_SECTIONS] : [...BASE_SECTIONS];
+  if (!params.isRC) return [...BASE_SECTIONS];
+  const anamnesi = RC_PERITO_SECTIONS.find((s) => s.id === 'anamnesi')!;
+  const ilFatto = RC_PERITO_SECTIONS.find((s) => s.id === 'ilFatto')!;
+  return [anamnesi, ...BASE_SECTIONS, ilFatto];
 }

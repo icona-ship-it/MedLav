@@ -3,8 +3,8 @@
 import { useCallback, useTransition, useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2, Download, Pencil, Printer, GitCompare, ShieldCheck,
-  FileCode, Eye, MoreHorizontal, RefreshCw, ShieldAlert, CheckCircle2,
+  Loader2, Download, Pencil, GitCompare, ShieldCheck,
+  Eye, MoreHorizontal, RefreshCw, ShieldAlert, CheckCircle2,
   FileText, FileSearch,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -115,15 +115,6 @@ export function ReportActionBar({
       router.refresh();
     });
   }, [caseId, report.id, router]);
-
-  const handlePdfExport = useCallback(() => {
-    const printWindow = window.open(`/api/cases/${caseId}/export/html?inline=true`, '_blank');
-    if (printWindow) {
-      printWindow.addEventListener('load', () => {
-        printWindow.print();
-      });
-    }
-  }, [caseId]);
 
   const handleLoadVersions = useCallback(async () => {
     setIsLoadingVersions(true);
@@ -237,14 +228,14 @@ export function ReportActionBar({
                   <span className="hidden sm:inline">Esporta</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem
                   onClick={() => window.open(`/api/cases/${caseId}/export/html?inline=true`, '_blank')}
                 >
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   <div>
-                    <div>Visualizza nel browser</div>
-                    <p className="text-xs text-muted-foreground font-normal">Apre anteprima in una nuova scheda</p>
+                    <div>Anteprima nel browser</div>
+                    <p className="text-xs text-muted-foreground font-normal">Apre la perizia in una nuova scheda</p>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -252,51 +243,16 @@ export function ReportActionBar({
                   <a href={`/api/cases/${caseId}/export/docx`} download>
                     <Download className="mr-2 h-3.5 w-3.5" />
                     <div>
-                      <div>Documento Word (depositabile)</div>
-                      <p className="text-xs text-muted-foreground font-normal">Solo la perizia, dall&apos;intestazione alla firma</p>
+                      <div>Scarica Word (.docx)</div>
+                      <p className="text-xs text-muted-foreground font-normal">Perizia completa, pronta al deposito</p>
                     </div>
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/docx?mode=lavoro`} download>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Fascicolo di lavoro (Word)</div>
-                      <p className="text-xs text-muted-foreground font-normal">Con indice, calcoli, anomalie e note di qualità</p>
-                    </div>
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/html`} download>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Esporta HTML</div>
-                      <p className="text-xs text-muted-foreground font-normal">Pagina web — per archiviare o condividere</p>
-                    </div>
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/pdf`} download>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Esporta PDF</div>
-                      <p className="text-xs text-muted-foreground font-normal">File PDF formato A4 — pronto per il deposito</p>
-                    </div>
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handlePdfExport}>
-                  <Printer className="mr-2 h-3.5 w-3.5" />
-                  <div>
-                    <div>Stampa dal browser</div>
-                    <p className="text-xs text-muted-foreground font-normal">Apre l&apos;anteprima di stampa</p>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/html?anonymize=true`} download>
+                  <a href={`/api/cases/${caseId}/export/docx?anonymize=true`} download>
                     <ShieldCheck className="mr-2 h-3.5 w-3.5" />
                     <div>
-                      <div>Esporta senza dati personali</div>
+                      <div>Word senza dati personali</div>
                       <p className="text-xs text-muted-foreground font-normal">Versione anonimizzata per condivisione</p>
                     </div>
                   </a>
@@ -354,28 +310,6 @@ export function ReportActionBar({
                     Confronta con versione precedente
                   </DropdownMenuItem>
                 )}
-
-                <DropdownMenuSeparator />
-
-                {/* Export extras */}
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/csv`} download>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Esporta CSV</div>
-                      <p className="text-xs text-muted-foreground font-normal">Tabella dati — per Excel</p>
-                    </div>
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/pct`} download>
-                    <FileCode className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Esporta PCT</div>
-                      <p className="text-xs text-muted-foreground font-normal">Formato tribunale</p>
-                    </div>
-                  </a>
-                </DropdownMenuItem>
 
                 {effectiveStatus === 'definitivo' && (
                   <>

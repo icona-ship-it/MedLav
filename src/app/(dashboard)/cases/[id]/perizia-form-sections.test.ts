@@ -45,6 +45,13 @@ describe('buildVisibleSections', () => {
     expect(nonRc).not.toContain('anamnesi');
   });
 
+  it('should list Dati Anamnestici FIRST (Lavini 2026-07-05: prima cosa da compilare)', () => {
+    const ids = buildVisibleSections({ isRC: true }).map((s) => s.id);
+    expect(ids[0]).toBe('anamnesi');
+    // "Il Fatto" resta in coda
+    expect(ids[ids.length - 1]).toBe('ilFatto');
+  });
+
   it('should never mutate the underlying constants (immutability)', () => {
     const first = buildVisibleSections({ isRC: true });
     first.pop();
