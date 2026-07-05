@@ -370,3 +370,45 @@ describe('analyzeExpenses — componenti fiscali non sono voci di spesa (gold: s
     expect(result.totalAmount).toBe(90);
   });
 });
+
+describe('isSsrCostNotification — costi SSR a forma estesa (bug Bigon 2026-07-05)', () => {
+  const base = { event_type: 'spesa_medica', event_date: '2024-11-13', facility: 'AOUI', source_type: 'altro' };
+
+  it('esclude "Il Servizio Sanitario Regionale ha impiegato euro X"', () => {
+    const r = analyzeExpenses([
+      { ...base, title: 'Costo procedura radiologica TC', description: 'Il Servizio Sanitario Regionale ha impiegato euro 521.35 per il percorso di cura.' },
+    ]);
+    expect(r.items).toHaveLength(0);
+    expect(r.totalAmount).toBeNull();
+  });
+
+  it('esclude "Il Servizio Sanitario Regionale ha impegnato euro X" (impegnato con N)', () => {
+    const r = analyzeExpenses([
+      { ...base, title: 'Spesa sanitaria per episodio di Pronto Soccorso', description: 'Il Servizio Sanitario Regionale ha impegnato euro 2.085,90 per il percorso di cura relativo all\'episodio di Pronto Soccorso.' },
+      { ...base, title: 'Spesa sanitaria per percorso di cura in Pronto Soccorso', description: 'Il Servizio Sanitario Regionale ha impegnato 2.085,90 Euro per il percorso di cura della paziente presso il Pronto Soccorso.' },
+    ]);
+    expect(r.items).toHaveLength(0);
+  });
+
+  it('esclude tutte le 7 voci SSR di Bigon → tabella spese vuota (come il gold)', () => {
+    const bigon = [
+      'Il Servizio Sanitario Regionale ha impiegato euro 521.35 per il percorso di cura.',
+      'Il Servizio Sanitario Regionale ha impiegato euro 279,00 per le prestazioni radiologiche.',
+      'Il Servizio Sanitario Regionale ha impegnato euro 1.038,80 per il percorso di cura.',
+      'Il Servizio Sanitario Regionale ha impegnato euro 2.085,90 per il percorso di cura.',
+      'Il Servizio Sanitario Regionale ha impegnato 2.085,90 Euro per il percorso di cura.',
+      'Il Servizio Sanitario Regionale ha impiegato euro 54,35 per il percorso di cura durante il ricovero.',
+    ].map((d, i) => ({ ...base, title: `Spesa sanitaria ${i}`, description: d }));
+    const r = analyzeExpenses(bigon);
+    expect(r.items).toHaveLength(0);
+    expect(r.totalAmount).toBeNull();
+  });
+
+  it('NON esclude una spesa out-of-pocket vera (Antoniazzi: pagata dal danneggiato)', () => {
+    const r = analyzeExpenses([
+      { ...base, title: 'RX gomito destro', description: 'Prestazione radiografica. Importo: 50,00 EUR. Fattura n. 26878, pagamento tramite Bancomat.' },
+    ]);
+    expect(r.items).toHaveLength(1);
+    expect(r.totalAmount).toBe(50);
+  });
+});

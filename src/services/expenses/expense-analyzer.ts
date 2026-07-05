@@ -293,7 +293,16 @@ interface AnalyzableEvent {
  */
 export function isSsrCostNotification(title: string, description?: string | null): boolean {
   const t = `${title} ${description ?? ''}`.toLowerCase();
-  return /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|il s\.?s\.?r\.? ha (impiegat|sostenut|spes)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t);
+  // "il SSR/SSN ha impiegato/impegnato/sostenuto/speso euro X" — sia in forma
+  // ABBREVIATA (s.s.r./s.s.n.) sia ESTESA ("servizio sanitario regionale/
+  // nazionale"). Bug Bigon 2026-07-05: il pattern copriva solo l'abbreviazione
+  // e solo "impiegat" (non "impegnat") → 7 costi SSR (€6.065) contati come
+  // spese del danneggiato. Sono costi del Servizio Sanitario, non out-of-pocket.
+  const serviceVerb = /(s\.?s\.?[rn]\.?|servizio sanitario(\s+(regionale|nazionale))?|sistema sanitario) ha (impi?egat|impegnat|sosten[uy]t|spes)/;
+  return (
+    serviceVerb.test(t) ||
+    /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t)
+  );
 }
 
 /**
