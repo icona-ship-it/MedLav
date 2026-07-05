@@ -74,9 +74,19 @@ const AMOUNT_PATTERNS: RegExp[] = [
   /([\d.]+,\d{2})\s?[Ee]uro/,
   // "150,00 €" or "1.500,00€"
   /([\d.]+,\d{2})\s?€/,
+  // "50,00 EUR" — codice ISO DOPO il numero (documenti commerciali/fatture reali;
+  // bug Antoniazzi 2026-07-05: [Ee]uro non matcha "EUR", il pattern EUR-prefisso
+  // esisteva solo prima della cifra → tutta la tabella spese usciva con "—")
+  /([\d.]+,\d{2})\s?EUR\b/,
   // "EUR 150,00"
   /EUR\s?([\d.]+(?:,\d{1,2})?)/i,
 ];
+
+// Il TOTALE dichiarato vince sugli importi parziali: su una ricevuta con
+// "100,00 EUR + IVA 4% per un totale di 120,00 EUR" la spesa sostenuta è 120
+// (è anche il numero che usa il gold). Finestra corta dopo "totale" per non
+// agganciare cifre lontane.
+const TOTAL_AMOUNT_PATTERN = /total[ei][^\d\n]{0,12}([\d.]+,\d{2})/i;
 
 /**
  * Try to extract a monetary amount from text.
@@ -84,6 +94,11 @@ const AMOUNT_PATTERNS: RegExp[] = [
  */
 export function extractAmount(text: string): number | null {
   if (!text || typeof text !== 'string') return null;
+
+  const total = text.match(TOTAL_AMOUNT_PATTERN);
+  if (total?.[1]) {
+    return parseItalianNumber(total[1]);
+  }
 
   for (const pattern of AMOUNT_PATTERNS) {
     const match = text.match(pattern);
@@ -281,6 +296,18 @@ export function isSsrCostNotification(title: string, description?: string | null
   return /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|il s\.?s\.?r\.? ha (impiegat|sostenut|spes)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t);
 }
 
+/**
+ * Vero se la voce è una COMPONENTE FISCALE di un'altra spesa (IVA scorporata,
+ * imposta/marca da bollo), non una prestazione autonoma: l'estrazione a volte
+ * le crea come eventi separati e contarle gonfia il totale (Antoniazzi: IVA
+ * "inclusa nel totale" del tutore + bollo della fattura RM → +6€ fantasma).
+ * Il gold elenca solo prestazioni. Conservativo: match sul TITOLO — una
+ * prestazione sanitaria vera non si intitola mai "IVA ..." o "Imposta di bollo".
+ */
+export function isFiscalComponentItem(title: string): boolean {
+  return /^\s*(iva\b|imposta di bollo\b|marca da bollo\b|bollo\b)/i.test(title);
+}
+
 export function analyzeExpenses(
   events: AnalyzableEvent[],
 ): ExpenseAnalysisResult {
@@ -298,6 +325,9 @@ export function analyzeExpenses(
     // (es. "il SSR ha impiegato euro X", "a carico del Servizio Sanitario"): contarle gonfia
     // il quantum con costi che il danneggiato non ha sostenuto.
     if (isSsrCostNotification(ev.title, ev.description)) continue;
+
+    // Le componenti fiscali (IVA scorporata, bollo) non sono voci di spesa autonome.
+    if (isFiscalComponentItem(ev.title)) continue;
 
     const category = inferCategory(ev.event_type, ev.title, ev.description);
     const amount = extractAmount(ev.title) ?? extractAmount(ev.description);

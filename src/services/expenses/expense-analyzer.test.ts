@@ -319,3 +319,54 @@ describe('fix Bigon — parser US + esclusione notifiche SSR', () => {
     expect(result.totalAmount).toBeCloseTo(36.15, 2);
   });
 });
+
+describe('extractAmount — valuta ISO dopo il numero (bug Antoniazzi 2026-07-05)', () => {
+  it('parsa "Importo: 50,00 EUR" (formato dei documenti commerciali reali)', () => {
+    expect(extractAmount('Prestazione radiografica. Importo: 50,00 EUR. Fattura n. 26878/2025/T')).toBe(50);
+  });
+
+  it('parsa "160,00 EUR" e "4,00 EUR"', () => {
+    expect(extractAmount('RM eseguita. Importo: 160,00 EUR. Esente IVA')).toBe(160);
+    expect(extractAmount('importo IVA: 4,00 EUR, inclusa nel totale')).toBe(4);
+  });
+
+  it('parsa il formato migliaia italiano prima di EUR', () => {
+    expect(extractAmount('Totale 1.500,00 EUR')).toBe(1500);
+  });
+
+  it('non si fa ingannare da EUR senza numero attaccato', () => {
+    expect(extractAmount('pagamento in EUR con carta')).toBeNull();
+  });
+});
+
+describe('analyzeExpenses — componenti fiscali non sono voci di spesa (gold: solo prestazioni)', () => {
+  const base = { event_type: 'spesa_medica', event_date: '2025-09-13', facility: 'X', source_type: 'altro' };
+
+  it('esclude la riga IVA quando è componente inclusa nel totale di un\'altra voce', () => {
+    const result = analyzeExpenses([
+      { ...base, title: 'Acquisto tutore articolato', description: 'Importo della prestazione: 100,00 EUR + IVA 4% (4,00 EUR) per un totale di 120,00 EUR.' },
+      { ...base, title: 'IVA 4% su tutore articolato', description: "IVA al 4% applicata sull'acquisto del tutore (importo IVA: 4,00 EUR, inclusa nel totale di 120,00 EUR)." },
+    ]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].description).toContain('tutore');
+    expect(result.items[0].amount).toBe(120);
+    expect(result.totalAmount).toBe(120);
+  });
+
+  it('esclude l\'imposta di bollo come voce autonoma', () => {
+    const result = analyzeExpenses([
+      { ...base, title: 'RM gomito destro', description: 'Importo: 160,00 EUR. Fattura n. 23102/2025/D.' },
+      { ...base, title: 'Imposta di bollo', description: 'Imposta di bollo di 2,00 EUR applicata sulla fattura n. 23102/2025/D.' },
+    ]);
+    expect(result.items).toHaveLength(1);
+    expect(result.totalAmount).toBe(160);
+  });
+
+  it('NON esclude una prestazione vera che cita l\'IVA nella descrizione', () => {
+    const result = analyzeExpenses([
+      { ...base, title: 'Visita fisiatrica', description: 'Importo: 90,00 EUR, esente IVA ex art. 10.' },
+    ]);
+    expect(result.items).toHaveLength(1);
+    expect(result.totalAmount).toBe(90);
+  });
+});
