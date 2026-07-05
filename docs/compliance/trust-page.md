@@ -76,7 +76,7 @@ Il sistema è progettato in modo che **nessuna valutazione medico-legale sia pro
 ## Nessun addestramento sui dati dei clienti
 
 - LegMed **non usa i dati dei clienti per addestrare modelli di AI**, né propri né di terzi.
-- I dati inviati a Mistral AI sono trattati ai soli fini dell'elaborazione richiesta, sulla base del DPA con Mistral: non vengono usati per l'addestramento dei modelli. La configurazione di zero data retention sul tenant API è **[DA VERIFICARE — confermare configurazione ZDR sul tenant Mistral prima della pubblicazione]**.
+- I dati inviati a Mistral AI sono trattati ai soli fini dell'elaborazione richiesta, sulla base del DPA con Mistral: non vengono usati per l'addestramento dei modelli (opt-out training verificato in console il 2026-07-05). La retention operativa presso Mistral segue i termini del DPA; la Zero Data Retention non è attivabile dalla console sul piano corrente — NON dichiariamo "zero retention" (rivalutare se Mistral la rende disponibile o via contratto enterprise).
 
 ---
 
