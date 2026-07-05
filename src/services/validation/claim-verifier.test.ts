@@ -135,3 +135,18 @@ describe('claim-verifier — parseClaimVerdicts (difensivo)', () => {
     expect(verdicts[0].motivo.length).toBeLessThanOrEqual(300);
   });
 });
+
+describe('claim-verifier — filtro placeholder (rumore visto sul primo run reale)', () => {
+  it('should drop findings on report placeholders like [da compilare dal perito]', () => {
+    const content = JSON.stringify({
+      claims: [
+        { claim: 'Peso: Kg [da compilare dal perito]', verdict: 'non_verificabile', motivo: 'placeholder' },
+        { claim: 'Terapia attuale: [Inserire in base alla valutazione]', verdict: 'non_verificabile', motivo: 'placeholder' },
+        { claim: 'La RM è del 12/09/2025', verdict: 'non_supportato', motivo: 'data documentata 13/09' },
+      ],
+    });
+    const verdicts = parseClaimVerdicts(content);
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0].claim).toContain('RM');
+  });
+});

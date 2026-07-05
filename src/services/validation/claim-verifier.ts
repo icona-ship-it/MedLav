@@ -161,6 +161,16 @@ export async function verifySectionClaims(params: {
   };
 }
 
+/**
+ * I PLACEHOLDER del report ("[da compilare dal perito]", "[inserire...]") non
+ * sono claim fattuali: il prompt lo dice ma il judge li flagga comunque come
+ * non_verificabile (visto sul primo run reale, Motta: 5 finding-rumore su 7).
+ * Filtro deterministico, non affidato al prompt.
+ */
+export function isPlaceholderClaim(claim: string): boolean {
+  return /\[(?:da compilare|inserire|a cura del perito|dato mancante)/i.test(claim);
+}
+
 /** Parsing difensivo del JSON del judge (mai far fallire la pipeline per il verifier). */
 export function parseClaimVerdicts(content: string): ClaimVerdict[] {
   try {
@@ -173,6 +183,7 @@ export function parseClaimVerdicts(content: string): ClaimVerdict[] {
       const verdict = c.verdict;
       if (verdict !== 'supportato' && verdict !== 'non_supportato' && verdict !== 'non_verificabile') continue;
       if (typeof c.claim !== 'string' || c.claim.trim().length === 0) continue;
+      if (isPlaceholderClaim(c.claim)) continue;
       valid.push({
         claim: c.claim.slice(0, 300),
         verdict,
