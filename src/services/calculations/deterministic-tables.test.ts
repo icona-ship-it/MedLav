@@ -326,3 +326,37 @@ describe('toDeterministicDocs (mapping)', () => {
     expect(out[0].pages[0]).toMatchObject({ pageNumber: 1, ocrText: 'T' });
   });
 });
+
+describe('formatDocumentazioneSanitaria — selettività routine (Lavini 2026-07-05)', () => {
+  it('NON riproduce un documento di sola routine (eventi tutti T3: lab/prescrizioni)', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ documentId: 'lab', fileName: 'esami.pdf', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Emocromo: Hb 13.2, GB 6800, PLT 250000' }] })],
+      [ev({ document_id: 'lab', event_type: 'esame', event_date: '2024-04-20' })],
+    );
+    // resta nell'elenco analitico (tracciabilità)
+    expect(out).toContain('*esami.pdf*');
+    // ma NON il verbatim
+    expect(out).not.toContain('Emocromo: Hb 13.2');
+    expect(out).toContain('Documentazione di routine');
+  });
+
+  it('riproduce INTEGRALMENTE un documento con anche UN SOLO evento T1 (diagnosi)', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ documentId: 'd1', fileName: 'ps.pdf', documentType: 'cartella_clinica', pages: [{ pageNumber: 1, ocrText: 'Diagnosi: frattura scomposta. Emocromo nella norma.' }] })],
+      [
+        ev({ document_id: 'd1', event_type: 'diagnosi', diagnosis: 'frattura scomposta', event_date: '2024-04-20' }),
+        ev({ document_id: 'd1', event_type: 'esame', event_date: '2024-04-20' }),
+      ],
+    );
+    expect(out).toContain('Diagnosi: frattura scomposta. Emocromo nella norma.');
+    expect(out).not.toContain('Documentazione di routine');
+  });
+
+  it('riproduce un documento SENZA eventi valutabili (conservativo)', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ documentId: 'x', fileName: 'referto.pdf', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'CONTENUTO_CLINICO_IMPORTANTE' }] })],
+      [],
+    );
+    expect(out).toContain('CONTENUTO_CLINICO_IMPORTANTE');
+  });
+});

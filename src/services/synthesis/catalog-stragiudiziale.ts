@@ -93,11 +93,15 @@ ${NO_EVN_RULE}`,
   {
     id: 'il_fatto_e_storia_clinica',
     title: 'Il Fatto e la Storia Clinica',
-    maxTokens: TOKENS_MEDIUM,
+    maxTokens: TOKENS_SMALL,
     dataSources: ['events-medical', 'perizia-metadata'],
     contextMaxChars: 600,
     needsOcr: false,
-    promptDirective: `Narrazione UNICA e COMPATTA dell'evento indice e dell'iter diagnostico-terapeutico successivo. 2-4 paragrafi totali (NON una sezione per fase). Allineato al benchmark Antoniazzi "IL FATTO E LA STORIA CLINICA" per perizia medico-legale RC.
+    // Lavini 2026-07-05: questa sezione era troppo lunga → deve essere un
+    // RIASSUNTO breve (l'evento indice + primo soccorso condensato). Il decorso
+    // clinico dettagliato (controlli, interventi, terapie, evoluzione) si sposta
+    // nell'Epicrisi. Il Pronto Soccorso va condensato alle cose importanti.
+    promptDirective: `RIASSUNTO breve e denso dell'evento indice e del primo soccorso. 1-2 paragrafi totali, MAI più di 2. Allineato al benchmark Antoniazzi "IL FATTO E LA STORIA CLINICA" per perizia medico-legale RC.
 
 ESEMPIO DI STILE (benchmark Antoniazzi):
 "Mentre stava attraversando la strada sulla striscia pedonali di fronte alla Scuola Cangrande In Corso porta nuova 66, Verona, in data 12/09/2025 verso le ore 17.40 veniva investita da motociclo delle poste italiane. Cadeva a terra. Non ricorda svenimento. Ma ricorda il capannello di persone che si sono radunate attorno. Dopo essersi alzata una astante ha chiamato la mamma che e' intervenuta e sulle prime, un po' agitata, veniva portata a casa che dista pochi passi dal luogo dell'incidente. Successivamente, aumentando il dolore a livello del gomito destro, i genitori hanno contattato telefonicamente conoscente specialista ortopedico che consigliava di eseguire Rx dell'area dolente."
@@ -105,19 +109,17 @@ ESEMPIO DI STILE (benchmark Antoniazzi):
 ⚠ ATTENZIONE — GUARDRAIL ANTI-COPIA (regola assoluta):
 L'esempio sopra serve SOLO a illustrare il REGISTRO LINGUISTICO (imperfetto/passato remoto, dettagli concreti, terza persona, prosa scorrevole). TUTTI i dati specifici (nomi di persona, date, luoghi, vie, numeri civici, scuole, mezzi coinvolti, parenti, ore precise) DEVONO derivare ESCLUSIVAMENTE dagli eventi clinici e dai metadati perizia forniti per IL CASO IN ELABORAZIONE. **VIETATO TASSATIVAMENTE** riportare nomi/date/luoghi dell'esempio (Antoniazzi, Scuola Cangrande, Corso Porta Nuova, 12/09/2025, motociclo Poste, "mamma", ecc.) nel report finale: sarebbe hallucination grave su perizia depositabile.
 
-Includi in ordine cronologico:
-- Data e circostanze dell'evento indice (luogo, ora, dinamica, modalita)
-- Prime cure prestate (pronto soccorso, primo accesso medico) e diagnosi iniziale
-- Visite e controlli successivi (data + specialista, raggruppati se ravvicinati)
-- Interventi e terapie principali (data + tipo)
-- Evoluzione clinica fino alla stabilizzazione
+CONTENUTO (solo questo, in ordine cronologico):
+- Data e circostanze dell'evento indice (luogo, ora, dinamica, modalità)
+- Passaggio in Pronto Soccorso / primo accesso medico CONDENSATO alle cose importanti: la diagnosi principale e i provvedimenti-chiave. NON elencare ogni singolo accertamento, parametro o esame del PS — solo l'essenziale.
 
-Stile narrativo in terza persona ("la paziente / il paziente"), ricostruzione fedele, dettagli concreti (luoghi, ore, persone presenti se documentate). Imperfetto/passato remoto.
+Stile narrativo in terza persona ("la paziente / il paziente"), ricostruzione fedele, dettagli concreti dell'evento (luoghi, ore, persone presenti se documentate). Imperfetto/passato remoto.
 
-LIMITI (anti-ridondanza):
-- NON riprodurre integralmente i documenti — e' oggetto di "La Documentazione Medica Prodotta"
+LIMITI (anti-ridondanza — TASSATIVI):
+- FERMATI al primo soccorso. Il decorso clinico successivo (visite di controllo, interventi, terapie, evoluzione fino alla stabilizzazione) NON va qui: è oggetto dell'Epicrisi.
+- NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta"
 - NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
-- NON includere la parte SOGGETTIVA (cio' che il paziente riferisce oggi in visita) — quella e' nel placeholder "Visita Clinica" che compilera' il perito.
+- NON includere la parte SOGGETTIVA (ciò che il paziente riferisce oggi in visita) — quella è nel placeholder "Visita Clinica" che compilerà il perito.
 ${NO_EVN_RULE}`,
   },
   {
@@ -200,16 +202,16 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
 
 Includi:
-1. Sintesi cronologica essenziale dei fatti principali (1-2 paragrafi compatti)
-2. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
-3. Eventuali spese mediche giudicate congrue (1 riga)
+1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").
+2. DECORSO CLINICO successivo al primo soccorso, in forma di sintesi cronologica: visite e controlli specialistici (data + specialista, raggruppati se ravvicinati), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione. Questa è la parte sostanziale della sezione.
+3. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
+4. Eventuali spese mediche giudicate congrue (1 riga)
 
 NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà nello spazio dedicato in fondo.
 
 LIMITI DELLA SEZIONE (anti-ridondanza):
-- NON ri-narrare l'evento indice in dettaglio — è oggetto di "Il Fatto e la Storia Clinica"
+- NON ri-narrare l'evento indice e il primo soccorso in dettaglio — sono oggetto di "Il Fatto e la Storia Clinica". Qui il decorso PARTE dopo il primo soccorso.
 - NON riprodurre i documenti — è oggetto della "Documentazione Medica Prodotta"
-Qui SOLO sintesi essenziale + dati medico-legali calcolati.
 
 Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}

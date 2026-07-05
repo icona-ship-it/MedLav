@@ -13,6 +13,7 @@ import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import { computeRelevanceTier } from '@/lib/event-relevance';
 import { calculateITTITP, formatITTITPTable, formatRicoveroITTFactsBlock } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
 import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
@@ -151,6 +152,37 @@ function demoteOcrHeadings(text: string): string {
  * importante vs rumore" richiede giudizio = LLM, fuori da questo renderer puro).
  * Returns '' when there are no clinical documents (caller uses the empty fallback).
  */
+/**
+ * Selettività doc-sanitaria (Lavini 2026-07-05: "solo eventi davvero importanti"):
+ * un documento di SOLA ROUTINE — tutti i suoi eventi sono T3 (esami di
+ * laboratorio, prescrizioni, follow-up) — non viene riprodotto integralmente,
+ * resta solo nell'elenco analitico (tracciabilità piena). Un documento con
+ * ANCHE UN SOLO evento T1/T2 (diagnosi, intervento, ricovero, visita, referto,
+ * imaging) è riprodotto INTEGRALMENTE: "mai perdere un fatto importante".
+ * Un documento SENZA eventi valutabili è riprodotto (conservativo).
+ *
+ * Config: flag unico, così Lavini può disattivarlo/tarare senza chirurgia.
+ * NB: filtro DI DOCUMENTO (safe). La riduzione più aggressiva — riprodurre solo
+ * le PAGINE con eventi importanti, o le sole citazioni-chiave — cambia la
+ * garanzia di completezza dell'atto: va decisa da Lavini sull'output reale.
+ */
+export const OMIT_ROUTINE_ONLY_DOCS_IN_DOC_SANITARIA = true;
+
+/** true se il documento ha SOLO eventi di routine (T3) e almeno un evento
+ * (→ valutabile). Documenti senza eventi ritornano false (riprodotti). */
+function isRoutineOnlyDocument(docId: string, events: DeterministicTableEvent[]): boolean {
+  const docEvents = events.filter((e) => e.document_id === docId);
+  if (docEvents.length === 0) return false;
+  return docEvents.every(
+    (e) =>
+      computeRelevanceTier({
+        eventType: e.event_type,
+        diagnosis: e.diagnosis,
+        sourceType: e.source_type,
+      }) === 'T3',
+  );
+}
+
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
   events: DeterministicTableEvent[],
@@ -211,6 +243,12 @@ export function formatDocumentazioneSanitaria(
     const attribution = docAttribution.get(doc.documentId);
     const header = `**${getDocumentTypeLabel(doc.documentType)}${attribution ? `, ${attribution}` : ''}${d ? ` in data ${formatDate(d)}` : ''}:**`;
     parts.push('', header);
+    // Documento di sola routine (T3) → non riprodotto integralmente (resta
+    // nell'elenco analitico sopra). Selettività Lavini, safe: mai un T1/T2.
+    if (OMIT_ROUTINE_ONLY_DOCS_IN_DOC_SANITARIA && isRoutineOnlyDocument(doc.documentId, events)) {
+      parts.push('*[Documentazione di routine (esami di laboratorio/prescrizioni): dettaglio integrale agli atti.]*', '');
+      continue;
+    }
     if (doc.pages.length === 0) {
       parts.push('*[Testo non disponibile per questo documento.]*');
     } else {
