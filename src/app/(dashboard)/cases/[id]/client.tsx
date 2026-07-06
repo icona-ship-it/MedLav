@@ -344,6 +344,7 @@ export function CaseDetailClient({
                 classificationProgress={classificationProgress}
                 onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
@@ -374,6 +375,7 @@ export function CaseDetailClient({
                 classificationProgress={classificationProgress}
                 onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
@@ -446,6 +448,7 @@ export function CaseDetailClient({
                 classificationProgress={classificationProgress}
                 onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}
@@ -503,6 +506,7 @@ export function CaseDetailClient({
                 classificationProgress={classificationProgress}
                 onClassificationStarted={handleClassificationStarted}
                 onProceedToNext={() => handleSetStep(2)}
+                pipelineMode={pipelineMode}
               />
             </div>
           )}

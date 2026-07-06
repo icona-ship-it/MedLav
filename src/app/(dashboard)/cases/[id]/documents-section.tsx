@@ -73,6 +73,10 @@ interface DocumentsSectionProps {
   /** Notifies the parent that "Categorizza tutti" was dispatched, so polling
    * starts immediately (the server takes seconds to write the first progress). */
   onClassificationStarted?: () => void;
+  /** La categoria del documento conta solo dove guida la riproduzione della
+   * doc-sanitaria (perizia RC = full, cronistoria = extraction_only). Per gli
+   * strumenti spese/anonimizzatore è irrilevante → niente flag "Da categorizzare". */
+  pipelineMode?: string;
 }
 
 // --- Helpers ---
@@ -101,8 +105,12 @@ export function DocumentsSection({
   onProceedToNext,
   classificationProgress,
   onClassificationStarted,
+  pipelineMode = 'full',
 }: DocumentsSectionProps) {
   const router = useRouter();
+  // La categoria pilota solo la doc-sanitaria (full/extraction_only); altrove
+  // il flag sarebbe rumore fuorviante.
+  const categoriesRelevant = pipelineMode === 'full' || pipelineMode === 'extraction_only';
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
@@ -162,6 +170,7 @@ export function DocumentsSection({
   // stabile). L'auto-categorizzazione durante l'analisi userà istruzioni
   // generiche su questi → meglio categorizzarli prima.
   const isUncategorizedDoc = (d: Document): boolean =>
+    categoriesRelevant &&
     (d.processing_status === 'caricato' || d.processing_status === 'completato') &&
     (d.document_type ?? 'altro') === 'altro';
   const uncategorizedCount = documents.filter(isUncategorizedDoc).length;
@@ -466,10 +475,9 @@ export function DocumentsSection({
                 const isComplete = doc.processing_status === 'completato';
                 const isError = doc.processing_status === 'errore';
                 const isClassifying = classifyingDocId === doc.id;
-                // Documento senza categoria (mostrato solo quando la tendina è
-                // visibile, cioè caricato/completato): flag esplicito sulla riga.
-                const isUncategorized = (isUploaded || isComplete)
-                  && (doc.document_type ?? 'altro') === 'altro';
+                // Documento senza categoria (solo dove la categoria conta, e
+                // quando la tendina è visibile): flag esplicito sulla riga.
+                const isUncategorized = isUncategorizedDoc(doc);
                 return (
                   <div
                     key={doc.id}
