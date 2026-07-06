@@ -164,6 +164,12 @@ export function CaseDetailClient({
   const hasResults = hasEvents || localAnomalies.length > 0 || hasReport;
   const processingStage = caseData.processing_stage ?? 'idle';
 
+  // Timestamp REALE di avvio elaborazione (scritto dalla start route quando i
+  // dati partono verso Inngest). Il timer "Tempo trascorso" conta da qui, non
+  // dall'ora di upload dei documenti.
+  const processingStartedAt = (caseData.perizia_metadata as Record<string, unknown> | null)
+    ?.processingStartedAt as string | undefined;
+
   // Extract generation progress from perizia_metadata (updated per section during report generation)
   const generationProgress = (
     (caseData.perizia_metadata as Record<string, unknown> | null)?.generationProgress as GenerationProgress | undefined
@@ -384,6 +390,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                processingStartedAt={processingStartedAt}
               />
             </div>
           )}
@@ -455,6 +462,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                processingStartedAt={processingStartedAt}
               />
             </div>
           )}
@@ -524,6 +532,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                processingStartedAt={processingStartedAt}
               />
             </div>
           )}

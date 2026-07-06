@@ -34,6 +34,24 @@ interface ProcessingSectionProps {
   lastError?: string;
   pipelineMode?: string;
   initialExcludedSections?: string[];
+  /** Timestamp REALE di avvio elaborazione (perizia_metadata.processingStartedAt).
+   * Passato a ProcessingProgress per far partire il timer dall'invio a Inngest,
+   * non dall'ora di upload dei documenti. */
+  processingStartedAt?: string;
+}
+
+/**
+ * Stima indicativa del tempo di analisi in base al NUMERO di documenti.
+ * I documenti sono elaborati in parallelo, ma il tempo cresce comunque col
+ * volume (OCR + estrazione + sintesi). Il vecchio "5–15 minuti" fisso era
+ * fuorviante su fascicoli grandi (79 doc → decine di minuti reali). Range
+ * volutamente ampi e onesti: meglio non promettere una precisione che non c'è.
+ */
+function estimateAnalysisTime(docCount: number): string {
+  if (docCount <= 5) return 'di solito pochi minuti';
+  if (docCount <= 20) return 'di solito 5–15 minuti';
+  if (docCount <= 50) return 'di solito 15–35 minuti';
+  return 'anche 30–60 minuti su fascicoli molto voluminosi';
 }
 
 // --- Pipeline steps preview ---
@@ -56,6 +74,7 @@ export function ProcessingSection({
   lastError,
   pipelineMode = 'full',
   initialExcludedSections = [],
+  processingStartedAt,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
@@ -281,17 +300,16 @@ export function ProcessingSection({
 
               <ProcessingProgress
                 documents={documents.filter((d) => !['caricato'].includes(d.processing_status))}
+                processingStartedAt={processingStartedAt}
               />
 
-              <p className="text-sm text-muted-foreground text-center">
-                L&apos;elaborazione continua in background. La pagina si aggiorna automaticamente.
-              </p>
-
-              {/* Reassurance message — always visible during processing */}
+              {/* Rassicurazione unica (prima erano tre messaggi sovrapposti che
+                  dicevano la stessa cosa): auto-refresh + puoi chiudere + email. */}
               <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30 p-3">
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
                 <p className="text-sm text-green-700 dark:text-green-400">
-                  L&apos;analisi continua anche se chiudi questa pagina. Riceverai un&apos;email al completamento.
+                  L&apos;analisi prosegue sul server anche se chiudi questa pagina: si aggiorna da sola
+                  e riceverai un&apos;email al completamento.
                 </p>
               </div>
 
@@ -353,17 +371,23 @@ export function ProcessingSection({
                       ))}
                     </div>
 
-                    {/* Prominent time estimate + doc count */}
-                    <div className="flex items-center justify-center gap-4 flex-wrap">
-                      <Badge variant="secondary" className="text-sm px-3 py-1">
-                        {uploadedCount} {uploadedCount === 1 ? 'documento' : 'documenti'}
-                      </Badge>
-                      <Badge variant="outline" className="text-sm px-3 py-1">
-                        <Clock className="mr-1.5 h-3.5 w-3.5" />
-                        {/* Flat honest range: docs are processed in PARALLEL, a
-                            per-file linear formula promised ~24-47 min on 47 files */}
-                        Tempo stimato: di solito 5–15 minuti
-                      </Badge>
+                    {/* Prominent time estimate + doc count. La stima scala col
+                        numero di documenti (vedi estimateAnalysisTime): il vecchio
+                        "5–15 minuti" fisso era irreale sui fascicoli grandi. */}
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="flex items-center justify-center gap-4 flex-wrap">
+                        <Badge variant="secondary" className="text-sm px-3 py-1">
+                          {uploadedCount} {uploadedCount === 1 ? 'documento' : 'documenti'}
+                        </Badge>
+                        <Badge variant="outline" className="text-sm px-3 py-1">
+                          <Clock className="mr-1.5 h-3.5 w-3.5" />
+                          Tempo stimato: {estimateAnalysisTime(uploadedCount)}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Stima indicativa: dipende dal numero e dalla dimensione dei documenti.
+                        Puoi chiudere la pagina, l&apos;analisi prosegue sul server.
+                      </p>
                     </div>
                   </div>
 

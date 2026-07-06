@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
-  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, Info,
+  ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, Info, FileQuestion,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -154,6 +154,17 @@ export function DocumentsSection({
   const uncertainCount = documents.filter(
     (d) => d.classification_metadata != null && d.classification_metadata.confidence < 50,
   ).length;
+
+  // Documenti SENZA categoria ("altro" o nullo): finora l'unico segnale era
+  // vedere "altro" nel menu a tendina. Ora li contiamo per il banner di
+  // riepilogo e li flagghiamo su ogni riga. Contiamo solo i documenti già
+  // caricati o completati (quelli in elaborazione non hanno ancora un tipo
+  // stabile). L'auto-categorizzazione durante l'analisi userà istruzioni
+  // generiche su questi → meglio categorizzarli prima.
+  const isUncategorizedDoc = (d: Document): boolean =>
+    (d.processing_status === 'caricato' || d.processing_status === 'completato') &&
+    (d.document_type ?? 'altro') === 'altro';
+  const uncategorizedCount = documents.filter(isUncategorizedDoc).length;
 
   const handleRetryDocument = useCallback(async (docId: string) => {
     setRetryingDocId(docId);
@@ -427,6 +438,25 @@ export function DocumentsSection({
               </div>
             )}
 
+            {/* Riepilogo documenti SENZA categoria: prima non c'era alcun segnale
+                aggregato — l'utente doveva accorgersi da solo del "altro" nelle
+                tendine. Non bloccante. Nascosto mentre la categorizzazione AI è
+                ancora in corso (i tipi non sono definitivi). */}
+            {uncategorizedCount > 0 && classificationProgress?.status !== 'running' && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                <FileQuestion className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-900 dark:text-amber-200">
+                  <span className="font-medium">
+                    {uncategorizedCount} {uncategorizedCount === 1 ? 'documento senza categoria' : 'documenti senza categoria'}
+                  </span>{' '}
+                  (contrassegnati <strong>Da categorizzare</strong> qui sotto). Verranno analizzati con
+                  istruzioni generiche e riprodotti integralmente nella &quot;Documentazione Sanitaria&quot; del report.
+                  Per un risultato più preciso assegna una categoria a mano o usa
+                  {' '}<strong>&quot;Categorizza tutti con AI&quot;</strong>.
+                </div>
+              </div>
+            )}
+
             {/* Document cards with inline type + actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {documents.map((doc) => {
@@ -436,6 +466,10 @@ export function DocumentsSection({
                 const isComplete = doc.processing_status === 'completato';
                 const isError = doc.processing_status === 'errore';
                 const isClassifying = classifyingDocId === doc.id;
+                // Documento senza categoria (mostrato solo quando la tendina è
+                // visibile, cioè caricato/completato): flag esplicito sulla riga.
+                const isUncategorized = (isUploaded || isComplete)
+                  && (doc.document_type ?? 'altro') === 'altro';
                 return (
                   <div
                     key={doc.id}
@@ -458,6 +492,16 @@ export function DocumentsSection({
 
                       {/* Status badges */}
                       <div className="flex items-center gap-1 shrink-0">
+                        {isUncategorized && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700"
+                            title="Nessuna categoria assegnata: scegline una qui sotto o usa la categorizzazione AI"
+                          >
+                            <FileQuestion className="h-3 w-3 mr-1" />
+                            Da categorizzare
+                          </Badge>
+                        )}
                         {isUploaded && <Badge variant="secondary" className="text-xs">Pronto</Badge>}
                         {!isUploaded && !isComplete && !isError && (
                           <Badge variant={processingVariant(doc.processing_status)} className="text-xs">
@@ -519,12 +563,19 @@ export function DocumentsSection({
                     {/* Row 2: Inline type dropdown (only for uploaded/ready docs) */}
                     {(isUploaded || isComplete) && (
                       <>
-                      <p className="text-xs font-medium text-foreground mt-2">Categoria del documento — scegli o usa l&apos;AI</p>
+                      <p className={`text-xs font-medium mt-2 ${isUncategorized ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}>
+                        {isUncategorized
+                          ? 'Categoria mancante — scegline una o usa l’AI'
+                          : 'Categoria del documento — scegli o usa l’AI'}
+                      </p>
                       <Select
                         value={doc.document_type ?? 'altro'}
                         onValueChange={(value) => handleTypeChange(doc.id, value)}
                       >
-                        <SelectTrigger className="w-full h-10 text-sm" aria-label="Categoria del documento">
+                        <SelectTrigger
+                          className={`w-full h-10 text-sm ${isUncategorized ? 'border-amber-400 ring-1 ring-amber-300 dark:border-amber-700 dark:ring-amber-800' : ''}`}
+                          aria-label="Categoria del documento"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

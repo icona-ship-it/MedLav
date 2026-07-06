@@ -18,6 +18,10 @@ interface ProcessingDocument {
 
 interface ProcessingProgressProps {
   documents: ProcessingDocument[];
+  /** Timestamp REALE di avvio elaborazione (case.perizia_metadata.processingStartedAt,
+   * scritto dalla start route quando i dati partono verso Inngest). Il timer conta
+   * da qui; fallback al created_at dei documenti solo per i casi legacy senza il campo. */
+  processingStartedAt?: string | null;
 }
 
 // --- Constants ---
@@ -64,10 +68,6 @@ export function computeWeightedProgress(statuses: readonly string[]): number {
   }, 0);
   return Math.round((sum / (statuses.length * maxStep)) * 100);
 }
-
-/** Above this elapsed time, reassure the user instead of letting them think
- * the app is stuck (top of the promised "5-15 min" range). */
-export const LONGER_THAN_EXPECTED_MS = 15 * 60 * 1000;
 
 function formatElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -159,7 +159,7 @@ function getOverallStepIndex(documents: ProcessingDocument[]): number {
   return Math.min(...processing.map((d) => getStepIndex(d.processing_status)));
 }
 
-export function ProcessingProgress({ documents }: ProcessingProgressProps) {
+export function ProcessingProgress({ documents, processingStartedAt }: ProcessingProgressProps) {
   const [elapsed, setElapsed] = useState(0);
   const overallStep = getOverallStepIndex(documents);
 
@@ -171,11 +171,18 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
     (d) => d.processing_status === 'completato' || isWarningError(d),
   );
 
-  // Stable start time: earliest created_at of any doc that entered processing
+  // Avvio REALE dell'analisi: il timestamp scritto dalla start route. Fallback al
+  // created_at dei documenti solo per casi legacy senza il campo (prima contava
+  // sempre da lì → mostrava "28m" appena avviata l'analisi di un fascicolo caricato
+  // mezz'ora prima).
   const startTimeMs = useMemo(() => {
+    if (processingStartedAt) {
+      const t = new Date(processingStartedAt).getTime();
+      if (!Number.isNaN(t)) return t;
+    }
     const d = getProcessingStartTime(documents);
     return d ? d.getTime() : null;
-  }, [documents]);
+  }, [processingStartedAt, documents]);
 
   // Timer: runs while processing, stops when all done
   useEffect(() => {
@@ -235,21 +242,15 @@ export function ProcessingProgress({ documents }: ProcessingProgressProps) {
         })}
       </div>
 
-      {/* Status bar: elapsed time */}
-      {startTimeMs !== null && (
+      {/* Status bar: solo il tempo trascorso. Rimosso l'avviso "richiede più
+          tempo del solito" (fuorviante: scattava per via del timer sbagliato e
+          allarmava su tempi normali per un macrodanno). La rassicurazione
+          "puoi chiudere la pagina" è nel box del componente genitore, non qui,
+          per non ripeterla tre volte. */}
+      {startTimeMs !== null && !allDone && (
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
-          <span>Tempo trascorso: {formatElapsed(elapsed)}</span>
-        </div>
-      )}
-
-      {/* Reassurance when the run exceeds the promised range: a silent long
-          wait reads as "stuck" and invites a destructive cancel. */}
-      {startTimeMs !== null && elapsed > LONGER_THAN_EXPECTED_MS && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-          Sta richiedendo più tempo del solito: succede coi fascicoli molto grandi.
-          L&apos;analisi prosegue sul server — puoi anche chiudere questa pagina e
-          tornare più tardi. Non annullare.
+          Tempo trascorso: {formatElapsed(elapsed)}
         </div>
       )}
 

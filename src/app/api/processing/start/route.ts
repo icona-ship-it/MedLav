@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('id, user_id, processing_stage, pipeline_mode, case_role')
+      .select('id, user_id, processing_stage, pipeline_mode, case_role, perizia_metadata')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -113,11 +113,20 @@ export async function POST(request: NextRequest) {
     }
 
     // TOCTOU protection: atomically set stage to 'elaborazione' only if still in expected state
-    // This prevents two concurrent requests from both passing the above check
+    // This prevents two concurrent requests from both passing the above check.
+    // processingStartedAt: timestamp REALE di avvio analisi (l'invio a Inngest è
+    // qui) — il timer "Tempo trascorso" DEVE contare da questo, non dal created_at
+    // dei documenti (che è l'ora di UPLOAD, spesso molto prima). Riscritto a ogni
+    // avvio così una rielaborazione riparte da zero.
     const allowedStages = ['idle', 'completato', 'errore'];
+    const existingMeta = (caseData.perizia_metadata ?? {}) as Record<string, unknown>;
     const { data: lockResult, error: lockError } = await supabase
       .from('cases')
-      .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+      .update({
+        processing_stage: 'elaborazione',
+        perizia_metadata: { ...existingMeta, processingStartedAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', caseId)
       .in('processing_stage', allowedStages)
       .select('id');
