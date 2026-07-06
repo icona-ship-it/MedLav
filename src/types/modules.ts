@@ -1,11 +1,13 @@
 /**
  * Module system types for LegMed.
  *
- * rc-mvp (pivot 2026-07-02): l'MVP fa UNA cosa sola — la perizia RC
- * stragiudiziale. Il catalogo si riduce al singolo modulo
- * 'perizia_ml_rc_civile'; gli altri moduli/categorie vivono su main e nel
- * tag full-app-2026-07-02. Le firme degli helper restano identiche così i
- * consumer non cambiano forma (degenerano al singolo modulo).
+ * rc-mvp (pivot 2026-07-02): il cuore dell'MVP è la perizia RC stragiudiziale.
+ * 2026-07-06: RIESPOSTI (richiesta utente) i 3 STRUMENTI standalone che il
+ * pivot aveva nascosto — Analisi Spese Mediche, Cronistoria, Anonimizzatore —
+ * le cui pipeline (expenses_only / extraction_only / anonymize_only) erano
+ * SEMPRE rimaste vive in process-case.ts e nella vista caso (client.tsx): il
+ * prune aveva tolto solo la CREAZIONE. Gli altri moduli (CTU/previdenziale/
+ * pareri) restano su main e nel tag full-app-2026-07-02.
  */
 
 import type { CaseRole, CaseType } from './index';
@@ -26,13 +28,18 @@ export type PipelineMode =
 // Module IDs
 // ---------------------------------------------------------------------------
 
-export type ModuleId = 'perizia_ml_rc_civile';
+export type ModuleId =
+  | 'perizia_ml_rc_civile'
+  // Strumenti standalone (riesposti 2026-07-06)
+  | 'analisi_doc_sanitari'   // Cronistoria estrattiva (extraction_only)
+  | 'analisi_spese_mediche'  // Analisi congruità spese (expenses_only)
+  | 'anonimizzatore';        // Anonimizzazione documenti (anonymize_only)
 
 // ---------------------------------------------------------------------------
 // Module categories
 // ---------------------------------------------------------------------------
 
-export type ModuleCategoryId = 1;
+export type ModuleCategoryId = 1 | 2;
 
 export interface ModuleCategory {
   id: ModuleCategoryId;
@@ -42,6 +49,7 @@ export interface ModuleCategory {
 
 export const MODULE_CATEGORIES: readonly ModuleCategory[] = [
   { id: 1, label: 'Perizia medico legale', description: 'Per privato, studio legale, assicurazione, agenzie infortunistiche' },
+  { id: 2, label: 'Strumenti di analisi', description: 'Cronistoria, spese mediche, anonimizzazione — su documentazione singola' },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -73,6 +81,36 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
     pipelineMode: 'full',
     legacyCaseTypes: ['rc_auto'],
     priority: true,
+  },
+  {
+    id: 'analisi_doc_sanitari',
+    label: 'Analisi e cronistoria documenti sanitari',
+    description: 'Trascrizione estrattiva e cronistoria della documentazione medico-sanitaria',
+    categoryId: 2,
+    impliedRole: null,
+    pipelineMode: 'extraction_only',
+    legacyCaseTypes: ['generica'],
+    priority: false,
+  },
+  {
+    id: 'analisi_spese_mediche',
+    label: 'Analisi spese mediche',
+    description: 'Gestione della congruità delle spese mediche e farmacologiche',
+    categoryId: 2,
+    impliedRole: null,
+    pipelineMode: 'expenses_only',
+    legacyCaseTypes: ['generica'],
+    priority: false,
+  },
+  {
+    id: 'anonimizzatore',
+    label: 'Anonimizzatore',
+    description: 'Anonimizzazione e pseudonimizzazione di documenti medico-legali',
+    categoryId: 2,
+    impliedRole: null,
+    pipelineMode: 'anonymize_only',
+    legacyCaseTypes: [],
+    priority: false,
   },
 ] as const;
 

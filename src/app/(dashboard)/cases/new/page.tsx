@@ -6,25 +6,30 @@ import {
   ArrowRight,
   Loader2,
   Scale,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { createCase } from '../../actions';
-import { MODULE_CATEGORIES } from '@/lib/constants';
-import { RC_MODULE } from '@/types/modules';
+import { MODULE_CATALOG, MODULE_CATEGORIES, RC_MODULE, type ModuleId } from '@/types/modules';
 
-// rc-mvp: niente picker per categoria/modulo — l'MVP crea SOLO la perizia RC
-// stragiudiziale. Il vecchio CategoryPicker vive su main e nel tag
-// full-app-2026-07-02.
-const RC_CATEGORY = MODULE_CATEGORIES[0];
+// rc-mvp + riesposizione strumenti (2026-07-06): la perizia RC resta il
+// cavallo di battaglia; sotto "Strumenti di analisi" i 3 tool standalone
+// (cronistoria, spese, anonimizzatore) per test e usi puntuali.
+const MODULES_BY_CATEGORY = MODULE_CATEGORIES.map((cat) => ({
+  category: cat,
+  modules: MODULE_CATALOG.filter((m) => m.categoryId === cat.id && !m.hidden),
+})).filter((g) => g.modules.length > 0);
 
 export default function NewCasePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedModuleId, setSelectedModuleId] = useState<ModuleId>(RC_MODULE.id);
+
+  const selectedModule = MODULE_CATALOG.find((m) => m.id === selectedModuleId) ?? RC_MODULE;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,23 +62,17 @@ export default function NewCasePage() {
         Torna indietro
       </Link>
 
-      {/* Header — same style as dashboard */}
+      {/* Header */}
       <div>
         <div className="flex items-center gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Scale className="h-6 w-6" />
           </div>
           <div>
-            <Badge variant="secondary" className="text-xs font-normal mb-1">
-              {RC_CATEGORY.label}
-            </Badge>
-            <h1 className="text-3xl font-bold tracking-tight">{RC_MODULE.label}</h1>
-            <p className="mt-1 text-muted-foreground">{RC_MODULE.description}</p>
+            <h1 className="text-3xl font-bold tracking-tight">Nuovo elaborato</h1>
+            <p className="mt-1 text-muted-foreground">Scegli cosa creare, poi caricherai i documenti.</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">
-          Dopo la creazione potrai caricare i documenti e avviare l&apos;elaborazione.
-        </p>
       </div>
 
       {/* Form */}
@@ -83,6 +82,53 @@ export default function NewCasePage() {
             {error}
           </div>
         )}
+
+        {/* Module selector */}
+        {MODULES_BY_CATEGORY.map(({ category, modules }) => (
+          <div key={category.id} className="space-y-3">
+            <div className="space-y-0.5">
+              <h2 className="text-sm font-semibold">{category.label}</h2>
+              <p className="text-xs text-muted-foreground">{category.description}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {modules.map((mod) => {
+                const isSelected = mod.id === selectedModuleId;
+                return (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    onClick={() => setSelectedModuleId(mod.id)}
+                    aria-pressed={isSelected}
+                    className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+                      isSelected
+                        ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
+                        : 'hover:border-primary/40 hover:bg-muted/40'
+                    }`}
+                  >
+                    <div
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                      }`}
+                    >
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{mod.label}</span>
+                        {mod.priority && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            Principale
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{mod.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
         <Card className="rounded-2xl">
           <CardContent className="p-6 sm:p-8 space-y-5">
@@ -115,7 +161,7 @@ export default function NewCasePage() {
               </div>
             </div>
 
-            <input type="hidden" name="moduleId" value={RC_MODULE.id} />
+            <input type="hidden" name="moduleId" value={selectedModuleId} />
           </CardContent>
         </Card>
 
@@ -132,7 +178,7 @@ export default function NewCasePage() {
             </>
           ) : (
             <>
-              Crea elaborato
+              Crea {selectedModule.priority ? 'perizia' : 'elaborato'}
               <ArrowRight className="ml-2 h-5 w-5" />
             </>
           )}
