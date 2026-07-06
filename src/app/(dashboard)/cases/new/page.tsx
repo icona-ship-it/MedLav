@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,9 +26,16 @@ const MODULES_BY_CATEGORY = MODULE_CATEGORIES.map((cat) => ({
 })).filter((g) => g.modules.length > 0);
 
 export default function NewCasePage() {
+  const searchParams = useSearchParams();
+  // Pre-selezione dal link della dashboard (?module=...), validata contro il
+  // catalogo — un valore sconosciuto ricade sulla perizia RC.
+  const requestedModule = searchParams.get('module');
+  const initialModuleId: ModuleId =
+    MODULE_CATALOG.find((m) => m.id === requestedModule)?.id ?? RC_MODULE.id;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedModuleId, setSelectedModuleId] = useState<ModuleId>(RC_MODULE.id);
+  const [selectedModuleId, setSelectedModuleId] = useState<ModuleId>(initialModuleId);
 
   const selectedModule = MODULE_CATALOG.find((m) => m.id === selectedModuleId) ?? RC_MODULE;
 

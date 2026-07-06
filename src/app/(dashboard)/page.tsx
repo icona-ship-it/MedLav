@@ -12,17 +12,19 @@ import { Button } from '@/components/ui/button';
 import { getCases } from './actions';
 import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
-import { RC_MODULE } from '@/types/modules';
+import { RC_MODULE, MODULE_CATALOG } from '@/types/modules';
 import { getElaborationCost } from '@/services/credits/credit-costs';
 
-// rc-mvp: la dashboard non è più un picker multi-modulo — l'MVP fa UNA cosa:
-// la perizia RC stragiudiziale. CTA unica verso /cases/new.
+// rc-mvp: la perizia RC è il cavallo di battaglia (CTA principale). Sotto,
+// gli strumenti standalone riesposti (2026-07-06): cronistoria, spese,
+// anonimizzatore — ognuno pre-seleziona il modulo su /cases/new.
 
 export default async function DashboardPage() {
   const allCases = await getCases();
   const cases = allCases.filter((c) => c.status !== 'archiviato');
   const recentCases = cases.slice(0, 5);
   const creditCost = getElaborationCost(RC_MODULE.pipelineMode);
+  const tools = MODULE_CATALOG.filter((m) => !m.priority && !m.hidden);
 
   return (
     <div className="space-y-10">
@@ -68,6 +70,35 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </section>
+
+      {/* Strumenti di analisi standalone */}
+      {tools.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Strumenti di analisi
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {tools.map((tool) => (
+              <Link key={tool.id} href={`/cases/new?module=${tool.id}`} className="group block">
+                <Card className="h-full rounded-xl transition-all hover:border-primary/40 hover:shadow-md">
+                  <CardContent className="flex h-full flex-col gap-2 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:text-primary">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] font-medium">
+                        {getElaborationCost(tool.pipelineMode)} crediti
+                      </Badge>
+                    </div>
+                    <h3 className="text-sm font-semibold leading-snug">{tool.label}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{tool.description}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Recent cases */}
       <section className="space-y-4">
