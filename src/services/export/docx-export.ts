@@ -251,7 +251,7 @@ export function validateDepositableExport(
 ): string | null {
   if (exportMode !== 'depositabile') return null;
   if (!pm?.ctuName?.trim()) {
-    return 'Per esportare la perizia in versione depositabile compila almeno il Nome del perito nei "Dati perizia" del caso. Per un documento di lavoro usa l\'esportazione in modalità bozza.';
+    return 'Per esportare la perizia compila almeno il Nome del perito nei "Dati perizia" del caso.';
   }
   if ((caseRole === 'ctu' || caseRole === 'ctp') && (!pm.tribunale?.trim() || !pm.rgNumber?.trim())) {
     return 'Per una perizia giudiziaria depositabile servono anche il Tribunale e il numero di Ruolo Generale (RG) nei "Dati perizia".';

@@ -57,7 +57,11 @@ export const RC_PERITO_SECTIONS: SectionDef[] = [
  */
 export function buildVisibleSections(params: { isRC: boolean }): SectionDef[] {
   if (!params.isRC) return [...BASE_SECTIONS];
-  const anamnesi = RC_PERITO_SECTIONS.find((s) => s.id === 'anamnesi')!;
-  const ilFatto = RC_PERITO_SECTIONS.find((s) => s.id === 'ilFatto')!;
-  return [anamnesi, ...BASE_SECTIONS, ilFatto];
+  // Anamnesi in cima, il resto (Il Fatto) in coda. Nessuna non-null assertion:
+  // se l'id 'anamnesi' venisse rinominato, si ricade sull'ordine sicuro
+  // (review 2026-07-06) invece di produrre un `undefined` silenzioso.
+  const anamnesi = RC_PERITO_SECTIONS.find((s) => s.id === 'anamnesi');
+  if (!anamnesi) return [...BASE_SECTIONS, ...RC_PERITO_SECTIONS];
+  const rest = RC_PERITO_SECTIONS.filter((s) => s.id !== 'anamnesi');
+  return [anamnesi, ...BASE_SECTIONS, ...rest];
 }

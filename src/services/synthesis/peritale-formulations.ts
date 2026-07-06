@@ -142,7 +142,7 @@ Di seguito la struttura attesa. NON copiare il contenuto — genera basandoti SO
 
 Dalla disamina complessiva della documentazione in atti emerge che il sig. [iniziali paziente], nato il [data nascita], in data [data evento indice] subiva [descrizione evento indice come risulta dalla documentazione].
 
-Il quadro documentale evidenzia un iter clinico caratterizzato da [sintesi del decorso principale: ricoveri, interventi, complicanze — con date e fonti].
+Il quadro documentale evidenzia il seguente decorso clinico successivo al primo soccorso: [DECORSO in sintesi cronologica — la parte sostanziale della sezione: visite e controlli specialistici (data + specialista), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione — con date e fonti in prosa].
 
 Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato [complicanze/evoluzione con date e fonti].
 
@@ -160,5 +160,6 @@ REGOLE:
 - Ogni affermazione ancorata alla fonte IN PROSA (tipo documento e data, senza parentesi quadre)
 - NO giudizi, NO opinioni, NO "si ritiene" — solo fatti documentati
 - Include ITT/ITP se calcolati
-- NON ripetere la cronologia dettagliata — sintetizzare
+- Il DECORSO clinico (visite, interventi, terapie, evoluzione) è la parte sostanziale: sintesi cronologica in prosa, NON riproduzione integrale dei documenti
+- NON ri-narrare l'evento indice e il primo soccorso in dettaglio (sono ne "Il Fatto e la Storia Clinica"): qui il decorso PARTE dopo il primo soccorso
 `;

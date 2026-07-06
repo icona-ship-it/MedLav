@@ -117,6 +117,7 @@ Stile narrativo in terza persona ("la paziente / il paziente"), ricostruzione fe
 
 LIMITI (anti-ridondanza — TASSATIVI):
 - FERMATI al primo soccorso. Il decorso clinico successivo (visite di controllo, interventi, terapie, evoluzione fino alla stabilizzazione) NON va qui: è oggetto dell'Epicrisi.
+- Se l'evento indice È esso stesso un ricovero d'urgenza con intervento immediato (es. politrauma operato in emergenza), "il primo soccorso" include l'accesso, il ricovero iniziale e l'intervento in urgenza (menzionato in una riga: tipo + data); il decorso post-operatorio e i controlli successivi restano all'Epicrisi.
 - NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta"
 - NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
 - NON includere la parte SOGGETTIVA (ciò che il paziente riferisce oggi in visita) — quella è nel placeholder "Visita Clinica" che compilerà il perito.
@@ -202,11 +203,16 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     dataSources: ['events-medical', 'context-summaries'],
     contextMaxChars: 0,
     needsOcr: false,
+    // excludeLabTests (review 2026-07-06): l'Epicrisi riceve gli eventi medici
+    // per il decorso, ma NON i lab di routine (rumore che gonfia il prompt e
+    // aggrava il rischio di troncamento su macrodanno; un lab T1 load-bearing
+    // resta comunque). Il decorso è fatto di visite/interventi/terapie, non di lab.
+    excludeLabTests: true,
     promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
 
 Includi:
 1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").
-2. DECORSO CLINICO successivo al primo soccorso, in forma di sintesi cronologica: visite e controlli specialistici (data + specialista, raggruppati se ravvicinati), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione. Questa è la parte sostanziale della sezione.
+2. DECORSO CLINICO successivo al primo soccorso, in forma di sintesi cronologica: visite e controlli specialistici (data + specialista, raggruppati se ravvicinati), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione. Quando il decorso è documentato è la parte SOSTANZIALE della sezione; su un caso SEMPLICE con decorso minimo (poche visite di controllo, nessun ricovero) sintetizzalo in poche righe SENZA gonfiarlo né ri-narrare l'evento.
 3. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
 4. Eventuali spese mediche giudicate congrue (1 riga)
 

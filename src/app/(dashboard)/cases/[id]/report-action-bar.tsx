@@ -80,6 +80,7 @@ export function ReportActionBar({
   const [isPending, startTransition] = useTransition();
   const [qualityGateOpen, setQualityGateOpen] = useState(false);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [lastExportInfo, setLastExportInfo] = useState<{ format: string; exportedAt: string } | null>(null);
   // Treat legacy "in_revisione" as "bozza"
   const effectiveStatus = report.report_status === 'in_revisione' ? 'bozza' : report.report_status;
@@ -127,6 +128,43 @@ export function ReportActionBar({
       setIsLoadingVersions(false);
     }
   }, [caseId, onVersionsToggle]);
+
+  // Download robusto: fetch + toast sull'errore (review 2026-07-06). Prima i
+  // link erano <a download>: un 400 (nome perito mancante) / 428 (attestazione)
+  // veniva scaricato SILENZIOSAMENTE come finto file .docx invece di mostrare
+  // il messaggio. Ora l'errore si vede; sul successo scarica il blob reale.
+  const handleDownload = useCallback((url: string) => {
+    setIsExporting(true);
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          let msg = 'Esportazione non riuscita. Riprova tra poco.';
+          try {
+            const body = await res.json();
+            if (body?.error) msg = body.error as string;
+          } catch { /* corpo non-JSON: tieni il default */ }
+          toast.error(msg);
+          return;
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') ?? '';
+        const fileName = /filename="?([^"]+)"?/.exec(cd)?.[1] ?? 'perizia.docx';
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        toast.error('Esportazione non riuscita. Controlla la connessione e riprova.');
+      } finally {
+        setIsExporting(false);
+      }
+    })();
+  }, []);
 
   return (
     <>
@@ -239,23 +277,25 @@ export function ReportActionBar({
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/docx`} download>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Scarica Word (.docx)</div>
-                      <p className="text-xs text-muted-foreground font-normal">Perizia completa, pronta al deposito</p>
-                    </div>
-                  </a>
+                <DropdownMenuItem
+                  disabled={isExporting}
+                  onSelect={() => handleDownload(`/api/cases/${caseId}/export/docx`)}
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  <div>
+                    <div>Scarica Word (.docx)</div>
+                    <p className="text-xs text-muted-foreground font-normal">Perizia completa, pronta al deposito</p>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={`/api/cases/${caseId}/export/docx?anonymize=true`} download>
-                    <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                    <div>
-                      <div>Word senza dati personali</div>
-                      <p className="text-xs text-muted-foreground font-normal">Versione anonimizzata per condivisione</p>
-                    </div>
-                  </a>
+                <DropdownMenuItem
+                  disabled={isExporting}
+                  onSelect={() => handleDownload(`/api/cases/${caseId}/export/docx?anonymize=true`)}
+                >
+                  <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                  <div>
+                    <div>Word senza dati personali</div>
+                    <p className="text-xs text-muted-foreground font-normal">Versione anonimizzata per condivisione</p>
+                  </div>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
