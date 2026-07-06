@@ -3,7 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidateCase } from '@/lib/cache';
 import { replaceSectionContent, parseSections } from '@/lib/section-parser-client';
-import { markSectionState, pruneClaimFindingsForSection } from '@/lib/section-state';
+import { markSectionState, pruneClaimFindingsForSection, stripViewHeavyMetadata } from '@/lib/section-state';
+import type { ReportGenerationMetadata } from '@/db/schema/reports';
 import { computeEditRatePercent } from '@/lib/edit-metrics';
 import { logger } from '@/lib/logger';
 
@@ -29,7 +30,16 @@ export async function getCaseReport(caseId: string) {
     return null;
   }
 
-  return data;
+  if (!data) return data;
+
+  // Alleggerisci il payload della VISTA: `generation_metadata.originalSynthesis`
+  // (intera bozza AI) non serve al client — su un macrodanno è ~metà del peso
+  // serializzato a ogni apertura. I percorsi save/regen lo rileggono con query
+  // proprie, quindi toglierlo qui è sicuro.
+  const strippedMeta = stripViewHeavyMetadata(
+    (data.generation_metadata ?? null) as ReportGenerationMetadata | null,
+  );
+  return { ...data, generation_metadata: strippedMeta ?? null };
 }
 
 /**

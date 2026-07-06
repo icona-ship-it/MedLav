@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { markSectionState, getSectionStatus, getSectionState } from './section-state';
+import { markSectionState, getSectionStatus, getSectionState, stripViewHeavyMetadata } from './section-state';
 import type { ReportGenerationMetadata } from '@/db/schema/reports';
 
 describe('section-state helpers', () => {
@@ -47,5 +47,45 @@ describe('section-state helpers', () => {
   it('starts a sections map when metadata had none', () => {
     const next = markSectionState(null, 'epicrisi', () => ({ status: 'locked', lockedAt: 'x' }));
     expect(next?.sections?.epicrisi?.status).toBe('locked');
+  });
+
+  describe('stripViewHeavyMetadata', () => {
+    it('passes null/undefined through unchanged', () => {
+      expect(stripViewHeavyMetadata(null)).toBeNull();
+      expect(stripViewHeavyMetadata(undefined)).toBeUndefined();
+    });
+
+    it('returns the same object when there is no originalSynthesis', () => {
+      const meta: ReportGenerationMetadata = { promptVersion: 'v1', sections: { epicrisi: { status: 'locked' } } };
+      expect(stripViewHeavyMetadata(meta)).toBe(meta);
+    });
+
+    it('removes originalSynthesis but keeps every other field', () => {
+      const meta: ReportGenerationMetadata = {
+        promptVersion: 'v1',
+        originalSynthesis: 'x'.repeat(300_000),
+        sections: { epicrisi: { status: 'edited' } },
+        claimVerification: {
+          checkedAt: '2026-07-01T00:00:00Z',
+          model: 'mistral-medium',
+          sectionsChecked: 1,
+          supportedCount: 1,
+          unverifiableCount: 0,
+          unsupportedCount: 0,
+          findings: [],
+        },
+      };
+      const stripped = stripViewHeavyMetadata(meta);
+      expect(stripped?.originalSynthesis).toBeUndefined();
+      expect(stripped?.promptVersion).toBe('v1');
+      expect(stripped?.sections?.epicrisi?.status).toBe('edited');
+      expect(stripped?.claimVerification?.model).toBe('mistral-medium');
+    });
+
+    it('does not mutate the input object (immutability)', () => {
+      const meta: ReportGenerationMetadata = { originalSynthesis: 'draft', promptVersion: 'v1' };
+      stripViewHeavyMetadata(meta);
+      expect(meta.originalSynthesis).toBe('draft');
+    });
   });
 });

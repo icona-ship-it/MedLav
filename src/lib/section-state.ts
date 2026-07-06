@@ -55,6 +55,23 @@ export function pruneClaimFindingsForSection(
   };
 }
 
+/**
+ * Rimuove dai metadata i campi PESANTI e non letti dalla vista, così il payload
+ * RSC di ogni apertura report non li trascina. Oggi: `originalSynthesis` —
+ * l'intera bozza AI integrale (su un macrodanno ~metà del peso del report),
+ * usata SOLO dai percorsi di salvataggio/rigenerazione, ciascuno con la propria
+ * query per reportId. La vista legge solo `sections` e `claimVerification`.
+ * Immutabile; ritorna null/undefined invariati e non tocca l'oggetto originale.
+ */
+export function stripViewHeavyMetadata(
+  metadata: ReportGenerationMetadata | null | undefined,
+): ReportGenerationMetadata | null | undefined {
+  if (!metadata || metadata.originalSynthesis === undefined) return metadata;
+  const rest = { ...metadata };
+  delete rest.originalSynthesis;
+  return rest;
+}
+
 /** Read the persisted status for a section (default 'auto'). */
 export function getSectionStatus(
   metadata: ReportGenerationMetadata | null | undefined,
