@@ -57,8 +57,12 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
     message: 'Risorsa non trovata. La pagina potrebbe essere stata rimossa.',
   },
   {
-    pattern: /file.*(?:too large|size|grande)/i,
-    message: 'File troppo grande. Il limite è 100MB per documento.',
+    // Include i messaggi REALI di Supabase Storage per un upload oltre limite —
+    // "Payload too large", "The object exceeded the maximum allowed size", 413:
+    // NON contengono la parola "file", quindi il vecchio pattern li mancava e
+    // l'utente vedeva "errore imprevisto" (bug Motta 2026-07-06).
+    pattern: /file.*(?:too large|size|grande)|payload too large|exceeded the maximum|maximum allowed size|(?:request )?entity too large|\b413\b/i,
+    message: 'File troppo grande (limite 100 MB per documento). Se è un PDF voluminoso, dividilo in file più piccoli prima di caricarlo.',
   },
   {
     pattern: /invalid.*(?:format|tipo|type)/i,

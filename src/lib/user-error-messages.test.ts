@@ -26,3 +26,23 @@ describe('toUserMessage', () => {
     expect(toUserMessage('TypeError: x is undefined')).toBe('Si è verificato un errore imprevisto. Riprova tra qualche istante.');
   });
 });
+
+describe('toUserMessage — upload oltre limite (bug Motta 2026-07-06)', () => {
+  it('mappa "Payload too large" di Supabase su un messaggio actionable, non generico', () => {
+    const m = toUserMessage('Payload too large');
+    expect(m).toContain('troppo grande');
+    expect(m).not.toContain('imprevisto');
+  });
+
+  it('mappa "The object exceeded the maximum allowed size"', () => {
+    expect(toUserMessage('The object exceeded the maximum allowed size')).toContain('troppo grande');
+  });
+
+  it('mappa un 413', () => {
+    expect(toUserMessage('Request failed with status 413')).toContain('troppo grande');
+  });
+
+  it('continua a mappare i messaggi con la parola "file"', () => {
+    expect(toUserMessage('file too large')).toContain('troppo grande');
+  });
+});
