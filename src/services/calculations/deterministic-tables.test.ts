@@ -337,3 +337,55 @@ describe('formatDocumentazioneSanitaria — nessuna omissione per-documento (rev
     expect(out).not.toContain('Documentazione di routine');
   });
 });
+
+describe('formatDocumentazioneSanitaria — filtro per-pagina (Lavini, 2026-07-07)', () => {
+  const bigDoc = (id: string, nPages: number) => doc({
+    documentId: id, fileName: `${id}.pdf`, documentType: 'cartella_clinica',
+    pages: Array.from({ length: nPages }, (_, i) => ({ pageNumber: i + 1, ocrText: `CONTENUTO_PAGINA_${i + 1}` })),
+  });
+
+  it('documento GRANDE: riproduce solo le pagine con reperti importanti (T1/T2), salta le pagine di sola routine', () => {
+    const out = formatDocumentazioneSanitaria(
+      [bigDoc('d', 10)],
+      [
+        ev({ document_id: 'd', event_type: 'diagnosi', diagnosis: 'frattura', source_pages: [2], event_date: '2024-01-01' }),
+        ev({ document_id: 'd', event_type: 'visita', source_pages: [5], event_date: '2024-01-01' }),
+        ev({ document_id: 'd', event_type: 'esame', source_pages: [7], event_date: '2024-01-01' }), // T3 → pagina 7 NON tenuta
+      ],
+    );
+    expect(out).toContain('CONTENUTO_PAGINA_2');
+    expect(out).toContain('CONTENUTO_PAGINA_5');
+    expect(out).not.toContain('CONTENUTO_PAGINA_7');
+    expect(out).not.toContain('CONTENUTO_PAGINA_1');
+    expect(out).toContain('reperti principali');
+    // il documento resta INTERO nell'elenco analitico (tracciabilità)
+    expect(out).toContain('*d.pdf*');
+  });
+
+  it('documento PICCOLO (≤8 pagine): riprodotto INTERO, nessun filtro', () => {
+    const out = formatDocumentazioneSanitaria(
+      [bigDoc('s', 4)],
+      [ev({ document_id: 's', event_type: 'diagnosi', diagnosis: 'x', source_pages: [1], event_date: '2024-01-01' })],
+    );
+    for (let p = 1; p <= 4; p++) expect(out).toContain(`CONTENUTO_PAGINA_${p}`);
+    expect(out).not.toContain('reperti principali');
+  });
+
+  it('FALLBACK conservativo: documento grande con reperti importanti ma SENZA source_pages → intero', () => {
+    const out = formatDocumentazioneSanitaria(
+      [bigDoc('d', 10)],
+      [ev({ document_id: 'd', event_type: 'diagnosi', diagnosis: 'x', source_pages: null, event_date: '2024-01-01' })],
+    );
+    for (let p = 1; p <= 10; p++) expect(out).toContain(`CONTENUTO_PAGINA_${p}`);
+    expect(out).not.toContain('reperti principali');
+  });
+
+  it('parse robusto: source_pages come STRINGA JSON del DB', () => {
+    const out = formatDocumentazioneSanitaria(
+      [bigDoc('d', 10)],
+      [ev({ document_id: 'd', event_type: 'diagnosi', diagnosis: 'x', source_pages: '[3]' as unknown as number[], event_date: '2024-01-01' })],
+    );
+    expect(out).toContain('CONTENUTO_PAGINA_3');
+    expect(out).not.toContain('CONTENUTO_PAGINA_1');
+  });
+});

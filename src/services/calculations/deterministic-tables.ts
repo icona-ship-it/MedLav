@@ -13,6 +13,7 @@ import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import { computeRelevanceTier } from '@/lib/event-relevance';
 import { calculateITTITP, formatITTITPTable, formatRicoveroITTFactsBlock } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
 import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
@@ -37,6 +38,11 @@ export interface DeterministicTableEvent {
   source_text?: string | null;
   /** Documented diagnosis (drives the relevance tier). */
   diagnosis?: string | null;
+  /** Pagine del documento da cui l'evento è stato estratto (per il filtro
+   * per-pagina della doc-sanitaria). Accetta sia l'array parsato (export via
+   * toDeterministicEvents) sia la stringa JSON grezza del DB (viewer client che
+   * passa EventRow direttamente); parseSourcePages normalizza entrambi. */
+  source_pages?: number[] | string | null;
 }
 
 /** A single OCR page of a document (verbatim text). */
@@ -151,14 +157,53 @@ function demoteOcrHeadings(text: string): string {
  * importante vs rumore" richiede giudizio = LLM, fuori da questo renderer puro).
  * Returns '' when there are no clinical documents (caller uses the empty fallback).
  */
-// Selettività doc-sanitaria (richiesta Lavini 2026-07-05 "solo eventi
-// importanti"): un primo tentativo — saltare i documenti di sola-routine —
-// è stato RIMOSSO dopo review avversariale 2026-07-06: (a) inefficace (solo
-// 2/63 doc su Bigon), (b) un filtro per-DOCUMENTO può perdere testo clinico
-// NON estratto come evento e mis-tiera i referti DISCORDANTI (sempre
-// load-bearing) su un atto depositabile. Il taglio vero (page-level o
-// citazioni-chiave) cambia la garanzia di completezza dell'atto → attende la
-// decisione di Lavini sul meccanismo, validata sull'output reale.
+/**
+ * Selettività doc-sanitaria "solo eventi importanti" (Lavini 2026-07-05,
+ * meccanismo scelto 2026-07-07 su dati reali: source_pages è 100% popolato
+ * sui casi reali, 0 eventi importanti senza pagina).
+ *
+ * FILTRO PER-PAGINA: nei documenti GRANDI (> soglia pagine) si riproduce
+ * verbatim SOLO le pagine che contengono un reperto importante (T1/T2:
+ * diagnosi, interventi, ricoveri, complicanze, visite, referti, terapie,
+ * imaging). Si saltano le pagine con soli eventi di routine T3 (lab seriali,
+ * prescrizioni). Mantiene TESTO VERBATIM REALE (no LLM, no troncamento) e la
+ * tracciabilità piena (il documento resta INTERO nell'elenco analitico +
+ * nota di quante pagine su quante). Documenti PICCOLI riprodotti interi.
+ *
+ * SICUREZZE (atto depositabile — "mai perdere un fatto importante"):
+ * - "importante" è INCLUSIVO (T1 O T2): un dubbio tiene la pagina.
+ * - Fallback conservativo: se un documento grande ha reperti importanti ma
+ *   NESSUNO risolve a una sua pagina (source_pages inaffidabile per quel doc),
+ *   il documento si riproduce INTERO.
+ * - Le pagine con reperti importanti sono SEMPRE tenute integre.
+ * Config: flag unico, Lavini può disattivarlo/tarare la soglia.
+ */
+export const DOC_SANITARIA_PAGE_FILTER = true;
+/** Documenti con più pagine di questa vengono filtrati; sotto, riprodotti interi. */
+export const DOC_SANITARIA_LARGE_DOC_PAGES = 8;
+
+/** Pagine (per documento) che contengono almeno un evento T1/T2 (importante).
+ * Inclusivo per sicurezza: computeRelevanceTier ritorna T1 su diagnosi/
+ * intervento/ricovero/complicanza (e diagnosi presente), T2 su visita/referto/
+ * terapia/imaging strumentale. Le pagine con soli lab/prescrizioni (T3) restano fuori. */
+function buildImportantPagesByDoc(events: DeterministicTableEvent[]): Map<string, Set<number>> {
+  const byDoc = new Map<string, Set<number>>();
+  for (const e of events) {
+    if (!e.document_id) continue;
+    const pages = parseSourcePages(e.source_pages);
+    if (!pages) continue;
+    const tier = computeRelevanceTier({
+      eventType: e.event_type,
+      diagnosis: e.diagnosis,
+      sourceType: e.source_type,
+    });
+    if (tier === 'T3') continue; // pagina di sola routine: non la tiene questo evento
+    let set = byDoc.get(e.document_id);
+    if (!set) { set = new Set<number>(); byDoc.set(e.document_id, set); }
+    for (const p of pages) set.add(p);
+  }
+  return byDoc;
+}
 
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
@@ -211,6 +256,11 @@ export function formatDocumentazioneSanitaria(
     parts.push(`- ${getDocumentTypeLabel(doc.documentType)} — *${doc.fileName}*${pageInfo}${dateInfo}`);
   }
 
+  // Pagine importanti per documento (T1/T2) — per il filtro per-pagina.
+  const importantPagesByDoc = DOC_SANITARIA_PAGE_FILTER
+    ? buildImportantPagesByDoc(events)
+    : new Map<string, Set<number>>();
+
   // (b) RIPRODUZIONE INTEGRALE VERBATIM — per documento, pagina per pagina.
   // Header di blocco in formato perizia (benchmark gold 2026-06-10):
   // "**Tipo, Struttura/Autore in data DD.MM.YYYY:**" — il filename resta SOLO
@@ -223,7 +273,21 @@ export function formatDocumentazioneSanitaria(
     if (doc.pages.length === 0) {
       parts.push('*[Testo non disponibile per questo documento.]*');
     } else {
-      for (const page of doc.pages) {
+      // Filtro per-pagina: SOLO su documenti grandi, e solo se il documento ha
+      // pagine-importanti risolte (altrimenti fallback conservativo = intero).
+      const importantPages = importantPagesByDoc.get(doc.documentId);
+      const isLarge = doc.pages.length > DOC_SANITARIA_LARGE_DOC_PAGES;
+      const applyFilter =
+        DOC_SANITARIA_PAGE_FILTER && isLarge && importantPages !== undefined && importantPages.size > 0;
+      const pagesToRender = applyFilter
+        ? doc.pages.filter((p) => importantPages!.has(p.pageNumber))
+        : doc.pages;
+      // Se il filtro azzererebbe tutto (paradosso), riproduci intero (safe).
+      const finalPages = pagesToRender.length > 0 ? pagesToRender : doc.pages;
+      if (applyFilter && finalPages.length < doc.pages.length) {
+        parts.push(`*[Riprodotte le ${finalPages.length} pagine con i reperti principali su ${doc.pages.length}; documento integrale agli atti.]*`);
+      }
+      for (const page of finalPages) {
         // QA 2026-06-11: the raw OCR carries artifacts (broken image refs,
         // marker-wrapped HTML tables, null leaks) that must never reach a
         // depositable perizia — sanitized content-preserving, never summarized.
@@ -300,7 +364,26 @@ export function toDeterministicEvents(
     document_id: (e.document_id as string | null) ?? null,
     source_text: (e.source_text as string | null) ?? null,
     diagnosis: (e.diagnosis as string | null) ?? null,
+    source_pages: parseSourcePages(e.source_pages),
   }));
+}
+
+/** source_pages arriva dal DB come stringa JSON ("[1,2,3]") o già come array.
+ * Ritorna numeri interi ≥1, o null se assente/illeggibile. */
+function parseSourcePages(raw: unknown): number[] | null {
+  if (Array.isArray(raw)) {
+    const nums = raw.filter((n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1);
+    return nums.length > 0 ? nums : null;
+  }
+  if (typeof raw === 'string' && raw.trim().length > 0 && raw !== 'null') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parseSourcePages(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 /**
