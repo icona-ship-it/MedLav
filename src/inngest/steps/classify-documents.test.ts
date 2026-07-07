@@ -3,6 +3,7 @@ import type { Mock } from 'vitest';
 
 vi.mock('@/services/classification/document-classifier', () => ({
   classifyDocument: vi.fn(),
+  classifyDocumentWithRetry: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -24,11 +25,14 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { classifyDocumentsStep, applyClassifications } from './classify-documents';
-import { classifyDocument } from '@/services/classification/document-classifier';
+import { classifyDocumentWithRetry } from '@/services/classification/document-classifier';
 import { logger } from '@/lib/logger';
 import type { OcrResult } from './types';
 
-const mockClassify = classifyDocument as Mock;
+// Lo step chiama classifyDocumentWithRetry (il wrapper con retry sui fallimenti
+// transitori); qui verifichiamo il comportamento dello STEP, quindi mockiamo
+// quella funzione.
+const mockClassify = classifyDocumentWithRetry as Mock;
 
 function makeOcrResult(overrides?: Partial<OcrResult>): OcrResult {
   return {

@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { classifyDocument } from '@/services/classification/document-classifier';
+import { classifyDocumentWithRetry } from '@/services/classification/document-classifier';
 import { logger } from '@/lib/logger';
 import type { OcrResult } from './types';
 
@@ -34,7 +34,7 @@ export async function classifyDocumentsStep(
 
   for (const ocrResult of docsWithText) {
     try {
-      const result = await classifyDocument(ocrResult.fullText, ocrResult.fileName);
+      const result = await classifyDocumentWithRetry(ocrResult.fullText, ocrResult.fileName);
 
       // Always save AI classification metadata for all docs
       await supabase

@@ -110,7 +110,14 @@ export async function classifyDocument(
   const userMessage = `Nome file: ${safeFileName}\n\nTesto documento (prime ${truncatedText.length} caratteri):\n${truncatedText}`;
 
   const result_ = await streamMistralChat({
-    model: MISTRAL_MODELS.MISTRAL_LARGE,
+    // mistral-medium (≈50 req/s) invece di large (≈1,25 req/s sul tier): la
+    // classificazione è un task semplice e vincolato dallo schema, ma con large
+    // 6 classificazioni concorrenti saturavano l'RPS → 429 → doc non classificati
+    // che l'utente doveva rifare. Medium regge il parallelismo. Stesso modello in
+    // TUTTI i percorsi (batch, pipeline, singola, reclassify) → nessuna
+    // classificazione divergente per lo stesso doc. (medium usa già json_schema
+    // nel claim-verifier).
+    model: MISTRAL_MODELS.MISTRAL_MEDIUM,
     messages: [
       { role: 'system', content: CLASSIFICATION_SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
@@ -129,6 +136,37 @@ export async function classifyDocument(
 
   const result = parseClassificationResponse(raw, fileName);
   return { ...result, usage };
+}
+
+/** Ritardi (ms) tra i tentativi a livello di chiamante. Distanziati per dare
+ * tempo al circuit-breaker Mistral di richiudersi dopo un picco transitorio. */
+const CLASSIFY_RETRY_DELAYS_MS = [3000, 8000];
+
+/**
+ * Come classifyDocument, ma RIPROVA quando la chiamata LANCIA (API giù,
+ * circuit-breaker aperto, timeout, 429 dopo l'esaurimento dei retry interni).
+ * I casi non-eccezionali (OCR vuoto, parse error) NON lanciano: ritornano
+ * 'altro' e non vengono riprovati (riprovare non aiuterebbe). Serve ai percorsi
+ * AUTOMATICI (batch pre-analisi + step pipeline) dove un fallimento transitorio
+ * lasciava il documento non classificato costringendo l'utente a rifare.
+ */
+export async function classifyDocumentWithRetry(
+  text: string,
+  fileName: string,
+): Promise<ClassificationResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= CLASSIFY_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await classifyDocument(text, fileName);
+    } catch (error) {
+      lastError = error;
+      const delay = CLASSIFY_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) break; // ultimo tentativo esaurito
+      logger.warn('classification', `classify ${fileName}: tentativo ${attempt + 1} fallito, riprovo tra ${delay}ms`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Classification failed after retries');
 }
 
 function parseClassificationResponse(raw: string, fileName: string): ClassificationResult {

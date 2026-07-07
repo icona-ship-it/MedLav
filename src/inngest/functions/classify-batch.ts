@@ -1,6 +1,6 @@
 import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
-import { classifyDocument } from '@/services/classification/document-classifier';
+import { classifyDocumentWithRetry } from '@/services/classification/document-classifier';
 import { ocrDocument } from '@/services/ocr/ocr-service';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { refundCredits } from '@/services/credits/credit-service';
@@ -16,12 +16,11 @@ export const classifyBatchJob = inngest.createFunction(
     id: 'classify-batch',
     retries: 2,
     concurrency: [
-      // Fuori dal pool "mistral-pool" (le classificazioni sono leggere sul TPM
-      // e non devono rubare slot alle pipeline). Il vincolo REALE del workspace
-      // è l'RPS di mistral-large: 1,25 req/sec (console 2026-07-04) — con
-      // chiamate brevi (~3s) il throughput sostenibile è ~4 concorrenti; 6 con
-      // il retry/Retry-After come ammortizzatore. Nota futura: spostare la
-      // classificazione su mistral-medium (50 req/sec) e alzare il cap.
+      // Fuori dal pool "mistral-pool" (le classificazioni sono leggere sul TPM e
+      // non devono rubare slot alle pipeline). Ora la classificazione gira su
+      // mistral-medium (~50 req/sec, vedi document-classifier), quindi 6
+      // concorrenti stanno ampiamente sotto l'RPS: i 429 che lasciavano doc non
+      // classificati (con large a 1,25 req/sec) non si presentano più.
       { limit: 6 },
       { limit: 4, key: 'event.data.userId' },
     ],
@@ -139,7 +138,7 @@ export const classifyBatchJob = inngest.createFunction(
               }
             }
 
-            const classification = await classifyDocument(ocrText, doc.file_name);
+            const classification = await classifyDocumentWithRetry(ocrText, doc.file_name);
 
             await supabase.from('documents').update({
               document_type: classification.documentType,

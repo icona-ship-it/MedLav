@@ -3,7 +3,7 @@ import type { Mock } from 'vitest';
 
 vi.mock('@/lib/mistral/client', () => ({
   streamMistralChat: vi.fn(),
-  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest' },
+  MISTRAL_MODELS: { MISTRAL_LARGE: 'mistral-large-latest', MISTRAL_MEDIUM: 'mistral-medium-latest' },
   DETERMINISTIC_SEED: 42,
   assertNotTruncated: vi.fn(),
 }));
@@ -16,7 +16,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { classifyDocument } from './document-classifier';
+import { classifyDocument, classifyDocumentWithRetry } from './document-classifier';
 import { streamMistralChat } from '@/lib/mistral/client';
 import { logger } from '@/lib/logger';
 
@@ -159,7 +159,7 @@ describe('document-classifier', () => {
       expect(result.documentType).toBe('altro');
     });
 
-    it('should use MISTRAL_LARGE model', async () => {
+    it('should use MISTRAL_MEDIUM model (RPS ~50 vs 1,25 di large → niente 429 sul batch)', async () => {
       // Arrange
       mockChat(JSON.stringify({ documentType: 'altro', confidence: 50, reasoning: 'generic' }));
 
@@ -168,7 +168,7 @@ describe('document-classifier', () => {
 
       // Assert
       const callArgs = mockStreamChat.mock.calls[0][0];
-      expect(callArgs.model).toBe('mistral-large-latest');
+      expect(callArgs.model).toBe('mistral-medium-latest');
     });
 
     it('should request json_schema response format with the documentType enum', async () => {
@@ -186,6 +186,47 @@ describe('document-classifier', () => {
       };
       expect(schema.properties.documentType.enum).toContain('altro');
       expect(schema.properties.documentType.enum).toContain('referto_specialistico');
+    });
+  });
+
+  describe('classifyDocumentWithRetry — riprova i fallimenti transitori', () => {
+    const goodText = 'Documento medico con testo sufficiente per la classificazione';
+
+    it('riprova quando la chiamata LANCIA e riesce a un tentativo successivo', async () => {
+      vi.useFakeTimers();
+      mockStreamChat
+        .mockRejectedValueOnce(new Error('429 Too Many Requests'))
+        .mockResolvedValueOnce({
+          content: JSON.stringify({ documentType: 'referto_specialistico', confidence: 80, reasoning: 'ok' }),
+          usage: emptyUsage,
+        });
+
+      const p = classifyDocumentWithRetry(goodText, 'file.pdf');
+      await vi.runAllTimersAsync();
+      const r = await p;
+
+      expect(r.documentType).toBe('referto_specialistico');
+      expect(mockStreamChat).toHaveBeenCalledTimes(2);
+      vi.useRealTimers();
+    });
+
+    it('lancia dopo aver esaurito i tentativi (1 + 2 retry)', async () => {
+      vi.useFakeTimers();
+      mockStreamChat.mockRejectedValue(new Error('circuit breaker OPEN'));
+
+      const p = classifyDocumentWithRetry(goodText, 'file.pdf');
+      p.catch(() => {}); // evita unhandled rejection durante l'avanzamento timer
+      await vi.runAllTimersAsync();
+
+      await expect(p).rejects.toThrow(/circuit breaker/i);
+      expect(mockStreamChat).toHaveBeenCalledTimes(3);
+      vi.useRealTimers();
+    });
+
+    it('NON riprova i casi non-eccezionali (OCR vuoto → altro, nessuna chiamata)', async () => {
+      const r = await classifyDocumentWithRetry('   \n  ', 'vuoto.pdf');
+      expect(r.documentType).toBe('altro');
+      expect(mockStreamChat).not.toHaveBeenCalled();
     });
   });
 });
