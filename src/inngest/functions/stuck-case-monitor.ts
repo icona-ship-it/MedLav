@@ -55,7 +55,14 @@ export const stuckCaseMonitor = inngest.createFunction(
         const meta = (row.perizia_metadata ?? {}) as Record<string, unknown>;
         const alertedAt = typeof meta.stuckAlertedAt === 'string' ? meta.stuckAlertedAt : null;
         // Già segnalato per QUESTO stallo (nessun avanzamento dall'alert)? Salta.
-        if (alertedAt && alertedAt >= row.updated_at) continue;
+        // Confronto NUMERICO: updated_at (Postgres, offset +00:00) e stuckAlertedAt
+        // (toISOString, 'Z') hanno formati ISO diversi → il confronto tra stringhe
+        // sarebbe inaffidabile. Parse a epoch.
+        if (alertedAt) {
+          const alertedMs = new Date(alertedAt).getTime();
+          const updatedMs = new Date(row.updated_at).getTime();
+          if (!Number.isNaN(alertedMs) && !Number.isNaN(updatedMs) && alertedMs >= updatedMs) continue;
+        }
 
         Sentry.captureMessage(
           `Caso possibilmente bloccato: ${row.code ?? row.id} fermo in '${row.processing_stage}' da oltre 30 min (ultimo aggiornamento ${row.updated_at})`,
