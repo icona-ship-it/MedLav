@@ -69,6 +69,30 @@ export function sanitizeLogMessage(message: string): string {
   return result;
 }
 
+/**
+ * Redige ricorsivamente i pattern PII anche nei VALORI di stringa dei metadata
+ * (prima solo `message` era sanitizzato: un metadata con CF/email/telefono in un
+ * campo — es. errorMessage — finiva in chiaro nei log Vercel). Immutabile: non
+ * muta l'input. Profondità limitata per evitare ricorsioni patologiche.
+ */
+function sanitizeMetadataValue(value: unknown, depth: number): unknown {
+  if (typeof value === 'string') return sanitizeLogMessage(value);
+  if (depth >= 6 || value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => sanitizeMetadataValue(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = sanitizeMetadataValue(v, depth + 1);
+  }
+  return out;
+}
+
+export function sanitizeMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!metadata) return metadata;
+  return sanitizeMetadataValue(metadata, 0) as Record<string, unknown>;
+}
+
 function formatDevMessage(tag: string, message: string, metadata?: Record<string, unknown>): string {
   const base = `[${tag}] ${message}`;
   if (metadata && Object.keys(metadata).length > 0) {
@@ -112,11 +136,12 @@ function createLogger(requestId?: string): Logger {
     if (!shouldLog(level)) return;
 
     const sanitized = sanitizeLogMessage(message);
+    const safeMetadata = sanitizeMetadata(metadata);
     const method = CONSOLE_METHOD[level];
     if (isProduction()) {
-      console[method](formatJsonEntry(level, tag, sanitized, requestId, metadata));
+      console[method](formatJsonEntry(level, tag, sanitized, requestId, safeMetadata));
     } else {
-      console[method](formatDevMessage(tag, sanitized, metadata));
+      console[method](formatDevMessage(tag, sanitized, safeMetadata));
     }
   }
 

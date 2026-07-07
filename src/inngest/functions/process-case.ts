@@ -1313,6 +1313,13 @@ export const processCase = inngest.createFunction(
         failedCount: failedSections.size,
         totalCount: sectionPlan.length,
       });
+      // Osservabilità: sezioni fallite = degrado silenzioso (il caso "completa"
+      // ma con fallback). Segnala a Sentry con soli ID sezione/caso (nessun
+      // contenuto clinico) così l'admin lo vede senza aprire il caso.
+      Sentry.captureMessage(
+        `Report case ${caseId}: ${failedSections.size}/${sectionPlan.length} sezioni fallite (${Array.from(failedSections.values()).map((f) => f.id).join(', ')})`,
+        'warning',
+      );
     }
 
     // NB: il check di copertura della doc-sanitaria selettiva (banner T1) vive

@@ -42,7 +42,8 @@ export async function deleteCaseAndRelatedData(
       .filter(Boolean);
 
     if (storagePaths.length > 0) {
-      await supabase.storage.from('documents').remove(storagePaths);
+      const { error: rmErr } = await supabase.storage.from('documents').remove(storagePaths);
+      if (rmErr) logger.warn('data-retention', `Rimozione documenti Storage fallita (${storagePaths.length} file, possibili orfani): ${rmErr.message}`);
     }
 
     // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
@@ -57,7 +58,8 @@ export async function deleteCaseAndRelatedData(
     }
     if (ocrImagePaths.length > 0) {
       for (let i = 0; i < ocrImagePaths.length; i += 1000) {
-        await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
+        const { error: ocrRmErr } = await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
+        if (ocrRmErr) logger.warn('data-retention', `Rimozione ocr-images fallita (batch da ${i}, possibili orfani Art.9): ${ocrRmErr.message}`);
       }
     }
 

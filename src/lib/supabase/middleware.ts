@@ -25,6 +25,11 @@ function buildCspHeader(): string {
     `font-src 'self' data:`,
     `connect-src 'self' https://*.supabase.co https://*.mistral.ai https://*.inngest.com https://*.sentry.io`,
     `frame-ancestors 'self'`,
+    // Hardening: nessun base-tag iniettabile (evita hijack degli URL relativi),
+    // nessun plugin/embed, e i form possono postare solo verso la stessa origine.
+    `base-uri 'none'`,
+    `object-src 'none'`,
+    `form-action 'self'`,
   ];
 
   return directives.join('; ') + ';';

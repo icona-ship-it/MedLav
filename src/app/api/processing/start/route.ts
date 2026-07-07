@@ -37,6 +37,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Kill-switch operativo: PROCESSING_PAUSED=true (env, flip senza redeploy)
+    // ferma l'avvio di nuove elaborazioni — leva per un incidente Mistral/DB o
+    // manutenzione, senza toccare i run già in corso.
+    if (process.env.PROCESSING_PAUSED === 'true') {
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione temporaneamente sospesa per manutenzione. Riprova tra poco.' },
+        { status: 503 },
+      );
+    }
+
     // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile e
     // penalizza utenti legittimi dietro lo stesso NAT/studio).
     const rateCheck = await checkRateLimit({ key: `processing:${user.id}`, ...RATE_LIMITS.PROCESSING });

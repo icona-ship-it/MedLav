@@ -1,4 +1,5 @@
 import { Mistral, HTTPClient } from '@mistralai/mistralai';
+import * as Sentry from '@sentry/nextjs';
 import { logger } from '@/lib/logger';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
@@ -135,9 +136,16 @@ class CircuitBreaker {
   recordFailure(): void {
     this.failures++;
     this.lastFailure = Date.now();
-    if (this.failures >= this.threshold) {
+    // Solo alla TRANSIZIONE verso 'open' (non a ogni fallimento successivo):
+    // segnala a Sentry che Mistral è giù → l'admin lo scopre subito, non da un
+    // caso bloccato. Nessun dato clinico, solo il conteggio.
+    if (this.failures >= this.threshold && this.state !== 'open') {
       this.state = 'open';
       logger.error('circuit-breaker', ` Circuit OPEN after ${this.failures} consecutive failures`);
+      Sentry.captureMessage(
+        `Mistral circuit breaker OPEN dopo ${this.failures} fallimenti consecutivi — API probabilmente giù`,
+        'error',
+      );
     }
   }
 }

@@ -45,7 +45,9 @@ const nextConfig: NextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
           },
-          // CSP is set per-request in middleware with a unique nonce (see src/lib/supabase/middleware.ts)
+          // CSP is set in middleware (see src/lib/supabase/middleware.ts).
+          // NB: usa 'unsafe-inline' per script/style (App Router + Tailwind/shadcn
+          // iniettano inline senza supporto nonce), non un nonce per-request.
         ],
       },
     ];

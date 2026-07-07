@@ -109,4 +109,46 @@ describe('logger', () => {
     expect(debugSpy).not.toHaveBeenCalled();
     expect(infoSpy).toHaveBeenCalledOnce();
   });
+
+  it('should redact PII in metadata VALUES (not just the message)', async () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { logger } = await import('./logger');
+
+    logger.info('tag', 'ok', { errorMessage: 'contatto mario.rossi@example.com al 3331234567' });
+
+    const logged = String(spy.mock.calls[0]?.[0] ?? '');
+    expect(logged).toContain('[EMAIL_REDACTED]');
+    expect(logged).toContain('[PHONE_REDACTED]');
+    expect(logged).not.toContain('mario.rossi@example.com');
+    expect(logged).not.toContain('3331234567');
+  });
+});
+
+describe('sanitizeMetadata', () => {
+  it('returns null/undefined unchanged', async () => {
+    const { sanitizeMetadata } = await import('./logger');
+    expect(sanitizeMetadata(undefined)).toBeUndefined();
+  });
+
+  it('redacts strings nested in objects and arrays, leaves non-strings intact', async () => {
+    const { sanitizeMetadata } = await import('./logger');
+    const out = sanitizeMetadata({
+      count: 3,
+      ok: true,
+      nested: { email: 'a.b@x.it', tags: ['3331234567', 'plain'] },
+    });
+    expect(out?.count).toBe(3);
+    expect(out?.ok).toBe(true);
+    const nested = out?.nested as { email: string; tags: string[] };
+    expect(nested.email).toBe('[EMAIL_REDACTED]');
+    expect(nested.tags[0]).toBe('[PHONE_REDACTED]');
+    expect(nested.tags[1]).toBe('plain');
+  });
+
+  it('does not mutate the input object', async () => {
+    const { sanitizeMetadata } = await import('./logger');
+    const input = { email: 'a.b@x.it' };
+    sanitizeMetadata(input);
+    expect(input.email).toBe('a.b@x.it');
+  });
 });
