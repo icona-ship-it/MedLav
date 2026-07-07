@@ -55,6 +55,31 @@ pg_dump "${SUPABASE_DB_URL}" \
 DUMP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 echo "✅ Dump complete: ${DUMP_SIZE}"
 
+# ── Integrity smoke test — il dump deve essere LEGGIBILE e non troncato PRIMA di
+#    cifrarlo/caricarlo. Un backup corrotto scoperto al disastro è peggio di
+#    nessun backup. (fail-loud)
+DUMP_BYTES=$(wc -c < "${BACKUP_FILE}")
+MIN_BYTES="${BACKUP_MIN_BYTES:-10240}"   # 10KB: un dump reale è molto più grande
+if [[ "${DUMP_BYTES}" -lt "${MIN_BYTES}" ]]; then
+  echo "ERROR: dump troppo piccolo (${DUMP_BYTES} byte < ${MIN_BYTES}) — probabile troncamento"; exit 1
+fi
+if ! pg_restore --list "${BACKUP_FILE}" >/dev/null 2>&1; then
+  echo "ERROR: pg_restore --list fallito — dump non leggibile (corrotto/troncato)"; exit 1
+fi
+TABLE_COUNT=$(pg_restore --list "${BACKUP_FILE}" 2>/dev/null | grep -c "TABLE DATA" || true)
+echo "🔎 Smoke test OK: dump leggibile, ${TABLE_COUNT} tabelle con dati"
+
+# ── Companion dump di auth.users (id,email,created_at) ────────────────────────
+# pg_dump del solo schema public NON include auth.users, ma cases.user_id vi fa
+# riferimento (ownership RLS). Senza questa mappatura, dopo un restore in un
+# progetto nuovo i casi restano orfani. La salviamo a parte (cifrata come il DB).
+command -v psql >/dev/null 2>&1 || { echo "ERROR: psql non installato (serve per il dump auth.users)"; exit 1; }
+AUTH_FILE="/tmp/legmed_auth_users_${TIMESTAMP}.csv"
+psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -c \
+  "\copy (select id, email, created_at from auth.users order by created_at) to '${AUTH_FILE}' csv header"
+AUTH_ROWS=$(( $(wc -l < "${AUTH_FILE}") - 1 ))
+echo "👥 auth.users esportati: ${AUTH_ROWS} righe"
+
 # ── Optional: encrypt dump (gpg symmetric AES256 — GDPR Art. 9 data) ─────────
 REMOTE_SUFFIX=""
 if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
@@ -84,6 +109,23 @@ aws s3 cp "${BACKUP_FILE}" "s3://${R2_BUCKET}/${REMOTE_PATH}" \
   --no-progress
 
 echo "✅ Upload complete"
+
+# ── auth.users companion: cifra (se passphrase presente) e carica accanto al DB
+AUTH_SUFFIX=""
+if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
+  gpg --batch --yes --symmetric --cipher-algo AES256 --pinentry-mode loopback \
+    --passphrase "${BACKUP_PASSPHRASE}" --output "${AUTH_FILE}.gpg" "${AUTH_FILE}"
+  rm -f "${AUTH_FILE}"
+  AUTH_FILE="${AUTH_FILE}.gpg"
+  AUTH_SUFFIX=".gpg"
+fi
+AUTH_REMOTE="db/auth-users/${TIMESTAMP}.csv${AUTH_SUFFIX}"
+echo "☁️  Uploading auth.users: s3://${R2_BUCKET}/${AUTH_REMOTE}"
+aws s3 cp "${AUTH_FILE}" "s3://${R2_BUCKET}/${AUTH_REMOTE}" \
+  --endpoint-url="${R2_ENDPOINT}" \
+  --no-progress
+rm -f "${AUTH_FILE}"
+echo "✅ auth.users upload complete"
 
 # ── Cleanup local file ────────────────────────────────────────────────────────
 rm -f "${BACKUP_FILE}"

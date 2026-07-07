@@ -109,6 +109,21 @@ jobs:
 
       - name: Notify on failure
         if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BACKUP_ALERT_EMAIL: ${{ secrets.BACKUP_ALERT_EMAIL }}
+          BACKUP_ALERT_FROM: ${{ secrets.BACKUP_ALERT_FROM }}
         run: |
           echo "::error::Backup settimanale FALLITO. Controllare i log del job e lo stato dei secrets."
-          # TODO: integrare Slack/email webhook quando configurato (vedi docs/SENTRY-ALERTS.md)
+          if [[ -n "${RESEND_API_KEY}" && -n "${BACKUP_ALERT_EMAIL}" ]]; then
+            FROM="${BACKUP_ALERT_FROM:-onboarding@resend.dev}"
+            RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl -s -X POST https://api.resend.com/emails \
+              -H "Authorization: Bearer ${RESEND_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{\"from\":\"${FROM}\",\"to\":[\"${BACKUP_ALERT_EMAIL}\"],\"subject\":\"⚠️ LegMed: backup off-site FALLITO\",\"text\":\"Il backup settimanale è fallito (run ${GITHUB_RUN_ID}). Log: ${RUN_URL}\"}" \
+              && echo "Notifica email inviata a ${BACKUP_ALERT_EMAIL}" \
+              || echo "::warning::Invio email di notifica fallito"
+          else
+            echo "::warning::RESEND_API_KEY/BACKUP_ALERT_EMAIL non configurati — nessuna email di allerta inviata."
+          fi

@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
   created_at bigint
 );
 
+-- ── GUARD anti "tabella fantasma" (Fase 3 del piano di uscita) ───────────────
+-- Questo script registra 0025 come APPLICATA. Se la tabella che 0025 crea
+-- (public.perizie_benchmark) non esiste, significa che 0025 NON è stata ancora
+-- applicata: proseguire la marcherebbe come fatta e `pnpm db:migrate` la
+-- salterebbe per sempre. ABORT esplicito → applica PRIMA 0025 (+0030) come da
+-- drizzle/MANUAL_MIGRATIONS.md, poi rilancia.
+DO $$
+BEGIN
+  IF to_regclass('public.perizie_benchmark') IS NULL THEN
+    RAISE EXCEPTION 'ABORT resync: public.perizie_benchmark assente → applica PRIMA 0025_perizie_benchmark.sql (e 0030) come da MANUAL_MIGRATIONS.md, poi rilancia questo script.';
+  END IF;
+END $$;
+
 -- 0000_goofy_polaris (when = 1771976916762 ≈ 2026-02-24 23:48 UTC)
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
 SELECT 'd096501a422083d1b02a79e31939751ebf0cdc0f194f07cf1de5c0fc80874509', 1771976916762
