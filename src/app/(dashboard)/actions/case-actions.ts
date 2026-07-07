@@ -8,6 +8,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
 import { getSelectableSections } from '@/services/synthesis/section-catalog';
+import { deleteCaseAndRelatedData } from '@/services/retention/delete-case-data';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
 import { isEmptyOrValidItalianDate } from '@/lib/validators/date-format';
 import { z } from 'zod';
@@ -460,37 +461,29 @@ export async function deleteCase(caseId: string) {
     metadata: { caseCode: caseData.code },
   });
 
-  // Remove all files from Storage for this case (documents + images)
+  // Cancellazione COMPLETA e GDPR-safe (Art. 9): stessa funzione del job di
+  // retention → rimuove documenti, ocr-images/{docId}, doc-summaries/{docId},
+  // section-parts e TUTTE le righe correlate. Prima deleteCase aveva una sua
+  // pulizia parziale che lasciava ocr-images (immagini radiologiche) e
+  // doc-summaries (sintesi cliniche derivate) orfani nel bucket per sempre —
+  // erasure incompleta sul percorso più usato (pulsante Elimina).
+  // L'ownership è già verificata sopra.
   const admin = createAdminClient();
+  await deleteCaseAndRelatedData(admin, caseId);
+
+  // Belt-and-suspenders: sweep del prefisso di caso {user}/{caseId} (inclusa la
+  // sottocartella legacy /images) per coprire file il cui storage_path non
+  // combaci o residui di vecchie convenzioni di upload.
   const storagePath = `${user.id}/${caseId}`;
-  const { data: fileList } = await admin.storage.from('documents').list(storagePath, { limit: 1000 });
-
-  if (fileList && fileList.length > 0) {
-    const filePaths = fileList.map((f) => `${storagePath}/${f.name}`);
-    await admin.storage.from('documents').remove(filePaths);
+  for (const prefix of [storagePath, `${storagePath}/images`]) {
+    const { data: fileList } = await admin.storage.from('documents').list(prefix, { limit: 1000 });
+    if (fileList && fileList.length > 0) {
+      const { error: removeError } = await admin.storage
+        .from('documents')
+        .remove(fileList.map((f) => `${prefix}/${f.name}`));
+      if (removeError) logger.warn('case-delete', `Sweep prefisso fallito (${prefix}): ${removeError.message}`);
+    }
   }
-
-  // Also remove images subdirectory
-  const { data: imageList } = await admin.storage.from('documents').list(`${storagePath}/images`, { limit: 1000 });
-  if (imageList && imageList.length > 0) {
-    const imagePaths = imageList.map((f) => `${storagePath}/images/${f.name}`);
-    await admin.storage.from('documents').remove(imagePaths);
-  }
-
-  // GDPR Art. 9 (review 2026-07-04): rimuovi anche le parti di sezione
-  // transitorie (bucket section-parts) — la cancellazione del caso deve
-  // coprirle SEMPRE, anche per run falliti/cancellati che non hanno pulito.
-  const { deleteCaseSectionParts } = await import('@/inngest/steps/section-part-store');
-  await deleteCaseSectionParts(caseId);
-
-  // Delete case from DB (cascade handles everything)
-  const { error } = await supabase
-    .from('cases')
-    .delete()
-    .eq('id', caseId)
-    .eq('user_id', user.id);
-
-  if (error) return { error: 'Errore eliminazione caso' };
 
   revalidateCases(user.id);
   return { success: true };
