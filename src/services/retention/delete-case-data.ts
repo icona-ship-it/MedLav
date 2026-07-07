@@ -46,26 +46,12 @@ export async function deleteCaseAndRelatedData(
       if (rmErr) logger.warn('data-retention', `Rimozione documenti Storage fallita (${storagePaths.length} file, possibili orfani): ${rmErr.message}`);
     }
 
-    // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
-    const ocrImagePaths: string[] = [];
-    for (const docId of docIds) {
-      const { data: listed } = await supabase.storage
-        .from('documents')
-        .list(`ocr-images/${docId}`);
-      if (listed && listed.length > 0) {
-        ocrImagePaths.push(...listed.map((f) => `ocr-images/${docId}/${f.name}`));
-      }
-    }
-    if (ocrImagePaths.length > 0) {
-      for (let i = 0; i < ocrImagePaths.length; i += 1000) {
-        const { error: ocrRmErr } = await supabase.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
-        if (ocrRmErr) logger.warn('data-retention', `Rimozione ocr-images fallita (batch da ${i}, possibili orfani Art.9): ${ocrRmErr.message}`);
-      }
-    }
-
-    // Remove cached document summaries (GDPR Art. 9 — derived clinical data)
+    // Remove OCR-extracted images + cached summaries from Storage (GDPR Art. 9 —
+    // immagini diagnostiche e dati clinici derivati). removeStoragePrefix PAGINA
+    // la list() → nessun orfano oltre i primi 100 file su documenti grandi.
     const { removeStoragePrefix } = await import('@/lib/supabase/storage');
     for (const docId of docIds) {
+      await removeStoragePrefix(`ocr-images/${docId}`);
       await removeStoragePrefix(`doc-summaries/${docId}`);
     }
   }

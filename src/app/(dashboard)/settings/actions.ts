@@ -444,26 +444,12 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
         await admin.storage.from('documents').remove(docStoragePaths);
       }
 
-      // Remove OCR-extracted images from Storage (GDPR Art. 9 — diagnostic images)
-      const ocrImagePaths: string[] = [];
-      for (const docId of docIds) {
-        const { data: listed } = await admin.storage
-          .from('documents')
-          .list(`ocr-images/${docId}`);
-        if (listed && listed.length > 0) {
-          ocrImagePaths.push(...listed.map((f) => `ocr-images/${docId}/${f.name}`));
-        }
-      }
-      if (ocrImagePaths.length > 0) {
-        // Supabase remove() supports up to 1000 paths per call
-        for (let i = 0; i < ocrImagePaths.length; i += 1000) {
-          await admin.storage.from('documents').remove(ocrImagePaths.slice(i, i + 1000));
-        }
-      }
-
-      // Remove cached document summaries (GDPR Art. 9 — derived clinical data)
+      // Remove OCR images + cached summaries (GDPR Art. 9 — immagini diagnostiche
+      // e dati clinici derivati). removeStoragePrefix PAGINA la list() → nessun
+      // orfano oltre i primi 100 file su documenti grandi.
       const { removeStoragePrefix } = await import('@/lib/supabase/storage');
       for (const docId of docIds) {
+        await removeStoragePrefix(`ocr-images/${docId}`);
         await removeStoragePrefix(`doc-summaries/${docId}`);
       }
     }

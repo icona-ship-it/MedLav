@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { createAdminClient } from './admin';
+import { logger } from '@/lib/logger';
 
 const BUCKET_NAME = 'documents';
 const SIGNED_URL_EXPIRY_SECONDS = 3600; // 1 hour
@@ -48,17 +49,32 @@ export async function downloadFile(storagePath: string): Promise<Blob> {
 }
 
 /**
- * Remove every file under a Storage prefix (e.g. `doc-summaries/{docId}`).
- * Used by the GDPR deletion cascades — best-effort per batch of 1000
- * (Supabase remove() limit per call).
+ * Remove every file under a Storage prefix (e.g. `doc-summaries/{docId}` o
+ * `ocr-images/{docId}`). Usata dalle cascate di cancellazione GDPR.
+ *
+ * PAGINA la list(): `.list()` di default ritorna solo 100 elementi — un
+ * documento grande (200 pagine con figure) può avere >100 immagini OCR, che
+ * altrimenti resterebbero orfane nel bucket (erasure Art.9 incompleta). Qui
+ * scorriamo per pagine da 1000 finché non arriva una pagina più corta.
  */
 export async function removeStoragePrefix(prefix: string): Promise<void> {
   const supabase = createAdminClient();
-  const { data: listed } = await supabase.storage.from(BUCKET_NAME).list(prefix);
-  if (!listed || listed.length === 0) return;
-  const paths = listed.map((f) => `${prefix}/${f.name}`);
-  for (let i = 0; i < paths.length; i += 1000) {
-    await supabase.storage.from(BUCKET_NAME).remove(paths.slice(i, i + 1000));
+  const PAGE = 1000;
+  let offset = 0;
+  for (;;) {
+    const { data: listed, error: listErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list(prefix, { limit: PAGE, offset });
+    if (listErr) {
+      logger.warn('storage', `list prefisso fallita (${prefix}, offset ${offset}): ${listErr.message}`);
+      return;
+    }
+    if (!listed || listed.length === 0) return;
+    const paths = listed.map((f) => `${prefix}/${f.name}`);
+    const { error: rmErr } = await supabase.storage.from(BUCKET_NAME).remove(paths);
+    if (rmErr) logger.warn('storage', `remove prefisso fallita (${prefix}, ${paths.length} file, possibili orfani): ${rmErr.message}`);
+    if (listed.length < PAGE) return;
+    offset += PAGE;
   }
 }
 
