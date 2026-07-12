@@ -150,8 +150,13 @@ async function writeCachedSummary(
   try {
     // usage stripped: a cache HIT pays zero tokens — it must not re-report cost
     const cacheable = { ...summary, usage: undefined };
+    // contentType 'text/plain' (non 'application/json'): il bucket documents NON
+    // ammette application/json (allowed_mime_types, migration 0031) e lo scarto
+    // silenzioso rompeva la cache → i riassunti si ricalcolavano a ogni run (costo
+    // Mistral + latenza). Il corpo resta una stringa JSON e la lettura fa comunque
+    // JSON.parse(text()), quindi il content-type non conta per il round-trip.
     const { error } = await bucket.upload(cachePath, JSON.stringify(cacheable), {
-      contentType: 'application/json',
+      contentType: 'text/plain',
       upsert: true,
     });
     if (error) {
