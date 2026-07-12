@@ -40,7 +40,8 @@ function ToolbarButton({ active, onClick, children, title }: ToolbarButtonProps)
       onClick={onClick}
       title={title}
       className={cn(
-        'p-1.5 rounded hover:bg-muted transition-colors',
+        // p-2 su touch (~36px, era ~28px), p-1.5 da sm in su.
+        'p-2 sm:p-1.5 rounded hover:bg-muted transition-colors',
         active && 'bg-muted text-foreground',
       )}
     >
@@ -151,7 +152,7 @@ export function RichTextEditor({ content, onChange, caseId, className, allowedHe
           <ToolbarButton
             active={editor.isActive('heading', { level: 2 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            title="Intestazione 2"
+            title="Titolo"
           >
             <Heading2 className="h-4 w-4" />
           </ToolbarButton>
@@ -160,7 +161,7 @@ export function RichTextEditor({ content, onChange, caseId, className, allowedHe
           <ToolbarButton
             active={editor.isActive('heading', { level: 3 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            title="Intestazione 3"
+            title="Sottotitolo"
           >
             <Heading3 className="h-4 w-4" />
           </ToolbarButton>

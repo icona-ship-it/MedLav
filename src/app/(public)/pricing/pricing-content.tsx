@@ -36,7 +36,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
       description: 'Prova LegMed senza impegno',
       features: [
         '30 crediti inclusi (~1 caso medio)',
-        'Pipeline OCR completa',
+        'Lettura automatica dei documenti (anche scansioni e manoscritti)',
         'Report medico-legale strutturato',
         'Export DOCX, CSV, HTML',
         'Rilevamento anomalie',
@@ -56,7 +56,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
         'Tutto del Trial, più:',
         'Categorizzazione AI documenti',
         'Rigenerazione sezioni report',
-        'RAG linee guida cliniche',
+        'Confronto automatico con le linee guida cliniche pertinenti',
         'Calcoli medico-legali (ITT/ITP)',
         'Anonimizzazione report',
         'Notifiche email',

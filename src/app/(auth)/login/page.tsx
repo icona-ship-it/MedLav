@@ -66,7 +66,7 @@ function MfaChallengeForm() {
           onClick={() => signOut()}
           className="text-sm text-muted-foreground hover:text-primary hover:underline"
         >
-          Annulla e torna al login
+          Annulla l&apos;accesso
         </button>
       </div>
     </>
@@ -113,6 +113,7 @@ function CredentialsForm({ onMfaRequired }: { onMfaRequired: () => void }) {
             placeholder="medico@studio.it"
             required
             autoComplete="email"
+            autoFocus
           />
         </div>
         <div className="space-y-2">
@@ -169,11 +170,11 @@ function LoginPageInner() {
               <Scale className="h-6 w-6 text-primary" />
             )}
           </div>
-          <CardTitle className="text-2xl">LegMed</CardTitle>
+          <CardTitle className="text-2xl">{isMfaStep ? 'Verifica in due passaggi' : 'Accedi'}</CardTitle>
           <CardDescription>
             {isMfaStep
-              ? 'Verifica in due passaggi'
-              : 'Accedi alla piattaforma di cronistoria medico-legale'}
+              ? 'Inserisci il codice del tuo autenticatore'
+              : 'Entra nel tuo studio LegMed'}
           </CardDescription>
         </CardHeader>
         <CardContent>

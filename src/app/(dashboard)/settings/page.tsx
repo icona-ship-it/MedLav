@@ -838,10 +838,10 @@ export default function SettingsPage() {
                       <label htmlFor="delete-password" className="text-sm text-muted-foreground">
                         Inserisci la tua password per confermare:
                       </label>
-                      <input
+                      <Input
                         id="delete-password"
                         type="password"
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                        autoComplete="current-password"
                         value={deletePassword}
                         onChange={(e) => { setDeletePassword(e.target.value); setDeletePasswordError(''); }}
                         placeholder="La tua password"

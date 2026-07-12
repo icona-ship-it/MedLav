@@ -371,7 +371,7 @@ export function PeriziaMetadataForm({
                 Dati per l&apos;intestazione della perizia
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                <strong>Tutti i campi sono facoltativi</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati vengono inseriti nell&apos;intestazione formale della perizia esportata e nel prompt di generazione. Puoi tornare a compilarli in qualsiasi momento.
+                <strong>Tutti i campi sono facoltativi</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati vengono usati per compilare l&apos;intestazione formale della perizia esportata e per orientare la stesura automatica del testo. Puoi tornare a compilarli in qualsiasi momento.
               </p>
             </div>
           </div>
@@ -400,7 +400,7 @@ export function PeriziaMetadataForm({
                     {section.title}
                   </span>
                   {isFilled && (
-                    <span className="text-xs text-green-600 dark:text-green-400">Compilato</span>
+                    <span className="text-xs text-green-600 dark:text-green-400">Iniziata</span>
                   )}
                 </div>
                 {isOpen ? (
@@ -526,12 +526,12 @@ export function PeriziaMetadataForm({
                     )}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <Label>CTU (nome)</Label>
+                        <Label>Perito (nome)</Label>
                         <Input value={form.ctuName} onChange={(e) => setForm({ ...form, ctuName: e.target.value })} placeholder="es. Dott. Mario Esempi" />
-                        <p className="text-sm text-muted-foreground mt-1">Nome completo del Consulente Tecnico d&apos;Ufficio</p>
+                        <p className="text-sm text-muted-foreground mt-1">Nome completo del medico legale che firma la perizia</p>
                       </div>
                       <div>
-                        <Label>Qualifica CTU</Label>
+                        <Label>Qualifica del perito</Label>
                         <Input value={form.ctuTitle} onChange={(e) => setForm({ ...form, ctuTitle: e.target.value })} placeholder="es. medico legale presso..." />
                         <p className="text-sm text-muted-foreground mt-1">Specializzazione e affiliazione professionale</p>
                       </div>
@@ -784,7 +784,7 @@ export function PeriziaMetadataForm({
         </Button>
         <p className="text-xs text-muted-foreground text-center mt-1">
           {isDirty
-            ? 'Modifiche non salvate — premi Prosegui per salvarle (bozza locale attiva)'
+            ? 'Modifiche non salvate — premi Prosegui per salvarle. Restano al sicuro anche se chiudi la pagina.'
             : 'Puoi tornare a compilare in qualsiasi momento'}
         </p>
       </div>

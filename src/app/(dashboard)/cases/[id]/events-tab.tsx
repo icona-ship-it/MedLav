@@ -300,7 +300,7 @@ export function EventsTab({
               <>
                 ,{' '}
                 <span className="text-warning font-medium">
-                  {verificationEvents.length} da valutare
+                  {verificationEvents.length} da verificare
                 </span>
               </>
             ) : ''})
@@ -413,13 +413,13 @@ export function EventsTab({
                         {dateCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'date' ? 'all' : 'date')}
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'date' ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-800 dark:hover:bg-yellow-900/50'}`}>
-                            Data incerta ({dateCount})
+                            Data mancante/incerta ({dateCount})
                           </button>
                         )}
                         {dataCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'data' ? 'all' : 'data')}
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'data' ? 'bg-orange-400 text-orange-900' : 'bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800 dark:hover:bg-orange-900/50'}`}>
-                            Dati incerti ({dataCount})
+                            Contenuto poco affidabile ({dataCount})
                           </button>
                         )}
                         {otherCount > 0 && (
@@ -557,6 +557,22 @@ export function EventsTab({
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nessun evento estratto. Avvia l&apos;elaborazione dei documenti.
             </p>
+          )}
+
+          {/* Lista vuota per via dei FILTRI (non perché non ci sono eventi):
+              spiega e offri l'azzeramento, invece di lasciare un vuoto muto. */}
+          {events.length > 0 && displayNormal.length + displayVerification.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">Nessun evento corrisponde ai filtri.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => { setEventViewTab('all'); setEventTypeFilter(null); setShowOnlyVerification(false); setVerificationSubFilter('all'); }}
+              >
+                Azzera filtri
+              </Button>
+            </div>
           )}
         </div>
         </>

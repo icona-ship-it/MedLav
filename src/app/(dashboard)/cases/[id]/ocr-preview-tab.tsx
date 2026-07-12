@@ -120,7 +120,7 @@ function DocumentOcrSection({
                 </div>
               </div>
               {page.ocr_text ? (
-                <pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs leading-relaxed bg-muted/30 rounded p-2 font-mono">
+                <pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs leading-relaxed bg-muted/30 rounded p-2 font-sans">
                   {page.ocr_text}
                 </pre>
               ) : (

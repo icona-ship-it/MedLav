@@ -54,7 +54,7 @@ export function EventsDocumentView({
                 {event.diagnosis && (
                   <p className="mt-0.5"><span className="font-semibold">Diagnosi:</span> {event.diagnosis}</p>
                 )}
-                {doctor && <p className="text-[12px] text-gray-500 dark:text-gray-400">{doctor.startsWith('Dr') ? doctor : `Dr. ${doctor}`}</p>}
+                {doctor && <p className="text-[12px] text-gray-500 dark:text-gray-400">{/^(dr|dott|prof)/i.test(doctor.trim()) ? doctor : `Dr. ${doctor}`}</p>}
               </div>
             );
           })}

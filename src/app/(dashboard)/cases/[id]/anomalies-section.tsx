@@ -842,7 +842,7 @@ export function MissingDocsSection({ missingDocs, caseId, onUploadComplete }: Mi
             <CardDescription>
               {standardItems > 0 && <span>{standardItems} documenti mancanti</span>}
               {standardItems > 0 && checklistItems.length > 0 && <span> · </span>}
-              {checklistItems.length > 0 && <span>{checklistItems.length} item checklist</span>}
+              {checklistItems.length > 0 && <span>{checklistItems.length} {checklistItems.length === 1 ? 'voce da verificare' : 'voci da verificare'}</span>}
             </CardDescription>
           );
         })()}

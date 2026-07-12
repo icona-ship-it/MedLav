@@ -241,7 +241,9 @@ export default function LandingPage() {
           <div className="grid gap-8 md:grid-cols-3">
             {stats.map((stat) => (
               <div key={stat.label} className="text-center">
-                <p className="text-5xl font-bold text-primary">{stat.value}</p>
+                {/* Scala ridotta (era text-5xl): alcuni valori sono frasi, non numeri,
+                    e in gigante risultavano sbilenchi/poco leggibili. */}
+                <p className="text-2xl font-bold text-primary sm:text-3xl">{stat.value}</p>
                 <p className="mt-2 text-base text-muted-foreground">{stat.label}</p>
               </div>
             ))}

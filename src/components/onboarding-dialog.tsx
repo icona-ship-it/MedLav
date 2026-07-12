@@ -107,17 +107,24 @@ export function OnboardingDialog() {
           ))}
         </div>
 
-        <div className="flex justify-between">
+        <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={handleClose}>
             Salta
           </Button>
-          <Button size="sm" onClick={handleNext}>
-            {isLast ? (
-              <>Inizia<ArrowRight className="ml-1 h-3 w-3" /></>
-            ) : (
-              <>Avanti<ArrowRight className="ml-1 h-3 w-3" /></>
+          <div className="flex items-center gap-2">
+            {step > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setStep((s) => Math.max(0, s - 1))}>
+                Indietro
+              </Button>
             )}
-          </Button>
+            <Button size="sm" onClick={handleNext}>
+              {isLast ? (
+                <>Inizia<ArrowRight className="ml-1 h-3 w-3" /></>
+              ) : (
+                <>Avanti<ArrowRight className="ml-1 h-3 w-3" /></>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

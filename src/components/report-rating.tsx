@@ -77,7 +77,7 @@ export function ReportRating({
             onMouseEnter={() => setHoveredStar(star)}
             onMouseLeave={() => setHoveredStar(0)}
             className="p-0.5 transition-transform hover:scale-110"
-            aria-label={`${star} stelle`}
+            aria-label={`${star} ${star === 1 ? 'stella' : 'stelle'}`}
           >
             <Star
               className={`h-5 w-5 ${

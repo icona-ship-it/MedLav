@@ -254,7 +254,10 @@ export function ReportActionBar({
                 disabled={isPending}
               >
                 {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">Approva</span>
+                {/* Azione primaria della schermata: la label 'Approva' resta SEMPRE
+                    visibile, anche su mobile (prima si riduceva a sola icona in una
+                    fila di icone simili, indistinguibile). */}
+                <span>Approva</span>
               </Button>
             )}
 

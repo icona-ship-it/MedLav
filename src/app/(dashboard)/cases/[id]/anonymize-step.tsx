@@ -215,7 +215,7 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
                 ) : (
                   <>
                     <ShieldCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    {allDocsReady ? 'Anonimizza tutti i documenti' : hasOcrDocs ? `Anonimizza ${ocrReadyDocs.length} documenti pronti` : 'Anonimizza'}
+                    {allDocsReady ? 'Anonimizza tutti i documenti' : hasOcrDocs ? `Anonimizza ${ocrReadyDocs.length} ${ocrReadyDocs.length === 1 ? 'documento pronto' : 'documenti pronti'}` : 'Anonimizza'}
                   </>
                 )}
               </Button>

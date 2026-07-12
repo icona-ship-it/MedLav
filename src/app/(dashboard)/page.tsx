@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             <Clock className="h-4 w-4" />
-            I tuoi ultimi elaborati
+            I tuoi casi recenti
           </h2>
           {recentCases.length > 0 && (
             <Button variant="ghost" size="sm" asChild>
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
           <Card className="rounded-xl">
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
-                Non hai ancora elaborati. Crea il primo caso per iniziare!
+                Non hai ancora casi. Crea il primo per iniziare!
               </p>
             </CardContent>
           </Card>

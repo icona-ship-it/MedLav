@@ -80,12 +80,15 @@ export function SharedCaseView({ caseData, events, anomalies, missingDocs, repor
 
         {/* Content tabs */}
         <Tabs defaultValue="report">
-          <TabsList>
-            <TabsTrigger value="report">Report</TabsTrigger>
-            <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
-            <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
-            <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
-          </TabsList>
+          {/* Scrollabile su mobile: 4 tab con contatori sforavano/troncavano su schermi stretti. */}
+          <div className="overflow-x-auto">
+            <TabsList className="w-max">
+              <TabsTrigger value="report">Report</TabsTrigger>
+              <TabsTrigger value="events">Eventi ({events.length})</TabsTrigger>
+              <TabsTrigger value="anomalies">Anomalie ({anomalies.length})</TabsTrigger>
+              <TabsTrigger value="missing">Doc. Mancanti ({missingDocs.length})</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="report">
             <Card>
@@ -130,7 +133,9 @@ export function SharedCaseView({ caseData, events, anomalies, missingDocs, repor
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  {/* Rosso se c'è almeno un'anomalia critica/alta, altrimenti giallo:
+                      prima era sempre giallo anche con anomalie gravi. */}
+                  <AlertTriangle className={`h-5 w-5 ${anomalies.some((a) => a.severity === 'critica' || a.severity === 'alta') ? 'text-destructive' : 'text-yellow-500'}`} />
                   Anomalie Rilevate
                 </CardTitle>
               </CardHeader>

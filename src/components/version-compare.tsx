@@ -7,6 +7,13 @@ import {
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { expandDeterministicBlocks, type DeterministicTableEvent, type DeterministicDoc } from '@/services/calculations/deterministic-tables';
 
+// Etichette leggibili al posto dei token enum grezzi con underscore.
+const STATUS_LABELS: Record<string, string> = {
+  bozza: 'Bozza',
+  in_revisione: 'In revisione',
+  definitivo: 'Definitivo',
+};
+
 interface ReportVersion {
   id: string;
   version: number;
@@ -49,13 +56,13 @@ export function VersionCompare({
           <SelectContent>
             {olderVersions.map((v) => (
               <SelectItem key={v.id} value={v.id}>
-                v{v.version} ({v.report_status})
+                v{v.version} ({STATUS_LABELS[v.report_status] ?? v.report_status})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <p className="mb-2 text-sm font-medium text-muted-foreground">
             v{selectedReport?.version ?? '?'} (precedente)

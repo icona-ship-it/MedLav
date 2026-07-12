@@ -141,6 +141,11 @@ export function QualityGateDialog({
           </label>
         </div>
 
+        {!allChecked && (
+          <p className="text-xs text-muted-foreground text-right">
+            Spunta tutte le caselle per abilitare l&apos;approvazione.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Annulla
