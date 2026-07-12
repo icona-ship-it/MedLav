@@ -90,8 +90,8 @@ export async function POST(request: NextRequest) {
             subscription_period_end: new Date(sub.current_period_end * 1000).toISOString(),
           }).eq('id', userId);
           if (updateError) {
-            logger.error('stripe', `Failed to update profile after checkout for user ${userId}: ${updateError.message}`);
-            return NextResponse.json({ success: false, error: 'Profile update failed' }, { status: 500 });
+            // throw (non return): così il catch fa il rollback dell'idempotenza e Stripe riprova.
+            throw new Error(`Profile update failed after checkout for ${userId}: ${updateError.message}`);
           }
 
           // Grant monthly credits for new Pro subscription
@@ -111,8 +111,7 @@ export async function POST(request: NextRequest) {
           subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
         }).eq('stripe_customer_id', customerId);
         if (updateError) {
-          logger.error('stripe', `Failed to update subscription for customer ${customerId}: ${updateError.message}`);
-          return NextResponse.json({ success: false, error: 'Subscription update failed' }, { status: 500 });
+          throw new Error(`Subscription update failed for customer ${customerId}: ${updateError.message}`);
         }
 
         // Refresh monthly credits on renewal
@@ -141,8 +140,7 @@ export async function POST(request: NextRequest) {
           subscription_period_end: null,
         }).eq('stripe_customer_id', customerId);
         if (updateError) {
-          logger.error('stripe', `Failed to cancel subscription for customer ${customerId}: ${updateError.message}`);
-          return NextResponse.json({ success: false, error: 'Subscription cancel failed' }, { status: 500 });
+          throw new Error(`Subscription cancel failed for customer ${customerId}: ${updateError.message}`);
         }
 
         // Revoke monthly credits (purchased credits remain)
@@ -166,8 +164,7 @@ export async function POST(request: NextRequest) {
           subscription_status: 'past_due',
         }).eq('stripe_customer_id', customerId);
         if (updateError) {
-          logger.error('stripe', `Failed to mark past_due for customer ${customerId}: ${updateError.message}`);
-          return NextResponse.json({ success: false, error: 'Payment status update failed' }, { status: 500 });
+          throw new Error(`Failed to mark past_due for customer ${customerId}: ${updateError.message}`);
         }
         logger.warn('stripe', `Payment failed for customer ${customerId}`);
         break;
@@ -175,7 +172,13 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown';
-    logger.error('stripe', `Webhook handler error: ${message}`);
+    logger.error('stripe', `Webhook handler error for ${event.id}: ${message}`);
+    // ROLLBACK IDEMPOTENZA: l'evento era stato marcato 'processato' PRIMA di
+    // eseguire l'handler; poiché l'handler NON è andato a buon fine, rimuoviamo il
+    // record così la ritrasmissione at-least-once di Stripe potrà rieseguirlo.
+    // Senza questo, un fallimento transitorio = provisioning perso in modo
+    // permanente per un utente pagante (la retry verrebbe dedupata e saltata).
+    await supabase.from('stripe_processed_events').delete().eq('event_id', event.id);
     return NextResponse.json({ success: false, error: 'Webhook handler failed' }, { status: 500 });
   }
 

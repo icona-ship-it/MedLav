@@ -461,6 +461,12 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
         await removeStoragePrefix(`doc-summaries/${docId}`);
       }
     }
+
+    // GDPR Art. 17: sweep RICORSIVO di tutto lo spazio dell'utente `{user.id}/…`
+    // per rimuovere eventuali ORFANI (file caricati senza riga `documents`, es.
+    // insert fallito dopo l'upload) che la rimozione per storage_path non tocca.
+    const { removeStoragePrefixRecursive } = await import('@/lib/supabase/storage');
+    await removeStoragePrefixRecursive(user.id);
     // GDPR Art. 9 (review 2026-07-04): parti di sezione transitorie del bucket
     // section-parts — vanno rimosse anche alla cancellazione dell'account.
     const { deleteCaseSectionParts } = await import('@/inngest/steps/section-part-store');

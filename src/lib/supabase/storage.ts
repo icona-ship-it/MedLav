@@ -79,6 +79,43 @@ export async function removeStoragePrefix(prefix: string): Promise<void> {
 }
 
 /**
+ * Rimuove RICORSIVAMENTE ogni file sotto un prefisso a più livelli (es.
+ * `{userId}` → `{userId}/{caseId}/{uuid}.ext`). removeStoragePrefix() rimuove solo
+ * i figli diretti; per la cancellazione GDPR Art. 17 servono anche gli ORFANI più
+ * in profondità (file caricati senza riga `documents`, es. insert fallito dopo
+ * l'upload) che altrimenti resterebbero per sempre nel bucket.
+ */
+export async function removeStoragePrefixRecursive(prefix: string): Promise<void> {
+  const supabase = createAdminClient();
+  const PAGE = 1000;
+  let offset = 0;
+  for (;;) {
+    const { data: entries, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list(prefix, { limit: PAGE, offset });
+    if (error) {
+      logger.warn('storage', `list ricorsiva fallita (${prefix}): ${error.message}`);
+      return;
+    }
+    if (!entries || entries.length === 0) return;
+    const files: string[] = [];
+    for (const entry of entries) {
+      if (!entry.name) continue;
+      const path = `${prefix}/${entry.name}`;
+      // Una "cartella" non ha id/metadata; un file ha id valorizzato.
+      if (entry.id == null) await removeStoragePrefixRecursive(path);
+      else files.push(path);
+    }
+    for (let i = 0; i < files.length; i += 100) {
+      const { error: rmErr } = await supabase.storage.from(BUCKET_NAME).remove(files.slice(i, i + 100));
+      if (rmErr) logger.warn('storage', `remove ricorsiva fallita (${prefix}): ${rmErr.message}`);
+    }
+    if (entries.length < PAGE) return;
+    offset += PAGE;
+  }
+}
+
+/**
  * Upload a base64-encoded image to Supabase Storage.
  * Compresses to JPEG (quality 80) and resizes to max 1600px width to save storage and egress.
  * Backwards-compatible: storage path extension is controlled by the caller.

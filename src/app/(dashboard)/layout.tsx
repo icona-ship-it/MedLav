@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { MobileSidebar } from '@/components/mobile-sidebar';
 import { createClient } from '@/lib/supabase/server';
@@ -13,7 +14,10 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = isAdminUser(user?.email);
+  // Difesa in profondità: NON affidare l'auth al solo middleware (che un bypass
+  // del middleware — vedi advisory Next — aggirerebbe). Coerente con AdminLayout.
+  if (!user) redirect('/landing');
+  const isAdmin = isAdminUser(user.email);
 
   // Check if user has any cases — onboarding only for brand new users
   let caseCount = 0;

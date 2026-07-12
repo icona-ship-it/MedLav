@@ -50,19 +50,23 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
   }
 
-  // Verify the image belongs to a document in this case
+  // Verify the image belongs to a document in this case.
+  // FAIL-CLOSED sul docId mancante: un path tipo `ocr-images//p1.png` passa il
+  // controllo startsWith ma ha docId vuoto — prima saltava del tutto il check di
+  // appartenenza al documento (bypass dell'autorizzazione per-documento).
   const docId = imagePath.split('/')[1]; // ocr-images/{docId}/p{N}-f{M}.png
-  if (docId) {
-    const { data: docData } = await supabase
-      .from('documents')
-      .select('id')
-      .eq('id', docId)
-      .eq('case_id', caseId)
-      .maybeSingle();
+  if (!docId) {
+    return NextResponse.json({ success: false, error: 'Percorso immagine non valido' }, { status: 400 });
+  }
+  const { data: docData } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('id', docId)
+    .eq('case_id', caseId)
+    .maybeSingle();
 
-    if (!docData) {
-      return NextResponse.json({ success: false, error: 'Immagine non trovata' }, { status: 404 });
-    }
+  if (!docData) {
+    return NextResponse.json({ success: false, error: 'Immagine non trovata' }, { status: 404 });
   }
 
   try {

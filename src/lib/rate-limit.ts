@@ -5,6 +5,7 @@
 
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { logger } from '@/lib/logger';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,8 +129,13 @@ export async function checkRateLimit(params: RateLimitParams): Promise<RateLimit
   if (isRedisConfigured) {
     try {
       return await checkRateLimitRedis(params);
-    } catch {
-      // Redis error — fall back to in-memory instead of crashing
+    } catch (err) {
+      // Redis error — fall back to in-memory instead of crashing. LOGGATO (prima
+      // era silenzioso): su serverless il fallback è per-istanza e degrada la
+      // protezione anti-abuso, quindi il degrado dev'essere osservabile/allertabile.
+      logger.warn('rate-limit', `Redis non raggiungibile per '${params.key}' — fallback in-memory per-istanza (protezione degradata)`, {
+        error: err instanceof Error ? err.message : 'unknown',
+      });
       return checkRateLimitInMemory(params);
     }
   }
