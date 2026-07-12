@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -238,9 +239,12 @@ function CreditsSection() {
       const data = await res.json() as { success: boolean; data?: { url: string }; error?: string };
       if (data.success && data.data?.url) {
         window.location.href = data.data.url;
+        return;
       }
+      // Niente fallimento silenzioso su un'azione che tocca il denaro: dai un esito chiaro.
+      toast.error(data.error ?? 'Non è stato possibile avviare l\'acquisto. Riprova o contatta l\'assistenza.');
     } catch {
-      // silently fail
+      toast.error('Non è stato possibile avviare l\'acquisto. Controlla la connessione e riprova.');
     } finally {
       setPurchasing(null);
     }
@@ -779,17 +783,28 @@ export default function SettingsPage() {
               disabled={exporting}
               onClick={async () => {
                 setExporting(true);
-                const result = await exportMyData();
-                if (result.data) {
-                  const blob = new Blob([result.data], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `legmed-export-${new Date().toISOString().slice(0, 10)}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
+                // try/catch/finally: senza il finally un'eccezione lascerebbe il
+                // bottone bloccato per sempre su 'Esportazione...'; senza il ramo
+                // d'errore l'utente cliccava e non scaricava nulla senza sapere perché.
+                try {
+                  const result = await exportMyData();
+                  if (result.data) {
+                    const blob = new Blob([result.data], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `legmed-export-${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success('Esportazione completata.');
+                  } else {
+                    toast.error(result.error ?? 'Esportazione non riuscita. Riprova.');
+                  }
+                } catch {
+                  toast.error('Esportazione non riuscita. Riprova.');
+                } finally {
+                  setExporting(false);
                 }
-                setExporting(false);
               }}
             >
               <Download className="mr-1 h-4 w-4" />

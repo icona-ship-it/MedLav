@@ -32,6 +32,9 @@ export function ShareCaseDialog({ caseId, hasReport }: ShareCaseDialogProps) {
   const [shares, setShares] = useState<ShareInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  // Conferma a due click sulla revoca: il cestino è accanto a 'Copia' ed è
+  // irreversibile (invalida un link con dati sanitari già inviato a un legale).
+  const [confirmRevokeToken, setConfirmRevokeToken] = useState<string | null>(null);
 
   const loadShares = useCallback(async () => {
     setIsLoading(true);
@@ -175,15 +178,37 @@ export function ShareCaseDialog({ caseId, hasReport }: ShareCaseDialogProps) {
                         )}
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleRevoke(share.token)}
-                      title="Revoca link"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    {confirmRevokeToken === share.token ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">Revocare?</span>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => { setConfirmRevokeToken(null); handleRevoke(share.token); }}
+                        >
+                          Sì
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setConfirmRevokeToken(null)}
+                        >
+                          No
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => setConfirmRevokeToken(share.token)}
+                        title="Revoca link"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );

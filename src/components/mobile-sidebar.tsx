@@ -38,7 +38,7 @@ export function MobileSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         {/* New Case */}
         <div className="px-3 pt-4 pb-2">
           <Button asChild className="w-full" onClick={() => setOpen(false)}>
-            <Link href="/">
+            <Link href="/cases/new">
               <Plus className="mr-2 h-4 w-4" />
               Nuovo Caso
             </Link>

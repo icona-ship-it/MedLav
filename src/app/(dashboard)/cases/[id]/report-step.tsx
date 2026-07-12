@@ -128,6 +128,36 @@ export function ReportStep({
   // (stato sollevato qui da PipelineWarningsBanner, così la riga vive nel pannello).
   const [pipelineDetail, setPipelineDetail] = useState<PipelineWarningItem | null>(null);
 
+  // Download robusto della cronistoria (caso solo-eventi): fetch + toast, come in
+  // report-action-bar. Prima erano <a download>: un errore server (400/428) veniva
+  // scaricato come finto file invece di mostrare il messaggio.
+  const handleTimelineDownload = useCallback((url: string, fallbackName: string) => {
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          let msg = 'Esportazione non riuscita. Riprova tra poco.';
+          try { const b = await res.json(); if (b?.error) msg = b.error as string; } catch { /* corpo non-JSON */ }
+          toast.error(msg);
+          return;
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') ?? '';
+        const fileName = /filename="?([^"]+)"?/.exec(cd)?.[1] ?? fallbackName;
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        toast.error('Esportazione non riuscita. Controlla la connessione e riprova.');
+      }
+    })();
+  }, []);
+
   // Report interaction state
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
@@ -281,32 +311,26 @@ export function ReportStep({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <a href={`/api/cases/${caseId}/export/docx`} download>
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      <div>
-                        <div>Esporta DOCX</div>
-                        <p className="text-xs text-muted-foreground font-normal">Documento Word — per stampare o inviare</p>
-                      </div>
-                    </a>
+                  <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/docx`, 'cronistoria.docx')}>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Esporta DOCX</div>
+                      <p className="text-xs text-muted-foreground font-normal">Documento Word — per stampare o inviare</p>
+                    </div>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <a href={`/api/cases/${caseId}/export/html`} download>
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      <div>
-                        <div>Esporta HTML</div>
-                        <p className="text-xs text-muted-foreground font-normal">Anteprima nel browser</p>
-                      </div>
-                    </a>
+                  <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/html`, 'cronistoria.html')}>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Esporta HTML</div>
+                      <p className="text-xs text-muted-foreground font-normal">Anteprima nel browser</p>
+                    </div>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <a href={`/api/cases/${caseId}/export/csv`} download>
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      <div>
-                        <div>Esporta CSV</div>
-                        <p className="text-xs text-muted-foreground font-normal">Tabella dati — per Excel</p>
-                      </div>
-                    </a>
+                  <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/csv`, 'cronistoria.csv')}>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    <div>
+                      <div>Esporta CSV</div>
+                      <p className="text-xs text-muted-foreground font-normal">Tabella dati — per Excel</p>
+                    </div>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

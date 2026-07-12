@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,6 +84,19 @@ export default function UpdatePasswordPage() {
               {isLoading ? 'Aggiornamento...' : 'Aggiorna password'}
             </Button>
           </form>
+          {/* Via d'uscita SEMPRE presente: se il link è scaduto/già usato la
+              sessione non c'è e l'aggiornamento fallisce comunque — l'utente deve
+              poter richiedere un nuovo link o tornare al login, non restare bloccato. */}
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Il link non funziona?{' '}
+            <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+              Richiedi un nuovo link
+            </Link>{' '}
+            ·{' '}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Torna al login
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

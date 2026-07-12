@@ -94,14 +94,15 @@ export default function LandingPage() {
                 Dati sanitari protetti in Europa
               </div>
               <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-                Trasformiamo i tuoi documenti clinici in{' '}
+                Dai documenti clinici a una{' '}
                 <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                  cronistorie pronte per la perizia
+                  bozza di perizia RC, pronta da rivedere
                 </span>
               </h1>
               <p className="mt-6 max-w-lg text-xl text-muted-foreground leading-relaxed">
-                Carica le cartelle cliniche del tuo caso. LegMed le analizza e genera
-                una cronistoria strutturata per le tue relazioni peritali.
+                Carica le cartelle cliniche del tuo caso. LegMed genera la cronistoria
+                degli eventi e una bozza strutturata di perizia RC stragiudiziale —
+                documentazione sanitaria, spese e calcoli — pronta da rifinire e firmare.
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
                 <Button size="lg" asChild className="text-base px-8 py-6">

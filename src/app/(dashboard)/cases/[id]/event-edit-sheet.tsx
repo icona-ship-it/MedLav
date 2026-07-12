@@ -11,7 +11,7 @@
  *   "Lettura e modifica visivamente disambigui".
  */
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { Loader2, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -68,6 +68,21 @@ function buildFormState(event: EventRow): EditFormState {
 export function EventEditSheet({
   event, caseId, open, onOpenChange, onSaved, onDeleted,
 }: EventEditSheetProps) {
+  // Il form interno segnala qui se è "sporco" (campi modificati): così la chiusura
+  // — backdrop, Esc o 'Annulla', che passano tutti da onOpenChange — può chiedere
+  // conferma invece di scartare in silenzio il lavoro del perito.
+  const dirtyRef = useRef(false);
+
+  const handleOpenChange = useCallback((next: boolean) => {
+    if (!next && dirtyRef.current
+      && !window.confirm('Ci sono modifiche non salvate a questo evento. Chiudere senza salvarle?')) {
+      return;
+    }
+    onOpenChange(next);
+  }, [onOpenChange]);
+
+  const setDirty = useCallback((d: boolean) => { dirtyRef.current = d; }, []);
+
   if (!event) {
     // Render nothing when no event selected. The parent passes `key={event.id}`
     // so the inner form is recreated (and state reset) for each distinct event.
@@ -75,12 +90,13 @@ export function EventEditSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
         <EventEditForm
           event={event}
           caseId={caseId}
-          onClose={() => onOpenChange(false)}
+          onClose={() => handleOpenChange(false)}
+          onDirtyChange={setDirty}
           onSaved={onSaved}
           onDeleted={onDeleted}
         />
@@ -100,13 +116,20 @@ interface EventEditFormProps {
   event: EventRow;
   caseId: string;
   onClose: () => void;
+  onDirtyChange: (dirty: boolean) => void;
   onSaved: () => void;
   onDeleted: () => void;
 }
 
-function EventEditForm({ event, caseId, onClose, onSaved, onDeleted }: EventEditFormProps) {
+function EventEditForm({ event, caseId, onClose, onDirtyChange, onSaved, onDeleted }: EventEditFormProps) {
   const [isPending, startTransition] = useTransition();
-  const [form, setForm] = useState<EditFormState>(buildFormState(event));
+  const [initial] = useState<EditFormState>(() => buildFormState(event));
+  const [form, setForm] = useState<EditFormState>(initial);
+
+  // "Sporco" = form diverso dallo stato iniziale. Riportato al wrapper così la
+  // chiusura può chiedere conferma. (Confronto JSON: gli oggetti sono piccoli e piatti.)
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initial);
+  useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
 
   const handleSave = () => {
     if (!form) return;
@@ -127,6 +150,7 @@ function EventEditForm({ event, caseId, onClose, onSaved, onDeleted }: EventEdit
         toast.error(result.error);
         return;
       }
+      onDirtyChange(false); // salvato → non più sporco: la chiusura non deve chiedere conferma
       toast.success('Evento salvato');
       onSaved();
     });
@@ -145,6 +169,7 @@ function EventEditForm({ event, caseId, onClose, onSaved, onDeleted }: EventEdit
               toast.error(result.error);
               return;
             }
+            onDirtyChange(false); // eliminato → la chiusura non deve chiedere conferma
             onDeleted();
           });
         },

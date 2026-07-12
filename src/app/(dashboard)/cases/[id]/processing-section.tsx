@@ -498,6 +498,24 @@ export function ProcessingSection({
                               </Button>
                             </div>
                           )}
+                          {/* Via d'uscita SEMPRE presente su errore: senza questo, un
+                              caso in 'errore' senza documenti falliti né blocco
+                              validatore restava un vicolo cieco (nessun modo di riavviare). */}
+                          {!isValidationBlock && (
+                            <div className="pt-2">
+                              <Button
+                                size="sm"
+                                onClick={handleStartProcessing}
+                                disabled={isStartingProcessing}
+                              >
+                                {isStartingProcessing ? (
+                                  <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Riavvio in corso...</>
+                                ) : (
+                                  <><RotateCcw className="mr-1 h-3.5 w-3.5" />Riavvia elaborazione</>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
