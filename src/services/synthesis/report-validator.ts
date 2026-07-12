@@ -562,8 +562,13 @@ const DUPLICATE_ERROR_THRESHOLD = 3; // 3+ repeats → error
 
 // ── New check: Unverified Citations (OCR cross-reference) ──
 
-/** Regex matching quoted text "..." in report (at least 8 words). */
-const QUOTED_TEXT_PATTERN = /"([^"]{30,})"/g;
+/**
+ * Regex matching quoted text in report (>=30 chars). Copre SIA le virgolette
+ * dritte "..." SIA le guillemet «...»: la doc-sanitaria RC stragiudiziale usa
+ * «...», che altrimenti sfuggirebbe al controllo di citazione non verificata
+ * (una citazione clinica fabbricata arriverebbe all'atto firmato senza warning).
+ */
+const QUOTED_TEXT_PATTERN = /(?:"([^"]{30,})"|«([^»]{30,})»)/g;
 
 /**
  * Check that quoted text ("...") in the report can be found in the OCR text.
@@ -593,7 +598,8 @@ function checkUnverifiedCitations(
   const quoteRegex = new RegExp(QUOTED_TEXT_PATTERN.source, 'g');
 
   while ((match = quoteRegex.exec(synthesis)) !== null) {
-    const quotedText = match[1];
+    const quotedText = match[1] ?? match[2]; // gruppo 1 = "..." ; gruppo 2 = «...»
+    if (!quotedText) continue;
     // Extract first 8 words for fuzzy matching
     const words = quotedText.split(/\s+/).slice(0, 8);
     if (words.length < 4) continue; // Skip very short quotes

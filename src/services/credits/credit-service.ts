@@ -267,14 +267,44 @@ export async function grantMonthlyCredits(
   resetAt: Date,
 ): Promise<void> {
   const supabase = createAdminClient();
+  const newResetIso = resetAt.toISOString();
 
+  // Idempotenza per PERIODO. Stripe emette customer.subscription.updated piu' volte
+  // nello stesso ciclo (cambio carta, portal, proration) con event_id diversi, che
+  // la dedup per evento NON blocca. Azzerare monthly_used a ogni evento 'active'
+  // regalerebbe l'intera quota piu' volte nello stesso mese. Reset SOLO quando il
+  // periodo (monthly_reset_at) cambia davvero.
+  const { data: existing } = await supabase
+    .from('user_credits')
+    .select('monthly_reset_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const samePeriod = !!existing?.monthly_reset_at
+    && new Date(existing.monthly_reset_at as string).getTime() === resetAt.getTime();
+
+  if (samePeriod) {
+    // Stesso ciclo: aggiorna solo l'allowance, NON toccare monthly_used, niente grant duplicato.
+    const { error } = await supabase
+      .from('user_credits')
+      .update({ monthly_allowance: monthlyAllowance, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+    if (error) {
+      logger.error(TAG, 'Failed to refresh monthly allowance', { userId, error: error.message });
+    } else {
+      logger.info(TAG, 'Monthly allowance refreshed (stesso periodo, nessun reset)', { userId, resetAt: newResetIso });
+    }
+    return;
+  }
+
+  // Nuovo periodo (o prima concessione): reset legittimo della quota consumata.
   const { error } = await supabase
     .from('user_credits')
     .upsert({
       user_id: userId,
       monthly_allowance: monthlyAllowance,
       monthly_used: 0,
-      monthly_reset_at: resetAt.toISOString(),
+      monthly_reset_at: newResetIso,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
 
@@ -286,7 +316,7 @@ export async function grantMonthlyCredits(
   const balance = await getBalance(userId);
   await recordTransaction(userId, monthlyAllowance, balance.total, 'monthly_grant', 'subscription');
 
-  logger.info(TAG, 'Monthly credits granted', { userId, monthlyAllowance, resetAt: resetAt.toISOString() });
+  logger.info(TAG, 'Monthly credits granted', { userId, monthlyAllowance, resetAt: newResetIso });
 }
 
 /**

@@ -97,18 +97,19 @@ describe('POST /api/stripe/webhook — idempotency (money-leak prevention)', () 
     expect(grantMonthlyCredits).not.toHaveBeenCalled();
   });
 
-  it('fails OPEN if the dedup table is missing (non-23505 error) — webhook keeps working', async () => {
+  it('fails CLOSED on a non-23505 dedup error — 500, no grant, Stripe retries', async () => {
+    // 0028 è applicata in prod: se l'insert di idempotenza fallisce per un motivo
+    // diverso dal conflitto, non possiamo garantire il no-double-grant → 500 e retry.
     mockEvent = {
-      id: 'evt_failopen',
+      id: 'evt_failclosed',
       type: 'checkout.session.completed',
       data: { object: { id: 'cs_1', mode: 'payment', metadata: { userId: UUID, creditPack: '50' } } },
     };
     dedupResult = { error: { code: '42P01', message: 'relation does not exist' } };
 
     const res = await POST(makeReq());
-    const json = await res.json() as { received: boolean };
-    expect(json.received).toBe(true);
-    // fail-open: processing continues, credits granted
-    expect(grantCredits).toHaveBeenCalledWith(UUID, 50, 'purchase', expect.anything());
+    expect(res.status).toBe(500);
+    // fail-closed: NIENTE accredito finché l'idempotenza non è garantita
+    expect(grantCredits).not.toHaveBeenCalled();
   });
 });

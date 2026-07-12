@@ -186,15 +186,17 @@ export async function createCase(formData: FormData) {
   const pipelineModeValue: string = moduleToPipelineMode(moduleIdValue);
   const moduleCategoryValue: number = moduleToCategory(moduleIdValue).id;
 
-  // Generate unique case code with retry on collision
+  // Generate unique case code with retry on collision.
+  // Il vincolo UNIQUE su cases.code e' GLOBALE (non per-utente): la numerazione
+  // deve quindi partire dal massimo GLOBALE, altrimenti un utente nuovo (0 casi)
+  // ripartirebbe da 001 e collide con i casi di altri utenti — creazione bloccata.
   const year = new Date().getFullYear();
   const prefix = `CASO-${year}-`;
 
-  // Find the highest existing code number for this user
+  // Find the highest existing code number across ALL users for this year.
   const { data: latestCase } = await supabase
     .from('cases')
     .select('code')
-    .eq('user_id', user.id)
     .like('code', `${prefix}%`)
     .order('code', { ascending: false })
     .limit(1)
@@ -207,9 +209,11 @@ export async function createCase(formData: FormData) {
     if (!isNaN(parsed)) nextNumber = parsed + 1;
   }
 
-  // Try inserting with retry on unique violation (up to 3 attempts)
+  // Insert con retry sul vincolo unique: partiamo dal max globale + 1 e saliamo,
+  // quindi il primo tentativo trova quasi sempre uno slot libero; i retry coprono
+  // le rare collisioni da creazioni concorrenti. Ampia finestra (50) per sicurezza.
   let newCaseId: string | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 50; attempt++) {
     const code = `${prefix}${(nextNumber + attempt).toString().padStart(3, '0')}`;
 
     const { data: newCase, error } = await supabase
@@ -272,7 +276,9 @@ export async function getCases(status?: string) {
     query = query.eq('status', status);
   }
 
-  const { data } = await query.order('created_at', { ascending: false });
+  // Cap difensivo: evita un select non paginato illimitato. 500 casi coprono
+  // ampiamente l'uso reale di un singolo perito; oltre serve paginazione dedicata.
+  const { data } = await query.order('created_at', { ascending: false }).limit(500);
 
   return data ?? [];
 }
