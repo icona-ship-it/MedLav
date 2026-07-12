@@ -1,10 +1,9 @@
 import Link from 'next/link';
 import {
   Scale, FileText, Clock, Shield, ArrowRight,
-  Upload, Cpu, FileCheck, AlertTriangle, Quote,
+  Upload, Cpu, FileCheck, AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 
 const steps = [
   {
@@ -23,7 +22,7 @@ const steps = [
     number: 3,
     icon: FileCheck,
     title: 'Il report è pronto',
-    description: 'Cronistoria strutturata, anomalie evidenziate, documenti mancanti segnalati. Esporta in DOCX, CSV o HTML.',
+    description: 'Cronistoria strutturata, anomalie evidenziate, documenti mancanti segnalati. Esporta in DOCX, PDF, CSV o HTML.',
   },
 ];
 
@@ -46,29 +45,14 @@ const features = [
   {
     icon: Shield,
     title: 'Sicuro e Conforme',
-    description: 'Tutti i dati restano in Europa. Crittografia, accesso protetto. Conforme GDPR Art. 9.',
+    description: 'I dati clinici restano in Europa. Crittografia, accesso protetto. Conforme GDPR Art. 9.',
   },
 ];
 
 const stats = [
   { value: 'Minuti', label: 'invece di ore per ogni caso' },
-  { value: '100%', label: 'dati protetti in Europa' },
+  { value: 'Dati clinici in UE', label: 'trattati solo in Europa (GDPR Art. 9)' },
   { value: 'Tutti i formati', label: 'PDF, immagini, scansioni' },
-];
-
-const testimonials = [
-  {
-    quote: 'LegMed ha trasformato il mio workflow. Report che richiedevano giorni ora sono pronti in ore.',
-    attribution: 'Medico Legale, CTU Tribunale',
-  },
-  {
-    quote: 'La trasparenza della pipeline \u00e8 fondamentale. Posso verificare ogni singolo evento estratto.',
-    attribution: 'Specialista in Medicina Legale',
-  },
-  {
-    quote: 'Finalmente uno strumento che rispetta davvero il GDPR. Dati in EU, audit trail completo.',
-    attribution: 'Avvocato, Studio Legale',
-  },
 ];
 
 export default function LandingPage() {
@@ -264,41 +248,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonianze */}
-      <section className="px-6 py-20 sm:py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-16 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Cosa dicono i professionisti
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              Chi lo usa ogni giorno racconta la sua esperienza.
-            </p>
-          </div>
-          <div className="grid gap-8 md:grid-cols-3">
-            {testimonials.map((testimonial, index) => (
-              <Card
-                key={testimonial.attribution}
-                className="animate-fade-in-up relative"
-                style={{ animationDelay: `${index * 150}ms` }}
-              >
-                <CardContent className="p-8">
-                  <Quote className="mb-4 h-8 w-8 text-primary/30" />
-                  <p className="mb-6 text-base italic leading-relaxed text-foreground">
-                    &ldquo;{testimonial.quote}&rdquo;
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    &mdash; {testimonial.attribution}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <p className="mt-8 text-center text-sm text-muted-foreground">
-            Testimonianze da beta tester
-          </p>
-        </div>
-      </section>
 
       {/* CTA finale */}
       <section className="px-6 py-20 sm:py-24">

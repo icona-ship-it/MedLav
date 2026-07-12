@@ -47,9 +47,10 @@ export default function InfoAiPage() {
           <section>
             <h2 className="text-xl font-semibold">2. Cosa fa LegMed con l&apos;AI</h2>
             <p>
-              LegMed è uno strumento di lavoro per il medico legale (CTU, CTP, perito stragiudiziale)
-              che assiste nella redazione di report medico-legali strutturati a partire dalla documentazione
-              clinica fornita dal professionista. L&apos;AI svolge ruoli specifici e ben delimitati:
+              LegMed è uno strumento di lavoro per il perito medico-legale in ambito stragiudiziale
+              (responsabilità civile) che assiste nella redazione di report medico-legali strutturati a
+              partire dalla documentazione clinica fornita dal professionista. L&apos;AI svolge ruoli
+              specifici e ben delimitati:
             </p>
             <ul className="list-disc pl-6 space-y-2 mt-3">
               <li>
@@ -106,9 +107,9 @@ export default function InfoAiPage() {
                   <td className="px-3 py-2 text-muted-foreground">Mistral Large 3 (dic. 2025, versione fissata)</td>
                 </tr>
                 <tr className="border-b border-border">
-                  <td className="px-3 py-2"><code className="text-xs">mistral-small-2603</code></td>
-                  <td className="px-3 py-2">Classificazione documentale</td>
-                  <td className="px-3 py-2 text-muted-foreground">Mistral Small 4 (mar. 2026, versione fissata)</td>
+                  <td className="px-3 py-2"><code className="text-xs">mistral-medium-latest</code></td>
+                  <td className="px-3 py-2">Classificazione documentale e verifica delle citazioni</td>
+                  <td className="px-3 py-2 text-muted-foreground">Mistral Medium (throughput elevato)</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2"><code className="text-xs">mistral-embed</code></td>
@@ -127,7 +128,8 @@ export default function InfoAiPage() {
           <section>
             <h2 className="text-xl font-semibold">4. Dove vengono trattati i dati</h2>
             <p>
-              Tutti i dati clinici caricati su LegMed sono elaborati nel territorio dell&apos;Unione Europea:
+              Tutti i <strong>dati clinici</strong> (documentazione sanitaria, immagini diagnostiche,
+              contenuto delle perizie) sono elaborati esclusivamente nel territorio dell&apos;Unione Europea:
             </p>
             <ul className="list-disc pl-6 space-y-1 mt-2">
               <li><strong>Database</strong>: Supabase, server in Frankfurt (eu-central-1, Germania)</li>
@@ -137,7 +139,19 @@ export default function InfoAiPage() {
               <li><strong>Cache rate-limiting</strong>: Upstash Redis, Frankfurt (Germania)</li>
             </ul>
             <p className="mt-3">
-              Nessun trasferimento di dati personali avviene al di fuori dello Spazio Economico Europeo.
+              Un insieme <strong>limitato di dati personali non clinici</strong> è trattato da fornitori
+              che possono operare al di fuori del SEE, sulla base di garanzie adeguate (clausole
+              contrattuali standard e, ove applicabile, decisioni di adeguatezza):
+            </p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li><strong>Notifiche email</strong> (indirizzo email): Resend</li>
+              <li><strong>Pagamenti</strong> (email e dati di fatturazione): Stripe</li>
+              <li><strong>Monitoraggio errori</strong> (diagnostica tecnica, con rimozione dei dati identificativi): Sentry</li>
+            </ul>
+            <p className="mt-3 text-sm text-muted-foreground">
+              I dati sanitari (categoria particolare, art. 9 GDPR) non vengono mai trasmessi a questi
+              fornitori. L&apos;elenco aggiornato dei responsabili del trattamento (subprocessor) è
+              disponibile su richiesta.
             </p>
           </section>
 

@@ -67,7 +67,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const publicPaths = ['/landing', '/login', '/register', '/forgot-password', '/auth', '/shared', '/terms', '/privacy', '/security', '/pricing', '/help'];
+  const publicPaths = ['/landing', '/login', '/register', '/forgot-password', '/auth', '/shared', '/terms', '/privacy', '/security', '/pricing', '/help', '/info-ai'];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
