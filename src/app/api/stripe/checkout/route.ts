@@ -7,6 +7,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { PLANS } from '@/lib/stripe/config';
 import { CREDIT_PACKS } from '@/services/credits/credit-costs';
 import { grantMonthlyCredits } from '@/services/credits/credit-service';
+import { logger } from '@/lib/logger';
 import { PLAN_CREDITS } from '@/services/credits/credit-costs';
 import { z } from 'zod';
 
@@ -126,8 +127,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { url: session.url } });
   } catch (error) {
+    // Il dettaglio d'errore (potenziale info Stripe/interna) resta nei log server.
+    logger.error('stripe/checkout', `Checkout failed: ${error instanceof Error ? error.message : 'unknown'}`);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Errore interno' },
+      { success: false, error: 'Errore nella creazione del pagamento. Riprova.' },
       { status: 500 },
     );
   }

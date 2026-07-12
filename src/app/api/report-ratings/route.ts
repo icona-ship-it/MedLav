@@ -99,6 +99,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
 
+    const rateCheck = await checkRateLimit({ key: `ratings-get:${user.id}`, ...RATE_LIMITS.API });
+    if (!rateCheck.success) {
+      return NextResponse.json({ success: false, error: 'Troppe richieste.' }, { status: 429 });
+    }
+
     const reportId = request.nextUrl.searchParams.get('reportId');
     if (!reportId) {
       return NextResponse.json({ success: false, error: 'reportId richiesto' }, { status: 400 });

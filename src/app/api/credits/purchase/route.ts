@@ -5,6 +5,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CREDIT_PACKS } from '@/services/credits/credit-costs';
 import { grantCredits } from '@/services/credits/credit-service';
+import { logger } from '@/lib/logger';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -76,40 +77,50 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const stripe = getStripeClient();
+  // Le chiamate Stripe possono lanciare (rete, chiave, rate limit): senza guard
+  // diventavano un 500 non gestito con stato potenzialmente parziale.
+  try {
+    const stripe = getStripeClient();
 
-  // Get or create Stripe customer
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('stripe_customer_id')
-    .eq('id', user.id)
-    .single();
-
-  let customerId = profile?.stripe_customer_id as string | null;
-
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      metadata: { userId: user.id },
-    });
-    customerId = customer.id;
-    await supabase
+    // Get or create Stripe customer
+    const { data: profile } = await supabase
       .from('profiles')
-      .update({ stripe_customer_id: customerId })
-      .eq('id', user.id);
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single();
+
+    let customerId = profile?.stripe_customer_id as string | null;
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId: user.id },
+      });
+      customerId = customer.id;
+      await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', user.id);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'payment',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${siteUrl}/settings?purchase=success&credits=${pack.credits}`,
+      cancel_url: `${siteUrl}/settings?purchase=cancelled`,
+      metadata: {
+        userId: user.id,
+        creditPack: String(pack.credits),
+      },
+    });
+
+    return NextResponse.json({ success: true, data: { url: session.url } });
+  } catch (error) {
+    logger.error('credits/purchase', `Stripe checkout failed: ${error instanceof Error ? error.message : 'unknown'}`);
+    return NextResponse.json(
+      { success: false, error: 'Errore nell\'avvio dell\'acquisto. Riprova.' },
+      { status: 500 },
+    );
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: 'payment',
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${siteUrl}/settings?purchase=success&credits=${pack.credits}`,
-    cancel_url: `${siteUrl}/settings?purchase=cancelled`,
-    metadata: {
-      userId: user.id,
-      creditPack: String(pack.credits),
-    },
-  });
-
-  return NextResponse.json({ success: true, data: { url: session.url } });
 }

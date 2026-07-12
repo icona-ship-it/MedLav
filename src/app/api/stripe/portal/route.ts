@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getStripeClient, isStripeMockMode } from '@/lib/stripe/client';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   const csrfError = await validateCsrfToken(request);
@@ -50,8 +51,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { url: session.url } });
   } catch (error) {
+    logger.error('stripe/portal', `Portal session failed: ${error instanceof Error ? error.message : 'unknown'}`);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Errore interno' },
+      { success: false, error: 'Errore nell\'apertura del portale abbonamento. Riprova.' },
       { status: 500 },
     );
   }

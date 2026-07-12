@@ -9,7 +9,10 @@ import { getBalance, deductCredits, refundCredits } from '@/services/credits/cre
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { logger } from '@/lib/logger';
 
-export const maxDuration = 30;
+// 60s (non 30): la chiamata Mistral è sincrona e il rimborso-su-errore vive nel
+// catch della request — un timeout hard della function la ucciderebbe PRIMA del
+// refund. Più margine riduce il rischio di credito perso su una singola call lenta.
+export const maxDuration = 60;
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
