@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* Registra le utility `prose`/`prose-invert`: senza il plugin erano no-op e i
+   report markdown fuori dal contenitore A4 (link condiviso, confronto versioni)
+   restavano destilizzati (heading senza gerarchia, liste senza pallini). */
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 

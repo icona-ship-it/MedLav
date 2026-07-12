@@ -93,7 +93,9 @@ export function WizardStepBar({
               key={step.number}
               type="button"
               onClick={() => onSetStep(step.number)}
-              className={`h-2 rounded-full cursor-pointer transition-all ${
+              // Pseudo-elemento trasparente: espande l'area tappabile a ~44px
+              // (target touch minimo) senza cambiare l'altezza visiva del dot (8px).
+              className={`relative h-2 rounded-full cursor-pointer transition-all before:absolute before:-inset-x-1 before:-inset-y-[18px] before:content-[''] ${
                 step.number === activeStep
                   ? 'w-6 bg-primary'
                   : autoStep > step.number

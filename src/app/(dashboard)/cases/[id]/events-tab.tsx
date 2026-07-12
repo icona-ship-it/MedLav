@@ -399,7 +399,7 @@ export function EventsTab({
                     type="button"
                     onClick={() => { setShowOnlyVerification(!showOnlyVerification); setVerificationSubFilter('all'); setEventTypeFilter(null); }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      showOnlyVerification && verificationSubFilter === 'all' ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                      showOnlyVerification && verificationSubFilter === 'all' ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-200 dark:hover:bg-yellow-900/60'
                     }`}
                   >
                     Da verificare ({verificationEvents.length})
@@ -412,19 +412,19 @@ export function EventsTab({
                       <>
                         {dateCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'date' ? 'all' : 'date')}
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'date' ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100'}`}>
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'date' ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-800 dark:hover:bg-yellow-900/50'}`}>
                             Data incerta ({dateCount})
                           </button>
                         )}
                         {dataCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'data' ? 'all' : 'data')}
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'data' ? 'bg-orange-400 text-orange-900' : 'bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100'}`}>
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'data' ? 'bg-orange-400 text-orange-900' : 'bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800 dark:hover:bg-orange-900/50'}`}>
                             Dati incerti ({dataCount})
                           </button>
                         )}
                         {otherCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'other' ? 'all' : 'other')}
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'other' ? 'bg-red-400 text-red-900' : 'bg-red-50 text-red-700 border border-red-300 hover:bg-red-100'}`}>
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'other' ? 'bg-red-400 text-red-900' : 'bg-red-50 text-red-700 border border-red-300 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800 dark:hover:bg-red-900/50'}`}>
                             Da verificare ({otherCount})
                           </button>
                         )}
@@ -471,12 +471,12 @@ export function EventsTab({
           {displayVerification.length > 0 && displayNormal.length > 0 && visibleCount >= displayNormal.length && (
             <div className="mt-2 space-y-2">
               <div className="flex items-center gap-2 py-3">
-                <div className="h-px flex-1 bg-yellow-300" />
-                <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
+                <div className="h-px flex-1 bg-yellow-300 dark:bg-yellow-800" />
+                <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   Eventi da verificare ({displayVerification.length})
                 </div>
-                <div className="h-px flex-1 bg-yellow-300" />
+                <div className="h-px flex-1 bg-yellow-300 dark:bg-yellow-800" />
               </div>
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs text-muted-foreground">

@@ -55,13 +55,17 @@ export default async function DashboardPage() {
                 </Badge>
               </div>
               <div>
-                <h3 className="text-lg font-bold">{RC_MODULE.label}</h3>
+                {/* h2 (non h3): è la card primaria subito dopo l'h1 di pagina —
+                    evita il salto di gerarchia h1→h3 (a11y heading-order). */}
+                <h2 className="text-lg font-bold">{RC_MODULE.label}</h2>
                 <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
                   {RC_MODULE.description}: documentazione sanitaria fedele, spese mediche e struttura pronta per la visita.
                 </p>
               </div>
               <div className="mt-auto flex items-center justify-end pt-2">
-                <span className="flex items-center gap-1 text-sm font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
+                {/* opacità piena: 'text-primary opacity-70' scendeva sotto il
+                    contrasto minimo WCAG AA (a11y color-contrast). */}
+                <span className="flex items-center gap-1 text-sm font-medium text-primary transition-opacity">
                   Nuovo caso
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </span>
