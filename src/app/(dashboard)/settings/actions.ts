@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
-import { logAccessArchived } from '@/lib/audit';
+import { logAccessArchivedAwait } from '@/lib/audit';
 
 const profileSchema = z.object({
   fullName: z.string().min(1, 'Il nome è obbligatorio'),
@@ -231,12 +231,16 @@ export async function exportMyData(): Promise<{ data?: string; error?: string }>
     return { error: 'Non autenticato' };
   }
 
-  // GDPR Art. 20 audit — log forense (sopravvive a cancellazione utente)
-  logAccessArchived({
+  // GDPR Art. 20: audit forense PRIMA dell'export, fail-closed (chi ha scaricato
+  // cosa deve restare provato: se non riusciamo a registrarlo, non esportiamo).
+  const archived = await logAccessArchivedAwait({
     userId: user.id,
     action: 'user.data_exported',
     metadata: { exported_at: new Date().toISOString() },
   });
+  if (!archived) {
+    return { error: 'Impossibile registrare la richiesta di export al momento. Riprova tra poco.' };
+  }
 
   const admin = createAdminClient();
 
@@ -396,13 +400,17 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
     return { error: 'Non autenticato' };
   }
 
-  // GDPR Art. 17 audit forense PRIMA della cancellazione — sopravvive al delete
-  // by design (audit_archive non ha FK su profiles).
-  logAccessArchived({
+  // GDPR Art. 17: audit forense PRIMA della cancellazione — e FAIL-CLOSED: se la
+  // prova non viene registrata NON procediamo, altrimenti resterebbe una
+  // cancellazione senza traccia (adempimento non dimostrabile).
+  const archived = await logAccessArchivedAwait({
     userId: user.id,
     action: 'user.deleted',
     metadata: { requested_at: new Date().toISOString() },
   });
+  if (!archived) {
+    return { error: 'Impossibile registrare la richiesta di cancellazione al momento. Riprova tra poco.' };
+  }
 
   const admin = createAdminClient();
 

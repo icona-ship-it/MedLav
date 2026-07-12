@@ -68,11 +68,16 @@ export function logAccess({ userId, action, entityType, entityId, metadata }: Lo
  * Schema: vedi `audit_archive` in `src/db/schema/audit.ts`. Solo INSERT da
  * service_role; nessuno puo' DELETE per design (compliance Art. 6(1)(c) GDPR).
  */
-export function logAccessArchived(params: LogAccessArchivedParams): void {
+/**
+ * Variante AWAITABLE del forense. Attende la scrittura e ritorna true/false.
+ * Da usare quando l'azione NON deve procedere senza la prova registrata
+ * (cancellazione account, export GDPR): il chiamante deve BLOCCARE se ritorna
+ * false, così non si cancella/esporta senza traccia forense.
+ */
+export async function logAccessArchivedAwait(params: LogAccessArchivedParams): Promise<boolean> {
   const admin = createAdminClient();
-
-  Promise.resolve(
-    admin
+  try {
+    const { error } = await admin
       .from('audit_archive')
       .insert({
         user_id: params.userId,
@@ -81,23 +86,29 @@ export function logAccessArchived(params: LogAccessArchivedParams): void {
         entity_id: params.entityId ?? null,
         metadata: params.metadata ?? null,
         ip_address: params.ipAddress ?? null,
-      }),
-  )
-    .then(({ error }) => {
-      if (error) {
-        // Forensic log failure e' grave — logga a livello error con tag specifico
-        logger.error('audit-archive', 'CRITICAL: Failed to write forensic audit', {
-          action: params.action,
-          userId: params.userId,
-          error: error.message,
-        });
-      }
-    })
-    .catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      logger.error('audit-archive', 'CRITICAL: Unexpected error in forensic audit', {
-        action: params.action,
-        error: message,
       });
+    if (error) {
+      logger.error('audit-archive', 'CRITICAL: Failed to write forensic audit', {
+        action: params.action,
+        userId: params.userId,
+        error: error.message,
+      });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error('audit-archive', 'CRITICAL: Unexpected error in forensic audit', {
+      action: params.action,
+      error: err instanceof Error ? err.message : 'unknown error',
     });
+    return false;
+  }
+}
+
+/**
+ * Versione fire-and-forget (non blocca il chiamante). Per azioni forensi che
+ * DEVONO essere provate prima di procedere usare invece `logAccessArchivedAwait`.
+ */
+export function logAccessArchived(params: LogAccessArchivedParams): void {
+  void logAccessArchivedAwait(params);
 }
