@@ -39,10 +39,11 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Delete in order (foreign key dependencies)
+    // Delete in order (foreign key dependencies). audit_log ESCLUSO: il registro
+    // di accesso è il trail di compliance GDPR e deve sopravvivere a un reset dei dati.
     const tables = [
       'event_images', 'anomalies', 'missing_documents', 'reports',
-      'events', 'pages', 'documents', 'cases', 'audit_log',
+      'events', 'pages', 'documents', 'cases',
     ];
 
     const results: Record<string, string> = {};

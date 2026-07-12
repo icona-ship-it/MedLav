@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { validateCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { processingPausedResponse } from '@/lib/processing-guard';
 import { getBalance, deductCredits } from '@/services/credits/credit-service';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { z } from 'zod';
@@ -27,6 +28,10 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
+
+  // Kill-switch operativo condiviso.
+  const pausedResponse = processingPausedResponse();
+  if (pausedResponse) return pausedResponse;
 
   const rateCheck = await checkRateLimit({ key: `classify-batch:${user.id}`, ...RATE_LIMITS.PROCESSING });
   if (!rateCheck.success) {
@@ -53,8 +58,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Caso non trovato' }, { status: 404 });
   }
 
-  // Credit check
-  const totalCredits = documentIds.length * CREDIT_COSTS.categorizzazione;
+  // Dedup + verifica che TUTTI i documentIds appartengano DAVVERO a questo caso:
+  // senza questo controllo si addebiterebbero crediti su id duplicati (stesso doc
+  // contato piu' volte) o su documenti di un altro caso passati dal client.
+  const uniqueDocIds = [...new Set(documentIds)];
+  const { data: ownedDocs } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('case_id', caseId)
+    .in('id', uniqueDocIds);
+  const validDocIds = (ownedDocs ?? []).map((d) => d.id as string);
+  if (validDocIds.length === 0) {
+    return NextResponse.json({ success: false, error: 'Nessun documento valido da categorizzare per questo caso.' }, { status: 400 });
+  }
+
+  // Credit check (solo sui documenti realmente appartenenti al caso)
+  const totalCredits = validDocIds.length * CREDIT_COSTS.categorizzazione;
   const balance = await getBalance(user.id);
 
   if (balance.total < totalCredits) {
@@ -66,7 +85,7 @@ export async function POST(request: NextRequest) {
 
   // Deduct credits upfront
   const deduction = await deductCredits(user.id, totalCredits, 'categorizzazione', caseId, {
-    documentCount: documentIds.length,
+    documentCount: validDocIds.length,
     batchMode: true,
   });
 
@@ -81,7 +100,7 @@ export async function POST(request: NextRequest) {
       data: {
         caseId,
         userId: user.id,
-        documentIds,
+        documentIds: validDocIds,
         totalCredits,
       },
     });
@@ -94,6 +113,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: { documentsQueued: documentIds.length, creditsCharged: totalCredits },
+    data: { documentsQueued: validDocIds.length, creditsCharged: totalCredits },
   });
 }

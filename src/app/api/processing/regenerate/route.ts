@@ -12,6 +12,7 @@ import type { CaseType } from '@/types';
 import { safeJsonParse } from '@/lib/format';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
+import { processingPausedResponse } from '@/lib/processing-guard';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
@@ -56,6 +57,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
+
+    // Kill-switch operativo condiviso.
+    const pausedResponse = processingPausedResponse();
+    if (pausedResponse) return pausedResponse;
 
     // Feature gate: check subscription allows processing
     const gate = await checkFeatureAccess(user.id, 'processing');

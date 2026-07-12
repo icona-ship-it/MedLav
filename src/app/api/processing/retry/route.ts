@@ -6,6 +6,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { getElaborationCost } from '@/services/credits/credit-costs';
+import { processingPausedResponse } from '@/lib/processing-guard';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -35,6 +36,10 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    // Kill-switch operativo condiviso.
+    const pausedResponse = processingPausedResponse();
+    if (pausedResponse) return pausedResponse;
 
     // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile).
     const rateCheck = await checkRateLimit({ key: `processing:${user.id}`, ...RATE_LIMITS.PROCESSING });

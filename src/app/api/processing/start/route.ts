@@ -7,6 +7,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { validateCaseForProcessing } from '@/lib/pipeline-limits';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { getElaborationCost } from '@/services/credits/credit-costs';
+import { processingPausedResponse } from '@/lib/processing-guard';
 import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
@@ -14,6 +15,22 @@ export const maxDuration = 30;
 const requestSchema = z.object({
   caseId: z.string().uuid(),
 });
+
+/**
+ * Rilascia il lock di elaborazione riportando processing_stage allo stato
+ * precedente. Da chiamare su OGNI ramo di rifiuto/errore dopo che il lock atomico
+ * è stato impostato, altrimenti il caso resta bloccato in 'elaborazione'.
+ */
+async function releaseProcessingLock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caseId: string,
+  previousStage: string,
+): Promise<void> {
+  await supabase
+    .from('cases')
+    .update({ processing_stage: previousStage, updated_at: new Date().toISOString() })
+    .eq('id', caseId);
+}
 
 /**
  * POST /api/processing/start
@@ -37,15 +54,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Kill-switch operativo: PROCESSING_PAUSED=true (env, flip senza redeploy)
-    // ferma l'avvio di nuove elaborazioni — leva per un incidente Mistral/DB o
-    // manutenzione, senza toccare i run già in corso.
-    if (process.env.PROCESSING_PAUSED === 'true') {
-      return NextResponse.json(
-        { success: false, error: 'Elaborazione temporaneamente sospesa per manutenzione. Riprova tra poco.' },
-        { status: 503 },
-      );
-    }
+    // Kill-switch operativo condiviso (vedi processing-guard).
+    const pausedResponse = processingPausedResponse();
+    if (pausedResponse) return pausedResponse;
 
     // Rate limiting PER-UTENTE (non per-IP: x-forwarded-for è spoofabile e
     // penalizza utenti legittimi dietro lo stesso NAT/studio).
@@ -154,6 +165,9 @@ export async function POST(request: NextRequest) {
       .eq('case_id', caseId);
 
     if (countError || !docCount || docCount === 0) {
+      // Rilascia il lock appena acquisito: senza reset il caso resta INCASTRATO in
+      // 'elaborazione' e la UI fa polling all'infinito (nessun run Inngest partirà).
+      await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
       return NextResponse.json(
         { success: false, error: 'Nessun documento da elaborare. Carica almeno un documento.' },
         { status: 400 },
@@ -163,6 +177,7 @@ export async function POST(request: NextRequest) {
     // Validate document count limits — BEFORE cleanup to avoid data loss
     const validation = validateCaseForProcessing({ documentCount: docCount });
     if (!validation.valid) {
+      await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
       return NextResponse.json(
         { success: false, error: validation.error },
         { status: 400 },
@@ -177,10 +192,7 @@ export async function POST(request: NextRequest) {
     const balance = await getBalance(user.id);
     if (balance.total < creditCost) {
       // Release the processing lock since we're rejecting
-      await supabase
-        .from('cases')
-        .update({ processing_stage: caseData.processing_stage, updated_at: new Date().toISOString() })
-        .eq('id', caseId);
+      await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
 
       return NextResponse.json(
         {
@@ -203,10 +215,7 @@ export async function POST(request: NextRequest) {
     );
 
     if (!deduction.success) {
-      await supabase
-        .from('cases')
-        .update({ processing_stage: caseData.processing_stage, updated_at: new Date().toISOString() })
-        .eq('id', caseId);
+      await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
 
       return NextResponse.json(
         { success: false, error: deduction.error },
@@ -275,14 +284,28 @@ export async function POST(request: NextRequest) {
 
     // processing_stage already set to 'elaborazione' by atomic lock above
 
-    // Send Inngest event to trigger processing
-    await inngest.send({
-      name: 'case/pipeline.start',
-      data: {
-        caseId,
-        userId: user.id,
-      },
-    });
+    // Send Inngest event to trigger processing. Se il dispatch fallisce, i crediti
+    // sono GIÀ stati addebitati e il lock è impostato: senza questo rollback il caso
+    // resterebbe in 'elaborazione' con crediti persi e nessun run in esecuzione.
+    try {
+      await inngest.send({
+        name: 'case/pipeline.start',
+        data: {
+          caseId,
+          userId: user.id,
+        },
+      });
+    } catch (sendError) {
+      logger.error('processing/start', `inngest.send failed for case ${caseId} — reverting stage + refunding`, {
+        error: sendError instanceof Error ? sendError.message : 'unknown',
+      });
+      await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
+      await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'pipeline_dispatch_failed' });
+      return NextResponse.json(
+        { success: false, error: 'Errore avvio elaborazione. Riprova.' },
+        { status: 500 },
+      );
+    }
 
     // Audit log
     await supabase.from('audit_log').insert({

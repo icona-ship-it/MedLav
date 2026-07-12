@@ -2,8 +2,40 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { inngest } from '@/lib/inngest/client';
 import { isAdminUser } from '@/lib/admin';
 import { logger } from '@/lib/logger';
+
+/**
+ * Purge ricorsivo di un bucket Storage. La struttura reale è a 3+ livelli
+ * (`userId/caseId/file` per i documenti, `ocr-images/{docId}/file` per le immagini
+ * OCR): una list a un solo livello lascia ORFANI i file più in profondità (dati
+ * sanitari Art. 9). Cammina le cartelle e cancella i file a batch.
+ */
+async function purgeStorageBucket(
+  admin: ReturnType<typeof createAdminClient>,
+  bucket: string,
+): Promise<void> {
+  async function walk(prefix: string): Promise<void> {
+    const { data: entries } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+    if (!entries || entries.length === 0) return;
+    const files: string[] = [];
+    for (const entry of entries) {
+      if (!entry.name) continue;
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      // Una "cartella" non ha id/metadata; un file ha id valorizzato.
+      if (entry.id == null) {
+        await walk(path);
+      } else {
+        files.push(path);
+      }
+    }
+    for (let i = 0; i < files.length; i += 100) {
+      await admin.storage.from(bucket).remove(files.slice(i, i + 100));
+    }
+  }
+  await walk('');
+}
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -241,13 +273,22 @@ export async function forceResetAllStuckCases() {
   const user = await verifyAdmin();
   const admin = createAdminClient();
 
+  // Solo gli stage di ELABORAZIONE, non le fasi di revisione umana
+  // (revisione_classificazione/revisione_anomalie): quelle NON sono "bloccate",
+  // sono in attesa dell'utente — azzerarle gli farebbe perdere il punto in cui era.
+  // E solo casi fermi da oltre la durata massima plausibile di una pipeline
+  // (15 min): così un run appena avviato non viene ucciso.
+  const STUCK_THRESHOLD_MIN = 15;
+  const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MIN * 60 * 1000).toISOString();
+
   const { data, error } = await admin
     .from('cases')
     .update({
       processing_stage: 'idle',
       updated_at: new Date().toISOString(),
     })
-    .in('processing_stage', ['elaborazione', 'generazione_report', 'revisione_classificazione', 'revisione_anomalie'])
+    .in('processing_stage', ['elaborazione', 'generazione_report'])
+    .lt('updated_at', cutoff)
     .select('id, code');
 
   if (error) {
@@ -255,16 +296,22 @@ export async function forceResetAllStuckCases() {
     return { success: false, count: 0 };
   }
 
-  const count = data?.length ?? 0;
-  logger.info('admin', `Force-reset ${count} stuck cases by admin ${user.id}`);
+  const resetCases = data ?? [];
+  // Cancella eventuali run Inngest ancora appesi, così non riscrivono dati dopo il reset.
+  for (const c of resetCases) {
+    await inngest.send({ name: 'case/pipeline.cancelled', data: { caseId: c.id as string } }).catch(() => { /* best-effort */ });
+  }
+
+  const count = resetCases.length;
+  logger.info('admin', `Force-reset ${count} stuck cases (>${STUCK_THRESHOLD_MIN}min) by admin ${user.id}`);
   return { success: true, count };
 }
 
 /**
  * Reset all data EXCEPT user accounts.
  * Deletes: events, anomalies, missing_documents, reports, pages,
- * event_images, documents, cases, audit_log.
- * Also clears Supabase Storage (uploaded files).
+ * event_images, documents, cases. NON cancella audit_log (trail di compliance).
+ * Also clears Supabase Storage (documenti, immagini OCR, section-parts, firme).
  */
 export async function resetAllData() {
   const user = await verifyAdmin();
@@ -272,8 +319,11 @@ export async function resetAllData() {
 
   logger.info('admin', ` Reset all data requested by user ${user.id}`);
 
-  // Delete in correct order (foreign key dependencies) — check each for errors
-  const tables = ['event_images', 'anomalies', 'missing_documents', 'reports', 'events', 'pages', 'documents', 'cases', 'audit_log'] as const;
+  // Delete in correct order (foreign key dependencies) — check each for errors.
+  // audit_log NON è incluso: il registro di accesso è immutabile per compliance
+  // GDPR (le policy RLS lo vietano; qui si usa il service-role che le bypassa, ma
+  // l'intento è che il trail sopravviva a un reset — purge separata e dedicata).
+  const tables = ['event_images', 'anomalies', 'missing_documents', 'reports', 'events', 'pages', 'documents', 'cases'] as const;
   for (const table of tables) {
     const { error } = await admin.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
     if (error) {
@@ -282,23 +332,14 @@ export async function resetAllData() {
     }
   }
 
-  // Clear storage bucket
-  try {
-    const { data: files } = await admin.storage.from('documents').list('', { limit: 1000 });
-    if (files && files.length > 0) {
-      // List all folders (user IDs)
-      for (const folder of files) {
-        if (folder.name) {
-          const { data: userFiles } = await admin.storage.from('documents').list(folder.name, { limit: 10000 });
-          if (userFiles && userFiles.length > 0) {
-            const paths = userFiles.map((f) => `${folder.name}/${f.name}`);
-            await admin.storage.from('documents').remove(paths);
-          }
-        }
-      }
+  // Clear storage buckets (purge RICORSIVO — la struttura è a 3+ livelli: senza
+  // ricorsione i file di ocr-images/{docId}/... e userId/caseId/... restavano orfani).
+  for (const bucket of ['documents', 'section-parts', 'signatures']) {
+    try {
+      await purgeStorageBucket(admin, bucket);
+    } catch (storageErr) {
+      logger.error('admin', ` Storage cleanup error (${bucket}): ${storageErr instanceof Error ? storageErr.message : 'unknown'}`);
     }
-  } catch (storageErr) {
-    logger.error('admin', ` Storage cleanup error: ${storageErr instanceof Error ? storageErr.message : 'unknown'}`);
   }
 
   logger.info('admin', ' All data reset successfully');

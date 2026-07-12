@@ -83,6 +83,19 @@ export async function saveDocumentMetadata(params: {
     return { error: 'Non autenticato' };
   }
 
+  // AUTORIZZAZIONE SUL PATH. Lo storagePath arriva dal client (file-upload lo
+  // costruisce come `${user.id}/${caseId}/${uuid}.ext`) e NON è vincolato lato
+  // server. Senza questo check un utente autenticato potrebbe registrare — e poi
+  // far firmare un signed-URL o cancellare col service-role — un file nel namespace
+  // di un ALTRO utente (dati sanitari Art. 9). Deve stare dentro `${user.id}/${caseId}/`.
+  const expectedPathPrefix = `${user.id}/${params.caseId}/`;
+  if (!params.storagePath.startsWith(expectedPathPrefix) || params.storagePath.includes('..')) {
+    logger.warn('document-validation', 'Rejected storagePath outside user/case namespace', {
+      caseId: params.caseId, // MAI loggare lo storagePath: potrebbe rivelare il path di un altro utente
+    });
+    return { error: 'Percorso file non valido.' };
+  }
+
   // Server-side file validation (client-side checks are not trusted)
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
   const ALLOWED_MIME_TYPES = new Set([
@@ -168,12 +181,18 @@ export async function saveDocumentMetadata(params: {
       }
     }
   } catch (err) {
-    // Hard failure of validation infrastructure — log but don't block (we already
-    // validated MIME via ALLOWED_MIME_TYPES; magic byte is defense-in-depth).
-    logger.error('document-validation', 'Magic-byte check threw', {
-      path: params.storagePath,
+    // Fail CLOSED (coerente col ramo download-fallito sopra): se la verifica
+    // infrastrutturale lancia, non possiamo garantire né la size reale né i magic
+    // bytes → il file non deve diventare OCR-eligibile. Cleanup dell'orfano + errore.
+    logger.error('document-validation', 'Magic-byte check threw — failing closed', {
+      caseId: params.caseId,
       error: err instanceof Error ? err.message : 'unknown',
     });
+    try {
+      const admin = createAdminClient();
+      await admin.storage.from('documents').remove([params.storagePath]).catch(() => { /* best-effort */ });
+    } catch { /* best-effort cleanup */ }
+    return { error: 'Impossibile verificare il file caricato. Riprova.' };
   }
 
   // Verify case ownership

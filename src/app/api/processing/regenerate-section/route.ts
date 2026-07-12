@@ -13,6 +13,7 @@ import { regenerateSection } from '@/services/synthesis/section-regenerator';
 import { parseSynthesisSections } from '@/services/synthesis/section-parser';
 import { fetchDocumentsOcrContext } from '@/inngest/steps/generate-report';
 import { validateCsrfToken } from '@/lib/csrf';
+import { processingPausedResponse } from '@/lib/processing-guard';
 import { deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 import { getSectionStatus, markSectionState } from '@/lib/section-state';
@@ -61,6 +62,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
     }
     authenticatedUserId = user.id;
+
+    // Kill-switch operativo condiviso.
+    const pausedResponse = processingPausedResponse();
+    if (pausedResponse) return pausedResponse;
 
     // Rate limit BEFORE credit deduction — don't charge for rate-limited requests
     // Use API limit (60/min) not PROCESSING (5/min) — user may regenerate many sections
