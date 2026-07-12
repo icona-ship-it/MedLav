@@ -13,6 +13,9 @@ importers:
 
   .:
     dependencies:
+      '@inngest/middleware-encryption':
+        specifier: ^1.0.2
+        version: 1.0.2(inngest@3.54.2(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(next@15.5.20(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(typescript@5.9.3)(zod@4.3.6))
       '@mistralai/mistralai':
         specifier: ^2.4.1
         version: 2.4.1(@opentelemetry/api@1.9.0)
@@ -1254,6 +1257,11 @@ packages:
 
   '@inngest/ai@0.1.7':
     resolution: {integrity: sha512-5xWatW441jacGf9czKEZdgAmkvoy7GS2tp7X8GSbdGeRXzjisHR6vM+q8DQbv6rqRsmQoCQ5iShh34MguELvUQ==}
+
+  '@inngest/middleware-encryption@1.0.2':
+    resolution: {integrity: sha512-If9CrN2kIfRN1PonyCnFICmbhuPzYZJ0vwREqf3H7vjhRV4ObLYfSWEkFgzMG5CV/JZ5iru2Dwn6mMzlpFNkBQ==}
+    peerDependencies:
+      inngest: '>=3.42.3'
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -4017,6 +4025,9 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+
   css-tree@3.1.0:
     resolution: {integrity: sha512-0eW44TGN5SQXU1mWSkKwFstI/22X2bG1nYzZTYMAWjylYURhse752YgbE4Cx46AC+bAvI+/dYTPRk1LqSUnu6w==}
     engines: {node: ^10 || ^12.20.0 || ^14.13.0 || >=15.0.0}
@@ -5044,6 +5055,12 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
+
+  libsodium-wrappers@0.7.16:
+    resolution: {integrity: sha512-Gtr/WBx4dKjvRL1pvfwZqu7gO6AfrQ0u9vFL+kXihtHf6NfkROR8pjYWn98MFDI3jN19Ii1ZUfPR9afGiPyfHg==}
+
+  libsodium@0.7.16:
+    resolution: {integrity: sha512-3HrzSPuzm6Yt9aTYCDxYEG8x8/6C0+ag655Y7rhhWZM9PT4NpdnbqlzXhGZlDnkgR6MeSTnOt/VIyHLs9aSf+Q==}
 
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
@@ -7339,6 +7356,12 @@ snapshots:
     dependencies:
       '@types/node': 22.19.11
       typescript: 5.9.3
+
+  '@inngest/middleware-encryption@1.0.2(inngest@3.54.2(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(next@15.5.20(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(typescript@5.9.3)(zod@4.3.6))':
+    dependencies:
+      crypto-js: 4.2.0
+      inngest: 3.54.2(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(next@15.5.20(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(typescript@5.9.3)(zod@4.3.6)
+      libsodium-wrappers: 0.7.16
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -10430,6 +10453,8 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
+  crypto-js@4.2.0: {}
+
   css-tree@3.1.0:
     dependencies:
       mdn-data: 2.12.2
@@ -11650,6 +11675,12 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libsodium-wrappers@0.7.16:
+    dependencies:
+      libsodium: 0.7.16
+
+  libsodium@0.7.16: {}
 
   lie@3.3.0:
     dependencies:
