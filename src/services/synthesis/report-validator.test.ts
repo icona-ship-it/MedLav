@@ -842,3 +842,29 @@ describe('formatIssuesForLog — GDPR-safe (solo tipo+conteggio, mai il message 
     expect(formatIssuesForLog([])).toBe('none');
   });
 });
+
+// Regression per il fix HIGH (verifica totale 2026-07-12): il controllo di
+// citazione non verificata deve coprire ANCHE le guillemet «...» (la doc-sanitaria
+// RC le usa), non solo le virgolette dritte "...". Prima le «...» fabbricate
+// raggiungevano l'atto firmato senza alcun warning.
+describe('unverified citations — «...» (doc-sanitaria RC)', () => {
+  const padding = 'Il periziando presenta una sintomatologia compatibile con il quadro descritto nella documentazione clinica agli atti del fascicolo sanitario. '.repeat(12);
+  const ocrCtx = (text: string): ReportValidationContext => ({
+    events: [],
+    ocrText: [{ documentId: 'd1', pages: [{ ocrText: text }] }],
+  });
+
+  it('segnala una citazione «...» NON presente nell\'OCR', () => {
+    const fabricated = '«diagnosi di frattura scomposta del femore prossimale con indicazione chirurgica urgente»';
+    const synthesis = `${padding}\n${fabricated}\n${padding}`;
+    const result = validateReport(synthesis, 5, ocrCtx('il documento originale riporta una semplice contusione al ginocchio senza alcuna frattura'));
+    expect(result.issues.some((i) => i.type === 'unverified_citation')).toBe(true);
+  });
+
+  it('NON segnala una citazione «...» presente nell\'OCR', () => {
+    const grounded = '«frattura scomposta del femore prossimale con indicazione chirurgica»';
+    const synthesis = `${padding}\n${grounded}\n${padding}`;
+    const result = validateReport(synthesis, 5, ocrCtx('referto: frattura scomposta del femore prossimale con indicazione chirurgica, ricovero immediato'));
+    expect(result.issues.some((i) => i.type === 'unverified_citation')).toBe(false);
+  });
+});
