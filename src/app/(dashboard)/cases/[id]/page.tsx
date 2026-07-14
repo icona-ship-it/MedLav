@@ -36,11 +36,15 @@ export default async function CaseDetailPage({
   const activelyProcessingStages = ['elaborazione', 'revisione_classificazione', 'generazione_report'];
   const isActivelyProcessing = activelyProcessingStages.includes(caseData.processing_stage as string);
 
+  // "Documenti attesi mancanti" NON mostrati (decisione prodotto 2026-07-14): il
+  // perito carica quello che ha e l'app lavora con quello — il promemoria su cosa
+  // "ci si aspettava" era percepito come un rimprovero inutile. Il detector resta
+  // attivo in pipeline (dato in DB, riattivabile ripristinando getCaseMissingDocs).
   const [documents, events, anomalies, missingDocs, report, eventImagesMap, documentPages] = await Promise.all([
     getCaseDocuments(id),
     getCaseEvents(id),
     getCaseAnomalies(id),
-    getCaseMissingDocs(id),
+    Promise.resolve([] as Awaited<ReturnType<typeof getCaseMissingDocs>>),
     getCaseReport(id),
     isActivelyProcessing ? Promise.resolve({} as Record<string, string[]>) : getCaseEventImages(id),
     isActivelyProcessing ? Promise.resolve([] as Awaited<ReturnType<typeof getCaseDocumentPages>>) : getCaseDocumentPages(id),
