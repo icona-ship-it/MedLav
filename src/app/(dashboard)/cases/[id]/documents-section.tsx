@@ -24,7 +24,7 @@ import { deleteDocument, retryDocument, updateDocumentType } from '../../actions
 import { toUserMessage } from '@/lib/user-error-messages';
 import { formatFileSize, getFileIcon } from '@/lib/format';
 import { DOCUMENT_TYPES } from '@/lib/constants';
-import { CREDIT_COSTS } from '@/services/credits/credit-costs';
+import { CREDIT_COSTS, getElaborationCost } from '@/services/credits/credit-costs';
 import { csrfHeaders } from '@/lib/csrf-client';
 import type { Document } from './types';
 
@@ -120,6 +120,17 @@ export function DocumentsSection({
   // True between the "Categorizza tutti" dispatch and the FIRST server-side
   // progress write: the user must see feedback INSTANTLY, not after ~10s.
   const [classifyStarting, setClassifyStarting] = useState(false);
+  // Conferma "procedi comunque" quando la categorizzazione lascerebbe il saldo
+  // sotto il costo dell'analisi (guard-rail trappola crediti).
+  const classifyDespiteLowCredits = useRef(false);
+  // Timeout ONESTO sul kickoff: se il primo progresso server non arriva entro 90s
+  // (evento perso/errore), non lasciare lo spinner infinito — spiega cosa fare.
+  const [classifyStartTimedOut, setClassifyStartTimedOut] = useState(false);
+  useEffect(() => {
+    if (!classifyStarting) { setClassifyStartTimedOut(false); return; }
+    const t = setTimeout(() => setClassifyStartTimedOut(true), 90_000);
+    return () => clearTimeout(t);
+  }, [classifyStarting]);
   useEffect(() => {
     if (classificationProgress?.status === 'running' || classificationProgress?.status === 'done') {
       setClassifyStarting(false);
@@ -245,6 +256,33 @@ export function DocumentsSection({
     const docsToClassify = documents.filter((d) => d.processing_status === 'caricato');
     if (docsToClassify.length === 0) return;
 
+    // GUARD-RAIL crediti (trappola trial, smoke test 2026-07-14): la categorizzazione
+    // costa 1/doc e l'analisi ne richiede altri N — se dopo la categorizzazione il
+    // saldo non basterebbe più per l'analisi, AVVISA PRIMA (niente vicolo cieco a
+    // scoperta ritardata). Best-effort: se il check fallisce, si procede come prima.
+    const classifyCost = docsToClassify.length * CREDIT_COSTS.categorizzazione;
+    try {
+      const balRes = await fetch('/api/credits/balance');
+      const bal = await balRes.json() as { success: boolean; data?: { total: number } };
+      const total = bal.data?.total;
+      if (bal.success && typeof total === 'number') {
+        const elabCost = getElaborationCost(pipelineMode ?? 'full');
+        if (total < classifyCost) {
+          toast.error(`La categorizzazione costa ${classifyCost} crediti e ne hai ${total}. Ricarica dai crediti in alto a destra.`);
+          return;
+        }
+        if (total - classifyCost < elabCost && !classifyDespiteLowCredits.current) {
+          classifyDespiteLowCredits.current = true;
+          setTimeout(() => { classifyDespiteLowCredits.current = false; }, 15_000);
+          toast.warning(
+            `Attenzione: dopo la categorizzazione ti resterebbero ${total - classifyCost} crediti, ma l'analisi ne richiede ${elabCost}. Se vuoi procedere comunque, premi di nuovo il pulsante.`,
+            { duration: 12_000 },
+          );
+          return;
+        }
+      }
+    } catch { /* check saldo best-effort: mai bloccare per un errore di rete */ }
+
     setClassifyingAll(true);
 
     try {
@@ -276,7 +314,7 @@ export function DocumentsSection({
     }
 
     setClassifyingAll(false);
-  }, [documents, caseId, router, onClassificationStarted]);
+  }, [documents, caseId, router, onClassificationStarted, pipelineMode]);
 
   const completedCount = documents.filter((d) => d.processing_status === 'completato').length;
   const processingCount = documents.filter((d) => isDocProcessing(d.processing_status)).length;
@@ -378,7 +416,7 @@ export function DocumentsSection({
 
             {/* Instant feedback between dispatch and the first server progress
                 write — without this the user stares at a static page for ~10s */}
-            {classifyStarting && classificationProgress?.status !== 'running' && (
+            {classifyStarting && classificationProgress?.status !== 'running' && !classifyStartTimedOut && (
               <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
@@ -391,6 +429,16 @@ export function DocumentsSection({
                   Legge le prime pagine di ogni documento per riconoscerne il tipo. Tra pochi secondi
                   vedrai l&apos;avanzamento documento per documento.
                 </p>
+              </div>
+            )}
+            {/* Timeout onesto: mai spinner infinito senza spiegazione */}
+            {classifyStartTimedOut && classificationProgress?.status !== 'running' && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-200">
+                La categorizzazione sta impiegando più del previsto. Prova a{' '}
+                <button type="button" className="underline font-medium" onClick={() => router.refresh()}>
+                  aggiornare la pagina
+                </button>
+                {' '}— se le categorie non compaiono, rilancia &quot;Categorizza tutti con AI&quot; (i documenti già categorizzati non vengono riaddebitati).
               </div>
             )}
 
@@ -429,7 +477,9 @@ export function DocumentsSection({
                 </p>
               </div>
             )}
-            {classificationProgress && classificationProgress.status === 'done' && (
+            {classificationProgress && classificationProgress.status === 'done'
+              && (!classificationProgress.completedAt
+                || Date.now() - new Date(classificationProgress.completedAt).getTime() < 10 * 60_000) && (
               <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-800 dark:text-green-200">
                 <span className="font-medium">
                   Fatto: {classificationProgress.completed - classificationProgress.errors} di {classificationProgress.total} documenti categorizzati.

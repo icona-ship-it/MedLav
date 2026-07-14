@@ -63,7 +63,7 @@ export const CASE_ROLES = [
 export const statusConfig: Record<string, { label: string; variant: 'secondary' | 'warning' | 'success' | 'outline' }> = {
   bozza: { label: 'Bozza', variant: 'secondary' },
   in_revisione: { label: 'In Revisione', variant: 'warning' },
-  definitivo: { label: 'Pronto al deposito', variant: 'success' },
+  definitivo: { label: 'Pronto alla consegna', variant: 'success' },
   archiviato: { label: 'Archiviato', variant: 'outline' },
 };
 

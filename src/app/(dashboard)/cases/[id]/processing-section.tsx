@@ -38,6 +38,11 @@ interface ProcessingSectionProps {
    * Passato a ProcessingProgress per far partire il timer dall'invio a Inngest,
    * non dall'ora di upload dei documenti. */
   processingStartedAt?: string;
+  /** Notifica il parent che l'avvio è riuscito → attiva il polling di kickoff
+   * (stesso pattern di onClassificationStarted). Senza, la transizione alla vista
+   * di progresso dipendeva da un singolo router.refresh(): se tornava stantio, il
+   * bottone restava congelato su "Avvio in corso…" mentre la pipeline correva. */
+  onProcessingStarted?: () => void;
 }
 
 /**
@@ -75,12 +80,16 @@ export function ProcessingSection({
   pipelineMode = 'full',
   initialExcludedSections = [],
   processingStartedAt,
+  onProcessingStarted,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
   const router = useRouter();
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  // Crediti insufficienti (402): mostrato come banner dedicato con saldo e CTA
+  // acquisto, non come errore generico senza via d'uscita.
+  const [insufficientCredits, setInsufficientCredits] = useState<{ needed: number; available: number } | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -176,24 +185,36 @@ export function ProcessingSection({
   const handleStartProcessing = useCallback(async () => {
     setIsStartingProcessing(true);
     setProcessingError(null);
+    setInsufficientCredits(null);
     try {
       const response = await fetch('/api/processing/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({ caseId }),
       });
-      const result = await response.json() as { success: boolean; error?: string };
+      const result = await response.json() as {
+        success: boolean; error?: string; creditsNeeded?: number; creditsAvailable?: number;
+      };
       if (!result.success) {
-        setProcessingError(result.error ?? 'Errore sconosciuto');
+        // 402 con saldo: banner dedicato con CTA acquisto (prima: testo nudo senza uscita).
+        if (typeof result.creditsNeeded === 'number' && typeof result.creditsAvailable === 'number') {
+          setInsufficientCredits({ needed: result.creditsNeeded, available: result.creditsAvailable });
+        } else {
+          setProcessingError(result.error ?? 'Errore sconosciuto');
+        }
         setIsStartingProcessing(false);
         return;
       }
+      // Avvio riuscito: attiva il polling di kickoff nel parent PRIMA del refresh —
+      // la transizione alla vista di progresso non dipende più da un singolo
+      // refresh (bug "Avvio in corso…" congelato, smoke test 2026-07-14).
+      onProcessingStarted?.();
       router.refresh();
     } catch {
       setProcessingError('Errore di rete. Verifica la connessione.');
       setIsStartingProcessing(false);
     }
-  }, [caseId, router]);
+  }, [caseId, router, onProcessingStarted]);
 
   useEffect(() => {
     if (isStartingProcessing && hasProcessingDocs) {
@@ -329,8 +350,6 @@ export function ProcessingSection({
             <div className="space-y-4">
               {hasUploadedDocs ? (
                 <>
-                  {/* Error/warning banners — shown first so user sees them immediately */}
-                  {processingError && <p className="text-sm text-destructive text-center">{processingError}</p>}
 
                   {failedDocs.length > 0 && (
                     <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
@@ -426,6 +445,25 @@ export function ProcessingSection({
                     </div>
                   )}
 
+                  {/* Errori d'avvio VICINO al bottone (prima erano in cima, lontani dal click) */}
+                  {insufficientCredits && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-2">
+                      <p className="text-sm text-amber-900 dark:text-amber-200">
+                        <span className="font-medium">Ti servono più crediti per questa analisi:</span>{' '}
+                        ne richiede {insufficientCredits.needed}, ne hai {insufficientCredits.available}.
+                      </p>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href="/settings">Vai ai crediti</a>
+                      </Button>
+                    </div>
+                  )}
+                  {processingError && (
+                    <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                      <span className="text-destructive">{processingError}</span>
+                    </div>
+                  )}
+
                   {/* Sticky action bar */}
                   <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-sm border-t px-4 py-3 mt-6 -mx-4">
                     <Button
@@ -442,16 +480,11 @@ export function ProcessingSection({
                       disabled={isStartingProcessing || !hasUploadedDocs}
                     >
                       {isStartingProcessing ? (
-                        <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso...</>
+                        <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Avvio in corso — tra pochi secondi vedrai l&apos;avanzamento…</>
                       ) : (
                         <>
                           <Play className="mr-2 h-5 w-5" />
                           Avvia Elaborazione
-                          {showSectionPicker && sectionOptions.length > 0 && (
-                            <span className="ml-2 text-sm font-normal opacity-90">
-                              · {enabledSectionCount} {enabledSectionCount === 1 ? 'sezione' : 'sezioni'}
-                            </span>
-                          )}
                           <Badge variant="secondary" className="ml-2 text-sm px-2 py-0.5 bg-white/20 text-white border-0">
                             {creditCost} crediti
                           </Badge>
@@ -459,7 +492,7 @@ export function ProcessingSection({
                       )}
                     </Button>
                     <p className="text-xs text-muted-foreground text-center mt-2">
-                      {creditLabel} — {creditCost} crediti verranno scalati dal tuo saldo.
+                      {creditLabel} — {creditCost} crediti scalati all&apos;avvio. Poi puoi chiudere la pagina: l&apos;analisi prosegue da sola.
                     </p>
                   </div>
                 </>

@@ -496,7 +496,7 @@ export function ReportStep({
           resta separato sopra. */}
       {(actionableCount > 0 || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
-          <p className="mb-2 text-sm font-semibold">Da controllare prima del deposito</p>
+          <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
           <div className="space-y-2">
             {claimFindings.length > 0 && (
               <details className="group">

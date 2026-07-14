@@ -261,9 +261,19 @@ export function CaseDetailClient({
     setClassifyKickoff(true);
     setTimeout(() => setClassifyKickoff(false), 90_000);
   }, []);
+  // Kickoff dell'AVVIO elaborazione (stesso pattern della categorizzazione): dopo
+  // "Avvia Elaborazione" il server impiega qualche secondo a riflettere lo stage —
+  // senza questa finestra il polling non partiva e, se il singolo router.refresh()
+  // tornava stantio, la pagina restava congelata su "Avvio in corso…" mentre la
+  // pipeline correva (smoke test 2026-07-14).
+  const [processingKickoff, setProcessingKickoff] = useState(false);
+  const handleProcessingStarted = useCallback(() => {
+    setProcessingKickoff(true);
+    setTimeout(() => setProcessingKickoff(false), 120_000);
+  }, []);
   // Classification polling is INDEPENDENT of the pipeline error state: it can
   // legitimately run on a case whose previous pipeline ended in 'errore'.
-  const needsPolling = isClassifying || classifyKickoff
+  const needsPolling = isClassifying || classifyKickoff || processingKickoff
     || (processingStage !== 'errore' && (hasProcessingDocs || processingStage === 'generazione_report' || processingStage === 'elaborazione'));
   useEffect(() => {
     if (!needsPolling) return;
@@ -385,6 +395,7 @@ export function CaseDetailClient({
             <div key="step-2" className="animate-step-in">
               <ProcessingSection
                 caseId={caseId}
+                onProcessingStarted={handleProcessingStarted}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}
@@ -458,6 +469,7 @@ export function CaseDetailClient({
             <div key="step-2" className="animate-step-in">
               <ProcessingSection
                 caseId={caseId}
+                onProcessingStarted={handleProcessingStarted}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}
@@ -495,7 +507,9 @@ export function CaseDetailClient({
           {/* === Full pipeline: 4-step wizard === */}
           {/* No separate anomaly review step — anomalies shown inside report */}
 
-          {/* STEP 1: Documenti */}
+          {/* STEP 1: Documenti — "Prosegui" salta DIRETTO all'Elaborazione (l'azione):
+              il form Info Perizia è facoltativo e resta raggiungibile dalla step bar;
+              fermarcisi in mezzo creava solo attrito e il dubbio "devo compilarlo?". */}
           {activeStep === 1 && (
             <div key="step-1" className="animate-step-in">
               <DocumentsSection
@@ -505,7 +519,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 classificationProgress={classificationProgress}
                 onClassificationStarted={handleClassificationStarted}
-                onProceedToNext={() => handleSetStep(2)}
+                onProceedToNext={() => handleSetStep(3)}
                 pipelineMode={pipelineMode}
               />
             </div>
@@ -529,6 +543,7 @@ export function CaseDetailClient({
             <div key="step-3" className="animate-step-in">
               <ProcessingSection
                 caseId={caseId}
+                onProcessingStarted={handleProcessingStarted}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}
