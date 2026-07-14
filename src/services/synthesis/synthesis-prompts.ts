@@ -157,7 +157,6 @@ export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): st
     // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP
     // restano in formatEventsForPrompt / CHRONOLOGY_SOURCES_GUIDE, non toccate.
     const sourceLabel = (SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType).replace(/^[A-D] - /, '');
-    const facility = rep.facility ? ` — ${rep.facility}` : '';
     // Intestazione DETERMINISTICA pronta (formato gold Antoniazzi): "**Tipo, struttura,
     // in data DATA:**". Fornita all'LLM da copiare IDENTICA come prima riga del blocco,
     // così smette di comporre titoli-evento data-prima. Backstop deterministico in

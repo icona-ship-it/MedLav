@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2, Download, AlertTriangle, RefreshCw, X, Info } from 'lucide-react';
 import { toUserMessage } from '@/lib/user-error-messages';
-import { groupPipelineWarnings, type DisplaySeverity } from '@/lib/pipeline-warning-display';
+import { groupPipelineWarnings } from '@/lib/pipeline-warning-display';
 import { scrollToReportSection } from '@/lib/report-navigation';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
