@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectAnomalies, filterRetiredAnomalies } from './anomaly-detector';
+import { detectAnomalies, filterRetiredAnomalies, stripTemporalFramingFromDescription, sanitizeAnomaliesForDisplay } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
 function makeEvent(overrides: Partial<ConsolidatedEvent> & { orderNumber: number; eventDate: string; eventType: ConsolidatedEvent['eventType'] }): ConsolidatedEvent {
@@ -168,5 +168,32 @@ describe('filterRetiredAnomalies — nasconde i tipi ritirati nei casi legacy (h
       { anomalyType: 'diagnosi_contraddittoria' },
     ]);
     expect(kept).toHaveLength(1);
+  });
+});
+
+describe('stripTemporalFramingFromDescription — via la cornice temporale dalle descrizioni storiche', () => {
+  it('rimuove "a distanza di N giorni" dopo "discordanti"', () => {
+    const out = stripTemporalFramingFromDescription('Diagnosi potenzialmente discordanti a distanza di 53 giorni. In data 10.08.2020...');
+    expect(out).not.toMatch(/a distanza di \d+ giorni/);
+    expect(out).toContain('Diagnosi potenzialmente discordanti. In data');
+  });
+  it('rimuove "entro un intervallo temporale ristretto"', () => {
+    const out = stripTemporalFramingFromDescription('La differenza entro un intervallo temporale ristretto richiede verifica.');
+    expect(out).not.toContain('intervallo temporale ristretto');
+  });
+  it('è idempotente e non tocca descrizioni già pulite', () => {
+    const clean = 'Diagnosi potenzialmente discordanti. Un documento riporta X, un altro Y.';
+    expect(stripTemporalFramingFromDescription(clean)).toBe(clean);
+  });
+});
+
+describe('sanitizeAnomaliesForDisplay — filtro + strip insieme', () => {
+  it('toglie i ritirati e ripulisce le descrizioni superstiti', () => {
+    const out = sanitizeAnomaliesForDisplay([
+      { anomaly_type: 'gap_documentale', description: 'Lacuna documentale di 200 giorni.' },
+      { anomaly_type: 'diagnosi_contraddittoria', description: 'Diagnosi potenzialmente discordanti a distanza di 20 giorni. In data X...' },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].description).not.toMatch(/a distanza di \d+ giorni/);
   });
 });

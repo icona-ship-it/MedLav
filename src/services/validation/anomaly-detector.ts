@@ -41,6 +41,30 @@ export function filterRetiredAnomalies<T extends { anomaly_type?: string; anomal
   return rows.filter((a) => !RETIRED_ANOMALY_TYPES.has(a.anomaly_type ?? a.anomalyType ?? ''));
 }
 
+/**
+ * Toglie l'inquadramento TEMPORALE dalle descrizioni di anomalie GIÀ salvate coi
+ * vecchi testi ("a distanza di N giorni", "entro un intervallo temporale
+ * ristretto"): le anomalie superstiti sono content-based, la cornice temporale
+ * non deve comparire nemmeno nei record storici (direttiva Lavini). Display-only,
+ * non muta il DB. Puro e idempotente.
+ */
+export function stripTemporalFramingFromDescription(description: string): string {
+  return description
+    .replace(/\s*(?:potenzialmente\s+)?discordanti\s+a distanza di\s+\d+\s+giorni/gi, ' potenzialmente discordanti')
+    .replace(/\s*a distanza di\s+\d+\s+giorni/gi, '')
+    .replace(/\s*entro un intervallo temporale ristretto/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+\./g, '.')
+    .trim();
+}
+
+/** Applica filtro tipi-ritirati + strip cornice temporale alle descrizioni. */
+export function sanitizeAnomaliesForDisplay<T extends { anomaly_type?: string; anomalyType?: string; description?: string }>(rows: T[]): T[] {
+  return filterRetiredAnomalies(rows).map((a) =>
+    a.description ? { ...a, description: stripTemporalFramingFromDescription(a.description) } : a,
+  );
+}
+
 /** Check if a date is a sentinel/placeholder (1900-*) */
 function isSentinelDate(dateStr: string): boolean {
   return dateStr.startsWith('1900-');

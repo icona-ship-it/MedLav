@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { filterRetiredAnomalies } from '@/services/validation/anomaly-detector';
+import { sanitizeAnomaliesForDisplay } from '@/services/validation/anomaly-detector';
 
 const uuidSchema = z.string().uuid();
 
@@ -36,9 +36,9 @@ export async function getCaseAnomalies(caseId: string) {
     .eq('case_id', parsed.data)
     .order('created_at', { ascending: true });
 
-  // Nascondi le anomalie di tipo RITIRATO (temporali/da-assenza) rimaste nei casi
-  // già processati — hide-don't-delete, nessuna scrittura su dati Art.9.
-  return filterRetiredAnomalies(data ?? []);
+  // Nascondi i tipi RITIRATI e togli la cornice temporale dalle descrizioni
+  // storiche — hide-don't-delete, nessuna scrittura su dati Art.9.
+  return sanitizeAnomaliesForDisplay(data ?? []);
 }
 
 /**
