@@ -136,8 +136,9 @@ export async function confirmAnomaly(params: {
 
   if (!anomalyRow) return { error: 'Anomalia non trovata' };
 
+  // null = casi legacy pre-triage: sono actionable (allineato alla UI).
   const actionableStatuses = ['detected', 'llm_confirmed'];
-  if (!actionableStatuses.includes(anomalyRow.status)) {
+  if (anomalyRow.status != null && !actionableStatuses.includes(anomalyRow.status)) {
     return { error: 'Anomalia gia risolta o ignorata' };
   }
 
@@ -201,8 +202,9 @@ export async function dismissAnomaly(params: {
 
   if (!anomalyRow) return { error: 'Anomalia non trovata' };
 
+  // null = casi legacy pre-triage: escludibili (allineato alla UI).
   const dismissableStatuses = ['detected', 'llm_confirmed', 'user_confirmed'];
-  if (!dismissableStatuses.includes(anomalyRow.status)) {
+  if (anomalyRow.status != null && !dismissableStatuses.includes(anomalyRow.status)) {
     return { error: 'Anomalia gia risolta o ignorata' };
   }
 

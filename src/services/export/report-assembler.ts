@@ -56,6 +56,8 @@ interface ExportAnomaly {
   severity: string;
   description: string;
   suggestion: string | null;
+  /** Nota del perito (status user_confirmed): prima non veniva stampata. */
+  resolution_note?: string | null;
 }
 
 interface ExportMissingDoc {
@@ -261,7 +263,10 @@ export function assembleFullReport(params: {
     const anomalyText = anomalies.map((a) => {
       const label = anomalyTypeLabels[a.anomaly_type] ?? a.anomaly_type;
       const suggestion = a.suggestion ? `\n  *Suggerimento:* ${a.suggestion}` : '';
-      return `- **[${a.severity.toUpperCase()}] ${label}**: ${a.description}${suggestion}`;
+      // La valutazione scritta dal perito (prima scartata) va riportata.
+      const note = a.resolution_note && a.resolution_note.trim()
+        ? `\n  **Nota del perito:** «${a.resolution_note.trim()}»` : '';
+      return `- **[${a.severity.toUpperCase()}] ${label}**: ${a.description}${suggestion}${note}`;
     }).join('\n');
     addSection('anomalie', 'ANOMALIE RILEVATE', anomalyText);
   }

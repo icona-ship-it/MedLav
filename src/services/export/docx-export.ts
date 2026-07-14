@@ -38,6 +38,9 @@ interface DocxAnomaly {
   severity: string;
   description: string;
   suggestion: string | null;
+  /** Nota del perito quando ha confermato l'anomalia (status user_confirmed).
+   * Prima non veniva stampata → la nota scritta dal perito spariva nel nulla. */
+  resolution_note?: string | null;
 }
 
 interface DocxMissingDoc {
@@ -532,6 +535,17 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
         if (anomaly.suggestion) {
           children.push(new Paragraph({
             children: [new TextRun({ text: anomaly.suggestion, italics: true, color: '64748B' })],
+          }));
+        }
+        // La nota del perito è la SUA valutazione: va stampata in evidenza (prima
+        // spariva). "Nota del perito: «...»" — è ciò che lui ha deciso su questa voce.
+        if (anomaly.resolution_note && anomaly.resolution_note.trim()) {
+          children.push(new Paragraph({
+            children: [
+              new TextRun({ text: 'Nota del perito: ', bold: true }),
+              new TextRun({ text: `«${anomaly.resolution_note.trim()}»` }),
+            ],
+            spacing: { before: 60 },
           }));
         }
       }

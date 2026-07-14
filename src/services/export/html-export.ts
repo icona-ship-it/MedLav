@@ -28,6 +28,8 @@ interface ExportAnomaly {
   severity: string;
   description: string;
   suggestion: string | null;
+  /** Nota del perito (status user_confirmed): prima non veniva stampata. */
+  resolution_note?: string | null;
 }
 
 interface ExportMissingDoc {
@@ -389,6 +391,7 @@ ${anomalies.length === 0 ? '<p>Nessuna anomalia rilevata.</p>' : anomalies.map((
   </div>
   <p>${escapeHtml(a.description)}</p>
   ${a.suggestion ? `<p style="margin-top:6px;color:#64748b;font-style:italic">${escapeHtml(a.suggestion)}</p>` : ''}
+  ${a.resolution_note && a.resolution_note.trim() ? `<p style="margin-top:6px"><strong>Nota del perito:</strong> «${escapeHtml(a.resolution_note.trim())}»</p>` : ''}
 </div>`).join('\n')}
 
 <h2 id="missing">${calculations && calculations.length > 0 ? '5' : '4'}. Documentazione Mancante</h2>

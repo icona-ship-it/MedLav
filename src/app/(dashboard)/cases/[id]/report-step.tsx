@@ -707,6 +707,14 @@ export function ReportStep({
             events={events}
             documents={documents}
             onChanged={() => router.refresh()}
+            onOpenEvent={(orderNumber) => {
+              // Chiudi il dialog anomalie e apri il drawer Eventi con l'evento
+              // sorgente evidenziato: il perito verifica l'anomalia sul fatto reale
+              // invece di cercarlo a mano tra centinaia di eventi.
+              setAnomalyDialogOpen(false);
+              setHighlightedEventId(orderNumber);
+              setEventsDrawerOpen(true);
+            }}
           />
           {missingDocs.length > 0 && (
             <MissingDocsSection

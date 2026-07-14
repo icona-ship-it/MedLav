@@ -28,6 +28,8 @@ interface AnomaliesSectionProps {
   events?: EventRow[];
   documents?: Document[];
   onChanged?: (dismissedId?: string) => void;
+  /** Apre il drawer Eventi sull'evento sorgente di un'anomalia (verifica rapida). */
+  onOpenEvent?: (orderNumber: number) => void;
 }
 
 interface MissingDocsSectionProps {
@@ -175,16 +177,23 @@ function parseInvolvedEvents(involvedEventsJson: string | null): InvolvedEvent[]
   }
 }
 
+interface ResolvedEventReference {
+  orderNumber: number;
+  label: string;
+  /** true se l'evento esiste ed è apribile nel drawer Eventi. */
+  openable: boolean;
+}
+
 function resolveEventReferences(
   involvedEvents: InvolvedEvent[],
   events?: EventRow[],
   documents?: Document[],
-): string[] {
+): ResolvedEventReference[] {
   if (!events || involvedEvents.length === 0) return [];
 
   return involvedEvents.map((ie) => {
     const matchedEvent = events.find((e) => e.order_number === ie.orderNumber);
-    if (!matchedEvent) return `Evento #${ie.orderNumber}: ${ie.title}`;
+    if (!matchedEvent) return { orderNumber: ie.orderNumber, label: `Evento #${ie.orderNumber}: ${ie.title}`, openable: false };
 
     const docName = matchedEvent.document_id && documents
       ? documents.find((d) => d.id === matchedEvent.document_id)?.file_name
@@ -210,7 +219,7 @@ function resolveEventReferences(
     }
 
     const docRef = docName ? ` — Doc: ${docName}${sourcePages}` : '';
-    return `Evento #${ie.orderNumber}: ${ie.title}${docRef}`;
+    return { orderNumber: ie.orderNumber, label: `Evento #${ie.orderNumber}: ${ie.title}${docRef}`, openable: true };
   });
 }
 
@@ -229,12 +238,14 @@ function AnomalyCard({
   documents,
   caseId,
   onChanged,
+  onOpenEvent,
 }: {
   anomaly: AnomalyRow;
   events?: EventRow[];
   documents?: Document[];
   caseId: string;
   onChanged?: (dismissedId?: string) => void;
+  onOpenEvent?: (orderNumber: number) => void;
 }) {
   const involvedEvents = parseInvolvedEvents(anomaly.involved_events);
   const references = resolveEventReferences(involvedEvents, events, documents);
@@ -271,7 +282,7 @@ function AnomalyCard({
     );
   }
 
-  // Actionable: detected | llm_confirmed
+  // Actionable: detected | llm_confirmed | null (legacy)
   return (
     <ActionableAnomalyCard
       anomaly={anomaly}
@@ -280,6 +291,7 @@ function AnomalyCard({
       guidance={guidance}
       caseId={caseId}
       onChanged={onChanged}
+      onOpenEvent={onOpenEvent}
     />
   );
 }
@@ -293,13 +305,15 @@ function ActionableAnomalyCard({
   guidance,
   caseId,
   onChanged,
+  onOpenEvent,
 }: {
   anomaly: AnomalyRow;
   typeLabel: string;
-  references: string[];
+  references: ResolvedEventReference[];
   guidance: AnomalyGuidanceEntry | undefined;
   caseId: string;
   onChanged?: (dismissedId?: string) => void;
+  onOpenEvent?: (orderNumber: number) => void;
 }) {
   // Textarea ALWAYS starts empty — the perito writes from scratch.
   const [expertNote, setExpertNote] = useState('');
@@ -344,14 +358,28 @@ function ActionableAnomalyCard({
       {/* Description */}
       <p className="text-sm">{anomaly.description}</p>
 
-      {/* References */}
+      {/* References — cliccabili: aprono il drawer Eventi sull'evento sorgente,
+          così il perito verifica l'anomalia sul fatto reale senza cercarlo a mano. */}
       {references.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {references.map((ref) => (
-            <p key={ref} className="text-xs text-muted-foreground flex items-start gap-1">
-              <FileText className="h-3 w-3 mt-0.5 shrink-0" />
-              {ref}
-            </p>
+            ref.openable && onOpenEvent ? (
+              <button
+                key={ref.orderNumber}
+                type="button"
+                onClick={() => onOpenEvent(ref.orderNumber)}
+                className="text-xs text-primary hover:underline flex items-start gap-1 text-left w-full"
+                title="Apri l'evento nella cronologia"
+              >
+                <FileText className="h-3 w-3 mt-0.5 shrink-0" />
+                <span>{ref.label}</span>
+              </button>
+            ) : (
+              <p key={ref.orderNumber} className="text-xs text-muted-foreground flex items-start gap-1">
+                <FileText className="h-3 w-3 mt-0.5 shrink-0" />
+                {ref.label}
+              </p>
+            )
           ))}
         </div>
       )}
@@ -388,7 +416,7 @@ function ActionableAnomalyCard({
             onChange={(e) => setExpertNote(e.target.value)}
           />
           <p className="text-sm text-muted-foreground">
-            Quello che scrivi qui sarà integrato nel report finale.
+            La tua nota comparirà nel documento accanto a questa segnalazione, come tua valutazione.
           </p>
         </div>
 
@@ -405,7 +433,7 @@ function ActionableAnomalyCard({
             ) : (
               <ThumbsUp className="mr-1 h-3 w-3" />
             )}
-            Includi nel report
+            Confermo — da segnalare
           </Button>
           <Button
             variant="outline"
@@ -419,7 +447,7 @@ function ActionableAnomalyCard({
             ) : (
               <Archive className="mr-1 h-3 w-3" />
             )}
-            Non includere
+            Non rilevante — escludi
           </Button>
         </div>
       </div>
@@ -607,12 +635,14 @@ function ResolvedAnomalyCard({
 
 // --- Anomalies Component ---
 
-export function AnomaliesSection({ anomalies, events, documents, caseId, onChanged }: AnomaliesSectionProps) {
+export function AnomaliesSection({ anomalies, events, documents, caseId, onChanged, onOpenEvent }: AnomaliesSectionProps) {
   const [showAutoResolved, setShowAutoResolved] = useState(false);
 
-  // Anomalies that need user action (detected + llm_confirmed)
+  // Anomalies that need user action (detected + llm_confirmed + legacy null).
+  // Lo status null (casi vecchi pre-triage) va trattato come actionable: era
+  // contato nel badge ma escluso da TUTTE le liste → badge che non si azzerava mai.
   const actionable = useMemo(
-    () => anomalies.filter((a) => a.status === 'detected' || a.status === 'llm_confirmed'),
+    () => anomalies.filter((a) => a.status === 'detected' || a.status === 'llm_confirmed' || a.status == null),
     [anomalies],
   );
 
@@ -657,6 +687,7 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
                 documents={documents}
                 caseId={caseId}
                 onChanged={onChanged}
+                onOpenEvent={onOpenEvent}
               />
             ))}
 
