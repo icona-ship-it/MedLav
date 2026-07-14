@@ -408,7 +408,10 @@ export function applyDeterministicImageCaptions(
       const docName = img.documentId ? docNameById.get(img.documentId) : undefined;
       const source = docName ? ` — fonte: ${docName}, pag. ${img.pageNumber}` : ` — pag. ${img.pageNumber}`;
       const desc = firstSentence ? ` (${firstSentence})` : '';
-      const alt = `Fig. ${n} — ${typeLabel}${desc}${source}`;
+      // Sanitizza le parentesi quadre: un ']' nell'alt-text (es. da una
+      // descrizione Pixtral che contiene "[...]") chiuderebbe in anticipo la
+      // sintassi markdown dell'immagine e romperebbe il riferimento.
+      const alt = `Fig. ${n} — ${typeLabel}${desc}${source}`.replace(/[[\]]/g, '');
       return `![${alt}](ocr-image:${path})`;
     },
   );

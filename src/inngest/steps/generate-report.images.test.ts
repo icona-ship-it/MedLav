@@ -110,3 +110,16 @@ describe('stripHallucinatedImageRefs', () => {
     expect(out).not.toContain('ocr-image:');
   });
 });
+
+describe('applyDeterministicImageCaptions — hardening: parentesi quadre nella descrizione', () => {
+  it('rimuove [ e ] dall\'alt-text per non rompere la sintassi markdown', () => {
+    const imgs: ImageCaptionMeta[] = [
+      { storagePath: 'p.jpg', imageType: 'radiografia', description: 'Frattura [scomposta] del femore.', pageNumber: 2, documentId: 'd1' },
+    ];
+    const out = applyDeterministicImageCaptions('![x](ocr-image:p.jpg)', imgs, new Map([['d1', 'RX.pdf']]));
+    expect(out).not.toContain('[scomposta]');
+    // l'immagine resta valida: un solo ![...]( e un solo )
+    expect((out.match(/!\[/g) ?? [])).toHaveLength(1);
+    expect(out).toContain('](ocr-image:p.jpg)');
+  });
+});
