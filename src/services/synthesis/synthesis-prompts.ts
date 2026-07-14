@@ -158,13 +158,36 @@ export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): st
     // restano in formatEventsForPrompt / CHRONOLOGY_SOURCES_GUIDE, non toccate.
     const sourceLabel = (SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType).replace(/^[A-D] - /, '');
     const facility = rep.facility ? ` — ${rep.facility}` : '';
+    // Intestazione DETERMINISTICA pronta (formato gold Antoniazzi): "**Tipo, struttura,
+    // in data DATA:**". Fornita all'LLM da copiare IDENTICA come prima riga del blocco,
+    // così smette di comporre titoli-evento data-prima. Backstop deterministico in
+    // section-generator (normalizeDocSanitariaBlockHeaders) se non obbedisce.
+    const canonicalHeader = buildDocSanitariaBlockHeader(sourceLabel, rep.facility, date);
     const content = evs.map((e) => {
-      const txt = (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();
+      // Cap sulle description LUNGHE (fonte delle "descrizioni lunghissime"): il
+      // sourceText (ancora verbatim ≤200 char) è preferito; la description LLM,
+      // quando usata, è capata a ~300 char su confine di parola.
+      const src = e.sourceText?.trim();
+      const txt = src || capText(e.description?.trim() || e.title || '', 300);
       const diag = e.diagnosis ? `\n     [Diagnosi: ${e.diagnosis}]` : '';
       return `   • ${txt}${diag}`;
     }).join('\n');
-    return `DOCUMENTO ${i + 1} | ${sourceLabel}${facility} | data ${date}\n(riproduci come UN UNICO blocco verbatim per questo documento, NON una voce per riga; raccordo minimo)\n${content}`;
+    return `DOCUMENTO ${i + 1}\nINTESTAZIONE-BLOCCO (copiala IDENTICA come PRIMA RIGA del blocco, in grassetto, senza anteporre la data né aggiungere un titolo dell'evento):\n${canonicalHeader}\nCONTENUTO-FONTE (cita da qui, verbatim tra «...»; raccordo minimo, MAI parafrasi lunga):\n${content}`;
   }).join('\n\n');
+}
+
+/** Intestazione canonica del blocco doc-sanitaria (formato gold Antoniazzi). */
+export function buildDocSanitariaBlockHeader(label: string, facility: string | null, date: string): string {
+  const fac = facility ? `, ${facility}` : '';
+  return `**${label}${fac}, in data ${date}:**`;
+}
+
+/** Taglia un testo a maxLen su confine di parola, aggiungendo "…" se tagliato. */
+function capText(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const slice = text.slice(0, maxLen);
+  const lastSpace = slice.lastIndexOf(' ');
+  return `${(lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice).trim()}…`;
 }
 
 /**

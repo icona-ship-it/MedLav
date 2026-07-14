@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes, capEventsForNarrativeSection, stripGuardFormulaFromDocSanitariaTitles } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes, capEventsForNarrativeSection, stripGuardFormulaFromDocSanitariaTitles, demoteStrayBoldParagraphs } from './section-generator';
+import { buildDocSanitariaBlockHeader } from './synthesis-prompts';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -351,5 +352,40 @@ describe('stripGuardFormulaFromDocSanitariaTitles — via la formula di cautela 
     const md = '**Referto RX femore destro, Ospedale di Prova, in data 22.09.2025:**';
     expect(stripGuardFormulaFromDocSanitariaTitles(md)).toBe(md);
     expect(stripGuardFormulaFromDocSanitariaTitles(stripGuardFormulaFromDocSanitariaTitles(md))).toBe(md);
+  });
+});
+
+describe('demoteStrayBoldParagraphs — il grassetto resta solo sulle intestazioni (formato gold)', () => {
+  it('de-emfatizza un intero paragrafo narrativo reso in bold', () => {
+    const long = 'Il paziente presentava un quadro clinico complesso caratterizzato da dolore persistente e limitazione funzionale, con necessità di trattamento riabilitativo prolungato nel tempo secondo indicazione specialistica.';
+    const md = `**${long}**`;
+    expect(demoteStrayBoldParagraphs(md)).toBe(long);
+  });
+
+  it('NON tocca una riga-intestazione legittima (breve, termina con ":")', () => {
+    const h = '**Cartella clinica, Ospedale di Verona, in data 16.07.2023:**';
+    expect(demoteStrayBoldParagraphs(h)).toBe(h);
+  });
+
+  it('NON tocca grassetti inline brevi dentro il testo', () => {
+    const md = 'Diagnosi di **frattura del femore** con indicazione chirurgica.';
+    expect(demoteStrayBoldParagraphs(md)).toBe(md);
+  });
+
+  it('è idempotente', () => {
+    const long = 'x'.repeat(200);
+    const once = demoteStrayBoldParagraphs(`**${long}**`);
+    expect(demoteStrayBoldParagraphs(once)).toBe(once);
+  });
+});
+
+describe('buildDocSanitariaBlockHeader — intestazione canonica formato gold', () => {
+  it('include struttura quando presente', () => {
+    expect(buildDocSanitariaBlockHeader('Cartella clinica', 'Ospedale X', '16.07.2023'))
+      .toBe('**Cartella clinica, Ospedale X, in data 16.07.2023:**');
+  });
+  it('omette struttura quando assente (niente virgola doppia)', () => {
+    expect(buildDocSanitariaBlockHeader('Referto di esame strumentale', null, '05.03.2024'))
+      .toBe('**Referto di esame strumentale, in data 05.03.2024:**');
   });
 });

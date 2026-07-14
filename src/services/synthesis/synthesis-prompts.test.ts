@@ -43,7 +43,7 @@ describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
       makeEvent({ documentId: 'doc-A', eventDate: '2024-03-10', title: 'Dimissione', sourceText: 'dimesso' }),
       makeEvent({ documentId: 'doc-B', eventDate: '2024-04-01', title: 'Controllo', sourceText: 'controllo ok' }),
     ]);
-    const blocks = out.match(/DOCUMENTO \d+ \|/g) ?? [];
+    const blocks = out.match(/DOCUMENTO \d+/g) ?? [];
     expect(blocks).toHaveLength(2); // 2 documenti, non 4 eventi
     // i 3 reperti del doc-A stanno nello STESSO blocco
     expect(out).toMatch(/frattura femore/);

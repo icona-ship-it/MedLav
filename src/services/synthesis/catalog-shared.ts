@@ -200,9 +200,9 @@ PRINCIPIO (direttiva del perito):
 - La prosa di raccordo è ridotta al minimo indispensabile (solo per introdurre il documento), MAI una parafrasi del suo contenuto.
 
 STRUTTURA (UN blocco per documento, ordine cronologico — benchmark Antoniazzi/MOTTA):
-- Riga-intestazione in GRASSETTO: **Tipo documento, struttura/autore, in data GG.MM.AAAA:**
-- Se la struttura/autore NON è documentata, OMETTILA dal titolo (scrivi solo "**Tipo documento, in data GG.MM.AAAA:**"). VIETATO scrivere nel titolo formule come "[dato non risultante dalla documentazione in atti]" o simili: nei titoli il dato mancante si omette e basta (le formule di cautela valgono solo nella prosa).
-- Subito sotto, le citazioni-chiave riprodotte VERBATIM tra «...» (diagnosi, reperti principali, conclusioni, indicazioni, prognosi).
+- PRIMA RIGA del blocco: copia IDENTICA l'INTESTAZIONE-BLOCCO fornita nei dati per quel documento (è già in grassetto, formato "**Tipo documento, struttura, in data GG.MM.AAAA:**"). VIETATO riformularla, anteporre la data, trasformarla in un titolo-evento o aggiungere qualsiasi altra riga di intestazione.
+- Se la struttura/autore NON è documentata è già omessa dall'intestazione fornita: non aggiungere formule come "[dato non risultante...]".
+- CORPO: MASSIMO 1-3 frasi brevi di raccordo in tutto il blocco + le citazioni-chiave VERBATIM tra «...» (diagnosi, reperti principali, conclusioni, indicazioni, prognosi). VIETATO il paragrafo narrativo lungo che riassume il documento: il contenuto clinico sta DENTRO le «...», non nella tua prosa. Il grassetto è riservato ALLA SOLA riga di intestazione.
 - Ogni documento compare UNA SOLA VOLTA: se un fatto è già stato citato da un documento precedente, NON ripeterlo.
 - Più referti con la stessa data e struttura (es. proiezioni RX dello stesso giorno) → un'unica intestazione di data.
 

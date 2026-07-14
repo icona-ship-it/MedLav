@@ -556,6 +556,9 @@ export async function generateSingleSection(params: {
   // Backstop deterministico; la radice è già tolta in formatEventsByDocumentForPrompt.
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder) {
     finalContent = stripClassifierCodeFromDocSanitariaTitles(finalContent);
+    // Grassetto scappato su interi paragrafi (l'LLM a volte bolda il raccordo):
+    // il bold resta solo sulle intestazioni-blocco (formato gold).
+    finalContent = demoteStrayBoldParagraphs(finalContent);
     // CASO-2026-219 (2026-07-14): quando la STRUTTURA non è documentata, l'LLM
     // riempiva lo slot del titolo con la formula di cautela pensata per le date
     // ("**Cartella clinica, [dato non risultante dalla documentazione in atti],
@@ -668,6 +671,21 @@ function isoToItDate(iso: string): string {
  */
 export function stripClassifierCodeFromDocSanitariaTitles(markdown: string): string {
   return markdown.replace(/^(\*\*)\s*[A-D]\s*[-–]\s+/gm, '$1');
+}
+
+/**
+ * Backstop deterministico: toglie il GRASSETTO "scappato" quando l'LLM rende in
+ * bold un intero paragrafo narrativo (non un'intestazione). Nel gold il grassetto
+ * è riservato alla riga-intestazione del blocco (breve, termina con ":**"). Una
+ * riga tutta-bold LUNGA (≥120 char) che NON è un'intestazione (non termina con
+ * ":") è un errore di formattazione: la de-emfatizziamo. Puro e idempotente.
+ */
+export function demoteStrayBoldParagraphs(markdown: string): string {
+  return markdown.replace(/^\*\*([^\n*][^\n]{119,})\*\*\s*$/gm, (line, inner: string) => {
+    // È un'intestazione legittima? (breve o termina con ':') → lasciala.
+    if (/:$/.test(inner.trim())) return line;
+    return inner;
+  });
 }
 
 /**
