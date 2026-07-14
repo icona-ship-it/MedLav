@@ -264,7 +264,7 @@ export function DocumentsSection({
         return;
       }
 
-      toast.success('Categorizzazione AI avviata in background');
+      toast.success('L\'AI sta riconoscendo il tipo dei documenti — puoi continuare a lavorare');
       // Instant local feedback + kick the parent's polling: the server takes
       // a few seconds to write the first classificationProgress, and without
       // the kickoff the polling condition would never turn on.
@@ -365,6 +365,7 @@ export function DocumentsSection({
                   onClick={handleClassifyAll}
                   disabled={classifyingDocId !== null}
                   className="shrink-0"
+                  title="L'AI legge ogni documento e ne riconosce il tipo (referto, cartella clinica, fattura…)"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   <span className="ml-1.5">Categorizza tutti con AI</span>
@@ -381,13 +382,14 @@ export function DocumentsSection({
               <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                  <span className="text-sm font-medium">Categorizzazione AI in avvio…</span>
+                  <span className="text-sm font-medium">L&apos;AI sta aprendo i documenti…</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                   <div className="h-full w-1/12 rounded-full bg-primary animate-pulse" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tra pochi secondi vedrai l&apos;avanzamento documento per documento.
+                  Legge le prime pagine di ogni documento per riconoscerne il tipo. Tra pochi secondi
+                  vedrai l&apos;avanzamento documento per documento.
                 </p>
               </div>
             )}
@@ -399,7 +401,7 @@ export function DocumentsSection({
                   <div className="flex items-center gap-2 min-w-0">
                     <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                     <span className="text-sm font-medium">
-                      Categorizzazione AI: {classificationProgress.completed} di {classificationProgress.total}
+                      L&apos;AI sta riconoscendo il tipo dei documenti: {classificationProgress.completed} di {classificationProgress.total}
                     </span>
                     <span className="text-xs text-muted-foreground tabular-nums">
                       ({Math.round((classificationProgress.completed / classificationProgress.total) * 100)}%)
@@ -429,8 +431,13 @@ export function DocumentsSection({
             )}
             {classificationProgress && classificationProgress.status === 'done' && (
               <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-800 dark:text-green-200">
-                Categorizzazione completata: {classificationProgress.completed - classificationProgress.errors} di {classificationProgress.total} documenti categorizzati
-                {classificationProgress.errors > 0 && `, ${classificationProgress.errors} con errori`}
+                <span className="font-medium">
+                  Fatto: {classificationProgress.completed - classificationProgress.errors} di {classificationProgress.total} documenti categorizzati.
+                </span>{' '}
+                Dai un&apos;occhiata alle categorie assegnate qui sotto — se una non ti convince, cambiala dal menu.
+                {classificationProgress.errors > 0 && (
+                  <> Per {classificationProgress.errors} {classificationProgress.errors === 1 ? 'documento' : 'documenti'} l&apos;AI non è riuscita a decidere: trovi il motivo sotto ciascuno.</>
+                )}
               </div>
             )}
 
@@ -439,11 +446,12 @@ export function DocumentsSection({
             {uncertainCount > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-200">
                 <span className="font-medium">
-                  {uncertainCount} {uncertainCount === 1 ? 'documento con categoria incerta' : 'documenti con categoria incerta'}
+                  Per {uncertainCount} {uncertainCount === 1 ? 'documento l’AI non è sicura della categoria' : 'documenti l’AI non è sicura della categoria'}
                 </span>{' '}
-                — spesso perché <strong>manoscritti o poco leggibili</strong> e l&apos;OCR estrae poco testo. Trovi il
-                motivo sotto ciascuno. In fase di analisi questi documenti potrebbero non essere letti: verifica e, se
-                serve, correggi la categoria a mano.
+                — succede di solito con scansioni poco leggibili o manoscritti, da cui si estrae poco testo.
+                Sotto ciascun documento trovi il motivo: se la categoria proposta non ti convince, correggila
+                dal menu. Un documento davvero illeggibile contribuirà poco all&apos;analisi, quindi vale la
+                pena dargli un&apos;occhiata ora.
               </div>
             )}
 
@@ -452,16 +460,17 @@ export function DocumentsSection({
                 tendine. Non bloccante. Nascosto mentre la categorizzazione AI è
                 ancora in corso (i tipi non sono definitivi). */}
             {uncategorizedCount > 0 && classificationProgress?.status !== 'running' && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
-                <FileQuestion className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-900 dark:text-amber-200">
+              <div className="flex items-start gap-2 rounded-lg border bg-primary/5 p-3">
+                <FileQuestion className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div className="text-sm text-foreground">
                   <span className="font-medium">
-                    {uncategorizedCount} {uncategorizedCount === 1 ? 'documento senza categoria' : 'documenti senza categoria'}
-                  </span>{' '}
-                  (contrassegnati <strong>Da categorizzare</strong> qui sotto). Verranno analizzati con
-                  istruzioni generiche e riprodotti integralmente nella &quot;Documentazione Sanitaria&quot; del report.
-                  Per un risultato più preciso assegna una categoria a mano o usa
-                  {' '}<strong>&quot;Categorizza tutti con AI&quot;</strong>.
+                    {uncategorizedCount} {uncategorizedCount === 1 ? 'documento è ancora da categorizzare' : 'documenti sono ancora da categorizzare'}
+                  </span>
+                  {' '}— la categoria dice all&apos;AI che tipo di documento sta leggendo (referto, cartella
+                  clinica, fattura…) e la aiuta a scrivere una perizia più precisa, con ogni informazione
+                  nella sezione giusta. Puoi sceglierla tu dal menu di ogni documento, oppure premere
+                  {' '}<strong>&quot;Categorizza tutti con AI&quot;</strong>: ci pensa lei in meno di un minuto.
+                  Non è obbligatorio — l&apos;analisi parte comunque.
                 </div>
               </div>
             )}
@@ -573,8 +582,8 @@ export function DocumentsSection({
                       <>
                       <p className={`text-xs font-medium mt-2 ${isUncategorized ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}>
                         {isUncategorized
-                          ? 'Categoria mancante — scegline una o usa l’AI'
-                          : 'Categoria del documento — scegli o usa l’AI'}
+                          ? 'Che documento è? Scegli la categoria o lascia fare all’AI'
+                          : 'Categoria del documento'}
                       </p>
                       <Select
                         value={doc.document_type ?? 'altro'}

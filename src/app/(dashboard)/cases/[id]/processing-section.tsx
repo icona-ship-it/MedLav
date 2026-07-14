@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Play, Loader2, XCircle, RotateCcw, AlertTriangle,
+  Play, Loader2, XCircle, RotateCcw, AlertTriangle, Sparkles,
   FileSearch, BrainCircuit, ShieldCheck, ShieldOff, FileText, CheckCircle2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -391,15 +391,16 @@ export function ProcessingSection({
                     </div>
                   </div>
 
-                  {/* Avviso documenti senza categoria — non bloccante */}
+                  {/* Suggerimento documenti senza categoria — non bloccante, tono informativo */}
                   {allDocsUncategorized && (
-                    <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <p className="text-sm text-amber-800 dark:text-amber-300">
-                        Molti documenti sono senza categoria: l&apos;analisi userà istruzioni generiche
-                        e <strong>tutti</strong> i documenti (anche atti legali e allegati non clinici)
-                        verranno riprodotti integralmente nella sezione &quot;Documentazione Sanitaria&quot;
-                        del report. Consigliato: torna al passaggio Documenti e usa &quot;Categorizza tutti con AI&quot;.
+                    <div className="flex items-start gap-2 rounded-md border bg-primary/5 p-3">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                      <p className="text-sm text-foreground">
+                        <strong>Suggerimento:</strong> i documenti non hanno ancora una categoria. Puoi
+                        avviare comunque — ma con le categorie assegnate l&apos;AI capisce meglio cosa sta
+                        leggendo e il report viene più preciso e ordinato. Se vuoi, torna al passaggio
+                        {' '}<strong>Documenti</strong> e premi &quot;Categorizza tutti con AI&quot;: ci pensa
+                        lei in meno di un minuto.
                       </p>
                     </div>
                   )}
