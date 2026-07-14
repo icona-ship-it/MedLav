@@ -275,6 +275,11 @@ interface AnalyzableEvent {
   event_date: string;
   facility: string | null;
   source_type: string;
+  /** Ancora verbatim OCR (≤200 char): fallback per l'estrazione dell'importo
+   * quando titolo/descrizione non lo riportano (casi reali 2026-07-14: 3 voci
+   * su 4 senza importo perché l'estrazione non l'aveva copiato in description,
+   * ma "€ 120,00" era nel sourceText). */
+  source_text?: string | null;
 }
 
 /**
@@ -291,16 +296,20 @@ interface AnalyzableEvent {
  * Vero se la voce è una NOTIFICA DI COSTO a carico del Servizio Sanitario (SSN/SSR),
  * non una spesa out-of-pocket del danneggiato → esclusa dalle spese risarcibili.
  */
-export function isSsrCostNotification(title: string, description?: string | null): boolean {
-  const t = `${title} ${description ?? ''}`.toLowerCase();
-  // "il SSR/SSN ha impiegato/impegnato/sostenuto/speso euro X" — sia in forma
-  // ABBREVIATA (s.s.r./s.s.n.) sia ESTESA ("servizio sanitario regionale/
-  // nazionale"). Bug Bigon 2026-07-05: il pattern copriva solo l'abbreviazione
-  // e solo "impiegat" (non "impegnat") → 7 costi SSR (€6.065) contati come
-  // spese del danneggiato. Sono costi del Servizio Sanitario, non out-of-pocket.
-  const serviceVerb = /(s\.?s\.?[rn]\.?|servizio sanitario(\s+(regionale|nazionale))?|sistema sanitario) ha (impi?egat|impegnat|sosten[uy]t|spes)/;
+export function isSsrCostNotification(title: string, description?: string | null, sourceText?: string | null): boolean {
+  // Include ANCHE il source_text (ancora OCR): la frase SSR spesso vive lì
+  // integrale mentre titolo/descrizione la parafrasano (CASO-2026-220: source_text
+  // "il Servizio Sanitario Regionale ha impiegato euro 27.90", ma la description
+  // usava l'ordine invertito "costo sostenuto dal SSR" → sfuggiva).
+  const t = `${title} ${description ?? ''} ${sourceText ?? ''}`.toLowerCase();
+  const service = '(s\\.?s\\.?[rn]\\.?|servizio sanitario(\\s+(regionale|nazionale))?|sistema sanitario)';
+  // Ordine DIRETTO: "il SSR ha impiegato/impegnato/sostenuto/speso ..."
+  const serviceVerb = new RegExp(`${service} ha (impi?egat|impegnat|sosten[uy]t|spes)`);
+  // Ordine INVERTITO: "costo/spesa ... sostenuto/impiegato/impegnato/speso DAL SSR"
+  const invertedVerb = new RegExp(`(impi?egat|impegnat|sosten[uy]t|spes)[a-z]*\\s+(euro\\s+[\\d.,]+\\s+)?(dal|da parte del|a carico del)\\s+${service}`);
   return (
     serviceVerb.test(t) ||
+    invertedVerb.test(t) ||
     /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t)
   );
 }
@@ -333,13 +342,17 @@ export function analyzeExpenses(
     // NON sono spese risarcibili del danneggiato le notifiche-costo a carico del SSN/SSR
     // (es. "il SSR ha impiegato euro X", "a carico del Servizio Sanitario"): contarle gonfia
     // il quantum con costi che il danneggiato non ha sostenuto.
-    if (isSsrCostNotification(ev.title, ev.description)) continue;
+    if (isSsrCostNotification(ev.title, ev.description, ev.source_text)) continue;
 
     // Le componenti fiscali (IVA scorporata, bollo) non sono voci di spesa autonome.
     if (isFiscalComponentItem(ev.title)) continue;
 
     const category = inferCategory(ev.event_type, ev.title, ev.description);
-    const amount = extractAmount(ev.title) ?? extractAmount(ev.description);
+    // Importo: titolo → descrizione → sourceText verbatim (l'ancora OCR spesso
+    // contiene "euro 120,00" anche quando l'estrazione non l'ha copiato altrove).
+    const amount = extractAmount(ev.title)
+      ?? extractAmount(ev.description)
+      ?? (ev.source_text ? extractAmount(ev.source_text) : null);
 
     items.push({
       date: ev.event_date ?? '',

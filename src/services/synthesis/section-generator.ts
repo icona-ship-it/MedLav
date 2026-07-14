@@ -252,6 +252,7 @@ export function buildSectionUserPrompt(params: {
       event_date: e.eventDate,
       facility: e.facility ?? null,
       source_type: e.sourceType,
+      source_text: e.sourceText ?? null,
     }));
     const expenseTotal = analyzeExpenses(expenseRows).totalAmount;
     if (expenseTotal !== null && expenseTotal > 0) {
@@ -555,6 +556,12 @@ export async function generateSingleSection(params: {
   // Backstop deterministico; la radice è già tolta in formatEventsByDocumentForPrompt.
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder) {
     finalContent = stripClassifierCodeFromDocSanitariaTitles(finalContent);
+    // CASO-2026-219 (2026-07-14): quando la STRUTTURA non è documentata, l'LLM
+    // riempiva lo slot del titolo con la formula di cautela pensata per le date
+    // ("**Cartella clinica, [dato non risultante dalla documentazione in atti],
+    // in data X:**") — incomprensibile per il medico. Nei TITOLI la formula va
+    // semplicemente omessa (resta tipo documento + data).
+    finalContent = stripGuardFormulaFromDocSanitariaTitles(finalContent);
   }
 
   // Doc-sanitaria SELETTIVA (default dal 2026-06-12): ogni citazione «...»
@@ -661,6 +668,24 @@ function isoToItDate(iso: string): string {
  */
 export function stripClassifierCodeFromDocSanitariaTitles(markdown: string): string {
   return markdown.replace(/^(\*\*)\s*[A-D]\s*[-–]\s+/gm, '$1');
+}
+
+/**
+ * Toglie dai TITOLI grassetto dei blocchi doc-sanitaria la formula di cautela
+ * "[dato non risultante dalla documentazione in atti]" (e varianti) che l'LLM
+ * infila nello slot struttura/autore quando il dato manca (CASO-2026-219: 17
+ * titoli). Nei titoli il dato mancante va OMESSO, non spiegato con una formula
+ * incomprensibile per il medico. Tocca SOLO le righe-titolo (grassetto che
+ * termina con ":**"); la formula nella PROSA resta valida. Puro e idempotente.
+ */
+export function stripGuardFormulaFromDocSanitariaTitles(markdown: string): string {
+  return markdown.replace(/^\*\*[^\n]*:\*\*\s*$/gm, (titleLine) =>
+    titleLine
+      .replace(/,?\s*\[(?:dato non risultante|non risultante|non documentat)[^\]]*\]/gi, '')
+      .replace(/,\s*,/g, ',')
+      .replace(/\*\*\s*,/, '**')
+      .replace(/,\s*:(\*\*)/, ':$1'),
+  );
 }
 
 /**

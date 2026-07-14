@@ -94,6 +94,9 @@ export function formatExpenseTable(events: DeterministicTableEvent[]): string {
       event_date: e.event_date ?? '',
       facility: e.facility ?? null,
       source_type: e.source_type ?? 'altro',
+      // Fallback importo: l'ancora verbatim OCR spesso contiene la cifra anche
+      // quando titolo/descrizione non la riportano (casi reali 2026-07-14).
+      source_text: e.source_text ?? null,
     })),
   );
   if (items.length === 0) return '';
@@ -323,7 +326,7 @@ export const DETERMINISTIC_MARKERS = {
 
 const EMPTY_FALLBACK: Record<keyof typeof DETERMINISTIC_MARKERS, string> = {
   ITT_ITP: '_Periodi di invalidità temporanea non calcolabili dai dati disponibili._',
-  SPESE: '_Nessuna spesa medica documentata._',
+  SPESE: '_Non risultano spese mediche a carico del danneggiato documentate negli atti._',
   CRONO: '_Nessun evento clinico in cronologia._',
   DOC_SANITARIA: '_Nessun documento sanitario disponibile._',
   // Nessun fatto calcolabile → niente blocco (l'LLM ha già scritto la sintesi sopra).

@@ -171,7 +171,7 @@ describe('expandDeterministicBlocks', () => {
     const md = DETERMINISTIC_MARKERS.SPESE;
     const out = expandDeterministicBlocks(md, []); // no expenses
     expect(out).not.toContain(DETERMINISTIC_MARKERS.SPESE);
-    expect(out).toContain('Nessuna spesa medica documentata');
+    expect(out).toContain('Non risultano spese mediche a carico del danneggiato');
   });
 });
 

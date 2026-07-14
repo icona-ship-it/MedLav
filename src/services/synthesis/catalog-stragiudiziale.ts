@@ -177,7 +177,11 @@ ${NO_EVN_RULE}`,
     dataSources: [],
     contextMaxChars: 0,
     needsOcr: false,
-    condition: 'has-expense-events',
+    // SEMPRE presente (CASO-2026-219, 2026-07-14): prima era condizionata a
+    // 'has-expense-events' → nei casi senza spese out-of-pocket la sezione
+    // spariva del tutto (il perito la cercava e non c'era, sembrava un pezzo
+    // mancante). Ora c'è sempre; se vuota mostra lo stato onesto "nessuna spesa
+    // documentata" (EMPTY_FALLBACK.SPESE) — struttura del report coerente.
     // DETERMINISTIC (B-pillar): table rendered from spesa_medica events at read
     // time — every voce inclusa (anche senza data → '—'), bollo come riga
     // separata, nessuna voce persa. Niente dipendenza dalla compliance LLM.

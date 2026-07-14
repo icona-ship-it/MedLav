@@ -774,6 +774,7 @@ export const processCase = inngest.createFunction(
             event_date: e.eventDate,
             facility: e.facility,
             source_type: e.sourceType,
+            source_text: e.sourceText ?? null,
           }));
           return analyzeExpenses(eventsForAnalysis);
         });

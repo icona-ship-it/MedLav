@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes, capEventsForNarrativeSection } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes, capEventsForNarrativeSection, stripGuardFormulaFromDocSanitariaTitles } from './section-generator';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -330,5 +330,26 @@ describe('capEventsForNarrativeSection — budget eventi per sezioni narrative (
     expect(r.events.length).toBeLessThanOrEqual(120);
     expect(r.events).toContain(events[0]);
     expect(r.events).toContain(events[899]); // ultimi 10 garantiti comunque
+  });
+});
+
+describe('stripGuardFormulaFromDocSanitariaTitles — via la formula di cautela dai TITOLI (CASO-2026-219)', () => {
+  it('toglie "[dato non risultante...]" dallo slot struttura del titolo', () => {
+    const md = '**Cartella clinica, [dato non risultante dalla documentazione in atti], in data 05.03.2024:**\nTesto del blocco.';
+    const out = stripGuardFormulaFromDocSanitariaTitles(md);
+    expect(out).toContain('**Cartella clinica, in data 05.03.2024:**');
+    expect(out).not.toContain('dato non risultante');
+    expect(out).toContain('Testo del blocco.');
+  });
+
+  it('NON tocca la formula nella PROSA (solo i titoli grassetto che finiscono con :**)', () => {
+    const md = 'La struttura [dato non risultante dalla documentazione in atti] ha erogato la prestazione.';
+    expect(stripGuardFormulaFromDocSanitariaTitles(md)).toBe(md);
+  });
+
+  it('è idempotente e lascia intatti i titoli già puliti', () => {
+    const md = '**Referto RX femore destro, Ospedale di Prova, in data 22.09.2025:**';
+    expect(stripGuardFormulaFromDocSanitariaTitles(md)).toBe(md);
+    expect(stripGuardFormulaFromDocSanitariaTitles(stripGuardFormulaFromDocSanitariaTitles(md))).toBe(md);
   });
 });

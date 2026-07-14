@@ -306,6 +306,23 @@ describe('fix Bigon — parser US + esclusione notifiche SSR', () => {
     expect(isSsrCostNotification('Ticket € 36,15')).toBe(false);
   });
 
+  it('isSsrCostNotification: ordine INVERTITO "costo sostenuto dal SSR" (CASO-2026-220)', () => {
+    // La description usa l'ordine invertito, il source_text quello diretto: entrambi vanno beccati.
+    expect(isSsrCostNotification(
+      'Spesa sanitaria per percorso di cura',
+      'Informazione amministrativa relativa al costo del percorso di cura sostenuto dal Servizio Sanitario Regionale: euro 27,90',
+    )).toBe(true);
+    expect(isSsrCostNotification(
+      'Spesa sanitaria per percorso di cura',
+      'costo del percorso di cura',
+      'il Servizio Sanitario Regionale ha impiegato euro 27.90 per il Suo percorso di cura.',
+    )).toBe(true);
+    // Una spesa VERA del paziente non deve essere esclusa dal nuovo pattern invertito.
+    expect(isSsrCostNotification(
+      'Visita fisiatrica', 'euro 120,00 sostenuti dalla paziente presso studio privato',
+    )).toBe(false);
+  });
+
   it('analyzeExpenses ESCLUDE le notifiche SSR dal totale risarcibile', () => {
     const ev = (o: Record<string, unknown>) => ({
       event_type: 'spesa_medica', title: '', description: '', event_date: '2024-06-15',

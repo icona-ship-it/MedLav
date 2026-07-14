@@ -201,6 +201,7 @@ PRINCIPIO (direttiva del perito):
 
 STRUTTURA (UN blocco per documento, ordine cronologico — benchmark Antoniazzi/MOTTA):
 - Riga-intestazione in GRASSETTO: **Tipo documento, struttura/autore, in data GG.MM.AAAA:**
+- Se la struttura/autore NON è documentata, OMETTILA dal titolo (scrivi solo "**Tipo documento, in data GG.MM.AAAA:**"). VIETATO scrivere nel titolo formule come "[dato non risultante dalla documentazione in atti]" o simili: nei titoli il dato mancante si omette e basta (le formule di cautela valgono solo nella prosa).
 - Subito sotto, le citazioni-chiave riprodotte VERBATIM tra «...» (diagnosi, reperti principali, conclusioni, indicazioni, prognosi).
 - Ogni documento compare UNA SOLA VOLTA: se un fatto è già stato citato da un documento precedente, NON ripeterlo.
 - Più referti con la stessa data e struttura (es. proiezioni RX dello stesso giorno) → un'unica intestazione di data.

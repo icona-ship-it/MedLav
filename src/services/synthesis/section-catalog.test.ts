@@ -257,10 +257,12 @@ describe('section-catalog', () => {
       expect(ids).toContain('spese_mediche');
     });
 
-    it('should not include spese_mediche without expense events', () => {
+    it('should ALWAYS include spese_mediche, anche senza spese (stato vuoto onesto)', () => {
+      // 2026-07-14 (CASO-2026-219): la sezione non è più condizionata — se non
+      // ci sono spese mostra "nessuna spesa documentata", non sparisce.
       const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
       const ids = plan.map((s) => s.id);
-      expect(ids).not.toContain('spese_mediche');
+      expect(ids).toContain('spese_mediche');
     });
 
     it('spese_mediche is a DETERMINISTIC placeholder (sentinel, no LLM) so every expense is included by construction', () => {
