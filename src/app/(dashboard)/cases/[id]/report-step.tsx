@@ -4,8 +4,10 @@ import { useState, useCallback, useMemo } from 'react';
 import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { Loader2, Download, AlertTriangle, RefreshCw, X, Info } from 'lucide-react';
 import { toUserMessage } from '@/lib/user-error-messages';
+import { groupPipelineWarnings, type DisplaySeverity } from '@/lib/pipeline-warning-display';
+import { scrollToReportSection } from '@/lib/report-navigation';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -182,6 +184,9 @@ export function ReportStep({
   const reviewCount = actionableCount + missingDocsCount + claimFindings.length;
   // Primo warning di pipeline con documenti falliti → abilita "Vedi dettagli" nel pannello.
   const drillablePipelineWarning = pipelineWarnings.find((w) => w.failedItems && w.failedItems.length > 0);
+  // Warning di pipeline TRADOTTI per il perito: copy calmo e specifico + gravità
+  // giusta (prima erano tutti "documenti non letti per intero", anche i critici).
+  const warningDisplays = useMemo(() => groupPipelineWarnings(pipelineWarnings), [pipelineWarnings]);
 
   const sections = report?.synthesis ? parseSections(report.synthesis) : [];
 
@@ -513,41 +518,79 @@ export function ReportStep({
                       <span className="font-medium">{f.sectionTitle}:</span>{' '}
                       «{f.claim}»
                       {' '}<span className="text-muted-foreground">— {f.verdict === 'non_supportato' ? 'non risulta dai documenti' : 'da verificare sull’originale'}{f.motivo ? ` (${f.motivo})` : ''}</span>
+                      {' '}
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => scrollToReportSection({ canonicalId: f.sectionId, title: f.sectionTitle })}
+                      >
+                        Vedi nel report
+                      </button>
                     </li>
                   ))}
                 </ul>
               </details>
             )}
-            {(actionableCount > 0 || missingDocsCount > 0) && (
+            {actionableCount > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <span className="text-sm">
-                    {actionableCount > 0 && `${actionableCount} ${actionableCount === 1 ? 'anomalia clinica da valutare' : 'anomalie cliniche da valutare'}`}
-                    {actionableCount > 0 && missingDocsCount > 0 && ' · '}
-                    {missingDocsCount > 0 && `${missingDocsCount} ${missingDocsCount === 1 ? 'documento atteso mancante' : 'documenti attesi mancanti'}`}
+                    {actionableCount} {actionableCount === 1 ? 'anomalia clinica da valutare' : 'anomalie cliniche da valutare'}
                   </span>
                 </div>
                 <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
-                  Apri elenco
+                  Valuta le anomalie
                 </Button>
               </div>
             )}
-            {pipelineWarnings.length > 0 && (
+            {missingDocsCount > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <span className="text-sm">
-                    Alcuni documenti non sono stati letti per intero — conviene verificarli sull&apos;originale.
+                    {missingDocsCount} {missingDocsCount === 1 ? 'documento atteso non presente nel fascicolo' : 'documenti attesi non presenti nel fascicolo'}
                   </span>
                 </div>
-                {drillablePipelineWarning && (
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
+                  Vedi quali
+                </Button>
+              </div>
+            )}
+            {warningDisplays.map((wd, i) => (
+              <div key={`wd-${i}`} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  {wd.severity === 'critical' ? (
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  ) : wd.severity === 'warning' ? (
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  ) : (
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="text-sm">{wd.title}</span>
+                </div>
+                {wd.action === 'view-documents' && drillablePipelineWarning && (
                   <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setPipelineDetail(drillablePipelineWarning)}>
-                    Vedi dettagli
+                    Vedi i documenti
+                  </Button>
+                )}
+                {wd.action === 'goto-section' && (
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => scrollToReportSection({ bodyText: 'SEZIONE NON GENERATA' })}>
+                    Vai alla sezione
+                  </Button>
+                )}
+                {wd.action === 'goto-docsanitaria' && (
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => scrollToReportSection({ canonicalId: 'documentazione_sanitaria', title: 'Documentazione' })}>
+                    Vai alla sezione
+                  </Button>
+                )}
+                {wd.action === 'reprocess' && (
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => onNavigateToStep(3)}>
+                    Rielabora
                   </Button>
                 )}
               </div>
-            )}
+            ))}
             {staleForPanel.length > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
