@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes } from './section-generator';
+import { chunkArray, buildAttiIndex, chunkEventsByDocument, buildDocSanitariaChunkSpec, stripClassifierCodeFromDocSanitariaTitles, stripBracketedDocRefs, stripCodeFences, stripGuardMarkersInsideQuotes, capEventsForNarrativeSection } from './section-generator';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
 import type { SectionSpec } from './section-generation-types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
@@ -283,5 +283,52 @@ describe('buildDocSanitariaChunkSpec — nota RC vs non-RC', () => {
   it('non-RC: mantiene la nota selettiva storica', () => {
     const ctu = buildDocSanitariaChunkSpec({ ...base, excludeLabTests: false }, 0, 3);
     expect(ctu.promptDirective).toMatch(/narrazione cronologica selettiva/i);
+  });
+});
+
+describe('capEventsForNarrativeSection — budget eventi per sezioni narrative (CASO-2026-219, 857 eventi)', () => {
+  const mk = (i: number, eventType = 'visita', diagnosis: string | null = null) => ({
+    eventType, eventDate: `2025-01-${String((i % 28) + 1).padStart(2, '0')}`,
+    diagnosis, sourceType: null, discrepancyNote: null,
+  });
+
+  it('non tocca liste sotto budget', () => {
+    const events = Array.from({ length: 50 }, (_, i) => mk(i));
+    const r = capEventsForNarrativeSection(events, 'anamnesi');
+    expect(r.capped).toBe(false);
+    expect(r.events).toHaveLength(50);
+  });
+
+  it('cappa una lista da 900 eventi al budget della sezione preservando ordine', () => {
+    const events = Array.from({ length: 900 }, (_, i) => mk(i));
+    const r = capEventsForNarrativeSection(events, 'anamnesi');
+    expect(r.capped).toBe(true);
+    expect(r.events.length).toBeLessThanOrEqual(120);
+    // ordine cronologico originale preservato (indici crescenti)
+    const idx = r.events.map((e) => events.indexOf(e));
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx);
+  });
+
+  it('include SEMPRE i primi e gli ultimi 10 eventi (evento indice + stato attuale)', () => {
+    const events = Array.from({ length: 900 }, (_, i) => mk(i));
+    const r = capEventsForNarrativeSection(events, 'il_fatto_e_storia_clinica');
+    for (let i = 0; i < 10; i++) expect(r.events).toContain(events[i]);
+    for (let i = 890; i < 900; i++) expect(r.events).toContain(events[i]);
+  });
+
+  it('prioritizza i T1 (diagnosi documentate) dentro il budget', () => {
+    // 900 eventi di routine (T3) con UN SOLO T1 in mezzo: deve sopravvivere al cap.
+    const events = Array.from({ length: 900 }, (_, i) =>
+      mk(i, 'visita', i === 500 ? 'frattura femore' : null));
+    const r = capEventsForNarrativeSection(events, 'anamnesi');
+    expect(r.events).toContain(events[500]); // T1 per diagnosi
+  });
+
+  it('quando i T1 superano il budget, li prende in ordine cronologico (dal fronte)', () => {
+    const events = Array.from({ length: 900 }, (_, i) => mk(i, 'intervento')); // tutti T1
+    const r = capEventsForNarrativeSection(events, 'anamnesi');
+    expect(r.events.length).toBeLessThanOrEqual(120);
+    expect(r.events).toContain(events[0]);
+    expect(r.events).toContain(events[899]); // ultimi 10 garantiti comunque
   });
 });

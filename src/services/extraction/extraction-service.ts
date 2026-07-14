@@ -133,11 +133,8 @@ export function prepareExtractionChunks(params: ExtractionParams): {
 const PARTIAL_RECOVERY_NOTE =
   '[AUTO] Estrazione da JSON LLM riparato/parziale: eventi successivi in questo segmento potrebbero non essere stati estratti — verificare la completezza nel documento originale';
 
-/**
- * Extract events from a single text chunk using streaming.
- * Designed to be called as a separate Inngest step for parallelism.
- */
-export async function extractEventsFromChunk(params: {
+/** Parametri di estrazione per chunk (esteso con la profondità dello split-retry). */
+interface ExtractChunkParams {
   chunkText: string;
   chunkLabel: string;
   documentType: string;
@@ -149,7 +146,113 @@ export async function extractEventsFromChunk(params: {
   pageRange?: string;
   /** Wave C.4: language hint when chunk OCR is detected as not-Italian. */
   languageHint?: 'de' | 'en' | 'mixed';
-}): Promise<ExtractionResponse & { usage?: TokenUsage }> {
+  /** Profondità dello split-retry (interno): 0 = chunk originale. */
+  _splitDepth?: number;
+}
+
+/** Soglia sotto cui non ha senso splittare (chunk già piccolo). */
+const SPLIT_RETRY_MIN_CHARS = 6000;
+
+/** Divide il testo a metà sul confine di riga più vicino al centro (null se
+ * non divisibile sensatamente). Puro. */
+export function splitChunkForRetry(text: string): [string, string] | null {
+  if (text.length < SPLIT_RETRY_MIN_CHARS) return null;
+  const mid = Math.floor(text.length / 2);
+  // cerca un confine di riga entro ±20% dal centro
+  const window = Math.floor(text.length * 0.2);
+  let cut = -1;
+  for (let d = 0; d <= window; d++) {
+    if (text[mid + d] === '\n') { cut = mid + d; break; }
+    if (text[mid - d] === '\n') { cut = mid - d; break; }
+  }
+  if (cut <= 0) cut = mid;
+  const a = text.slice(0, cut).trim();
+  const b = text.slice(cut).trim();
+  if (a.length < 500 || b.length < 500) return null;
+  return [a, b];
+}
+
+/** True per l'errore di troncamento output (assertNotTruncated). */
+function isTruncationError(e: unknown): boolean {
+  return e instanceof Error && /truncation detected|finishreason=length/i.test(e.message);
+}
+
+/**
+ * Extract events from a single text chunk using streaming.
+ * Designed to be called as a separate Inngest step for parallelism.
+ *
+ * AUTO-SPLIT sui chunk DENSI (CASO-2026-219/220, 2026-07-14): quando l'output
+ * LLM tronca (finishReason=length) o il JSON va recuperato parzialmente (coda
+ * persa), il chunk viene RIPROVATO diviso in due metà — output dimezzato =
+ * niente troncamento — e i risultati fusi. Solo se anche lo split fallisce si
+ * tiene il recupero parziale (flaggato) o si rilancia. Un livello di profondità.
+ */
+export async function extractEventsFromChunk(params: ExtractChunkParams): Promise<ExtractionResponse & { usage?: TokenUsage }> {
+  const depth = params._splitDepth ?? 0;
+
+  let result: (ExtractionResponse & { usage?: TokenUsage }) | null = null;
+  try {
+    result = await extractChunkOnce(params);
+  } catch (error) {
+    // Troncamento duro: riprova splittando PRIMA di rilanciare (il retry Inngest
+    // ripeterebbe lo stesso input → stessa troncatura).
+    if (depth === 0 && isTruncationError(error)) {
+      const split = await trySplitExtraction(params);
+      if (split) return split;
+    }
+    throw error;
+  }
+
+  // Recupero parziale (JSON riparato, coda possibile persa): tenta lo split per
+  // un'estrazione PULITA; se non migliora, tieni il recupero parziale flaggato.
+  if (result.partialRecovery && depth === 0) {
+    const split = await trySplitExtractionSafe(params);
+    if (split && !split.partialRecovery) {
+      logger.info('extraction', `[${params.chunkLabel}] split-retry riuscito: estrazione pulita (${split.events.length} eventi vs ${result.events.length} dal recupero parziale)`);
+      return split;
+    }
+  }
+  return result;
+}
+
+/** Split-retry che RILANCIA gli errori (usato nel ramo troncamento-duro). */
+async function trySplitExtraction(params: ExtractChunkParams): Promise<(ExtractionResponse & { usage?: TokenUsage }) | null> {
+  const halves = splitChunkForRetry(params.chunkText);
+  if (!halves) return null;
+  logger.warn('extraction', `[${params.chunkLabel}] output troncato su chunk denso (${params.chunkText.length} char) → retry in 2 metà`);
+  const [a, b] = halves;
+  const ra = await extractEventsFromChunk({ ...params, chunkText: a, chunkLabel: `${params.chunkLabel}·A`, _splitDepth: 1 });
+  const rb = await extractEventsFromChunk({ ...params, chunkText: b, chunkLabel: `${params.chunkLabel}·B`, _splitDepth: 1 });
+  return mergeSplitResults(ra, rb);
+}
+
+/** Split-retry che NON rilancia (usato nel ramo recupero-parziale: il salvage esiste già). */
+async function trySplitExtractionSafe(params: ExtractChunkParams): Promise<(ExtractionResponse & { usage?: TokenUsage }) | null> {
+  try {
+    return await trySplitExtraction(params);
+  } catch {
+    return null;
+  }
+}
+
+function mergeSplitResults(
+  a: ExtractionResponse & { usage?: TokenUsage },
+  b: ExtractionResponse & { usage?: TokenUsage },
+): ExtractionResponse & { usage?: TokenUsage } {
+  return {
+    events: [...a.events, ...b.events],
+    abbreviations: [...(a.abbreviations ?? []), ...(b.abbreviations ?? [])],
+    partialRecovery: Boolean(a.partialRecovery || b.partialRecovery),
+    usage: a.usage && b.usage ? {
+      promptTokens: a.usage.promptTokens + b.usage.promptTokens,
+      completionTokens: a.usage.completionTokens + b.usage.completionTokens,
+      totalTokens: a.usage.totalTokens + b.usage.totalTokens,
+    } : (a.usage ?? b.usage),
+  };
+}
+
+/** Esecuzione singola (senza split-retry) — il corpo originale della funzione. */
+async function extractChunkOnce(params: ExtractChunkParams): Promise<ExtractionResponse & { usage?: TokenUsage }> {
   const {
     chunkText, chunkLabel, documentType, caseType,
     temperature = 0, chunkIndex, totalChunks, documentName, pageRange, languageHint,

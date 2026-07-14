@@ -1298,6 +1298,29 @@ export const processCase = inngest.createFunction(
       }
     }
 
+    // ULTIMA CHANCE prima del fallback (CASO-2026-219, 2026-07-14: Anamnesi+Fatto
+    // fallite dopo i retry in-step): un tentativo FINALE per ogni sezione fallita,
+    // a pipeline scarica (niente contesa col resto delle sezioni) e con seed
+    // diverso (attempt+1). Col budget-eventi narrativo il prompt è anche molto più
+    // piccolo del tentativo originale. Solo se fallisce anche questo → fallback.
+    for (const failed of Array.from(failedSections.values())) {
+      const spec = sectionPlan.find((s) => s.id === failed.id);
+      if (!spec || completedSections.has(failed.id)) continue;
+      try {
+        const retried = await step.run(`gen-section-final-retry-${failed.id}`, async () => {
+          await updateProgress(sectionPlan.indexOf(spec), `${spec.title} (nuovo tentativo)`);
+          return generateSectionStep(caseId, spec, synthesisParams, buildPreviousContext(sectionPlan.indexOf(spec)), attempt + 1);
+        });
+        completedSections.set(failed.id, retried);
+        failedSections.delete(failed.id);
+        logger.info('pipeline', `Sezione "${failed.id}" recuperata al tentativo finale`, { caseId });
+      } catch (retryError) {
+        logger.error('pipeline', `Sezione "${failed.id}" fallita anche al tentativo finale`, {
+          error: retryError instanceof Error ? retryError.message : 'unknown',
+        });
+      }
+    }
+
     // Stand-ins for failed sections: the report stays structurally complete
     // (titles present for the validator) with an explicit technical marker.
     for (const failed of failedSections.values()) {

@@ -5,7 +5,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { CaseType, CaseRole } from '@/types';
-import { isExcludableLabEvent, isExcludableNoiseEvent } from '@/lib/event-relevance';
+import { isExcludableLabEvent, isExcludableNoiseEvent, computeRelevanceTier } from '@/lib/event-relevance';
 import { stripLabBlocks } from '@/lib/lab-block-stripper';
 import type { SynthesisParams } from './synthesis-service';
 import type { SectionSpec, GeneratedSection, SectionContext } from './section-generation-types';
@@ -170,6 +170,19 @@ export function buildSectionUserPrompt(params: {
     parts.push(`## TUTTI GLI EVENTI CLINICI (${events.length} totali)\n\n${formatEventsForPrompt(events)}\n`);
   } else if (spec.dataSources.includes('events-medical')) {
     let medical = filterMedicalEvents(events);
+    // BUDGET EVENTI per le sezioni NARRATIVE (CASO-2026-219, 857 eventi, 2026-07-14):
+    // Anamnesi/Fatto producono POCHE RIGHE ma ricevevano TUTTI gli eventi → prompt
+    // ~300K char → timeout/errore → sezione non generata dopo i retry. Le sezioni
+    // narrative sono RIASSUNTI: un cap prioritizzato (T1 prima, estremi cronologici
+    // garantiti) è sicuro — "mai perdere un fatto" vale per la doc-sanitaria, che
+    // NON passa di qui (ha il suo batching dedicato).
+    if (spec.id !== 'documentazione_sanitaria') {
+      const budgeted = capEventsForNarrativeSection(medical, spec.id);
+      if (budgeted.capped) {
+        logger.info('synthesis', `Sezione ${spec.id}: eventi nel prompt ${medical.length} → ${budgeted.events.length} (budget narrativo)`);
+        medical = budgeted.events;
+      }
+    }
     // Lavini (perizia RC): esami ematochimici/di laboratorio di ROUTINE esclusi dalla
     // riproduzione. NB: un lab T1 load-bearing (es. D-dimero→TVP) resta — "mai perdere
     // un fatto" prevale (isExcludableLabEvent esclude solo i lab T2/T3).
@@ -691,7 +704,61 @@ export function stripCodeFences(content: string): string {
  * "[Diagnosi: …]" / "[Raccomandazioni: …]" ecc. che l'LLM inietta nel virgolettato — solo
  * etichette-schema note, MAI parentesi quadre generiche (possono essere testo del documento,
  * es. "[v.n. 4.0-10.0]"). Non tocca il testo fuori dalle «...». Puro e idempotente.
+ * (La funzione è più sotto: stripGuardMarkersInsideQuotes.)
  */
+/** Budget di eventi nel prompt per le sezioni NARRATIVE (riassunti brevi: non
+ * serve l'intero fascicolo). Le sezioni con output piccolo hanno budget piccolo;
+ * l'Epicrisi (decorso completo) più largo. Default prudente per sezioni ignote. */
+const NARRATIVE_EVENT_BUDGET: Readonly<Record<string, number>> = {
+  intestazione_stragiudiziale: 80,
+  anamnesi: 120,
+  il_fatto_e_storia_clinica: 150,
+  epicrisi: 300,
+};
+const NARRATIVE_EVENT_BUDGET_DEFAULT = 300;
+
+/**
+ * Cap prioritizzato degli eventi per una sezione narrativa (CASO-2026-219: 857
+ * eventi → prompt ~300K char → Anamnesi/Fatto MAI generate dopo i retry). Selezione:
+ *   1. estremi cronologici SEMPRE inclusi (primi 10 = evento indice/primo soccorso,
+ *      ultimi 10 = stato attuale — servono a fatto/epicrisi);
+ *   2. tutti i T1 (fatti load-bearing) in ordine, finché c'è budget;
+ *   3. T2 poi T3 a riempire.
+ * L'ordine cronologico originale è preservato nell'output. La doc-sanitaria NON
+ * passa di qui (ha il batching dedicato: "mai perdere un fatto" resta integro).
+ * Puro e testabile.
+ */
+export function capEventsForNarrativeSection<T extends {
+  eventType: string; eventDate: string; diagnosis?: string | null;
+  sourceType?: string | null; discrepancyNote?: string | null;
+}>(events: T[], sectionId: string): { events: T[]; capped: boolean } {
+  const budget = NARRATIVE_EVENT_BUDGET[sectionId] ?? NARRATIVE_EVENT_BUDGET_DEFAULT;
+  if (events.length <= budget) return { events, capped: false };
+
+  const keep = new Set<number>();
+  // 1. Estremi cronologici garantiti (events è già in ordine cronologico).
+  for (let i = 0; i < Math.min(10, events.length); i++) keep.add(i);
+  for (let i = Math.max(0, events.length - 10); i < events.length; i++) keep.add(i);
+  // 2-3. Tier: T1 poi T2 poi T3, in ordine cronologico, fino al budget.
+  const byTier: Record<'T1' | 'T2' | 'T3', number[]> = { T1: [], T2: [], T3: [] };
+  events.forEach((e, i) => {
+    const tier = computeRelevanceTier({
+      eventType: e.eventType, diagnosis: e.diagnosis,
+      sourceType: e.sourceType, discrepancyNote: e.discrepancyNote,
+    });
+    byTier[tier].push(i);
+  });
+  for (const tier of ['T1', 'T2', 'T3'] as const) {
+    for (const i of byTier[tier]) {
+      if (keep.size >= budget) break;
+      keep.add(i);
+    }
+    if (keep.size >= budget) break;
+  }
+  const kept = events.filter((_, i) => keep.has(i));
+  return { events: kept, capped: true };
+}
+
 export function stripGuardMarkersInsideQuotes(text: string): string {
   return text.replace(/«[^»]*»/g, (quote) =>
     quote.replace(
