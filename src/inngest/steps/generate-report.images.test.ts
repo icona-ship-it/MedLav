@@ -1,5 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { imageAnalysisForMetadata, stripHallucinatedImageRefs } from './generate-report';
+import { imageAnalysisForMetadata, stripHallucinatedImageRefs, applyDeterministicImageCaptions, type ImageCaptionMeta } from './generate-report';
+
+describe('applyDeterministicImageCaptions — didascalia tracciabile con fonte (fronte E)', () => {
+  const imgs: ImageCaptionMeta[] = [
+    { storagePath: 'ocr-images/d1/p3-f1.jpg', imageType: 'radiografia', description: 'Frattura del femore distale. Altri dettagli.', pageNumber: 3, documentId: 'd1' },
+    { storagePath: 'ocr-images/d2/p1-f1.jpg', imageType: 'tac', description: 'Emorragia subaracnoidea.', pageNumber: 1, documentId: 'd2' },
+  ];
+  const names = new Map([['d1', 'RX_femore.pdf'], ['d2', 'TAC_cranio.pdf']]);
+
+  it('riscrive alt-text con Fig progressiva, tipo, descrizione e fonte (doc + pagina)', () => {
+    const md = 'Testo ![vecchio](ocr-image:ocr-images/d1/p3-f1.jpg) e ![altro](ocr-image:ocr-images/d2/p1-f1.jpg).';
+    const out = applyDeterministicImageCaptions(md, imgs, names);
+    expect(out).toContain('![Fig. 1 — radiografia (Frattura del femore distale.) — fonte: RX_femore.pdf, pag. 3](ocr-image:ocr-images/d1/p3-f1.jpg)');
+    expect(out).toContain('![Fig. 2 — tac (Emorragia subaracnoidea.) — fonte: TAC_cranio.pdf, pag. 1](ocr-image:ocr-images/d2/p1-f1.jpg)');
+  });
+
+  it('numerazione progressiva per apparizione → niente "Fig. 1" duplicate', () => {
+    const md = '![a](ocr-image:ocr-images/d2/p1-f1.jpg)\n![b](ocr-image:ocr-images/d1/p3-f1.jpg)';
+    const out = applyDeterministicImageCaptions(md, imgs, names);
+    expect((out.match(/Fig\. 1/g) ?? [])).toHaveLength(1);
+    expect((out.match(/Fig\. 2/g) ?? [])).toHaveLength(1);
+  });
+
+  it('fonte senza nome documento → mostra solo la pagina', () => {
+    const md = '![x](ocr-image:ocr-images/d1/p3-f1.jpg)';
+    const out = applyDeterministicImageCaptions(md, imgs, new Map());
+    expect(out).toContain('— pag. 3]');
+    expect(out).not.toContain('fonte:');
+  });
+
+  it('immagine non nota → lasciata invariata', () => {
+    const md = '![x](ocr-image:sconosciuta.jpg)';
+    expect(applyDeterministicImageCaptions(md, imgs, names)).toBe(md);
+  });
+
+  it('imageType "altro" → etichetta generica', () => {
+    const other: ImageCaptionMeta[] = [{ storagePath: 'p.jpg', imageType: 'altro', description: '', pageNumber: 2 }];
+    const out = applyDeterministicImageCaptions('![x](ocr-image:p.jpg)', other, new Map());
+    expect(out).toContain('Immagine diagnostica');
+  });
+});
 
 describe('imageAnalysisForMetadata', () => {
   it('keeps the re-embed fields and drops token usage', () => {

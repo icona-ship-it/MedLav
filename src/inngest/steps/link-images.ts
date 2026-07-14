@@ -159,12 +159,19 @@ export async function analyzeDiagnosticImagesStep(
   // multi-slice RM, full TAC panels can easily require 10-15 images.
   const MAX_DIAGNOSTIC_IMAGES = 15;
   const pagesWithImages: Array<Record<string, unknown>> = [];
+  // ORDINE DETERMINISTICO (2026-07-14): prima la query era senza .order() →
+  // "quali 15 immagini" dipendeva dall'ordine fisico di Postgres (arbitrario, non
+  // riproducibile). Ora ordina per documento poi pagina: la selezione è stabile e
+  // spiegabile ("le prime immagini in ordine di documento/pagina"). docIds è già
+  // in ordine di elaborazione (cronologico), quindi il batching preserva l'ordine.
   for (let i = 0; i < docIds.length && pagesWithImages.length < MAX_DIAGNOSTIC_IMAGES; i += 200) {
     const { data } = await supabase
       .from('pages')
       .select('page_number, image_path, document_id')
       .in('document_id', (docIds as string[]).slice(i, i + 200))
       .not('image_path', 'is', null)
+      .order('document_id', { ascending: true })
+      .order('page_number', { ascending: true })
       .limit(MAX_DIAGNOSTIC_IMAGES - pagesWithImages.length);
     if (data) pagesWithImages.push(...data);
   }

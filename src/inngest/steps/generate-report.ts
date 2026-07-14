@@ -373,6 +373,47 @@ export function stripHallucinatedImageRefs(report: string, realImagePaths: Set<s
   );
 }
 
+/** Metadati per la didascalia deterministica di un'immagine. */
+export interface ImageCaptionMeta {
+  storagePath: string;
+  imageType: string;
+  description: string;
+  pageNumber: number;
+  documentId?: string;
+}
+
+/**
+ * Riscrive in modo DETERMINISTICO la didascalia (alt-text) di OGNI immagine reale
+ * nel report: "Fig. N — Tipo (descrizione) — fonte: nomeFile, pag. P". Risponde
+ * alla domanda del perito "da dove viene questa immagine e perché". Vantaggi:
+ * (1) fonte TRACCIABILE (documento + pagina) che l'LLM non poteva garantire;
+ * (2) numerazione progressiva PER ORDINE DI APPARIZIONE → niente più "Fig. 1"
+ * duplicate quando il report è generato a finestre. Puro e testabile.
+ */
+export function applyDeterministicImageCaptions(
+  report: string,
+  images: ImageCaptionMeta[],
+  docNameById: Map<string, string>,
+): string {
+  const byPath = new Map(images.map((img) => [img.storagePath, img]));
+  let n = 0;
+  return report.replace(
+    /!\[[^\]]*\]\(ocr-image:([^)]+)\)/g,
+    (match: string, path: string) => {
+      const img = byPath.get(path);
+      if (!img) return match; // sconosciuta (verrà comunque strippata a monte)
+      n += 1;
+      const firstSentence = (img.description || '').split(/(?<=[.!?])\s/)[0]?.trim() ?? '';
+      const typeLabel = img.imageType && img.imageType !== 'altro' ? img.imageType : 'Immagine diagnostica';
+      const docName = img.documentId ? docNameById.get(img.documentId) : undefined;
+      const source = docName ? ` — fonte: ${docName}, pag. ${img.pageNumber}` : ` — pag. ${img.pageNumber}`;
+      const desc = firstSentence ? ` (${firstSentence})` : '';
+      const alt = `Fig. ${n} — ${typeLabel}${desc}${source}`;
+      return `![${alt}](ocr-image:${path})`;
+    },
+  );
+}
+
 /**
  * Assemble all generated sections into a final report and save to DB.
  * No LLM call — pure assembly + validation + DB insert.
@@ -411,6 +452,25 @@ export async function assembleSectionsAndSaveReport(
       .map((img) => img.storagePath!),
   );
   fullReport = stripHallucinatedImageRefs(fullReport, realImagePaths);
+
+  // Didascalie DETERMINISTICHE con FONTE (documento + pagina): risponde alla
+  // domanda "da dove viene questa immagine" e rende la numerazione progressiva
+  // (niente "Fig. 1" duplicate). La fonte-nome viene da documentsOcrText.
+  const docNameById = new Map(
+    (synthesisParams.documentsOcrText ?? []).map((d) => [d.documentId, d.fileName]),
+  );
+  const captionImages = (synthesisParams.imageAnalysis ?? [])
+    .filter((img) => img.storagePath)
+    .map((img) => ({
+      storagePath: img.storagePath!,
+      imageType: img.imageType,
+      description: img.description,
+      pageNumber: img.pageNumber,
+      documentId: img.documentId,
+    }));
+  if (captionImages.length > 0) {
+    fullReport = applyDeterministicImageCaptions(fullReport, captionImages, docNameById);
+  }
 
   // Wave 3.3 — Source attribution appendix: append a "## Riferimenti
   // Documentali" section listing each unique document cited in the report.
