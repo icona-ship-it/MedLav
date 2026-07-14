@@ -24,6 +24,23 @@ export interface DetectedAnomaly {
 // evita di confrontare una diagnosi con un'altra a distanza di anni).
 const DIAGNOSI_COMPARE_WINDOW_DAYS = 60;
 
+/**
+ * Tipi di anomalia RITIRATI (direttiva Lavini 2026-07-14): temporali/da-assenza,
+ * non più prodotti dal detector. I casi GIÀ processati ne hanno di storiche nel
+ * DB: vanno NASCOSTE al read-time (UI + export) — hide-don't-delete, nessuna
+ * scrittura su dati Art.9. Le anomalie superstiti sono solo content-based.
+ */
+export const RETIRED_ANOMALY_TYPES: ReadonlySet<string> = new Set([
+  'ritardo_diagnostico', 'gap_post_chirurgico', 'gap_documentale',
+  'terapia_senza_followup', 'complicanza_non_gestita',
+  'consenso_non_documentato', 'sequenza_temporale_violata',
+]);
+
+/** Filtra via le anomalie di tipo ritirato (temporale/da-assenza). Puro. */
+export function filterRetiredAnomalies<T extends { anomaly_type?: string; anomalyType?: string }>(rows: T[]): T[] {
+  return rows.filter((a) => !RETIRED_ANOMALY_TYPES.has(a.anomaly_type ?? a.anomalyType ?? ''));
+}
+
 /** Check if a date is a sentinel/placeholder (1900-*) */
 function isSentinelDate(dateStr: string): boolean {
   return dateStr.startsWith('1900-');

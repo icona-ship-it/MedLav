@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
+import { filterRetiredAnomalies } from '@/services/validation/anomaly-detector';
 
 export interface DocumentPage {
   pageNumber: number;
@@ -127,7 +128,9 @@ export async function loadCaseDataForExport(caseId: string) {
   return {
     caseData: caseRow,
     events: eventsList,
-    anomalies: anomaliesRes.data ?? [],
+    // Nascondi le anomalie di tipo RITIRATO (temporali/da-assenza) dei casi
+    // già processati — non devono comparire nemmeno negli export.
+    anomalies: filterRetiredAnomalies(anomaliesRes.data ?? []),
     missingDocs: missingRes.data ?? [],
     report: reportRes.data,
     calculations,

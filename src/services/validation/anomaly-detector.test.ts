@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectAnomalies } from './anomaly-detector';
+import { detectAnomalies, filterRetiredAnomalies } from './anomaly-detector';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 
 function makeEvent(overrides: Partial<ConsolidatedEvent> & { orderNumber: number; eventDate: string; eventType: ConsolidatedEvent['eventType'] }): ConsolidatedEvent {
@@ -147,4 +147,26 @@ describe('detectAnomalies', () => {
     });
   });
 
+});
+
+describe('filterRetiredAnomalies — nasconde i tipi ritirati nei casi legacy (hide-don\'t-delete)', () => {
+  it('rimuove i tipi temporali/da-assenza, tiene i content-based', () => {
+    const rows = [
+      { anomaly_type: 'gap_documentale' },
+      { anomaly_type: 'sequenza_temporale_violata' },
+      { anomaly_type: 'diagnosi_contraddittoria' },
+      { anomaly_type: 'valore_clinico_critico' },
+      { anomaly_type: 'terapia_senza_followup' },
+    ];
+    const kept = filterRetiredAnomalies(rows);
+    expect(kept.map((r) => r.anomaly_type)).toEqual(['diagnosi_contraddittoria', 'valore_clinico_critico']);
+  });
+
+  it('funziona anche col campo camelCase anomalyType', () => {
+    const kept = filterRetiredAnomalies([
+      { anomalyType: 'gap_post_chirurgico' },
+      { anomalyType: 'diagnosi_contraddittoria' },
+    ]);
+    expect(kept).toHaveLength(1);
+  });
 });
