@@ -62,14 +62,15 @@ describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
   // Fix Bigon: il codice classificatore A-/B-/C-/D- (SOURCE_TYPE_LABELS) NON deve
   // finire nell'intestazione del blocco-documento (l'LLM la copiava nel titolo
   // grassetto → "**B - Referto...:**"). Lo togliamo alla radice, qui.
-  it('NON espone il codice classificatore A-/B-/C-/D- nell\'intestazione del blocco', () => {
+  it('usa etichette gold sentence-case, senza codice classificatore A-/B-/C-/D-', () => {
     const out = formatEventsByDocumentForPrompt([
       makeEvent({ documentId: 'doc-B', sourceType: 'referto_controllo', title: 'Controllo', sourceText: 'controllo' }),
       makeEvent({ documentId: 'doc-A', sourceType: 'cartella_clinica', title: 'Cartella', sourceText: 'cartella' }),
     ]);
-    // il LABEL leggibile resta, il CODICE non c'è
-    expect(out).toContain('REFERTI CONTROLLI MEDICI');
-    expect(out).toContain('CARTELLA CLINICA');
+    // Intestazioni gold: singolari, sentence-case, senza codice né categoria maiuscola plurale.
+    expect(out).toContain('Referto di controllo medico');
+    expect(out).toContain('Cartella clinica');
+    expect(out).not.toContain('REFERTI CONTROLLI MEDICI');
     expect(out).not.toContain('B - ');
     expect(out).not.toContain('A - ');
   });

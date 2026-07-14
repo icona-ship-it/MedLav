@@ -28,6 +28,18 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   altro: 'ALTRO',
 };
 
+// Etichette per l'INTESTAZIONE del blocco doc-sanitaria: singolari e in
+// sentence-case, come nei gold (Antoniazzi/Motta) — non le categorie plurali
+// maiuscole di SOURCE_TYPE_LABELS, adatte all'indice cronologico CTU ma non a un
+// titolo-documento ("Referto radiologico, Ospedale X, in data ...").
+const DOC_BLOCK_TYPE_LABELS: Record<string, string> = {
+  cartella_clinica: 'Cartella clinica',
+  referto_controllo: 'Referto di controllo medico',
+  esame_strumentale: 'Referto di esame strumentale',
+  esame_ematochimico: 'Referto di esami ematochimici',
+  altro: 'Documento sanitario',
+};
+
 const CHRONOLOGY_SOURCES_GUIDE = `Le categorie delle fonti sono:
 **(A) CARTELLA CLINICA** — diagnosi, parametri vitali, esami, anamnesi, terapie, descrizioni operatorie, diari clinici, lettere di dimissione
 **(B) REFERTI CONTROLLI MEDICI** — visite specialistiche, follow-up, certificati
@@ -156,7 +168,9 @@ export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): st
     // l'LLM lo copiava nel titolo grassetto del blocco ("**B - Referto...:**" su Bigon).
     // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP
     // restano in formatEventsForPrompt / CHRONOLOGY_SOURCES_GUIDE, non toccate.
-    const sourceLabel = (SOURCE_TYPE_LABELS[rep.sourceType] ?? rep.sourceType).replace(/^[A-D] - /, '');
+    // Etichetta sentence-case singolare per il titolo del blocco (formato gold),
+    // NON la categoria plurale maiuscola dell'indice cronologico.
+    const sourceLabel = DOC_BLOCK_TYPE_LABELS[rep.sourceType] ?? 'Documento sanitario';
     // Intestazione DETERMINISTICA pronta (formato gold Antoniazzi): "**Tipo, struttura,
     // in data DATA:**". Fornita all'LLM da copiare IDENTICA come prima riga del blocco,
     // così smette di comporre titoli-evento data-prima. Backstop deterministico in
