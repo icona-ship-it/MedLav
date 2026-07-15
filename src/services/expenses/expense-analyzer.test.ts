@@ -4,6 +4,7 @@ import {
   extractAmount,
   inferCategory,
   isSsrCostNotification,
+  collectSsnCosts,
 } from './expense-analyzer';
 
 // ---------------------------------------------------------------------------
@@ -427,5 +428,26 @@ describe('isSsrCostNotification — costi SSR a forma estesa (bug Bigon 2026-07-
     ]);
     expect(r.items).toHaveLength(1);
     expect(r.totalAmount).toBe(50);
+  });
+});
+
+describe('collectSsnCosts — tabella separata costi SSN', () => {
+  const ev = (o: Record<string, unknown>) => ({
+    event_type: 'spesa_medica', title: '', description: '', event_date: '2024-06-15',
+    facility: null, source_type: 'spese_mediche', ...o,
+  });
+  it('raccoglie i costi SSN (esclusi dalle spese danneggiato) col totale', () => {
+    const r = collectSsnCosts([
+      ev({ title: 'Costo A', description: 'il SSR ha impiegato euro 521,35' }),
+      ev({ title: 'Ticket fisioterapia € 36,15' }), // spesa danneggiato → NON qui
+      ev({ title: 'Costo B', source_text: 'il Servizio Sanitario Regionale ha impiegato euro 279,00' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+    expect(r.total).toBeCloseTo(800.35, 2);
+  });
+  it('nessun costo SSN → lista vuota, totale null', () => {
+    const r = collectSsnCosts([ev({ title: 'Ticket € 36,15' })]);
+    expect(r.items).toHaveLength(0);
+    expect(r.total).toBeNull();
   });
 });

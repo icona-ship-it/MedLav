@@ -326,6 +326,44 @@ export function isFiscalComponentItem(title: string): boolean {
   return /^\s*(iva\b|imposta di bollo\b|marca da bollo\b|bollo\b)/i.test(title);
 }
 
+/** Voce di costo a carico del Servizio Sanitario (SSN/SSR). */
+export interface SsnCostItem {
+  date: string;
+  description: string;
+  facility: string | null;
+  amount: number | null;
+}
+
+/**
+ * Raccoglie i COSTI A CARICO DEL SSN/SSR — le notifiche-costo che analyzeExpenses
+ * ESCLUDE dalle spese del danneggiato — in una lista separata, così il perito ha
+ * tutti i costi ordinati ma distinti (out-of-pocket vs pubblici). Puro.
+ */
+export function collectSsnCosts(events: AnalyzableEvent[]): { items: SsnCostItem[]; total: number | null } {
+  if (!Array.isArray(events) || events.length === 0) return { items: [], total: null };
+  const items: SsnCostItem[] = [];
+  for (const ev of events) {
+    if (!ev || typeof ev.title !== 'string') continue;
+    if (!isSsrCostNotification(ev.title, ev.description, ev.source_text)) continue;
+    const amount = extractAmount(ev.title)
+      ?? extractAmount(ev.description)
+      ?? (ev.source_text ? extractAmount(ev.source_text) : null);
+    items.push({ date: ev.event_date ?? '', description: ev.title, facility: ev.facility ?? null, amount });
+  }
+  items.sort((a, b) => a.date.localeCompare(b.date));
+  // Dedup deterministica (stessa data + importo + descrizione = stessa notifica).
+  const seen = new Set<string>();
+  const deduped = items.filter((i) => {
+    const key = `${i.date}|${i.amount ?? 'null'}|${i.description.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const withAmount = deduped.filter((i) => i.amount != null);
+  const total = withAmount.length > 0 ? withAmount.reduce((s, i) => s + (i.amount ?? 0), 0) : null;
+  return { items: deduped, total };
+}
+
 export function analyzeExpenses(
   events: AnalyzableEvent[],
 ): ExpenseAnalysisResult {

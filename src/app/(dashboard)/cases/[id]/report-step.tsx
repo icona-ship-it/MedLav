@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, AlertTriangle, RefreshCw, X, Info } from 'lucide-react';
+import { Loader2, Download, AlertTriangle, RefreshCw, X, Info, ExternalLink } from 'lucide-react';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { groupPipelineWarnings } from '@/lib/pipeline-warning-display';
 import { scrollToReportSection } from '@/lib/report-navigation';
@@ -299,7 +299,7 @@ export function ReportStep({
         <div className="flex flex-col">
           {/* Warning banner for pipeline issues */}
           {pipelineWarnings.length > 0 && (
-            <PipelineWarningsBanner warnings={pipelineWarnings} documents={documents} events={events} />
+            <PipelineWarningsBanner warnings={pipelineWarnings} caseId={caseId} documents={documents} events={events} />
           )}
 
           {/* Export toolbar for timeline data */}
@@ -773,6 +773,7 @@ export function ReportStep({
           (stato sollevato qui da PipelineWarningsBanner per unificare i banner). */}
       <PipelineWarningDetailDialog
         warning={pipelineDetail}
+        caseId={caseId}
         documents={documents}
         events={events}
         onClose={() => setPipelineDetail(null)}
@@ -796,10 +797,12 @@ export function ReportStep({
 
 function PipelineWarningsBanner({
   warnings,
+  caseId,
   documents,
   events,
 }: {
   warnings: PipelineWarningItem[];
+  caseId: string;
   documents: Document[];
   events: EventRow[];
 }) {
@@ -861,6 +864,7 @@ function PipelineWarningsBanner({
 
       <PipelineWarningDetailDialog
         warning={detailWarning}
+        caseId={caseId}
         documents={documents}
         events={events}
         onClose={() => setDetailWarning(null)}
@@ -873,11 +877,13 @@ function PipelineWarningsBanner({
 
 function PipelineWarningDetailDialog({
   warning,
+  caseId,
   documents,
   events,
   onClose,
 }: {
   warning: PipelineWarningItem | null;
+  caseId: string;
   documents: Document[];
   events: EventRow[];
   onClose: () => void;
@@ -905,6 +911,7 @@ function PipelineWarningDetailDialog({
             {failedDocs.map(({ fileName, doc, eventCount }, idx) => (
               <FailedDocumentRow
                 key={idx}
+                caseId={caseId}
                 fileName={fileName}
                 doc={doc}
                 eventCount={eventCount}
@@ -924,10 +931,12 @@ function PipelineWarningDetailDialog({
 }
 
 function FailedDocumentRow({
+  caseId,
   fileName,
   doc,
   eventCount,
 }: {
+  caseId: string;
   fileName: string;
   doc: Document | undefined;
   eventCount: number;
@@ -964,6 +973,17 @@ function FailedDocumentRow({
         {sizeLabel && <span>Dimensione: <span className="text-foreground">{sizeLabel}</span></span>}
       </div>
       <p className="text-xs text-muted-foreground italic">{reason}</p>
+      {doc?.id && (
+        <a
+          href={`/api/cases/${caseId}/documents/${doc.id}/view`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline mt-1"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Apri il documento originale
+        </a>
+      )}
     </div>
   );
 }

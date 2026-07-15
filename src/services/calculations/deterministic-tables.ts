@@ -12,7 +12,7 @@ import { formatDate, formatEuro } from '@/lib/format';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
-import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
+import { analyzeExpenses, collectSsnCosts } from '@/services/expenses/expense-analyzer';
 import { computeRelevanceTier } from '@/lib/event-relevance';
 import { calculateITTITP, formatITTITPTable, formatRicoveroITTFactsBlock } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
@@ -115,6 +115,46 @@ export function formatExpenseTable(events: DeterministicTableEvent[]): string {
     '|---|---|---|---|---|',
     ...rows,
     `| **Totale** | | | | ${totalCell}${totalNote} |`,
+  ].join('\n');
+}
+
+/**
+ * Tabella SEPARATA dei costi a carico del Servizio Sanitario (SSN/SSR) — le
+ * notifiche-costo escluse dalle spese risarcibili del danneggiato. Distinta
+ * perché sono costi pubblici, NON out-of-pocket del periziando, ma il perito
+ * vuole vederli ordinati. Restituisce '' se non ce ne sono. Deterministica.
+ */
+export function formatSsnCostTable(events: DeterministicTableEvent[]): string {
+  const expenses = events.filter((e) => e.event_type === 'spesa_medica');
+  if (expenses.length === 0) return '';
+
+  const { items, total } = collectSsnCosts(
+    expenses.map((e) => ({
+      event_type: e.event_type,
+      title: e.title ?? '',
+      description: e.description ?? '',
+      event_date: e.event_date ?? '',
+      facility: e.facility ?? null,
+      source_type: e.source_type ?? 'altro',
+      source_text: e.source_text ?? null,
+    })),
+  );
+  if (items.length === 0) return '';
+
+  const rows = items.map((it) =>
+    `| ${displayDate(it.date)} | ${cell(it.description)} | ${cell(it.facility)} | ${it.amount !== null ? formatEuro(it.amount) : '—'} |`,
+  );
+  const someMissing = items.some((it) => it.amount === null);
+  const totalCell = total !== null ? `**${formatEuro(total)}**` : '—';
+  const totalNote = someMissing ? ' *(alcuni importi non rilevati)*' : '';
+
+  return [
+    '_Costi sostenuti dal Servizio Sanitario (SSN/SSR), non a carico del danneggiato — riportati per completezza:_',
+    '',
+    '| Data | Descrizione | Struttura | Importo (a carico SSN) |',
+    '|---|---|---|---|',
+    ...rows,
+    `| **Totale a carico SSN** | | | ${totalCell}${totalNote} |`,
   ].join('\n');
 }
 
@@ -442,9 +482,14 @@ export function expandDeterministicBlocks(
 ): string {
   if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
 
+  // Spese: tabella danneggiato + (se presenti) tabella SEPARATA costi a carico SSN.
+  const speseDanneggiato = formatExpenseTable(events) || EMPTY_FALLBACK.SPESE;
+  const speseSsn = formatSsnCostTable(events);
+  const speseBlock = speseSsn ? `${speseDanneggiato}\n\n${speseSsn}` : speseDanneggiato;
+
   const replacements: Array<[string, string]> = [
     [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events)) || EMPTY_FALLBACK.ITT_ITP],
-    [DETERMINISTIC_MARKERS.SPESE, formatExpenseTable(events) || EMPTY_FALLBACK.SPESE],
+    [DETERMINISTIC_MARKERS.SPESE, speseBlock],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
     [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatRicoveroITTFactsBlock(events) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
   ];
