@@ -186,18 +186,19 @@ export function ReportActionBar({
             )}
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            {/* UX Ondata 3-IA: Support panel buttons (drawer da destra) — eventi/pubmed/ocr */}
+          {/* Right: Actions — gerarchia chiara per ridurre il rumore visivo:
+              VISTE (ghost, discrete) · MODIFICA · [ESPORTA] · APPROVA (primaria) · ⋯ */}
+          <div className="flex items-center gap-1.5">
+            {/* Viste "peek" — pulsanti ghost, meno peso di azioni vere */}
             {onOpenEventsDrawer && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={onOpenEventsDrawer}
                 title="Eventi clinici della cronistoria (apre pannello laterale)"
               >
                 <FileText className="mr-1 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Eventi</span>
+                <span className="hidden md:inline">Eventi</span>
                 {typeof eventsCount === 'number' && eventsCount > 0 && (
                   <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 leading-tight">
                     {eventsCount}
@@ -207,61 +208,28 @@ export function ReportActionBar({
             )}
             {onOpenOcrDrawer && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={onOpenOcrDrawer}
                 title="Testo originale dei documenti (apre pannello laterale)"
               >
                 <FileSearch className="mr-1 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Testo originale</span>
+                <span className="hidden md:inline">Testo originale</span>
               </Button>
             )}
 
-            {/* Separator before primary actions (only visible if any drawer button rendered) */}
+            {/* Separator prima delle azioni vere */}
             {(onOpenEventsDrawer || onOpenOcrDrawer) && (
-              <span className="hidden sm:inline-block w-px h-5 bg-border" aria-hidden />
+              <span className="hidden sm:inline-block w-px h-5 bg-border mx-0.5" aria-hidden />
             )}
 
-            {/* Quality button with badge (apre lo Sheet a tutte le larghezze) */}
-            {onOpenQualitySheet && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onOpenQualitySheet}
-              >
-                <ShieldAlert className="mr-1 h-3.5 w-3.5" />
-                Qualità
-                {alertCount > 0 && (
-                  <Badge variant="destructive" className="ml-1 text-xs px-1 py-0 leading-tight">
-                    {alertCount}
-                  </Badge>
-                )}
-              </Button>
-            )}
-
-            {/* Edit button */}
-            <Button variant="outline" size="sm" onClick={onEdit}>
+            {/* Modifica — azione secondaria, ghost */}
+            <Button variant="ghost" size="sm" onClick={onEdit}>
               <Pencil className="mr-1 h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Modifica</span>
+              <span className="hidden md:inline">Modifica</span>
             </Button>
 
-            {/* Approve button — visible for drafts (primary action of this screen) */}
-            {effectiveStatus === 'bozza' && (
-              <Button
-                variant="approve"
-                size="sm"
-                onClick={() => setQualityGateOpen(true)}
-                disabled={isPending}
-              >
-                {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
-                {/* Azione primaria della schermata: la label 'Approva' resta SEMPRE
-                    visibile, anche su mobile (prima si riduceva a sola icona in una
-                    fila di icone simili, indistinguibile). */}
-                <span>Approva</span>
-              </Button>
-            )}
-
-            {/* Export dropdown */}
+            {/* Export dropdown — azione secondaria, outline */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -303,14 +271,45 @@ export function ReportActionBar({
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Approva — AZIONE PRIMARIA della schermata, sempre l'elemento più
+                evidente (verde), label sempre visibile. */}
+            {effectiveStatus === 'bozza' && (
+              <Button
+                variant="approve"
+                size="sm"
+                onClick={() => setQualityGateOpen(true)}
+                disabled={isPending}
+              >
+                {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
+                <span>Approva</span>
+              </Button>
+            )}
+
             {/* Overflow menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" title="Altre azioni" aria-label="Altre azioni">
+                <Button variant="ghost" size="sm" title="Altre azioni" aria-label="Altre azioni">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
+                {/* Dettagli analisi / Qualità — spostato qui dalla toolbar (il
+                    pannello "Da controllare" sotto mostra già gli avvisi; qui
+                    restano le metriche: confidenza OCR, copertura documenti). */}
+                {onOpenQualitySheet && (
+                  <>
+                    <DropdownMenuItem onClick={onOpenQualitySheet}>
+                      <ShieldAlert className="mr-2 h-3.5 w-3.5" />
+                      Dettagli analisi (qualità)
+                      {alertCount > 0 && (
+                        <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0 leading-tight">
+                          {alertCount}
+                        </Badge>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 {/* Regenerate — with confirmation dialog */}
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
