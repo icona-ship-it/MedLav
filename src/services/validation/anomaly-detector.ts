@@ -170,30 +170,46 @@ function makeEventRef(event: ConsolidatedEvent): DetectedAnomaly['involvedEvents
   };
 }
 
+/** Marcatori di NEGAZIONE/esclusione in una diagnosi (polarità negativa). */
+const NEGATION_MARKERS = [
+  'non ', 'assenza', 'assente', 'escluso', 'esclus', 'negativ', 'nessun',
+  'integro', 'integra', 'indenne', 'nella norma', 'nei limiti', 'regolare',
+  'non evidenz', 'non si eviden', 'non rilev', 'non present',
+];
+
+function hasNegationPolarity(s: string): boolean {
+  return NEGATION_MARKERS.some((m) => s.includes(m));
+}
+
 /**
- * Heuristic: two diagnoses are contradictory only if they share
- * very few words (< 20% overlap) and both are substantial.
+ * Due diagnosi sono CONTRADDITTORIE (non semplicemente diverse) quando parlano
+ * dello STESSO soggetto anatomico/clinico ma con POLARITÀ OPPOSTA: una afferma un
+ * reperto, l'altra lo nega/esclude.
+ *
+ * La vecchia euristica ("poche parole in comune") era ROVESCIATA: due lesioni
+ * DIVERSE di un politrauma (contusione cerebrale vs frattura costale) hanno per
+ * forza poche parole in comune → venivano flaggate come discordanti (falsi
+ * positivi, test GRANDE 2026-07-15). Una vera contraddizione condivide il
+ * soggetto (es. "radio", "menisco") e diverge sul reperto (presente/assente).
+ * Conservativa: preferisce NON flaggare piuttosto che flaggare cose diverse.
  */
 function areDiagnosesContradictory(a: string, b: string): boolean {
   const normalizedA = a.toLowerCase().trim();
   const normalizedB = b.toLowerCase().trim();
-
   if (normalizedA === normalizedB) return false;
 
   const wordsA = new Set(normalizedA.split(/\s+/).filter((w) => w.length > 3));
   const wordsB = new Set(normalizedB.split(/\s+/).filter((w) => w.length > 3));
+  if (wordsA.size < 2 || wordsB.size < 2) return false;
 
-  let overlap = 0;
-  for (const word of wordsA) {
-    if (wordsB.has(word)) overlap++;
-  }
+  // 1. STESSO SOGGETTO: almeno un token significativo condiviso. Senza, sono
+  //    diagnosi di cose DIVERSE (non contraddittorie) — es. politrauma.
+  let shared = 0;
+  for (const w of wordsA) if (wordsB.has(w)) shared++;
+  if (shared === 0) return false;
 
-  const maxSize = Math.max(wordsA.size, wordsB.size);
-  if (maxSize === 0) return false;
-
-  // Only flag if overlap is very low (< 20%) — clearly different diagnoses
-  if (overlap / maxSize > 0.2) return false;
-
-  // Both must have at least 3 meaningful words
-  return wordsA.size >= 3 && wordsB.size >= 3;
+  // 2. POLARITÀ OPPOSTA: esattamente una delle due nega/esclude il reperto.
+  //    (Se entrambe affermano o entrambe negano → evoluzione o riformulazione,
+  //    non contraddizione.)
+  return hasNegationPolarity(normalizedA) !== hasNegationPolarity(normalizedB);
 }

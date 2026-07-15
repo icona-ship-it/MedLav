@@ -118,16 +118,24 @@ describe('detectAnomalies', () => {
   });
 
   describe('diagnosi_contraddittoria (CONTENUTO, non tempo)', () => {
-    it('flagga due diagnosi discordanti (differenza di contenuto)', () => {
+    it('flagga una VERA contraddizione: stesso soggetto, polarità opposta', () => {
       const anomalies = detectAnomalies([
-        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'diagnosi', title: 'Diagnosi A', diagnosis: 'Frattura femore destro composta' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'diagnosi', title: 'Diagnosi B', diagnosis: 'Lussazione anca sinistra post traumatica' }),
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'diagnosi', title: 'Diagnosi A', diagnosis: 'Frattura composta del radio distale destro' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'diagnosi', title: 'Diagnosi B', diagnosis: 'Assenza di lesioni ossee a carico del radio destro' }),
       ]);
       const contradictions = anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria');
       expect(contradictions.length).toBe(1);
       // La descrizione GUIDA col contenuto, non con "a distanza di N giorni".
       expect(contradictions[0].description).not.toMatch(/a distanza di \d+ giorni/);
       expect(contradictions[0].description).toContain('discordanti');
+    });
+
+    it('NON flagga diagnosi di lesioni DIVERSE (soggetti diversi, non contraddizione)', () => {
+      const anomalies = detectAnomalies([
+        makeEvent({ orderNumber: 1, eventDate: '2024-01-10', eventType: 'diagnosi', title: 'Diagnosi A', diagnosis: 'Frattura femore destro composta' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-02-15', eventType: 'diagnosi', title: 'Diagnosi B', diagnosis: 'Lussazione anca sinistra post traumatica' }),
+      ]);
+      expect(anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria').length).toBe(0);
     });
 
     it('NON flagga la stessa diagnosi riformulata', () => {
@@ -140,8 +148,8 @@ describe('detectAnomalies', () => {
 
     it('NON flagga diagnosi_contraddittoria con date sentinella 1900', () => {
       const anomalies = detectAnomalies([
-        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'diagnosi', title: 'D1', diagnosis: 'Frattura femore destro composta' }),
-        makeEvent({ orderNumber: 2, eventDate: '2024-01-15', eventType: 'diagnosi', title: 'D2', diagnosis: 'Lussazione anca sinistra post traumatica' }),
+        makeEvent({ orderNumber: 1, eventDate: '1900-01-01', eventType: 'diagnosi', title: 'D1', diagnosis: 'Frattura composta del radio destro' }),
+        makeEvent({ orderNumber: 2, eventDate: '2024-01-15', eventType: 'diagnosi', title: 'D2', diagnosis: 'Assenza di frattura del radio destro' }),
       ]);
       expect(anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria').length).toBe(0);
     });
@@ -195,5 +203,37 @@ describe('sanitizeAnomaliesForDisplay — filtro + strip insieme', () => {
     ]);
     expect(out).toHaveLength(1);
     expect(out[0].description).not.toMatch(/a distanza di \d+ giorni/);
+  });
+});
+
+describe('diagnosi_contraddittoria — precisione: stesso soggetto + polarità opposta (fix falsi positivi politrauma)', () => {
+  const mk = (i: number, diagnosis: string) => makeEvent({
+    orderNumber: i, eventDate: `2025-06-${String(i + 5).padStart(2, '0')}`, eventType: 'diagnosi',
+    title: `Diagnosi ${i}`, diagnosis,
+  });
+
+  it('NON flagga lesioni DIVERSE di un politrauma (soggetti diversi)', () => {
+    const anomalies = detectAnomalies([
+      mk(1, 'Focolai contusivi emorragici cerebrali frontali bilaterali'),
+      mk(2, 'Fratture costali multiple arco laterale destro'),
+      mk(3, 'Frattura pluriframmentaria del femore sinistro'),
+    ]);
+    expect(anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria')).toHaveLength(0);
+  });
+
+  it('flagga una VERA contraddizione: stesso soggetto, uno afferma uno nega', () => {
+    const anomalies = detectAnomalies([
+      mk(1, 'Frattura composta del radio distale destro'),
+      mk(2, 'Assenza di lesioni ossee a carico del radio destro'),
+    ]);
+    expect(anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria')).toHaveLength(1);
+  });
+
+  it('NON flagga una evoluzione dello stesso soggetto (entrambe affermano)', () => {
+    const anomalies = detectAnomalies([
+      mk(1, 'Frattura composta del femore sinistro'),
+      mk(2, 'Frattura pluriframmentaria del femore sinistro'),
+    ]);
+    expect(anomalies.filter((a) => a.anomalyType === 'diagnosi_contraddittoria')).toHaveLength(0);
   });
 });
