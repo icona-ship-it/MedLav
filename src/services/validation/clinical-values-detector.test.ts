@@ -141,6 +141,22 @@ describe('clinical-values-detector', () => {
       expect(detectCriticalClinicalValues(events)).toHaveLength(0);
     });
 
+    it('NON flagga la saturazione della TRANSFERRINA come SpO2 (pannello marziale, Bigon 223)', () => {
+      const events = [
+        makeEvent({ description: 'Esami ematochimici: transferrina saturazione 18% (pannello marziale), ferritina 89 µg/L' }),
+      ];
+      expect(detectCriticalClinicalValues(events)).toHaveLength(0);
+    });
+
+    it('la SpO2 vera resta flaggata anche scritta "saturazione NN%"', () => {
+      const events = [
+        makeEvent({ description: 'Accesso PS: paziente dispnoico, saturazione 82% in aria ambiente' }),
+      ];
+      const anomalies = detectCriticalClinicalValues(events);
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0].description).toContain('Saturazione');
+    });
+
     it('comportamento invariato con unità convenzionali: Hb 5,2 g/dL resta flaggata', () => {
       const events = [
         makeEvent({ description: 'Emoglobina Hb: 5,2 g/dL, paziente anemico' }),

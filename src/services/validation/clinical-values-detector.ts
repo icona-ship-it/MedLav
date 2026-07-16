@@ -28,6 +28,10 @@ interface ClinicalValuePattern {
    * in silenzio invece di flaggare un'anomalia impossibile che brucerebbe la
    * fiducia del medico. Il documento resta comunque sotto gli occhi del perito. */
   implausibleAbove?: number;
+  /** Contesto di ESCLUSIONE attorno al match: se compare, il numero appartiene a
+   * un ALTRO analita omonimo e non va flaggato (Bigon 223: "transferrina
+   * saturazione 18%" del pannello marziale letta come SpO2 18% — impossibile). */
+  excludeContext?: RegExp;
 }
 
 /**
@@ -66,6 +70,9 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     normalRange: { min: 95, max: 100 },
     criticalRange: { min: 88, max: 100 },
     implausibleAbove: 100,
+    // "saturazione" negli esami ematochimici è quasi sempre quella della
+    // TRANSFERRINA (pannello marziale, valori 15-45%): mai leggerla come SpO2.
+    excludeContext: /transferrin|sideremia|ferritin|pannello marziale/i,
   },
   {
     name: 'Glicemia',
@@ -154,6 +161,14 @@ export function detectCriticalClinicalValues(
 
       const rawValue = parseItalianNumber(match[1]);
       if (isNaN(rawValue)) continue;
+
+      // Analita omonimo nel contesto (es. saturazione transferrina) → non è
+      // il parametro vitale che questo pattern misura: salta.
+      if (pattern.excludeContext) {
+        const ctxStart = Math.max(0, match.index - 40);
+        const ctx = textToScan.slice(ctxStart, match.index + match[0].length + 20);
+        if (pattern.excludeContext.test(ctx)) continue;
+      }
 
       // Unità SI accanto al numero (finestra subito dopo il match: la regex può
       // aver già consumato una "g" di "g/L") → converti nell'unità canonica.
