@@ -1421,6 +1421,85 @@ export const processCase = inngest.createFunction(
       });
     });
 
+    // REVISIONE AUTOMATICA (founder 2026-07-17): per ogni sezione con errori
+    // fattuali, UNA rigenerazione mirata con l'elenco esatto degli errori del
+    // judge, poi ri-verifica: al perito arriva solo ciò che sopravvive. Un solo
+    // giro, mai bloccante, doc-sanitaria esclusa, log trasparente nei metadata.
+    const { selectRepairableSections: selectRepair } = await import('@/inngest/steps/auto-repair');
+    const repairTargets = selectRepair(claimVerify.findings);
+    if (repairTargets.length > 0 && synthesisResult.reportId) {
+      for (const target of repairTargets) {
+        await step.run(`auto-repair-${target.sectionId}`, async () => {
+          try {
+            const { buildRepairInstruction } = await import('@/inngest/steps/auto-repair');
+            const { regenerateSection } = await import('@/services/synthesis/section-regenerator');
+            const { fetchDocumentsOcrContext } = await import('@/inngest/steps/generate-report');
+            const { createAdminClient } = await import('@/lib/supabase/admin');
+            const supabase = createAdminClient();
+            const { data: rep } = await supabase
+              .from('reports').select('synthesis')
+              .eq('id', synthesisResult.reportId).single();
+            if (!rep?.synthesis) return { skipped: 'report_not_found' };
+            const updated = await regenerateSection({
+              sectionId: target.sectionId,
+              currentSynthesis: rep.synthesis as string,
+              caseType: updatedMetadata.caseType,
+              caseTypes: updatedMetadata.caseTypes.length > 1 ? updatedMetadata.caseTypes : undefined,
+              caseRole: updatedMetadata.caseRole,
+              events: synthesisParams.events,
+              anomalies: synthesisParams.anomalies,
+              missingDocuments: synthesisParams.missingDocuments,
+              calculations: synthesisParams.calculations,
+              userInstruction: buildRepairInstruction(target),
+              periziaMetadata: updatedMetadata.periziaMetadata,
+              documentsOcrText: await fetchDocumentsOcrContext(caseId),
+              moduleId: updatedMetadata.moduleId,
+              patientInitials: updatedMetadata.patientInitials,
+              imageAnalysis: synthesisParams.imageAnalysis,
+            });
+            if (updated === rep.synthesis) return { unchanged: true };
+            await supabase.from('reports')
+              .update({ synthesis: updated, updated_at: new Date().toISOString() })
+              .eq('id', synthesisResult.reportId);
+            return { repaired: target.findings.length };
+          } catch (err) {
+            logger.warn('pipeline', `Auto-repair ${target.sectionId} fallita: ${err instanceof Error ? err.message : 'unknown'}`);
+            return { failed: true };
+          }
+        });
+      }
+      await step.run('claim-verify-after-repair', async () => {
+        const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest, toOcrEvidenceDigest } = await import('@/inngest/steps/claim-verify');
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        // Log trasparente PRIMA della ri-verifica (che fa il merge fresh dei metadata).
+        const { data: rep } = await supabase.from('reports').select('generation_metadata')
+          .eq('id', synthesisResult.reportId).single();
+        const meta = (rep?.generation_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('reports').update({
+          generation_metadata: {
+            ...meta,
+            autoRepair: {
+              attemptedAt: new Date().toISOString(),
+              sections: repairTargets.map((t) => ({ sectionId: t.sectionId, findings: t.findings.length })),
+              findingsBefore: claimVerify.unsupportedCount,
+            },
+          },
+        }).eq('id', synthesisResult.reportId);
+        let extraEvidence = toDocumentSummariesDigest(documentSummaries);
+        if (!extraEvidence) {
+          const { fetchDocumentsOcrContext } = await import('@/inngest/steps/generate-report');
+          extraEvidence = toOcrEvidenceDigest(await fetchDocumentsOcrContext(caseId));
+        }
+        return runClaimVerification({
+          caseId,
+          reportId: synthesisResult.reportId,
+          events: toClaimEventDigest(synthesisParams.events),
+          documentSummariesDigest: extraEvidence,
+        });
+      });
+    }
+
     // ── Build pipeline cost summary ──────────────────────────────
     const costSteps: CostStep[] = [];
     const totalOcrPages = ocrResults.reduce((sum, r) => sum + (r.ocrPages ?? r.pageCount), 0);

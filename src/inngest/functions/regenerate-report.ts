@@ -598,8 +598,8 @@ export const regenerateReport = inngest.createFunction(
     );
 
     // Verifica claim-level anti-misgrounded (come in process-case): judge
-    // Medium ≠ generatore, mai bloccante, ritorna solo conteggi.
-    await step.run('regen-claim-verify', async () => {
+    // Medium ≠ generatore, mai bloccante.
+    const firstVerify = await step.run('regen-claim-verify', async () => {
       const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest, toOcrEvidenceDigest } = await import('../steps/claim-verify');
       // Evidenza del judge = ciò che il GENERATORE ha legittimamente visto:
       // riassunti map-reduce (casi grandi) o OCR grezzo cappato (casi piccoli).
@@ -616,6 +616,85 @@ export const regenerateReport = inngest.createFunction(
         documentSummariesDigest: extraEvidence,
       });
     });
+
+    // REVISIONE AUTOMATICA (founder 2026-07-17): l'ultimo passo non si limita a
+    // segnalare — per ogni sezione con errori fattuali fa UNA rigenerazione
+    // mirata con l'elenco esatto degli errori, poi il judge RIGIRA da capo: al
+    // perito arriva solo ciò che sopravvive. Un solo giro, mai bloccante,
+    // doc-sanitaria esclusa, log trasparente nei metadata.
+    const { selectRepairableSections } = await import('../steps/auto-repair');
+    const repairTargets = selectRepairableSections(firstVerify.findings);
+    if (repairTargets.length > 0 && regenSynthesisResult.reportId) {
+      for (const target of repairTargets) {
+        await step.run(`auto-repair-${target.sectionId}`, async () => {
+          try {
+            const { buildRepairInstruction } = await import('../steps/auto-repair');
+            const { regenerateSection } = await import('@/services/synthesis/section-regenerator');
+            const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+            const supabase = createAdminClient();
+            const { data: rep } = await supabase
+              .from('reports').select('synthesis')
+              .eq('id', regenSynthesisResult.reportId).single();
+            if (!rep?.synthesis) return { skipped: 'report_not_found' };
+            const updated = await regenerateSection({
+              sectionId: target.sectionId,
+              currentSynthesis: rep.synthesis as string,
+              caseType: prep.metadata.caseType,
+              caseTypes: prep.metadata.caseTypes.length > 1 ? prep.metadata.caseTypes : undefined,
+              caseRole: prep.metadata.caseRole,
+              events: synthesisParams.events,
+              anomalies: synthesisParams.anomalies,
+              missingDocuments: synthesisParams.missingDocuments,
+              calculations: synthesisParams.calculations,
+              userInstruction: buildRepairInstruction(target),
+              periziaMetadata: prep.metadata.periziaMetadata,
+              documentsOcrText: await fetchDocumentsOcrContext(caseId),
+              moduleId: prep.metadata.moduleId,
+              patientInitials: prep.metadata.patientInitials,
+              imageAnalysis,
+            });
+            if (updated === rep.synthesis) return { unchanged: true };
+            await supabase.from('reports')
+              .update({ synthesis: updated, updated_at: new Date().toISOString() })
+              .eq('id', regenSynthesisResult.reportId);
+            return { repaired: target.findings.length };
+          } catch (err) {
+            // Mai bloccante: la sezione resta com'era e il finding resta visibile.
+            logger.warn('regenerate-report', `Auto-repair ${target.sectionId} fallita: ${err instanceof Error ? err.message : 'unknown'}`);
+            return { failed: true };
+          }
+        });
+      }
+      await step.run('regen-claim-verify-after-repair', async () => {
+        const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest, toOcrEvidenceDigest } = await import('../steps/claim-verify');
+        const supabase = createAdminClient();
+        // Log trasparente PRIMA della ri-verifica (che fa il merge fresh dei metadata).
+        const { data: rep } = await supabase.from('reports').select('generation_metadata')
+          .eq('id', regenSynthesisResult.reportId).single();
+        const meta = (rep?.generation_metadata ?? {}) as Record<string, unknown>;
+        await supabase.from('reports').update({
+          generation_metadata: {
+            ...meta,
+            autoRepair: {
+              attemptedAt: new Date().toISOString(),
+              sections: repairTargets.map((t) => ({ sectionId: t.sectionId, findings: t.findings.length })),
+              findingsBefore: firstVerify.unsupportedCount,
+            },
+          },
+        }).eq('id', regenSynthesisResult.reportId);
+        let extraEvidence = toDocumentSummariesDigest(documentSummaries);
+        if (!extraEvidence) {
+          const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+          extraEvidence = toOcrEvidenceDigest(await fetchDocumentsOcrContext(caseId));
+        }
+        return runClaimVerification({
+          caseId,
+          reportId: regenSynthesisResult.reportId,
+          events: toClaimEventDigest(synthesisParams.events),
+          documentSummariesDigest: extraEvidence,
+        });
+      });
+    }
 
     // Sections that failed degrade to explicit markers (regenerable one-by-one)
     // — the run completes normally so the user gets the report; Sentry tracks

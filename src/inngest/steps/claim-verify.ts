@@ -34,6 +34,9 @@ export interface ClaimVerifyStepResult {
   unsupportedCount: number;
   unverifiableCount: number;
   usage: TokenUsage;
+  /** Findings persistiti (≤ MAX_FINDINGS): servono al ciclo di revisione
+   * automatica per costruire le istruzioni di correzione per-sezione. */
+  findings?: ClaimVerificationFinding[];
 }
 
 export async function runClaimVerification(params: {
@@ -155,6 +158,7 @@ export async function runClaimVerification(params: {
       unsupportedCount: summary.unsupportedCount,
       unverifiableCount: summary.unverifiableCount,
       usage,
+      findings: summary.findings,
     };
   } catch (err) {
     logger.warn('claim-verify', `Verifica claim saltata: ${err instanceof Error ? err.message : 'unknown'}`);

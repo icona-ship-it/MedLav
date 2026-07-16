@@ -230,6 +230,12 @@ export function ReportStep({
   // (negazioni, dettagli, giudizi medico-legali del perito). Gli errori vanno in
   // alto, evidenti; le note sotto, discrete.
   const claimErrors = claimFindings.filter((f) => f.verdict === 'non_supportato');
+  // Revisione automatica (2026-07-17): quanti errori il ciclo di auto-correzione
+  // ha risolto prima della consegna — trasparenza verso il perito.
+  const autoRepairMeta = (report?.generation_metadata as { autoRepair?: { findingsBefore?: number } } | null)?.autoRepair;
+  const autoRepairedCount = typeof autoRepairMeta?.findingsBefore === 'number'
+    ? Math.max(0, autoRepairMeta.findingsBefore - claimErrors.length)
+    : 0;
   const claimNotes = claimFindings.filter((f) => f.verdict !== 'non_supportato');
   // Conteggio per il badge "Dettagli analisi" (overflow ⋯): SOLO ciò che quella
   // vista gestisce (anomalie da valutare + doc mancanti). I claim NON vi
@@ -595,10 +601,21 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0) && (
+      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
           <div className="space-y-2">
+            {/* Trasparenza revisione automatica: cosa è stato corretto PRIMA di
+                arrivare qui (il perito deve sapere che c'è stato un giro di
+                auto-correzione verificata, non una magia silenziosa). */}
+            {autoRepairedCount > 0 && (
+              <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span>
+                  La revisione automatica ha corretto {autoRepairedCount} {autoRepairedCount === 1 ? 'dato che non tornava' : 'dati che non tornavano'} coi documenti; la verifica è stata rieseguita dopo la correzione.
+                </span>
+              </div>
+            )}
             {/* ERRORI DA CORREGGERE — l'AI ha scritto cose che NON tornano coi
                 documenti (date, somme, fatti). In alto, evidenti, sempre aperti. */}
             {claimErrors.length > 0 && (
