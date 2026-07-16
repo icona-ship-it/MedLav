@@ -124,12 +124,36 @@ export async function POST(request: NextRequest) {
         { status: 402 },
       );
     }
+    // LOCK ATOMICO (audit 2026-07-16): claim del caso PRIMA di addebitare, come
+    // /start. Senza, un doppio click (o retry concorrente) passava entrambi il
+    // check saldo → doppio addebito da 30 crediti + due pipeline concorrenti.
+    // Solo se lo stage era errore/completato/idle il claim riesce.
+    const { data: lockResult } = await supabase
+      .from('cases')
+      .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
+      .eq('id', caseId)
+      .eq('user_id', user.id)
+      .in('processing_stage', ['idle', 'completato', 'errore'])
+      .select('id');
+    if (!lockResult || lockResult.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Elaborazione già in corso. Attendi il completamento.' },
+        { status: 409 },
+      );
+    }
+
+    // Helper: rilascia il lock (ripristina 'errore') su ogni fallimento successivo.
+    const releaseLock = async () => {
+      await supabase.from('cases').update({ processing_stage: 'errore' }).eq('id', caseId).eq('user_id', user.id);
+    };
+
     const deduction = await deductCredits(user.id, creditCost, 'elaborazione', caseId, {
       pipelineMode,
       reason: 'retry',
       retriedDocuments: retryIds.length,
     });
     if (!deduction.success) {
+      await releaseLock();
       return NextResponse.json({ success: false, error: deduction.error }, { status: 402 });
     }
 
@@ -144,18 +168,8 @@ export async function POST(request: NextRequest) {
       .in('id', retryIds);
     if (docError) {
       await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'retry_doc_reset_failed' });
+      await releaseLock();
       return NextResponse.json({ success: false, error: 'Errore durante il reset dei documenti. Riprova.' }, { status: 500 });
-    }
-
-    // Reset processing stage so UI reflects retry in progress
-    const { error: stageError } = await supabase
-      .from('cases')
-      .update({ processing_stage: 'elaborazione', updated_at: new Date().toISOString() })
-      .eq('id', caseId)
-      .eq('user_id', user.id);
-    if (stageError) {
-      await refundCredits(user.id, creditCost, 'elaborazione', caseId, { reason: 'retry_stage_reset_failed' });
-      return NextResponse.json({ success: false, error: 'Errore durante il retry. Riprova.' }, { status: 500 });
     }
 
     // Trigger Inngest

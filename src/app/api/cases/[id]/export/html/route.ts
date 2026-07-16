@@ -12,6 +12,7 @@ import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { checkDepositableAttestation } from '@/services/export/attestation';
+import { validateDepositableExport } from '@/services/export/docx-export';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -136,6 +137,16 @@ export async function GET(
     const isInline = request.nextUrl.searchParams.get('inline') === 'true';
     // QA 2026-06-11: default DEPOSITABILE; ?mode=lavoro per le carte di lavoro.
     const exportMode = request.nextUrl.searchParams.get('mode') === 'lavoro' ? 'lavoro' as const : 'depositabile' as const;
+
+    // AUDIT 2026-07-16: stesso gate della route DOCX. Senza, un'anteprima
+    // "depositabile" di un caso SENZA dati perito usciva col layout basic =
+    // fascicolo tecnico di lavoro (anomalie, doc mancanti, stats) spacciato per
+    // perizia — la prima esperienza di ogni beta.
+    const pmForGate = data.periziaMetadata as { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null;
+    const depositableError = validateDepositableExport(pmForGate, data.caseData.case_role as string, exportMode);
+    if (depositableError) {
+      return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
+    }
 
     // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
     // dopo l'approvazione non esce come depositabile finché non viene riapprovato.

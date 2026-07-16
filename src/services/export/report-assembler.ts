@@ -183,11 +183,13 @@ export function assembleFullReport(params: {
 
   const synthText = synthesis ?? '';
 
-  // 2. PROFILO METODOLOGICO (legacy hardcoded) — SOLO se la sintesi non ha già
-  // la propria sezione dal catalogo (QA 2026-06-11: nel DOCX comparivano
-  // ENTRAMBE, "PROFILO METODOLOGICO" voce 1 e "Profilo Metodologico" voce 4).
+  // 2. PROFILO METODOLOGICO (legacy hardcoded) — AUDIT 2026-07-16: un report RC
+  // reale non ha MAI una sezione "profilo metodologico" nel catalogo, quindi
+  // questo boilerplate finiva SEMPRE nel depositabile — testo che il perito non
+  // ha mai visto né scritto, in un atto firmato. Iniettarlo SOLO nel fallback
+  // senza sintesi (es. export di un caso senza report generato).
   const synthHasProfilo = /^##\s+.*profilo\s+metodologico/im.test(synthText);
-  if (!synthHasProfilo) {
+  if (!synthText && !synthHasProfilo) {
     const metodologico = `La presente relazione è stata redatta sulla base dell'esame della documentazione sanitaria acquisita agli atti, secondo i criteri della medicina legale e nel rispetto delle linee guida scientifiche vigenti.\n\nIl metodo adottato ha previsto:\n- Esame sistematico di tutta la documentazione clinica in atti\n- Ricostruzione cronologica degli eventi\n- Analisi critica dei profili di responsabilità\n- Valutazione del nesso causale secondo il criterio del "più probabile che non"\n- Quantificazione del danno biologico secondo i criteri tabellari`;
     addSection('metodologico', 'PROFILO METODOLOGICO', metodologico);
   }
@@ -221,11 +223,23 @@ export function assembleFullReport(params: {
   if (synthText) {
     // Parse synthesis into sections by ## headings
     const synthSections = synthText.split(/^(?=## )/m).filter((s) => s.trim().length > 0);
+    // AUDIT 2026-07-16: il testo che il perito aggiunge PRIMA del primo "## "
+    // (una premessa in cima) non ha heading → veniva SCARTATO dall'export pur
+    // essendo visibile nel viewer. Lo prependiamo alla prima sezione reale.
+    let pendingIntro = '';
     for (const sectionText of synthSections) {
       const headingMatch = sectionText.match(/^## (.+)/);
+      if (!headingMatch) {
+        pendingIntro = `${pendingIntro}${sectionText.trim()}\n\n`;
+        continue;
+      }
       if (headingMatch) {
         const title = headingMatch[1].trim();
         let content = sectionText.replace(/^## .+\n+/, '').trim();
+        if (pendingIntro) {
+          content = `${pendingIntro}${content}`;
+          pendingIntro = '';
+        }
         if (pm.esameObiettivo && !esameObiettivoInjected && /visita|esame\s+obiettivo/i.test(title)) {
           content = `${content}\n\n**Esame obiettivo (rilevato dal perito):**\n\n${pm.esameObiettivo}`;
           esameObiettivoInjected = true;

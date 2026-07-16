@@ -374,7 +374,11 @@ export function ProcessingSection({
                         {isRetrying ? (
                           <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
                         ) : (
-                          <><RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti</>
+                          <>
+                            <RotateCcw className="mr-1 h-3 w-3" />Riprova documenti falliti
+                            {/* Il retry rilancia l'analisi completa: dichiara il costo. */}
+                            <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">{creditCost} crediti</Badge>
+                          </>
                         )}
                       </Button>
                     </div>
@@ -582,7 +586,10 @@ export function ProcessingSection({
                         {isRetrying ? (
                           <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Riprovo...</>
                         ) : (
-                          <><RotateCcw className="mr-1 h-3 w-3" />Riprova</>
+                          <>
+                            <RotateCcw className="mr-1 h-3 w-3" />Riprova
+                            <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">{creditCost} crediti</Badge>
+                          </>
                         )}
                       </Button>
                     </div>
