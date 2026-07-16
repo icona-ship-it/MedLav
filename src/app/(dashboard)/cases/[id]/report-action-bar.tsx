@@ -57,6 +57,10 @@ interface ReportActionBarProps {
   onOpenOcrDrawer?: () => void;
   /** Counter shown in toolbar buttons (events count) */
   eventsCount?: number;
+  /** Porta al passo "Info Perizia" — CTA sul toast quando l'export depositabile
+   * è bloccato per dati perito mancanti (audit 2026-07-16: al primo export la
+   * beta tester riceveva l'errore senza una via diretta per risolverlo). */
+  onOpenPeriziaForm?: () => void;
 }
 
 // --- Component ---
@@ -75,6 +79,7 @@ export function ReportActionBar({
   onOpenEventsDrawer,
   onOpenOcrDrawer,
   eventsCount,
+  onOpenPeriziaForm,
 }: ReportActionBarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -133,6 +138,40 @@ export function ReportActionBar({
   // link erano <a download>: un 400 (nome perito mancante) / 428 (attestazione)
   // veniva scaricato SILENZIOSAMENTE come finto file .docx invece di mostrare
   // il messaggio. Ora l'errore si vede; sul successo scarica il blob reale.
+  // Anteprima nel browser via fetch (audit 2026-07-16): il window.open diretto,
+  // se il route risponde 400 (dati perito mancanti), mostrava JSON grezzo in una
+  // scheda nuova — vicolo cieco. Ora: successo → scheda con l'HTML; errore →
+  // toast con CTA "Compila Dati perizia".
+  const handlePreview = useCallback((url: string) => {
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          let msg = 'Anteprima non disponibile. Riprova tra poco.';
+          try {
+            const body = await res.json();
+            if (body?.error) msg = body.error as string;
+          } catch { /* corpo non-JSON */ }
+          if (onOpenPeriziaForm && /nome del perito|dati perizia/i.test(msg)) {
+            toast.error(msg, {
+              duration: 12_000,
+              action: { label: 'Compila Dati perizia', onClick: onOpenPeriziaForm },
+            });
+          } else {
+            toast.error(msg);
+          }
+          return;
+        }
+        // Check ok → apri l'URL vero (stessa origin: le immagini relative /api/…
+        // continuano a risolvere; un blob URL le romperebbe). Costa un render in
+        // più lato server: accettabile per un'anteprima.
+        window.open(url, '_blank');
+      } catch {
+        toast.error('Anteprima non disponibile. Controlla la connessione e riprova.');
+      }
+    })();
+  }, [onOpenPeriziaForm]);
+
   const handleDownload = useCallback((url: string) => {
     setIsExporting(true);
     (async () => {
@@ -144,7 +183,15 @@ export function ReportActionBar({
             const body = await res.json();
             if (body?.error) msg = body.error as string;
           } catch { /* corpo non-JSON: tieni il default */ }
-          toast.error(msg);
+          // Errore "dati perito mancanti" → CTA diretta al form (niente vicolo cieco).
+          if (onOpenPeriziaForm && /nome del perito|dati perizia/i.test(msg)) {
+            toast.error(msg, {
+              duration: 12_000,
+              action: { label: 'Compila Dati perizia', onClick: onOpenPeriziaForm },
+            });
+          } else {
+            toast.error(msg);
+          }
           return;
         }
         const blob = await res.blob();
@@ -166,7 +213,7 @@ export function ReportActionBar({
         setIsExporting(false);
       }
     })();
-  }, [caseId]);
+  }, [caseId, onOpenPeriziaForm]);
 
   return (
     <>
@@ -242,7 +289,7 @@ export function ReportActionBar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem
-                  onClick={() => window.open(`/api/cases/${caseId}/export/html?inline=true`, '_blank')}
+                  onClick={() => handlePreview(`/api/cases/${caseId}/export/html?inline=true`)}
                 >
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   <div>

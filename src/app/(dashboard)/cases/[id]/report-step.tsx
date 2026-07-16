@@ -412,13 +412,18 @@ export function ReportStep({
       return (
         <Card className="border-orange-300/50">
           <CardContent className="pt-6">
-            <div className="py-8 text-center space-y-2">
+            <div className="py-8 text-center space-y-3">
               <p className="text-sm font-medium text-orange-700 dark:text-orange-400">
                 Elaborazione completata, ma nessun evento trovato.
               </p>
               <p className="text-xs text-muted-foreground">
-                Prova a rielaborare il caso. Se il problema persiste, i documenti potrebbero non contenere dati clinici estraibili.
+                Se il problema persiste, i documenti potrebbero non contenere dati clinici estraibili.
               </p>
+              {/* CTA diretta (audit 2026-07-16): "prova a rielaborare" senza bottone
+                  lasciava l'utente a indovinare dove cliccare. */}
+              <Button variant="outline" onClick={() => onNavigateToStep(3)}>
+                Vai all&apos;Elaborazione per rielaborare
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -545,6 +550,7 @@ export function ReportStep({
         onOpenEventsDrawer={() => setEventsDrawerOpen(true)}
         onOpenOcrDrawer={() => setOcrDrawerOpen(true)}
         eventsCount={events.length}
+        onOpenPeriziaForm={() => onNavigateToStep(2)}
       />
 
       {/* UX Ondata 3-IA Fase B: vista SOLA del Report.

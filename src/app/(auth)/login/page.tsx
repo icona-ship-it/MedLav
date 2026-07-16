@@ -181,7 +181,8 @@ function LoginPageInner() {
           {callbackFailed && !isMfaStep && (
             <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
               Il link che hai usato non è più valido o è già stato utilizzato.
-              Accedi con le tue credenziali oppure richiedi un nuovo link.
+              Se hai già confermato l&apos;email, accedi qui sotto con le tue credenziali;
+              se non riesci ad accedere, usa &quot;Password dimenticata&quot; per ricevere un nuovo link.
             </div>
           )}
           {isMfaStep ? (

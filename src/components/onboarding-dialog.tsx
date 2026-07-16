@@ -37,7 +37,7 @@ const STEPS = [
     details: [
       'Documentazione sanitaria: citazioni testuali fedeli dai documenti, in ordine cronologico',
       'Spese mediche: tabella deterministica dai giustificativi',
-      'Esporta in DOCX/PDF e rifinisci il testo direttamente nell\'editor',
+      'Esporta in Word (anche in versione anonimizzata) e rifinisci il testo direttamente nell\'editor',
     ],
   },
 ];
