@@ -62,17 +62,25 @@ export function planDocSanitariaEventBatches(
   }));
 }
 
-/** Firma di contenuto di un evento per la dedup: testo riprodotto, normalizzato. */
+/**
+ * Firma di contenuto di un evento per la dedup: DATA + testo riprodotto, normalizzato.
+ * La data fa parte della firma: due referti col testo OCR identico ma svolti in date
+ * DIVERSE (es. lo stesso esame ripetuto) sono fatti distinti e NON vanno deduplicati —
+ * altrimenti si perderebbe un accertamento. Solo testo identico E stessa data ⇒ duplicato.
+ */
 function eventContentText(e: ConsolidatedEvent): string {
-  return (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();
+  const body = (e.sourceText?.trim() || e.description?.trim() || e.title || '').trim();
+  const date = (e.eventDate ?? '').trim();
+  return date ? `${date}|${body}` : body;
 }
 
 /**
  * Anti-DUPLICAZIONE (perizia RC): lo stesso referto presente in PIÙ PDF sorgente ha più
  * `documentId` e verrebbe reso più volte nella "Documentazione Medica Prodotta". Qui si
- * scartano i documenti il cui contenuto è IDENTICO (dopo normalizzazione spazi/maiuscole)
- * a un documento già tenuto — tenendo il PRIMO. Solo contenuto identico ⇒ un duplicato
- * esatto non porta alcun fatto nuovo ⇒ "mai perdere un fatto" rispettato. Pura e testabile.
+ * scartano i documenti il cui contenuto è IDENTICO (stesso testo E stessa data, dopo
+ * normalizzazione spazi/maiuscole) a un documento già tenuto — tenendo il PRIMO. Solo
+ * contenuto+data identici ⇒ un duplicato esatto non porta alcun fatto nuovo ⇒ "mai
+ * perdere un fatto" rispettato. Pura e testabile.
  */
 export function dedupeDocumentsByContent(events: ConsolidatedEvent[]): ConsolidatedEvent[] {
   const contentByDoc = new Map<string, string[]>();

@@ -555,6 +555,12 @@ export async function generateSingleSection(params: {
   // l'LLM copia nei titoli grassetto dei blocchi-documento (leak su Bigon, ~336).
   // Backstop deterministico; la radice è già tolta in formatEventsByDocumentForPrompt.
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder) {
+    // GDPR/parser hardening (audit 2026-07-16): un heading ## interno alla
+    // doc-sanitaria AI chiuderebbe la sezione nel parser e potrebbe far trapelare
+    // testo clinico sul link pubblico. Demota ogni ## a #### (le sotto-sezioni
+    // restano leggibili ma non sono più confini di sezione). Prima era SOLO nel
+    // percorso di rigenerazione, non nella pipeline principale.
+    finalContent = finalContent.replace(/^##(\s+)/gm, '####$1');
     finalContent = stripClassifierCodeFromDocSanitariaTitles(finalContent);
     // Grassetto scappato su interi paragrafi (l'LLM a volte bolda il raccordo):
     // il bold resta solo sulle intestazioni-blocco (formato gold).

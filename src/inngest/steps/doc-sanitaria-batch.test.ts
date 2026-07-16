@@ -136,6 +136,14 @@ describe('dedupeDocumentsByContent — anti-duplicazione (mai perdere un fatto)'
     expect([...new Set(dedupeDocumentsByContent(events).map((e) => e.documentId))]).toEqual(['doc-a', 'doc-b']);
   });
 
+  it('TIENE documenti con testo identico ma DATE diverse (esame ripetuto ≠ duplicato)', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', eventDate: '2024-03-15', sourceText: 'RX torace: nei limiti.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-b', eventDate: '2024-05-20', sourceText: 'RX torace: nei limiti.' }), // stesso testo, controllo successivo
+    ];
+    expect([...new Set(dedupeDocumentsByContent(events).map((e) => e.documentId))]).toEqual(['doc-a', 'doc-b']);
+  });
+
   it('normalizza spazi/maiuscole prima del confronto', () => {
     const events = [
       makeEvent({ orderNumber: 1, documentId: 'doc-a', sourceText: 'Frattura  COMPOSTA del radio.' }),

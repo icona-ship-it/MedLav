@@ -228,7 +228,7 @@ LIMITI DELLA SEZIONE (anti-ridondanza):
 
 Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}
-Quando disponibili, cita evidenze scientifiche pertinenti [Autore, Rivista, Anno].
+NON citare letteratura o evidenze scientifiche: questa sezione non riceve fonti bibliografiche, quindi qualsiasi riferimento [Autore, Rivista, Anno] sarebbe inventato. Attieniti ai fatti clinici documentati.
 
 ${EPICRISI_FORMULATIONS}
 
