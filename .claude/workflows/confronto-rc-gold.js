@@ -13,9 +13,9 @@ const REPO = '/Users/edo_mac_mini/Desktop/Progetti AI/MedLav'
 const RUBRIC_VERSION = 'v1-2026-07-02'
 
 const CASES = [
-  { slug: 'antoniazzi-stragiudiziale', fascia: 'semplice', gate: 90 },
-  { slug: 'motta-rc-stragiudiziale', fascia: 'medio', gate: 85 },
-  { slug: 'bigon-katia-macrodanno-rc', fascia: 'macrodanno', gate: 80 },
+  { slug: 'gold-a-semplice', fascia: 'semplice', gate: 90 },
+  { slug: 'gold-b-medio', fascia: 'medio', gate: 85 },
+  { slug: 'gold-c-macrodanno', fascia: 'macrodanno', gate: 80 },
 ]
 
 // Rubrica esplicita e versionata: il punteggio deve essere RIPETIBILE.

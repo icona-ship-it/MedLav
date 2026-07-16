@@ -42,3 +42,11 @@ Referrer-Policy: strict-origin-when-cross-origin
 ## Se Trovi una Vulnerabilita
 
 STOP IMMEDIATO. Correggi prima di continuare qualsiasi altro lavoro.
+
+## Dati reali in codice, prompt ed esempi — VIETATO (GDPR Art. 9 + AI Act)
+
+- **Prompt ed esempi few-shot**: SEMPRE dati interamente fittizi e dichiarati tali. Universo fittizio di riferimento: "via degli Esempi", "Cittàdemo", "Ospedale Civile di Cittàdemo", cognomi tipo "Demprova". MAI nomi, date di nascita, luoghi, strutture o diagnosi provenienti da casi/gold reali (incidenti: "Scuola Cangrande" e "REGNOTO VALERIA" trovati nei prompt il 2026-07-17 e bonificati).
+- **Fixture di test**: stessi vincoli — mai date di nascita, CF o combinazioni identificanti derivate da casi reali.
+- **Slug, ID e nomi file committati**: mai cognomi dei periziandi; usare codici neutri (es. `gold-a-semplice`) o i codici caso (`CASO-2026-NNN`).
+- **Commenti nel codice**: preferire i codici caso ai cognomi; i cognomi-codename legacy nei commenti sono tollerati ma da non aggiungere.
+- I file in `benchmark/` (dati sanitari reali) restano SEMPRE gitignored.

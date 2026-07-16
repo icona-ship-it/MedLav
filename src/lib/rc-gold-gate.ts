@@ -33,20 +33,20 @@ export interface RcGoldCaseConfig {
 
 export const RC_GOLD_CASES: RcGoldCaseConfig[] = [
   {
-    slug: 'antoniazzi-stragiudiziale',
+    slug: 'gold-a-semplice',
     fascia: 'semplice',
     minPanelScore: 90,
     wordDeltaMaxPct: 15,
     goldBlocksCalibrated: 6,
   },
   {
-    slug: 'motta-rc-stragiudiziale',
+    slug: 'gold-b-medio',
     fascia: 'medio',
     minPanelScore: 85,
     goldBlocksCalibrated: 6,
   },
   {
-    slug: 'bigon-katia-macrodanno-rc',
+    slug: 'gold-c-macrodanno',
     fascia: 'macrodanno',
     minPanelScore: 80,
     blockRatioMax: 1.3,

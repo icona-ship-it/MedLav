@@ -152,7 +152,7 @@ describe('claim-verifier — filtro placeholder (rumore visto sul primo run real
 });
 
 describe('claim-verifier — ancoraggio dei claim alla sezione (fabbricazioni del judge, caso 224 v2)', () => {
-  const anamnesiTelegrafica = `Paziente: la minore A.B., nata l'11.07.2013, sesso femminile.
+  const anamnesiTelegrafica = `Paziente: la minore D.P., nata il 05.04.2014, sesso femminile.
 In passato: [da compilare dal perito] (nessuna patologia pregressa documentata).
 Terapia attuale: FANS per 4-5 giorni «come da consulenza ortopedica del 13.09.2025».`;
 

@@ -49,24 +49,24 @@ export const ANTI_FABRICATION_RULE = `ANTI-FABBRICAZIONE: in questa sezione ogni
  * an explicit anti-pattern. Showing the model an example of WRONG behavior
  * is empirically more effective than rules alone for high-stakes sections.
  */
-export const NEGATIVE_FEW_SHOT_INTESTAZIONE = `## ESEMPIO DI OUTPUT ERRATO (DA NON FARE MAI)
+export const NEGATIVE_FEW_SHOT_INTESTAZIONE = `## ESEMPIO DI OUTPUT ERRATO (DA NON FARE MAI — dati dell'esempio INTERAMENTE FITTIZI)
 
-Caso reale (Regnoto, CASO-2026-147). Input: metadati perizia vuoti. Eventi clinici contengono "REGNOTO VALERIA, nata 11/08/1962, frattura collo femore sinistro 13/12/2025, Ospedale Borgo Trento (AOUI Verona)".
+Scenario d'esempio. Input: metadati perizia vuoti. Eventi clinici contengono "DEMPROVA GIULIA, nata 05/04/1965, frattura collo femore sinistro 10/01/2021, Ospedale Civile di Cittàdemo".
 
 ❌ OUTPUT FABBRICATO (da NON produrre mai):
 "Dott. Marco Rossi, iscrizione Albo Milano n. 12345.
 Periziando: Mario Bianchi, nato 15/03/1978, Via Roma 10 Milano, CF BNCMRA78C15F205Z.
 Oggetto: lesioni da sinistro stradale del 5 maggio 2023 — frattura tibia/perone sx — Ospedale Niguarda. Certificati INAIL 10/05/2023 — 30/09/2023."
 
-Spiegazione: il modello ha INVENTATO ogni singolo dato (perito, nome paziente, data nascita, indirizzo, CF, telefono, data dell'evento, sede della lesione, struttura sanitaria, certificati INAIL inesistenti). Tutti questi dati sono fittizi e contraddicono i documenti reali del caso.
+Spiegazione: il modello ha INVENTATO ogni singolo dato (perito, nome paziente, data nascita, indirizzo, CF, telefono, data dell'evento, sede della lesione, struttura sanitaria, certificati INAIL inesistenti). Tutti questi dati contraddicono i documenti forniti.
 
 ✓ OUTPUT CORRETTO:
 "Dati del professionista incaricato: [da compilare dal perito]
-Periziando: REGNOTO VALERIA, nata 11/08/1962 (Verona).
+Periziando: DEMPROVA GIULIA, nata 05/04/1965 (Cittàdemo).
 Data della visita medico-legale: [da compilare dal perito]
-Oggetto dell'incarico: valutazione medico-legale stragiudiziale relativa alla frattura del collo femorale sinistro riportata dalla periziando in data 13/12/2025 a seguito di caduta accidentale, trattata chirurgicamente presso l'Ospedale Borgo Trento (AOUI Verona) con impianto di artroprotesi non cementata in data 15/12/2025."
+Oggetto dell'incarico: valutazione medico-legale stragiudiziale relativa alla frattura del collo femorale sinistro riportata dalla periziando in data 10/01/2021 a seguito di caduta accidentale, trattata chirurgicamente presso l'Ospedale Civile di Cittàdemo con impianto di artroprotesi non cementata in data 12/01/2021."
 
-LEZIONE: tutti i dati clinici e identificativi del paziente sono ESTRAIBILI dagli eventi forniti — vanno letti, non inventati. I dati del perito e della visita ML, se non in metadati, vanno marcati \`[da compilare dal perito]\`, MAI riempiti con plausibilità.
+LEZIONE: tutti i dati clinici e identificativi del paziente sono ESTRAIBILI dagli eventi forniti — vanno letti, non inventati. I dati del perito e della visita ML, se non in metadati, vanno marcati \`[da compilare dal perito]\`, MAI riempiti con plausibilità. VIETATO riportare nel report i dati di QUESTO esempio (Demprova, Cittàdemo, 05/04/1965): sono fittizi.
 `;
 
 /** Opening formulations for document analysis sections */
