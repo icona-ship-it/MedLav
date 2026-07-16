@@ -13,7 +13,7 @@
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
-  ChevronDown, ChevronUp, Pencil, Trash2, ZoomIn,
+  Check, ChevronDown, ChevronUp, Pencil, Trash2, ZoomIn,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -164,19 +164,13 @@ export function EventCard({
                 {EVENT_TYPES.find((t) => t.value === event.event_type)?.label ?? event.event_type}
               </Badge>
               {event.requires_verification && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleQuickVerify();
-                  }}
-                  disabled={isVerifying}
-                  className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400 hover:text-green-700 dark:hover:text-green-400 transition-colors disabled:opacity-50"
-                  title="Clicca per segnare come verificato"
+                <span
+                  className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400"
+                  title="L'AI chiede una tua conferma su questo evento: controllalo e premi Verificato"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
-                  {isVerifying ? '...' : 'da valutare'}
-                </button>
+                  da valutare
+                </span>
               )}
               {isClinical && !includeInChrono && (
                 <Badge variant="secondary" className="text-xs">Fuori cronologia</Badge>
@@ -186,6 +180,21 @@ export function EventCard({
           </div>
         </button>
         <div className="flex items-center gap-0.5 ml-2">
+          {/* Bottone di verifica ESPLICITO (founder 2026-07-17): prima l'unica via
+              era il badge cliccabile — sembrava un'etichetta, nessuno lo scopriva. */}
+          {event.requires_verification && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/30 mr-1"
+              onClick={(e) => { e.stopPropagation(); handleQuickVerify(); }}
+              disabled={isPending || isVerifying}
+              title="Segna questo evento come verificato da te"
+            >
+              <Check className="mr-1 h-3.5 w-3.5" />
+              {isVerifying ? 'Verifico…' : 'Verificato'}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

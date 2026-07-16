@@ -299,9 +299,17 @@ export function EventsTab({
             {verificationEvents.length > 0 ? (
               <>
                 ,{' '}
-                <span className="text-warning font-medium">
+                {/* Cliccabile (founder 2026-07-17): il contatore diceva 9 ma la
+                    vista Cronistoria ne mostrava 3 — ora un click porta alla
+                    lista COMPLETA dei da-verificare, di qualunque tipo. */}
+                <button
+                  type="button"
+                  className="text-warning font-medium hover:underline"
+                  title="Mostra tutti gli eventi da verificare (clinici, documenti e spese)"
+                  onClick={() => { setEventViewTab('all'); setEventTypeFilter(null); setShowOnlyVerification(true); setVerificationSubFilter('all'); }}
+                >
                   {verificationEvents.length} da verificare
-                </span>
+                </button>
               </>
             ) : ''})
             {dateRange && (
@@ -397,7 +405,16 @@ export function EventsTab({
                 <>
                   <button
                     type="button"
-                    onClick={() => { setShowOnlyVerification(!showOnlyVerification); setVerificationSubFilter('all'); setEventTypeFilter(null); }}
+                    // Il chip mostra il TOTALE (tutti i tipi) → attivandolo passa
+                    // alla vista Tutti, così i numeri combaciano sempre (founder
+                    // 2026-07-17: "sopra dice 9, sotto sono 3").
+                    onClick={() => {
+                      const next = !showOnlyVerification;
+                      setShowOnlyVerification(next);
+                      setVerificationSubFilter('all');
+                      setEventTypeFilter(null);
+                      if (next) setEventViewTab('all');
+                    }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                       showOnlyVerification && verificationSubFilter === 'all' ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-200 dark:hover:bg-yellow-900/60'
                     }`}
@@ -474,13 +491,26 @@ export function EventsTab({
                 <div className="h-px flex-1 bg-yellow-300 dark:bg-yellow-800" />
                 <div className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Eventi da verificare ({displayVerification.length})
+                  Da verificare in questa vista ({displayVerification.length}
+                  {verificationEvents.length > displayVerification.length ? ` di ${verificationEvents.length}` : ''})
                 </div>
                 <div className="h-px flex-1 bg-yellow-300 dark:bg-yellow-800" />
               </div>
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs text-muted-foreground">
-                  Questi eventi potrebbero richiedere una tua verifica.
+                  Controlla ogni evento e premi <span className="font-medium text-green-700 dark:text-green-400">Verificato</span>, oppure correggilo con la matita.
+                  {verificationEvents.length > displayVerification.length && (
+                    <>
+                      {' '}Altri {verificationEvents.length - displayVerification.length} tra Documenti e spese —{' '}
+                      <button
+                        type="button"
+                        className="font-medium text-primary hover:underline"
+                        onClick={() => { setEventViewTab('all'); setEventTypeFilter(null); setShowOnlyVerification(true); setVerificationSubFilter('all'); }}
+                      >
+                        mostrali tutti
+                      </button>
+                    </>
+                  )}
                 </p>
                 <div className="flex items-center gap-1.5">
                   <Button
@@ -489,7 +519,7 @@ export function EventsTab({
                     className="h-7 text-xs"
                     onClick={() => {
                       toast('Verificare tutti gli eventi?', {
-                        description: `${verificationEvents.length} eventi saranno segnati come verificati.`,
+                        description: `${verificationEvents.length} eventi (inclusi quelli tra Documenti e spese) saranno segnati come verificati.`,
                         action: {
                           label: 'Verifica tutti',
                           onClick: async () => {
@@ -504,7 +534,7 @@ export function EventsTab({
                     }}
                   >
                     <CheckCheck className="mr-1 h-3 w-3" />
-                    Verifica tutti
+                    Verifica tutti ({verificationEvents.length})
                   </Button>
                   <Button
                     variant="outline"

@@ -372,8 +372,12 @@ export function DocumentsSection({
       {documents.length > 0 && (
         <Card>
           <CardContent className="pt-6 space-y-4">
-            {/* Header with counts + batch AI classify */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* Header with counts + batch AI classify — STICKY (founder 2026-07-17):
+                con molti documenti il bottone "Categorizza tutti con AI" finiva
+                fuori schermo e nessuno lo trovava. Resta incollato in alto mentre
+                si scorre la lista; i margini negativi lo fanno aderire ai bordi
+                della card, lo sfondo copre le righe che gli passano sotto. */}
+            <div className="sticky top-9 z-20 -mx-6 -mt-6 rounded-t-lg border-b bg-card/95 px-6 pb-3 pt-5 backdrop-blur-sm flex items-center justify-between gap-2 flex-wrap">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
                   {documents.length} {documents.length === 1 ? 'documento' : 'documenti'}
