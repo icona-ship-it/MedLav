@@ -58,6 +58,22 @@ export interface GenerationProgress {
   currentSectionTitle: string;
 }
 
+/**
+ * Vera se una nota-claim è in realtà un GIUDIZIO medico-legale del perito (nesso
+ * causale, criteri, suscettibilità, valutazione del danno): viene dallo scaffold
+ * che il perito compila, NON è un fatto estraibile dai documenti — non va trattata
+ * come un errore ma etichettata "valutazione del perito". Euristica sul motivo del
+ * verifier + su frasi-scaffold tipiche.
+ */
+function isMedicoLegalJudgmentNote(finding: { claim?: string; motivo?: string }): boolean {
+  const motivo = (finding.motivo ?? '').toLowerCase();
+  const claim = (finding.claim ?? '').toLowerCase();
+  if (/valutazione medico[- ]legale|riservat|non desumibile dagli eventi|compet(e|enza) del perito/.test(motivo)) {
+    return true;
+  }
+  return /criteri (topografic|di modalità|temporale|di efficienza)|nesso causale|suscettibilità individuale|danno biologico|invalidità (permanente|temporanea)|postumi/.test(claim);
+}
+
 export interface PipelineWarningItem {
   step: string;
   severity: 'warning' | 'critical';
@@ -179,8 +195,14 @@ export function ReportStep({
   // Claim non supportati/verificabili dal verifier indipendente (anti-misgrounded):
   // lista "da verificare" scritta dalla pipeline nei metadata del report.
   const claimFindings = report?.generation_metadata?.claimVerification?.findings ?? [];
-  // Conteggio UNICO mostrato sia nel pannello "Avvisi" sia nel badge toolbar "Qualità"
-  // (prima erano due numeri diversi — es. 9 vs 4 — per la stessa preoccupazione: confondeva).
+  // Direttiva founder (2026-07-16): separare gli ERRORI VERI dell'AI (non_supportato:
+  // date/somme/fatti che NON tornano coi documenti) dalle NOTE non-verificabili
+  // (negazioni, dettagli, giudizi medico-legali del perito). Gli errori vanno in
+  // alto, evidenti; le note sotto, discrete.
+  const claimErrors = claimFindings.filter((f) => f.verdict === 'non_supportato');
+  const claimNotes = claimFindings.filter((f) => f.verdict !== 'non_supportato');
+  // Conteggio per il badge "Qualità" (nell'overflow): le anomalie vivono lì, non
+  // più nel pannello principale.
   const reviewCount = actionableCount + missingDocsCount + claimFindings.length;
   // Primo warning di pipeline con documenti falliti → abilita "Vedi dettagli" nel pannello.
   const drillablePipelineWarning = pipelineWarnings.find((w) => w.failedItems && w.failedItems.length > 0);
@@ -499,29 +521,27 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(actionableCount > 0 || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0) && (
+      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
           <div className="space-y-2">
-            {claimFindings.length > 0 && (
-              <details className="group">
-                <summary className="flex cursor-pointer list-none items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <span className="text-sm">
-                    {claimFindings.length} {claimFindings.length === 1 ? 'affermazione del report da verificare' : 'affermazioni del report da verificare'} sui documenti
-                    {' '}<span className="text-muted-foreground">(controllo automatico indipendente — apri l&apos;elenco)</span>
-                  </span>
-                </summary>
-                <ul className="mt-2 ml-6 space-y-1.5 border-l pl-3">
-                  {claimFindings.map((f) => (
-                    <li key={`${f.sectionId}:${f.claim}`} className="text-sm">
-                      <span className="font-medium">{f.sectionTitle}:</span>{' '}
-                      «{f.claim}»
-                      {' '}<span className="text-muted-foreground">— {f.verdict === 'non_supportato' ? 'non risulta dai documenti' : 'da verificare sull’originale'}{f.motivo ? ` (${f.motivo})` : ''}</span>
+            {/* ERRORI DA CORREGGERE — l'AI ha scritto cose che NON tornano coi
+                documenti (date, somme, fatti). In alto, evidenti, sempre aperti. */}
+            {claimErrors.length > 0 && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
+                <p className="flex items-center gap-2 text-sm font-medium text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {claimErrors.length === 1 ? 'Un dato del report non torna coi documenti' : `${claimErrors.length} dati del report non tornano coi documenti`}
+                </p>
+                <ul className="mt-2 ml-6 space-y-2 border-l border-destructive/20 pl-3">
+                  {claimErrors.map((f) => (
+                    <li key={`err:${f.sectionId}:${f.claim}`} className="text-sm">
+                      <span className="font-medium">{f.sectionTitle}:</span>{' '}«{f.claim}»
+                      {f.motivo && <span className="text-muted-foreground"> — {f.motivo}</span>}
                       {' '}
                       <button
                         type="button"
-                        className="text-primary hover:underline"
+                        className="font-medium text-primary hover:underline"
                         onClick={() => scrollToReportSection({ canonicalId: f.sectionId, title: f.sectionTitle })}
                       >
                         Vedi nel report
@@ -529,19 +549,6 @@ export function ReportStep({
                     </li>
                   ))}
                 </ul>
-              </details>
-            )}
-            {actionableCount > 0 && (
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <span className="text-sm">
-                    {actionableCount} {actionableCount === 1 ? 'anomalia clinica da valutare' : 'anomalie cliniche da valutare'}
-                  </span>
-                </div>
-                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
-                  Valuta le anomalie
-                </Button>
               </div>
             )}
             {missingDocsCount > 0 && (
@@ -609,6 +616,43 @@ export function ReportStep({
                   </Button>
                 </div>
               </div>
+            )}
+            {/* NOTE — affermazioni non verificabili (negazioni, dettagli, giudizi
+                medico-legali del perito): NON sono errori. In fondo, discrete,
+                collassate. I giudizi ML etichettati per evitare che il perito
+                pensi di dover correggere qualcosa. */}
+            {claimNotes.length > 0 && (
+              <details className="group border-t pt-2">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground">
+                  <Info className="h-4 w-4 shrink-0" />
+                  {claimNotes.length} {claimNotes.length === 1 ? 'nota' : 'note'} — affermazioni da verificare all&apos;occorrenza (non sono errori)
+                  <span className="ml-auto text-xs group-open:hidden">mostra</span>
+                  <span className="ml-auto text-xs hidden group-open:inline">nascondi</span>
+                </summary>
+                <ul className="mt-2 ml-6 space-y-1.5 border-l pl-3">
+                  {claimNotes.map((f) => {
+                    const isJudgment = isMedicoLegalJudgmentNote(f);
+                    return (
+                      <li key={`note:${f.sectionId}:${f.claim}`} className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">{f.sectionTitle}:</span>{' '}«{f.claim}»
+                        {isJudgment ? (
+                          <span className="italic"> — valutazione del perito, non un errore</span>
+                        ) : (
+                          f.motivo && <span> — {f.motivo}</span>
+                        )}
+                        {' '}
+                        <button
+                          type="button"
+                          className="text-primary hover:underline"
+                          onClick={() => scrollToReportSection({ canonicalId: f.sectionId, title: f.sectionTitle })}
+                        >
+                          Vedi nel report
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
             )}
           </div>
         </div>
