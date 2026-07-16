@@ -13,7 +13,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { verifySectionClaims, parseClaimVerdicts } from './claim-verifier';
+import { verifySectionClaims, parseClaimVerdicts, isClaimGroundedInSection } from './claim-verifier';
 import { streamMistralChat } from '@/lib/mistral/client';
 
 const mockStreamChat = streamMistralChat as Mock;
@@ -148,5 +148,30 @@ describe('claim-verifier — filtro placeholder (rumore visto sul primo run real
     const verdicts = parseClaimVerdicts(content);
     expect(verdicts).toHaveLength(1);
     expect(verdicts[0].claim).toContain('RM');
+  });
+});
+
+describe('claim-verifier — ancoraggio dei claim alla sezione (fabbricazioni del judge, caso 224 v2)', () => {
+  const anamnesiTelegrafica = `Paziente: la minore A.B., nata l'11.07.2013, sesso femminile.
+In passato: [da compilare dal perito] (nessuna patologia pregressa documentata).
+Terapia attuale: FANS per 4-5 giorni «come da consulenza ortopedica del 13.09.2025».`;
+
+  it('SCARTA un claim fabbricato che non ha alcun riscontro nel testo della sezione', () => {
+    expect(isClaimGroundedInSection('La paziente è stata ricoverata per 3 giorni in ospedale.', anamnesiTelegrafica)).toBe(false);
+    expect(isClaimGroundedInSection('Il codice triage assegnato al PS era giallo.', anamnesiTelegrafica)).toBe(false);
+    expect(isClaimGroundedInSection('La paziente ha eseguito una TAC del gomito destro.', anamnesiTelegrafica)).toBe(false);
+  });
+
+  it('TIENE un claim realmente estratto dal testo (anche con lievi flessioni)', () => {
+    expect(isClaimGroundedInSection('La paziente assume FANS per 4-5 giorni come da consulenza ortopedica.', anamnesiTelegrafica)).toBe(true);
+  });
+
+  it('TIENE un claim parafrasato che condivide le parole-contenuto della sezione', () => {
+    const fatto = 'La paziente veniva investita da un motociclo mentre attraversava le strisce pedonali in data 12.09.2025 e riportava frattura composta dell\'olecrano destro.';
+    expect(isClaimGroundedInSection('La paziente ha riportato una frattura composta dell\'olecrano destro dopo essere stata investita da un motociclo.', fatto)).toBe(true);
+  });
+
+  it('claim senza parole-contenuto → tenuto (conservativo, non giudicabile)', () => {
+    expect(isClaimGroundedInSection('Sì. No. Ok.', anamnesiTelegrafica)).toBe(true);
   });
 });

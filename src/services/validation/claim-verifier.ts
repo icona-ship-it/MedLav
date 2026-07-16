@@ -98,7 +98,9 @@ const CLAIM_VERIFY_SCHEMA: MistralResponseFormat = {
 function buildJudgeSystemPrompt(): string {
   return `Sei un verificatore fattuale INDIPENDENTE per perizie medico-legali. Ricevi una sezione di report e la FONTE DI VERITÀ: l'elenco degli EVENTI CLINICI documentati e, quando presenti, i RIASSUNTI DEI DOCUMENTI del fascicolo (entrambi fanno fede: un claim attestato da uno qualsiasi dei due è supportato).
 
-COMPITO: scomponi la sezione nei suoi claim fattuali (fatti clinici, date, diagnosi, terapie, dinamiche — NON giudizi valutativi o formule di stile) e per ciascuno emetti un verdetto:
+COMPITO: scomponi la sezione nei suoi claim fattuali (fatti clinici, date, diagnosi, terapie, dinamiche — NON giudizi valutativi o formule di stile) e per ciascuno emetti un verdetto.
+REGOLA ASSOLUTA: estrai i claim ESCLUSIVAMENTE da frasi presenti nel testo della «SEZIONE DA VERIFICARE». Gli eventi e i riassunti/OCR sono SOLO l'evidenza per il verdetto — MAI una fonte di claim. Se la sezione è telegrafica, fatta di placeholder o non contiene affermazioni fattuali, restituisci una lista VUOTA.
+Verdetti possibili:
 - "supportato": il claim è attestato dagli eventi (anche con parafrasi)
 - "non_supportato": il claim afferma qualcosa che gli eventi non attestano O contraddicono (date diverse, diagnosi diverse, fatti assenti)
 - "non_verificabile": deciderlo richiederebbe i documenti originali
@@ -167,10 +169,16 @@ export async function verifySectionClaims(params: {
   assertNotTruncated(result, `claim-verify:${params.sectionId}`);
 
   const parsed = parseClaimVerdicts(result.content);
+  // Scarta i claim SENZA riscontro testuale nella sezione: sono fabbricazioni
+  // del judge (mai mostrare al perito un "errore" su una frase che non esiste).
+  const grounded = parsed.filter((v) => isClaimGroundedInSection(v.claim, params.sectionContent));
+  if (grounded.length < parsed.length) {
+    logger.warn('claim-verifier', `Sezione ${params.sectionId}: ${parsed.length - grounded.length}/${parsed.length} claim del judge senza riscontro nel testo — scartati come fabbricazioni`);
+  }
   return {
     sectionId: params.sectionId,
     sectionTitle: params.sectionTitle,
-    verdicts: parsed.slice(0, MAX_CLAIMS_PER_SECTION),
+    verdicts: grounded.slice(0, MAX_CLAIMS_PER_SECTION),
     usage: result.usage,
   };
 }
@@ -183,6 +191,24 @@ export async function verifySectionClaims(params: {
  */
 export function isPlaceholderClaim(claim: string): boolean {
   return /\[(?:da compilare|inserire|a cura del perito|dato mancante)/i.test(claim);
+}
+
+/**
+ * ANCORAGGIO del claim al testo della sezione (caso 224 v2, 2026-07-17): con una
+ * sezione quasi vuota (anamnesi telegrafica) e molta evidenza nel prompt, il judge
+ * ha FABBRICATO 8 claim pescandoli dall'evidenza ("ricoverata 3 giorni", "triage
+ * giallo") — frasi che nel report NON esistevano. Un claim vale solo se ha
+ * riscontro testuale nella sezione: almeno metà delle sue parole-contenuto deve
+ * comparire nel testo (radici a 6 caratteri: tollera "eseguito/eseguita").
+ * Deterministico: i claim inventati (sovrapposizione ~zero) cadono sempre.
+ */
+export function isClaimGroundedInSection(claim: string, sectionContent: string): boolean {
+  const norm = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const content = norm(sectionContent);
+  const words = norm(claim).match(/[a-z0-9]{4,}/g) ?? [];
+  if (words.length === 0) return true; // nessuna parola-contenuto: non giudicabile → tieni (conservativo)
+  const found = words.filter((w) => content.includes(w.slice(0, 6))).length;
+  return found / words.length >= 0.5;
 }
 
 /** Parsing difensivo del JSON del judge (mai far fallire la pipeline per il verifier). */
