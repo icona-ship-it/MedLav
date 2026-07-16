@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHeaderMarkdown, isHeaderSectionId } from './header-template';
+import { renderHeaderMarkdown, genderFromCodiceFiscale, normalizeAccompagnatore, isHeaderSectionId } from './header-template';
 import type { HeaderData } from './header-schema';
 
 function emptyHeader(): HeaderData {
@@ -74,7 +74,7 @@ describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniaz
   it('blocco dati periziando riga per riga (nato/residente, C.F., MAIL, TEL, Avvocato)', () => {
     const md = renderHeaderMarkdown(stragHeader());
     expect(md).toContain('**Carla Fittizia**');
-    expect(md).toContain('Nato/a a Verona il 01/01/2000 e residente a Verona, via Esempio 2');
+    expect(md).toContain('Nato a Verona il 01/01/2000 e residente a Verona, via Esempio 2'); // genere risolto dal CF del fixture (giorno ≤ 40 → m)
     expect(md).toContain('C.F. XXXXXX00X00X000X');
     expect(md).toContain('MAIL: carla@esempio.it');
     expect(md).toContain('TEL: 333 0000000');
@@ -109,5 +109,30 @@ describe('isHeaderSectionId', () => {
     expect(isHeaderSectionId('intestazione_stragiudiziale')).toBe(true);
     expect(isHeaderSectionId('epicrisi')).toBe(false);
     expect(isHeaderSectionId('documentazione_sanitaria')).toBe(false);
+  });
+});
+
+describe('genderFromCodiceFiscale — genere certo dal CF (audit 2026-07-16)', () => {
+  it('giorno > 40 = femmina', () => {
+    expect(genderFromCodiceFiscale('RSSMRA85T50H501W')).toBe('f'); // giorno 50 = 10 F
+  });
+  it('giorno <= 40 = maschio', () => {
+    expect(genderFromCodiceFiscale('RSSMRA85T10H501W')).toBe('m');
+  });
+  it('CF assente o malformato → null (resta Nato/a)', () => {
+    expect(genderFromCodiceFiscale(null)).toBeNull();
+    expect(genderFromCodiceFiscale('non-un-cf')).toBeNull();
+  });
+});
+
+describe('normalizeAccompagnatore — articolo sui gradi di parentela (audit 2026-07-16)', () => {
+  it('"padre" → "del padre" ("in presenza del padre", non "di padre")', () => {
+    expect(normalizeAccompagnatore('padre')).toBe('del padre');
+    expect(normalizeAccompagnatore('madre')).toBe('della madre');
+  });
+  it('valore già articolato o nome proprio → invariato', () => {
+    expect(normalizeAccompagnatore('sua madre')).toBe('sua madre');
+    expect(normalizeAccompagnatore('della madre')).toBe('della madre');
+    expect(normalizeAccompagnatore('Mario Rossi')).toBe('Mario Rossi');
   });
 });

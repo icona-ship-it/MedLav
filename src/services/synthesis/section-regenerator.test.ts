@@ -115,6 +115,6 @@ describe('regenerateSection — parity with generation', () => {
 
     expect(mockGenerate).not.toHaveBeenCalled();
     // Re-emits the deterministic placeholder text, not LLM prose.
-    expect(result).toContain('Le spese mediche documentate sono riepilogate nella tabella seguente');
+    expect(result).toContain('Si riepilogano di seguito le spese mediche documentate in atti.');
   });
 });

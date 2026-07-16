@@ -83,20 +83,39 @@ function eventContentText(e: ConsolidatedEvent): string {
  * perdere un fatto" rispettato. Pura e testabile.
  */
 export function dedupeDocumentsByContent(events: ConsolidatedEvent[]): ConsolidatedEvent[] {
-  const contentByDoc = new Map<string, string[]>();
+  const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const sigsByDoc = new Map<string, Set<string>>();
   const order: string[] = [];
   for (const e of events) {
-    if (!contentByDoc.has(e.documentId)) { contentByDoc.set(e.documentId, []); order.push(e.documentId); }
-    contentByDoc.get(e.documentId)!.push(eventContentText(e));
+    if (!sigsByDoc.has(e.documentId)) { sigsByDoc.set(e.documentId, new Set()); order.push(e.documentId); }
+    const sig = norm(eventContentText(e));
+    if (sig.length > 0) sigsByDoc.get(e.documentId)!.add(sig);
   }
-  const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim();
-  const seen = new Set<string>();
+
+  // SOTTOINSIEME (audit 2026-07-16, Bigon/Motta): lo stesso referto vive spesso
+  // DENTRO la cartella clinica E come documento autonomo → la firma-intera non
+  // combacia mai e il referto veniva narrato due volte. Un documento i cui fatti
+  // (data+testo) sono TUTTI già contenuti in un altro documento tenuto non porta
+  // nulla di nuovo → si scarta il sottoinsieme e si tiene il contenitore ("mai
+  // perdere un fatto" rispettato: ogni fatto resta, narrato una volta). A parità
+  // di insieme resta il primo per ordine di apparizione. O(n²) sui documenti: ok.
   const dropped = new Set<string>();
   for (const id of order) {
-    const sig = norm((contentByDoc.get(id) ?? []).join('\n'));
-    if (sig.length === 0) continue; // contenuto vuoto → non deduplicare (conservativo)
-    if (seen.has(sig)) dropped.add(id);
-    else seen.add(sig);
+    const sigs = sigsByDoc.get(id)!;
+    if (sigs.size === 0) continue; // contenuto vuoto → non deduplicare (conservativo)
+    for (const otherId of order) {
+      if (otherId === id || dropped.has(otherId)) continue;
+      const other = sigsByDoc.get(otherId)!;
+      if (other.size < sigs.size) continue;
+      const isSubset = [...sigs].every((s) => other.has(s));
+      if (!isSubset) continue;
+      // Insiemi uguali: tiene il primo in ordine di apparizione; sottoinsieme
+      // stretto: tiene sempre il contenitore.
+      if (other.size > sigs.size || order.indexOf(otherId) < order.indexOf(id)) {
+        dropped.add(id);
+        break;
+      }
+    }
   }
   return dropped.size === 0 ? events : events.filter((e) => !dropped.has(e.documentId));
 }
@@ -151,6 +170,28 @@ export function stripRepeatedSectionHeading(part: string, title: string): string
     'gm',
   );
   return part.replace(titleLine, '');
+}
+
+/**
+ * Pulizia degli ARTEFATTI DI FINESTRA sull'output di un batch doc-sanitaria
+ * (audit 2026-07-16, Bigon): oltre al titolo ripetuto, ai confini tra finestre
+ * l'LLM lascia (a) paragrafi-cerniera di servizio che parlano delle istruzioni
+ * ("i successivi documenti verranno citati nei blocchi seguenti, come da
+ * indicazioni…") e (b) separatori "---" orfani. Nel deposito sono voce del
+ * software, non del perito. Conservativo: rimuove SOLO paragrafi brevi, non
+ * intestati **, che matchano formule di servizio note. Puro e idempotente.
+ */
+export function stripWindowArtifacts(part: string, title: string): string {
+  const noHeading = stripRepeatedSectionHeading(part, title);
+  const META_PARAGRAPH = /(verranno citat|si riportano di seguito i documenti|nei blocchi seguenti|come da indicazioni|in base alle istruzioni|di seguito si procede a (citare|riportare))/i;
+  const paragraphs = noHeading.split(/\n{2,}/);
+  const kept = paragraphs.filter((p) => {
+    const trimmed = p.trim();
+    if (/^-{3,}$/.test(trimmed)) return false; // separatore orfano
+    if (trimmed.startsWith('**')) return true; // blocco-documento: mai toccato
+    return !(trimmed.length < 400 && META_PARAGRAPH.test(trimmed));
+  });
+  return kept.join('\n\n').trim();
 }
 
 /**

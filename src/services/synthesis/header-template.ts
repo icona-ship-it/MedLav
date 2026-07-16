@@ -18,6 +18,39 @@ import type { HeaderData } from './header-schema';
 const TBD = '[da compilare dal perito]';
 
 /**
+ * Genere del periziando dal CODICE FISCALE (dato certo, non inferenza dal nome):
+ * nei CF italiani il giorno di nascita (posizioni 10-11) è aumentato di 40 per
+ * le donne. Ritorna 'f' | 'm' | null (CF assente/malformato → null).
+ */
+export function genderFromCodiceFiscale(cf: string | null | undefined): 'f' | 'm' | null {
+  if (!cf) return null;
+  const clean = cf.trim().toUpperCase();
+  if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z0-9]{4}[A-Z]$/.test(clean)) return null;
+  const day = parseInt(clean.slice(9, 11), 10);
+  if (isNaN(day)) return null;
+  return day > 40 ? 'f' : 'm';
+}
+
+/**
+ * "in presenza di padre:" → "in presenza del padre:" (audit 2026-07-16): l'LLM
+ * riempie lo slot col sostantivo nudo e la prima frase dell'atto esce sgrammaticata.
+ * Aggiunge l'articolo solo ai gradi di parentela noti al singolare; se il valore
+ * ha già articolo/possessivo o è un nome proprio, resta com'è. Pura.
+ */
+export function normalizeAccompagnatore(value: string): string {
+  const v = value.trim();
+  if (/^(del|della|dei|delle|di |il |la |un |una |su[oa] )/i.test(v)) return v;
+  const ARTICLE: Record<string, string> = {
+    padre: 'del padre', madre: 'della madre', marito: 'del marito', moglie: 'della moglie',
+    figlio: 'del figlio', figlia: 'della figlia', fratello: 'del fratello', sorella: 'della sorella',
+    tutore: 'del tutore', tutrice: 'della tutrice', nonno: 'del nonno', nonna: 'della nonna',
+    zio: 'dello zio', zia: 'della zia', compagno: 'del compagno', compagna: 'della compagna',
+  };
+  const key = v.toLowerCase();
+  return ARTICLE[key] ? ARTICLE[key] : v;
+}
+
+/**
  * Render header markdown from validated JSON. Pure function.
  */
 export function renderHeaderMarkdown(data: HeaderData): string {
@@ -58,14 +91,19 @@ function renderStragiudizialeHeader(data: HeaderData): string {
 
   // Riga visita. Niente "con il suo consenso": MOTTA/Antoniazzi non lo scrivono
   // (decisione Lavini 2026-06-23, #2 — allineare ai benchmark di riferimento).
-  const accompagnatore = p.accompagnatore ? `, in presenza di ${p.accompagnatore}` : '';
+  // "in presenza del padre" (l'articolo assorbe il "di") vs "in presenza di sua madre"/"di Mario Rossi".
+  const acc = p.accompagnatore ? normalizeAccompagnatore(p.accompagnatore) : null;
+  const accompagnatore = acc ? `, in presenza ${/^(del|dello|della|dei|delle|degli|di )/i.test(acc) ? '' : 'di '}${acc}` : '';
   lines.push(`In data ${data.dataVisitaMedicoLegale ?? TBD} ho sottoposto ad accertamenti clinici e valutazione medico legale${accompagnatore}:`);
   lines.push('');
 
   // Dati del periziando, riga per riga (gold Antoniazzi).
   lines.push(`**${p.nome ?? TBD}**`);
   if (p.luogoNascita || p.dataNascita) {
-    let nato = 'Nato/a';
+    // Genere dal CF quando disponibile (audit 2026-07-16): "Nato/a" non risolto
+    // in un atto con perizianda identificata era una stonatura immediata.
+    const gender = genderFromCodiceFiscale(p.codiceFiscale);
+    let nato = gender === 'f' ? 'Nata' : gender === 'm' ? 'Nato' : 'Nato/a';
     if (p.luogoNascita) nato += ` a ${p.luogoNascita}`;
     if (p.dataNascita) nato += ` il ${p.dataNascita}`;
     if (p.residenza) nato += ` e residente a ${p.residenza}`;

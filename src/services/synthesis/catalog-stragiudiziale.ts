@@ -12,6 +12,7 @@ import {
   TOKENS_MEDIUM,
   TOKENS_NONE,
   NO_EVN_RULE,
+  REGISTRO_ANAGRAFICO_RULE,
   ANTI_REPETITION_AND_LENGTH_RULES,
   DOC_SANITARIA_PLACEHOLDER,
   DOC_SANITARIA_INTRO,
@@ -69,7 +70,8 @@ REGOLA ASSOLUTA — NESSUN RIFERIMENTO AL TRIBUNALE (segnalata dal perito 2026-0
 - L'incarico e' di parte (assicurazione, avvocato, paziente, medico di base) — non giudiziale.
 
 Stile formale e conciso. Massimo 8-10 righe totali.
-${NO_EVN_RULE}`,
+${NO_EVN_RULE}
+${REGISTRO_ANAGRAFICO_RULE}`,
   },
   {
     id: 'anamnesi',
@@ -88,7 +90,8 @@ ${NO_EVN_RULE}`,
 "Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate)
 "Anamnesi familiare: [solo se pertinente e documentata]"
 Una voce per riga; ometti le righe senza dato documentato. Riporta SOLO fatti documentati.
-${NO_EVN_RULE}`,
+${NO_EVN_RULE}
+${REGISTRO_ANAGRAFICO_RULE}`,
   },
   {
     id: 'il_fatto_e_storia_clinica',
@@ -121,7 +124,8 @@ LIMITI (anti-ridondanza — TASSATIVI):
 - NON riprodurre integralmente i documenti — è oggetto di "La Documentazione Medica Prodotta"
 - NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
 - NON includere la parte SOGGETTIVA (ciò che il paziente riferisce oggi in visita) — quella è nel placeholder "Visita Clinica" che compilerà il perito.
-${NO_EVN_RULE}`,
+${NO_EVN_RULE}
+${REGISTRO_ANAGRAFICO_RULE}`,
   },
   {
     id: 'documentazione_sanitaria',
@@ -145,7 +149,8 @@ ${DOC_REPRODUCTION_RULES}
 ${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
-${NO_EVN_RULE}`,
+${NO_EVN_RULE}
+${REGISTRO_ANAGRAFICO_RULE}`,
   },
   {
     id: 'visita_clinica',
@@ -186,7 +191,9 @@ ${NO_EVN_RULE}`,
     // time — every voce inclusa (anche senza data → '—'), bollo come riga
     // separata, nessuna voce persa. Niente dipendenza dalla compliance LLM.
     isPlaceholder: true,
-    placeholderText: `Le spese mediche documentate sono riepilogate nella tabella seguente, calcolata automaticamente dalle voci di spesa del fascicolo.
+    // Registro peritale, non da software (audit 2026-07-16): "calcolata
+    // automaticamente" rivelava lo strumento dentro l'atto depositabile.
+    placeholderText: `Si riepilogano di seguito le spese mediche documentate in atti.
 
 ${DETERMINISTIC_MARKERS.SPESE}`,
     promptDirective: '',
@@ -232,6 +239,7 @@ LIMITI DELLA SEZIONE (anti-ridondanza):
 
 Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}
+${REGISTRO_ANAGRAFICO_RULE}
 NON citare letteratura o evidenze scientifiche: questa sezione non riceve fonti bibliografiche, quindi qualsiasi riferimento [Autore, Rivista, Anno] sarebbe inventato. Attieniti ai fatti clinici documentati.
 
 ${EPICRISI_FORMULATIONS}

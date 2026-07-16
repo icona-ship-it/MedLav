@@ -85,10 +85,17 @@ export const EPICRISI_FORMULATIONS = `
 FORMULAZIONI STANDARD PER L'EPICRISI:
 - "Dalla disamina complessiva della documentazione in atti emerge che il paziente..."
 - "Il quadro documentale evidenzia un iter clinico caratterizzato da..."
-- "I periodi di inabilita' temporanea, come desumibili dalla documentazione, risultano: un periodo di INABILITA' TEMPORANEA AL 100% di gg. [N]; INABILITA' TEMPORANEA AL 75% di gg. [N]; AL 50% di gg. [N]; AL 25% di gg. [N]" (una riga per periodo, solo i livelli effettivamente presenti — formato benchmark gold 2026-06-10)
 - "Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data], e' caratterizzato da..."
 - "Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato..."
 - "La documentazione consente di ricostruire la seguente sequenza cronologica:..."
+
+DIVIETO ASSOLUTO SU ITT/INABILITA' (audit 2026-07-16): NON scrivere percentuali di
+inabilita' temporanea (100%/75%/50%/25%) ne' conteggi di giorni di inabilita'. Una
+prognosi clinica ("guaribile in giorni 30") NON e' un periodo di inabilita' al 100%:
+equipararle e' un errore metodologico. I FATTI calcolati (giorni di ricovero, durata
+complessiva, spese documentate) sono aggiunti AUTOMATICAMENTE in coda alla sezione;
+la GRADUAZIONE dei periodi di inabilita' e' una valutazione riservata al perito, che
+la compila nello spazio dedicato.
 `;
 
 /** Few-shot example for Documentazione Sanitaria section — ALL data is fictional */
@@ -146,20 +153,15 @@ Il quadro documentale evidenzia il seguente decorso clinico successivo al primo 
 
 Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato [complicanze/evoluzione con date e fonti].
 
-I periodi di inabilita' temporanea, come desumibili dalla documentazione esaminata, risultano i seguenti:
-- un periodo di INABILITA' TEMPORANEA AL 100% di gg. [N]
-- un periodo di INABILITA' TEMPORANEA AL [X]% di gg. [N]
-(una riga per periodo; livelli tipici 100/75/50/25, SOLO quelli effettivamente presenti; percentuale in maiuscolo, giorni come "gg. N" — formato dei benchmark depositati. Ancoraggio alla fonte tra parentesi solo se utile alla tracciabilita')
-
 Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data ultimo controllo], e' caratterizzato da [situazione clinica attuale — solo fatti documentati].
 
 ---
 
 REGOLE:
-- Prosa discorsiva, MAI elenchi puntati per la narrazione (tranne ITT/ITP)
+- Prosa discorsiva, MAI elenchi puntati per la narrazione
 - Ogni affermazione ancorata alla fonte IN PROSA (tipo documento e data, senza parentesi quadre)
 - NO giudizi, NO opinioni, NO "si ritiene" — solo fatti documentati
-- Include ITT/ITP se calcolati
+- VIETATO scrivere percentuali di inabilita' (ITT/ITP) o conteggi di giorni di inabilita': i fatti calcolati arrivano automaticamente in coda, la graduazione la compila il perito nello spazio dedicato
 - Il DECORSO clinico (visite, interventi, terapie, evoluzione) è la parte sostanziale: sintesi cronologica in prosa, NON riproduzione integrale dei documenti
 - NON ri-narrare l'evento indice e il primo soccorso in dettaglio (sono ne "Il Fatto e la Storia Clinica"): qui il decorso PARTE dopo il primo soccorso
 `;

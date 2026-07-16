@@ -24,7 +24,7 @@ import {
 } from '@/services/synthesis/document-summarizer';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripWindowArtifacts, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -457,7 +457,7 @@ export const regenerateReport = inngest.createFunction(
           ...(spec.excludeLabTests ? [] : [buildAttiIndex(synthesisParams.events)]),
           // Togli l'intestazione di sezione ri-emessa da ogni batch — `## Titolo` o `**Titolo**`
           // (su Bigon il grassetto ×9); la canonica è aggiunta una volta a valle.
-          ...texts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
+          ...texts.map((p) => stripWindowArtifacts(p, spec.title)),
         ].join('\n\n');
 
         let finalContent = combinedContent;

@@ -32,7 +32,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
-import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripRepeatedSectionHeading, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripWindowArtifacts, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
@@ -1176,7 +1176,7 @@ export const processCase = inngest.createFunction(
           // Ogni batch a volte ri-emette l'intestazione di sezione (## Titolo o **Titolo**)
           // nonostante la direttiva → toglila da ogni blocco; quella canonica è aggiunta una
           // volta a valle (assembleSectionBlock). Su Bigon il grassetto compariva 9×.
-          ...texts.map((p) => stripRepeatedSectionHeading(p, spec.title)),
+          ...texts.map((p) => stripWindowArtifacts(p, spec.title)),
         ].join('\n\n');
 
         // Garanzia di completezza della doc-sanitaria SELETTIVA (decisione medici

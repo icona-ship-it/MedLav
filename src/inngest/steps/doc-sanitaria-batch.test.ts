@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch, distillRcDocSanitariaEvents, planRcDocSanitariaBatches } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, stripWindowArtifacts, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch, distillRcDocSanitariaEvents, planRcDocSanitariaBatches } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 
@@ -165,6 +165,63 @@ describe('dedupeDocumentsByContent — anti-duplicazione (mai perdere un fatto)'
 
   it('input vuoto → vuoto', () => {
     expect(dedupeDocumentsByContent([])).toEqual([]);
+  });
+
+  it('SCARTA il documento SOTTOINSIEME di un contenitore (dimissione dentro cartella + autonoma = narrata una volta)', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'dimissione-standalone', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura bifocale femore sinistro.' }),
+      makeEvent({ orderNumber: 2, documentId: 'cartella', eventDate: '2024-11-13', sourceText: 'Accesso PS per politrauma da investimento.' }),
+      makeEvent({ orderNumber: 3, documentId: 'cartella', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura bifocale femore sinistro.' }),
+    ];
+    const out = dedupeDocumentsByContent(events);
+    expect([...new Set(out.map((e) => e.documentId))]).toEqual(['cartella']);
+    expect(out).toHaveLength(2); // il contenitore resta INTERO
+  });
+
+  it('il documento con un fatto IN PIÙ sopravvive sempre: cade il sottoinsieme, nessun fatto perso', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'estratto', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura femore.' }),
+      makeEvent({ orderNumber: 2, documentId: 'referto-completo', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura femore.' }),
+      makeEvent({ orderNumber: 3, documentId: 'referto-completo', eventDate: '2024-11-23', sourceText: 'Terapia domiciliare con eparina.' }),
+    ];
+    const out = dedupeDocumentsByContent(events);
+    expect([...new Set(out.map((e) => e.documentId))]).toEqual(['referto-completo']);
+    expect(out).toHaveLength(2); // tutti i fatti restano (dentro il completo)
+  });
+
+  it('due documenti con fatti PARZIALMENTE sovrapposti ma ciascuno con un fatto proprio → restano entrambi', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-x', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura femore.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-x', eventDate: '2024-11-24', sourceText: 'Controllo ferita chirurgica regolare.' }),
+      makeEvent({ orderNumber: 3, documentId: 'doc-y', eventDate: '2024-11-22', sourceText: 'Diagnosi alla dimissione: frattura femore.' }),
+      makeEvent({ orderNumber: 4, documentId: 'doc-y', eventDate: '2024-11-23', sourceText: 'Terapia domiciliare con eparina.' }),
+    ];
+    const out = dedupeDocumentsByContent(events);
+    expect(new Set(out.map((e) => e.documentId))).toEqual(new Set(['doc-x', 'doc-y']));
+  });
+});
+
+describe('stripWindowArtifacts — artefatti ai confini di finestra (audit 2026-07-16)', () => {
+  it('rimuove il paragrafo-cerniera di servizio e i separatori orfani, tiene i blocchi-documento', () => {
+    const part = `---\n\n*I successivi documenti clinici, in ordine cronologico, verranno citati nei blocchi seguenti, riportando esclusivamente i dati clinici rilevanti.*\n\n**Referto di esame strumentale, in data 13.11.2024:**\nIl referto descrive «frattura bifocale scomposta».`;
+    const out = stripWindowArtifacts(part, 'La Documentazione Medica Prodotta');
+    expect(out).not.toContain('verranno citati');
+    expect(out).not.toMatch(/^-{3,}$/m);
+    expect(out).toContain('**Referto di esame strumentale');
+    expect(out).toContain('frattura bifocale scomposta');
+  });
+
+  it('NON tocca prosa clinica legittima né i blocchi-documento lunghi', () => {
+    const part = `**Cartella clinica, in data 13.11.2024:**\nLa paziente giunge in PS. Nei blocchi operatori si procedeva a riduzione della frattura.`;
+    const out = stripWindowArtifacts(part, 'La Documentazione Medica Prodotta');
+    expect(out).toBe(part.trim());
+  });
+
+  it('rimuove anche il titolo di sezione ripetuto (comportamento pregresso preservato)', () => {
+    const part = `## La Documentazione Medica Prodotta\n\n**Referto, in data 01.01.2025:**\nTesto.`;
+    const out = stripWindowArtifacts(part, 'La Documentazione Medica Prodotta');
+    expect(out).not.toContain('## La Documentazione');
+    expect(out).toContain('**Referto');
   });
 });
 

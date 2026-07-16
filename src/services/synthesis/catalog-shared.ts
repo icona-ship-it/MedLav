@@ -73,6 +73,17 @@ export const EXPENSE_EVENT_TYPES = new Set([
 export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (es. «come da referto ortopedico del 13.11.2024»). NON racchiudere le citazioni tra parentesi quadre: né riferimenti numerati agli eventi né del tipo «tipo, data».';
 
 /**
+ * Registro anagrafico (audit 2026-07-16): "la sig.ra" per una dodicenne, "Il
+ * paziente giunge" per una donna e le parentesi pseudo-verifica ("dato
+ * parzialmente riscontrato…") sono stecche immediate per un medico legale.
+ * Regola condivisa, appesa a ogni direttiva di sezione accanto a NO_EVN_RULE.
+ */
+export const REGISTRO_ANAGRAFICO_RULE = `REGISTRO ANAGRAFICO (vincolante):
+- Rispetta il GENERE del periziando in ogni forma ("la paziente", "la perizianda", participi accordati): MAI il maschile generico per una donna.
+- Se il periziando è MINORENNE alla data dei fatti (verificalo dalla data di nascita), MAI "sig./sig.ra": scrivi "il minore"/"la minore".
+- VIETATE le parentesi editoriali o di pseudo-verifica nel testo ("dato parzialmente riscontrato", "dato riferito al periziando", "non esplicitamente identificato", "confermato nella…"): la verifica di fedeltà avviene a valle, fuori dall'atto. Se un dato non è attribuibile con certezza, semplicemente NON scriverlo.`;
+
+/**
  * Sprint 1 S1.1 + S1.2 (Lavini quality, 2026-05-17): regole anti-verbosità +
  * anti-ripetizione per le sezioni "documentazione_sanitaria" dove il LLM
  * tende a ridondare e ripetere informazioni. Sono regole rinforzate rispetto
