@@ -7,6 +7,7 @@ import {
   ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, Info, FileQuestion,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { notifyCreditsChanged } from '@/lib/credits-events';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -307,6 +308,7 @@ export function DocumentsSection({
       // a few seconds to write the first classificationProgress, and without
       // the kickoff the polling condition would never turn on.
       setClassifyStarting(true);
+      notifyCreditsChanged();
       onClassificationStarted?.();
       router.refresh();
     } catch {

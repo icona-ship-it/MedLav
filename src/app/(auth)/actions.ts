@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -170,9 +171,20 @@ export async function signIn(formData: FormData) {
     return { error: 'Inserisci email e password' };
   }
 
-  const rateCheck = await checkRateLimit({ key: `auth:${email}`, ...RATE_LIMITS.AUTH });
-  if (!rateCheck.success) {
-    return { error: 'Troppi tentativi. Riprova tra qualche minuto.' };
+  // Brute-force: limite PER EMAIL (stretto) + PER IP (audit 2026-07-16). L'IP da
+  // x-forwarded-for è spoofabile ma aggiunge una barriera contro il password-
+  // spraying su molte email dalla stessa origine.
+  const emailCheck = await checkRateLimit({ key: `login:${email.toLowerCase()}`, ...RATE_LIMITS.LOGIN });
+  if (!emailCheck.success) {
+    return { error: 'Troppi tentativi di accesso. Riprova tra qualche minuto.' };
+  }
+  const hdrs = await headers();
+  const ip = (hdrs.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
+  if (ip !== 'unknown') {
+    const ipCheck = await checkRateLimit({ key: `login-ip:${ip}`, ...RATE_LIMITS.LOGIN_IP });
+    if (!ipCheck.success) {
+      return { error: 'Troppi tentativi di accesso da questa rete. Riprova tra qualche minuto.' };
+    }
   }
 
   const supabase = await createClient();

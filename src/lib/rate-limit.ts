@@ -148,8 +148,14 @@ export async function checkRateLimit(params: RateLimitParams): Promise<RateLimit
 export const RATE_LIMITS = {
   /** Auth endpoints: 30 requests per minute (login, signup, password reset) */
   AUTH: { limit: 30, windowMs: 60_000 },
+  /** Login: più stretto (brute-force). 8 tentativi/min per email + limite per IP. */
+  LOGIN: { limit: 8, windowMs: 60_000 },
+  LOGIN_IP: { limit: 20, windowMs: 60_000 },
   /** Heavy operations: 20 requests per minute (start processing, cancel, split PDF) */
   PROCESSING: { limit: 20, windowMs: 60_000 },
   /** General API: 200 requests per minute (export, search, classify, regenerate) */
   API: { limit: 200, windowMs: 60_000 },
+  /** Export PDF: Puppeteer è costoso (~60s CPU). Stretto per non saturare la
+   * lambda (audit 2026-07-16). */
+  EXPORT_PDF: { limit: 10, windowMs: 60_000 },
 } as const;

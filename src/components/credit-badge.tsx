@@ -36,10 +36,14 @@ export function CreditBadge() {
       }
     }
     document.addEventListener('visibilitychange', handleVisibility);
+    // Refresh dopo una spesa/rimborso nella STESSA tab (audit 2026-07-16): prima
+    // il badge restava stantio finché non si cambiava scheda o si ricaricava.
+    window.addEventListener('legmed:credits-changed', fetchBalance);
 
     return () => {
       mounted = false;
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('legmed:credits-changed', fetchBalance);
     };
   }, []);
 

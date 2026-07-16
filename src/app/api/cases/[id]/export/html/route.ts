@@ -317,7 +317,7 @@ function generateExpenseTableHtml(params: {
 
     return `<tr>
       <td>${idx + 1}</td>
-      <td>${formatDateForHtml(String(item.date ?? ''))}</td>
+      <td>${escapeHtml(formatDateForHtml(String(item.date ?? '')))}</td>
       <td>${escapeHtml(String(item.description ?? ''))}</td>
       <td class="amount">${amount !== null ? `€ ${amount.toFixed(2).replace('.', ',')}` : '—'}</td>
       <td>${escapeHtml(String(item.receiptNumber ?? '—'))}</td>

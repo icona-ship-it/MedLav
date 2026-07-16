@@ -7,6 +7,7 @@ import {
   FileSearch, BrainCircuit, ShieldCheck, ShieldOff, FileText, CheckCircle2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { notifyCreditsChanged } from '@/lib/credits-events';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -213,6 +214,7 @@ export function ProcessingSection({
       // la transizione alla vista di progresso non dipende più da un singolo
       // refresh (bug "Avvio in corso…" congelato, smoke test 2026-07-14).
       onProcessingStarted?.();
+      notifyCreditsChanged();
       router.refresh();
     } catch {
       setProcessingError('Errore di rete. Verifica la connessione.');
@@ -243,6 +245,7 @@ export function ProcessingSection({
         toast.success(refunded > 0
           ? `Elaborazione annullata — ${refunded} crediti rimborsati`
           : 'Elaborazione annullata');
+        if (refunded > 0) notifyCreditsChanged();
       }
       router.refresh();
     } catch {

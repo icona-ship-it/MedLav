@@ -223,6 +223,7 @@ export async function refundCredits(
   operation: CreditOperation | string,
   entityId?: string,
   metadata?: Record<string, unknown>,
+  _retryCount = 0,
 ): Promise<DeductResult> {
   if (amount <= 0) return { success: true };
 
@@ -233,17 +234,30 @@ export async function refundCredits(
 
   const newBalance = (row.balance as number) + amount;
 
-  const { error: updateErr } = await supabase
+  // OPTIMISTIC LOCK (audit 2026-07-16): senza il .eq('balance', row.balance) un
+  // refund concorrente a una deduzione poteva sovrascriverla (saldo errato). Su
+  // 0 righe aggiornate = corsa rilevata → rileggi e riprova.
+  const { data: updated, error: updateErr } = await supabase
     .from('user_credits')
     .update({
       balance: newBalance,
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('balance', row.balance as number)
+    .select('id');
 
   if (updateErr) {
     logger.error(TAG, 'Credit refund failed', { userId, amount, error: updateErr.message });
     return { success: false, error: 'Errore nel rimborso crediti' };
+  }
+  if (!updated || updated.length === 0) {
+    if (_retryCount >= 5) {
+      logger.error(TAG, 'Credit refund giving up after retries', { userId, amount });
+      return { success: false, error: 'Errore nel rimborso crediti (concorrenza)' };
+    }
+    logger.warn(TAG, 'Credit refund race, retrying', { userId, amount, retry: _retryCount + 1 });
+    return refundCredits(userId, amount, operation, entityId, metadata, _retryCount + 1);
   }
 
   const allowance = row.monthly_allowance as number;
@@ -386,6 +400,7 @@ export async function grantCredits(
   amount: number,
   type: 'trial_grant' | 'purchase',
   metadata?: Record<string, unknown>,
+  _grantRetry = 0,
 ): Promise<void> {
   const supabase = createAdminClient();
 
@@ -395,13 +410,18 @@ export async function grantCredits(
 
   const newBalance = (row.balance as number) + amount;
 
-  const { error } = await supabase
+  // OPTIMISTIC LOCK (audit 2026-07-16): condiziona sul saldo letto; su 0 righe
+  // (deduzione/refund concorrente) rileggi e riprova, così l'accredito non
+  // sovrascrive una modifica intercorsa.
+  const { data: updated, error } = await supabase
     .from('user_credits')
     .update({
       balance: newBalance,
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('balance', row.balance as number)
+    .select('id');
 
   if (error) {
     // MAI ingoiare: un pagamento riuscito senza crediti accreditati = soldi persi
@@ -409,6 +429,11 @@ export async function grantCredits(
     // ritenta gratis finché l'accredito va a buon fine (audit 2026-07-16).
     logger.error(TAG, 'Failed to grant credits', { userId, amount, type, error: error.message });
     throw new Error(`grantCredits fallito per ${userId}: ${error.message}`);
+  }
+  if (!updated || updated.length === 0) {
+    if (_grantRetry >= 5) throw new Error(`grantCredits: concorrenza non risolta per ${userId}`);
+    logger.warn(TAG, 'grantCredits race, retrying', { userId, amount, retry: _grantRetry + 1 });
+    return grantCredits(userId, amount, type, metadata, _grantRetry + 1);
   }
 
   const allowance = row.monthly_allowance as number;

@@ -336,6 +336,11 @@ export async function POST(request: NextRequest) {
         error: insertError.message,
         code: insertError.code,
       });
+      // Rimborso (audit 2026-07-16): il credito era già dedotto ma nessun report
+      // è stato salvato → l'utente non deve pagare per un lavoro non consegnato.
+      await refundCredits(authenticatedUserId, CREDIT_COSTS.rigenerazione_sezione, 'rigenerazione_sezione', undefined, {
+        reason: 'regen_section_insert_failed',
+      });
       return NextResponse.json({ success: false, error: 'Errore salvataggio report.' }, { status: 500 });
     }
 
