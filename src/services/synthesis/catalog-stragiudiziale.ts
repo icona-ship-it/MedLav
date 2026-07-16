@@ -218,9 +218,13 @@ Includi:
 1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").
 2. DECORSO CLINICO successivo al primo soccorso, in forma di sintesi cronologica: visite e controlli specialistici (data + specialista, raggruppati se ravvicinati), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione. Quando il decorso è documentato è la parte SOSTANZIALE della sezione; su un caso SEMPLICE con decorso minimo (poche visite di controllo, nessun ricovero) sintetizzalo in poche righe SENZA gonfiarlo né ri-narrare l'evento.
 3. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
-4. Eventuali spese mediche giudicate congrue (1 riga)
+4. Una riga sulle spese mediche documentate: usa ESATTAMENTE l'importo totale fornito nei dati qui sotto (stesso valore della tabella Spese) e NON sommare tu le voci né inventare un totale diverso. La congruità la valuta il perito.
 
 NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà nello spazio dedicato in fondo.
+
+FEDELTÀ DELLE DATE (prevenzione errori):
+- Riporta la data di un esame SOLO se l'esame è effettivamente tra i fatti forniti, e con la SUA data esatta.
+- NON attribuire un'unica data a più esami diversi (es. una RX e una RM svolte in giorni diversi): se hanno date diverse, indicale distintamente; se di un esame non hai la data tra i fatti, non inferirla.
 
 LIMITI DELLA SEZIONE (anti-ridondanza):
 - NON ri-narrare l'evento indice e il primo soccorso in dettaglio — sono oggetto di "Il Fatto e la Storia Clinica". Qui il decorso PARTE dopo il primo soccorso.
