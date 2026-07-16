@@ -78,6 +78,23 @@ export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (
  * parzialmente riscontrato…") sono stecche immediate per un medico legale.
  * Regola condivisa, appesa a ogni direttiva di sezione accanto a NO_EVN_RULE.
  */
+/**
+ * Anti-distorsione dei fatti clinici (caso 224, 2026-07-17): in una stesura la
+ * "frattura composta" è diventata "scomposta", il gomito destro "sinistro",
+ * un'escoriazione una "frattura", RX+RM una "TAC", la prognosi 30gg "25gg" e
+ * gli esami SUGGERITI risultavano "eseguiti". Ogni classe qui sotto è stata
+ * osservata davvero. Regola condivisa da tutte le sezioni.
+ */
+export const ANTI_DISTORSIONE_RULE = `FEDELTÀ ASSOLUTA AI FATTI (vincolante — ogni violazione è un errore grave su un atto legale):
+- COPIA ESATTAMENTE gli aggettivi diagnostici: "frattura composta" NON può diventare "scomposta" (né viceversa), "sospetta" resta "sospetta".
+- COPIA ESATTAMENTE la LATERALITÀ (destro/sinistro) di ogni lesione, esame e arto: mai scambiarla.
+- COPIA ESATTAMENTE il TIPO di esame: RX ≠ RM ≠ TAC ≠ ecografia. Se gli eventi dicono RX e RM, non scrivere TAC.
+- NON promuovere la gravità di una lesione: un'escoriazione NON è una frattura, una contusione NON è una lesione ossea.
+- DATE: la data del TRAUMA e la data dell'ACCESSO alle cure sono spesso diverse (trauma la sera, PS il giorno dopo): usa per ciascun fatto la SUA data, copiata dagli eventi.
+- NUMERI (giorni di prognosi, durate, misure): copiali ESATTAMENTE dal fatto giusto — la durata del gesso NON è la prognosi.
+- Un esame SUGGERITO/PRESCRITTO ("si consiglia RX se persiste dolore") NON è un esame ESEGUITO: scrivilo come eseguito solo se un referto ne attesta l'esecuzione.
+Se un dato non è chiaramente attestato negli eventi forniti, NON scriverlo.`;
+
 export const REGISTRO_ANAGRAFICO_RULE = `REGISTRO ANAGRAFICO (vincolante):
 - Rispetta il GENERE del periziando in ogni forma ("la paziente", "la perizianda", participi accordati): MAI il maschile generico per una donna.
 - Se il periziando è MINORENNE alla data dei fatti (verificalo dalla data di nascita), MAI "sig./sig.ra": scrivi "il minore"/"la minore".

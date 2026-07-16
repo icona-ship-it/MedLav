@@ -13,6 +13,7 @@ import {
   TOKENS_NONE,
   NO_EVN_RULE,
   REGISTRO_ANAGRAFICO_RULE,
+  ANTI_DISTORSIONE_RULE,
   ANTI_REPETITION_AND_LENGTH_RULES,
   DOC_SANITARIA_PLACEHOLDER,
   DOC_SANITARIA_INTRO,
@@ -71,7 +72,8 @@ REGOLA ASSOLUTA — NESSUN RIFERIMENTO AL TRIBUNALE (segnalata dal perito 2026-0
 
 Stile formale e conciso. Massimo 8-10 righe totali.
 ${NO_EVN_RULE}
-${REGISTRO_ANAGRAFICO_RULE}`,
+${REGISTRO_ANAGRAFICO_RULE}
+${ANTI_DISTORSIONE_RULE}`,
   },
   {
     id: 'anamnesi',
@@ -91,7 +93,8 @@ ${REGISTRO_ANAGRAFICO_RULE}`,
 "Anamnesi familiare: [solo se pertinente e documentata]"
 Una voce per riga; ometti le righe senza dato documentato. Riporta SOLO fatti documentati.
 ${NO_EVN_RULE}
-${REGISTRO_ANAGRAFICO_RULE}`,
+${REGISTRO_ANAGRAFICO_RULE}
+${ANTI_DISTORSIONE_RULE}`,
   },
   {
     id: 'il_fatto_e_storia_clinica',
@@ -125,7 +128,8 @@ LIMITI (anti-ridondanza — TASSATIVI):
 - NON anticipare la sintesi finale, le valutazioni e i dati ITT/ITP — sono oggetto dell'Epicrisi
 - NON includere la parte SOGGETTIVA (ciò che il paziente riferisce oggi in visita) — quella è nel placeholder "Visita Clinica" che compilerà il perito.
 ${NO_EVN_RULE}
-${REGISTRO_ANAGRAFICO_RULE}`,
+${REGISTRO_ANAGRAFICO_RULE}
+${ANTI_DISTORSIONE_RULE}`,
   },
   {
     id: 'documentazione_sanitaria',
@@ -150,7 +154,8 @@ ${DOC_SANITARIA_NEUTRALITY}
 
 ${ANTI_REPETITION_AND_LENGTH_RULES}
 ${NO_EVN_RULE}
-${REGISTRO_ANAGRAFICO_RULE}`,
+${REGISTRO_ANAGRAFICO_RULE}
+${ANTI_DISTORSIONE_RULE}`,
   },
   {
     id: 'visita_clinica',
@@ -240,6 +245,7 @@ LIMITI DELLA SEZIONE (anti-ridondanza):
 Scrivi in prosa formale e densa.
 ${NO_EVN_RULE}
 ${REGISTRO_ANAGRAFICO_RULE}
+${ANTI_DISTORSIONE_RULE}
 NON citare letteratura o evidenze scientifiche: questa sezione non riceve fonti bibliografiche, quindi qualsiasi riferimento [Autore, Rivista, Anno] sarebbe inventato. Attieniti ai fatti clinici documentati.
 
 ${EPICRISI_FORMULATIONS}
