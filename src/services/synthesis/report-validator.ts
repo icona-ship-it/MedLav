@@ -100,9 +100,15 @@ const SENTINEL_NAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // token distintivo di un esempio few-shot.
   // Token distintivi dell'esempio narrativo Antoniazzi in il_fatto_e_storia_clinica
   // (section-catalog.ts): se compaiono nel report, l'LLM ha copiato l'esempio.
-  { pattern: /\bScuola\s+Cangrande\b/i, label: 'Scuola Cangrande (esempio Antoniazzi)' },
-  { pattern: /\bCorso\s+[Pp]orta\s+[Nn]uova\b/i, label: 'Corso Porta Nuova (esempio Antoniazzi)' },
-  { pattern: /\bmotociclo\s+delle\s+[Pp]oste\b/i, label: 'motociclo delle Poste (esempio Antoniazzi)' },
+  { pattern: /\bScuola\s+Cangrande\b/i, label: 'Scuola Cangrande (esempio Antoniazzi legacy)' },
+  { pattern: /\bCorso\s+[Pp]orta\s+[Nn]uova\b/i, label: 'Corso Porta Nuova (esempio Antoniazzi legacy)' },
+  { pattern: /\bmotociclo\s+delle\s+[Pp]oste\b/i, label: 'motociclo delle Poste (esempio Antoniazzi legacy)' },
+  // Canarini del NUOVO esempio interamente fittizio (2026-07-17): l'esempio con
+  // dettagli reali del gold è stato riscritto (leak "Scuola Cangrande" osservato
+  // sul caso 224 nonostante il guardrail). Questi token non esistono nel mondo
+  // reale: se compaiono, l'LLM ha copiato l'esempio.
+  { pattern: /\bvia\s+degli\s+Esempi\b/i, label: 'via degli Esempi (esempio fittizio)' },
+  { pattern: /\bCitt[àa]demo\b/i, label: 'Cittàdemo (esempio fittizio)' },
 ];
 
 // Truncation-detection floor only. Real LLM truncation (finishReason='length')
