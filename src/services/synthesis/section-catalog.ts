@@ -192,12 +192,23 @@ export function resolveSectionPlan(params: {
  * Used by the single-section regeneration path so it inherits the exact same
  * promptDirective / token budget / intestazione routing as initial generation.
  */
+/**
+ * Alias CANONICI → id di catalogo (prova dal vivo 224, 2026-07-17): il parser
+ * canonicalizza per titolo ("I Dati Anamnestici" → 'i_dati_anamnestici') mentre
+ * il catalogo usa 'anamnesi'. La revisione automatica e il bottone "Correggi
+ * con AI" arrivano coi canonici dei claim-finding e devono risolvere comunque.
+ */
+const CANONICAL_SECTION_ALIASES: Record<string, string> = {
+  i_dati_anamnestici: 'anamnesi',
+};
+
 export function getSectionSpecById(
   sectionId: string,
   periziaMetadata?: PeriziaMetadata,
 ): SectionSpec | undefined {
   const sections = applyRcPeritoSections(STRAGIUDIZIALE_SECTIONS, periziaMetadata);
-  return sections.find((s) => s.id === sectionId);
+  const resolved = CANONICAL_SECTION_ALIASES[sectionId] ?? sectionId;
+  return sections.find((s) => s.id === resolved);
 }
 
 /**

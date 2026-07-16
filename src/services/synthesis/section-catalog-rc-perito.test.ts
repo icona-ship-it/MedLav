@@ -50,3 +50,14 @@ describe('applyRcPeritoSections (via getSectionSpecById) — sezioni perito RC',
     expect(il?.placeholderText).not.toMatch(/\[[A-D]\s*[-–]/);
   });
 });
+
+describe('getSectionSpecById — alias canonici (prova dal vivo 224)', () => {
+  it("risolve 'i_dati_anamnestici' (canonico del parser) sulla spec 'anamnesi'", () => {
+    const spec = getSectionSpecById('i_dati_anamnestici');
+    expect(spec?.id).toBe('anamnesi');
+  });
+  it('gli id di catalogo restano risolti direttamente', () => {
+    expect(getSectionSpecById('epicrisi')?.id).toBe('epicrisi');
+    expect(getSectionSpecById('sezione_inesistente')).toBeUndefined();
+  });
+});
