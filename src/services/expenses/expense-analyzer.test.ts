@@ -294,6 +294,61 @@ describe('QA 2026-06-11 — dedup voci di spesa (PDF caricato due volte)', () =>
   });
 });
 
+describe('dedup ricevuta di pagamento (bug Antoniazzi 221: totale 380 invece di 330)', () => {
+  // Scenario reale: la fattura RX (€50) e la ricevuta bancomat che la paga (€50,
+  // stesso giorno) venivano contate ENTRAMBE — la ricevuta aveva il numero fattura
+  // nella chiave dedup, la riga RX no → chiavi diverse → +50€ fantasma sul totale.
+  // Dati speculari al caso reale: il dedup per numero-ricevuta NON li aggancia
+  // perché il titolo della ricevuta dà ref "26878" mentre la descrizione della
+  // prestazione dà ref "26878/2025/T" → chiavi diverse, entrambe contate.
+  const rxInvoice = {
+    event_type: 'spesa_medica',
+    title: 'RX gomito destro',
+    description: 'Prestazione radiologica: RX gomito destro. Importo: €50,00. Fattura n.26878/2025/T del 12/09/2025',
+    event_date: '2025-09-12',
+    facility: 'Centro Diagnostico',
+    source_type: 'altro',
+    source_text: 'RX GOMITO DX\t\t\t50,00',
+  };
+  const bancomatReceipt = {
+    event_type: 'spesa_medica',
+    title: 'Pagamento bancomat fattura 26878',
+    description: 'Pagamento della fattura n.26878/2025/T tramite bancomat Mastercard contactless il 12/09/2025 alle ore 19:01',
+    event_date: '2025-09-12',
+    facility: null,
+    source_type: 'altro',
+    source_text: 'DATA 12/09/25 ORA 19:01\tIMPORTO € 50,00\tTRANSAZIONE ESEGUITA',
+  };
+
+  it('conta UNA volta la spesa quando fattura e ricevuta di pagamento hanno stessa data+importo', () => {
+    const result = analyzeExpenses([rxInvoice, bancomatReceipt]);
+    expect(result.totalItems).toBe(1);
+    expect(result.totalAmount).toBe(50);
+    // Resta la voce di PRESTAZIONE (più informativa), non la ricevuta.
+    expect(result.items[0].description).toBe('RX gomito destro');
+  });
+
+  it('TIENE la ricevuta di pagamento quando è l\'unica prova della spesa (nessuna riga prestazione)', () => {
+    const result = analyzeExpenses([bancomatReceipt]);
+    expect(result.totalItems).toBe(1);
+    expect(result.totalAmount).toBe(50);
+  });
+
+  it('TIENE la ricevuta di pagamento se l\'importo NON coincide con nessuna prestazione (spesa diversa)', () => {
+    const otherPayment = { ...bancomatReceipt, title: 'Pagamento bancomat farmacia', source_text: 'IMPORTO € 23,50 TRANSAZIONE ESEGUITA', description: 'Ricevuta POS farmacia' };
+    const result = analyzeExpenses([rxInvoice, otherPayment]);
+    expect(result.totalItems).toBe(2);
+    expect(result.totalAmount).toBeCloseTo(73.5, 2);
+  });
+
+  it('scenario 221 completo: RX 50 (fattura+ricevuta) + RM 160 + tutore 120 = 330, non 380', () => {
+    const rm = { ...rxInvoice, title: 'RM gomito destro', description: 'Prestazione di Risonanza Magnetica (RM) al gomito destro. Importo: 160,00 EUR', event_date: '2025-09-13' };
+    const tutore = { ...rxInvoice, title: 'Acquisto tutore articolato', description: 'Acquisto tutore articolato. Importo: 120,00 EUR', event_date: '2025-09-13' };
+    const result = analyzeExpenses([rxInvoice, bancomatReceipt, rm, tutore]);
+    expect(result.totalAmount).toBe(330);
+  });
+});
+
 describe('fix Bigon — parser US + esclusione notifiche SSR', () => {
   it('extractAmount riconosce il formato anglosassone "euro 1,038.80"', () => {
     expect(extractAmount('Prestazione euro 1,038.80')).toBeCloseTo(1038.8, 2);

@@ -342,6 +342,18 @@ export function isFiscalComponentItem(title: string): boolean {
   return /^\s*(iva\b|imposta di bollo\b|marca da bollo\b|bollo\b)/i.test(title);
 }
 
+/**
+ * Vero se la voce è un RECORD DI PAGAMENTO (ricevuta POS/bancomat, bonifico,
+ * quietanza, "Pagamento ..."): la PROVA che una spesa è stata saldata, non una
+ * prestazione in più. Da sola resta una voce valida (può essere l'unica traccia
+ * della spesa); accanto a una prestazione con stessa data+importo è la sua
+ * quietanza e va contata una volta sola (bug Antoniazzi 221: fattura RX €50 +
+ * ricevuta bancomat €50 stesso giorno → totale gonfiato 380 invece di 330).
+ */
+export function isPaymentTransactionRecord(title: string): boolean {
+  return /^\s*pagamento\b/i.test(title) || /\b(bancomat|pos|bonifico|transazione|quietanza)\b/i.test(title);
+}
+
 /** Voce di costo a carico del Servizio Sanitario (SSN/SSR). */
 export interface SsnCostItem {
   date: string;
@@ -435,8 +447,22 @@ export function analyzeExpenses(
     seenExpense.add(key);
     return true;
   });
+
+  // Antoniazzi 221 (2026-07-16): la fattura della prestazione E la ricevuta di
+  // pagamento che la salda sfuggono al dedup sopra (la ricevuta porta il numero
+  // fattura nella chiave, la prestazione la descrizione) → +€50 fantasma sul
+  // totale. Conservativo: scarta il record-di-pagamento SOLO se esiste una voce
+  // NON-pagamento con stessa data+importo (è la sua quietanza); da solo resta.
+  const serviceAmountKeys = new Set(
+    dedupedItems
+      .filter((i) => i.amount != null && !isPaymentTransactionRecord(i.description))
+      .map((i) => `${i.date}|${i.amount}`),
+  );
+  const withoutPaymentDupes = dedupedItems.filter((i) =>
+    !(i.amount != null && isPaymentTransactionRecord(i.description) && serviceAmountKeys.has(`${i.date}|${i.amount}`)),
+  );
   items.length = 0;
-  items.push(...dedupedItems);
+  items.push(...withoutPaymentDupes);
 
   // Calculate totals per category
   const allCategories: ExpenseCategory[] = [
