@@ -76,5 +76,33 @@ describe('markdownToHtml', () => {
       const html = markdownToHtml('![Fig](/api/cases/1/images?path=a)');
       expect(html).toContain('/api/cases/1/images');
     });
+
+    it('renders an image INLINE in un paragrafo (non markdown letterale nell\'atto)', () => {
+      const html = markdownToHtml('Come da referto ![Fig.1](ocr-image:ocr-images/d/p1-f0.png) si osserva la frattura.');
+      expect(html).toContain('<img src="ocr-image:ocr-images/d/p1-f0.png"');
+      expect(html).not.toContain('![Fig.1]');
+    });
+
+    it('immagine inline con URL non sicuro → resta solo l\'alt, niente markdown grezzo', () => {
+      const html = markdownToHtml('Vedi ![descrizione](javascript:alert) nel documento.');
+      expect(html).not.toContain('javascript:alert');
+      expect(html).not.toContain('![');
+      expect(html).toContain('descrizione');
+    });
+
+    it('evidenzia il blocco-placeholder del perito come nel DOCX (parità export)', () => {
+      const html = markdownToHtml('*[Il perito compilerà qui le considerazioni medico-legali.]*');
+      expect(html).toContain('perito-placeholder');
+      expect(html).toContain('Il perito compilerà qui le considerazioni medico-legali.');
+      expect(html).not.toContain('*[');
+    });
+
+    it('blocco-placeholder multi-riga: chiude su "]*" e evidenzia tutte le righe', () => {
+      const md = '*[Il perito ricostruirà:\nla dinamica del sinistro\ne il nesso causale.]*';
+      const html = markdownToHtml(md);
+      expect(html).toContain('perito-placeholder');
+      expect(html).toContain('la dinamica del sinistro');
+      expect(html).toContain('e il nesso causale.');
+    });
   });
 });

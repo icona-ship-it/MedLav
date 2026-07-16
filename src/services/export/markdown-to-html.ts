@@ -51,8 +51,26 @@ function convertMarkdownTable(lines: string[]): string {
   return html;
 }
 
+/** Riga che apre un blocco-placeholder del perito (`*[...]*` o `[da compilare/inserire...]`).
+ * Vive qui (modulo leggero, zero dipendenze) ed è ri-esportata da docx-export:
+ * DOCX e HTML devono riconoscere gli stessi blocchi. */
+export function isPlaceholderBlockStart(line: string): boolean {
+  const t = line.trim();
+  if (t.startsWith('*[')) return true;
+  return t.startsWith('[') && /(da compilare|inserire qui|il perito compil|il perito ricostru|il perito inseri|da verificare)/i.test(t);
+}
+
 function convertInlineFormatting(text: string): string {
   let result = escapeHtml(text);
+  // Immagini INLINE nel paragrafo (audit 2026-07-16): il blocco-immagine a riga
+  // intera è gestito in markdownToHtml, ma un'immagine in mezzo al testo finiva
+  // come markdown letterale "![alt](url)" nell'atto esportato. Stessa whitelist
+  // di schemi del blocco; URL non sicuro → resta solo l'alt. PRIMA di bold/italic
+  // (che altrimenti potrebbero mangiare i delimitatori dentro l'URL).
+  result = result.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, src: string) =>
+    /^(https?:\/\/|data:image\/|\/api\/|ocr-image:)/.test(src)
+      ? `<img src="${src}" alt="${alt}" style="max-width:100%;height:auto">`
+      : alt);
   // Bold: **text** or __text__
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
@@ -158,6 +176,27 @@ export function markdownToHtml(markdown: string): string {
       const src = isSafeUrl ? escapeHtml(rawSrc) : '#';
       output.push(`<figure class="report-image"><img src="${src}" alt="${alt}" style="max-width:100%;height:auto"><figcaption>${alt}</figcaption></figure>`);
       i++;
+      continue;
+    }
+
+    // Blocco-placeholder del perito (*[...]* anche multi-riga): evidenziato in
+    // giallo come nel DOCX (audit 2026-07-16: prima solo il Word lo mostrava,
+    // nell'anteprima HTML i placeholder si mimetizzavano nel testo). Stile
+    // inline così il blocco resta evidenziato in qualunque consumatore.
+    if (isPlaceholderBlockStart(line)) {
+      closeList();
+      const blockLines: string[] = [];
+      while (i < lines.length && blockLines.length < 40) {
+        blockLines.push(lines[i]);
+        const closes = /\]\*?[.\s]*$/.test(lines[i].trim());
+        i++;
+        if (closes) break;
+      }
+      const inner = blockLines.join('\n').trim().replace(/^\*?\[/, '').replace(/\]\*?\.?$/, '').trim();
+      const innerHtml = inner.split('\n')
+        .map((pl) => `<p style="margin:0.25em 0">${convertInlineFormatting(pl.replace(/^\*|\*$/g, ''))}</p>`)
+        .join('');
+      output.push(`<div class="perito-placeholder" style="background:#fff3a0;font-style:italic;padding:0.5em 0.75em;border-radius:3px;margin:0.75em 0">${innerHtml}</div>`);
       continue;
     }
 

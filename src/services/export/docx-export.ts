@@ -5,6 +5,7 @@ import {
   TableLayoutType, ImageRun,
 } from 'docx';
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isPlaceholderBlockStart } from './markdown-to-html';
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
@@ -815,12 +816,9 @@ export function scaleToFit(
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-/** Riga che apre un blocco-placeholder del perito (`*[...]*` o `[da compilare/inserire...]`). */
-export function isPlaceholderBlockStart(line: string): boolean {
-  const t = line.trim();
-  if (t.startsWith('*[')) return true;
-  return t.startsWith('[') && /(da compilare|inserire qui|il perito compil|il perito ricostru|il perito inseri|da verificare)/i.test(t);
-}
+// Blocchi-placeholder: predicato condiviso col renderer HTML (stessi blocchi
+// evidenziati in giallo in entrambi gli export). Ri-esportato per compatibilità.
+export { isPlaceholderBlockStart };
 
 export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
