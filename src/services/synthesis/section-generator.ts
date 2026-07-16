@@ -31,8 +31,7 @@ import {
   NEGATIVE_FEW_SHOT_INTESTAZIONE,
 } from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
-import { analyzeExpenses } from '@/services/expenses/expense-analyzer';
-import { formatEuro, formatEventDateByPrecision } from '@/lib/format';
+import { formatEventDateByPrecision } from '@/lib/format';
 import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
 import { distillRcDocSanitariaEvents } from '@/inngest/steps/doc-sanitaria-batch';
 import { isExcludableByPolicy } from './selettivita-policy';
@@ -241,25 +240,13 @@ export function buildSectionUserPrompt(params: {
   }
 
   // Add calculations
-  // QA 2026-06-11: l'epicrisi citava "totale di euro [da compilare]" mentre la
-  // tabella spese deterministica aveva già il totale — il dato calcolato va
-  // fornito esplicitamente al prompt (stessa fonte della tabella: analyzeExpenses).
+  // Bug 221 (2026-07-16): prima si iniettava il TOTALE spese calcolato chiedendo
+  // all'LLM di scriverlo — ma il CoVe non può verificare una SOMMA mai scritta
+  // nei documenti e la sostituiva con "[non documentato]". Ora la riga col totale
+  // è un FATTO DETERMINISTICO appeso a valle (formatEpicrisiFactsBlock, via il
+  // marker ITT_RICOVERO_FACTS): all'LLM resta solo il divieto di scrivere cifre.
   if (spec.id === 'epicrisi') {
-    const expenseRows = synthesisParams.events.map((e) => ({
-      event_type: e.eventType,
-      title: e.title,
-      description: e.description,
-      event_date: e.eventDate,
-      facility: e.facility ?? null,
-      source_type: e.sourceType,
-      source_text: e.sourceText ?? null,
-    }));
-    const expenseTotal = analyzeExpenses(expenseRows).totalAmount;
-    if (expenseTotal !== null && expenseTotal > 0) {
-      parts.push(`TOTALE SPESE MEDICHE DOCUMENTATE (calcolo deterministico, stesso valore della tabella spese): ${formatEuro(expenseTotal)}. Usa ESATTAMENTE questo importo nella riga sulle spese. NON dichiararle "congrue/giustificate" né esprimere giudizi di congruità: è valutazione riservata al perito (lascia eventualmente un placeholder). NON inventare un totale diverso.\n`);
-    } else {
-      parts.push('SPESE MEDICHE: non risultano spese mediche risarcibili documentate (out-of-pocket del danneggiato) nel fascicolo. NON inventare un totale di spesa né dichiarare spese "esibite/congrue": al più rimanda alla tabella spese e lascia che il perito integri eventuali ricevute.\n');
-    }
+    parts.push('SPESE MEDICHE: NON scrivere importi, somme o totali di spesa e NON esprimere giudizi di congruità (riservati al perito). La riga con il totale documentato è aggiunta AUTOMATICAMENTE in coda alla sezione, insieme ai dati medico-legali calcolati.\n');
   }
 
   if (spec.dataSources.includes('calculations') && synthesisParams.calculations) {

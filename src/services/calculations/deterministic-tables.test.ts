@@ -167,6 +167,27 @@ describe('expandDeterministicBlocks', () => {
     expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS);
   });
 
+  it('ITT_RICOVERO_FACTS include la riga col TOTALE spese documentate (bug 221: CoVe sostituiva la somma LLM con "[non documentato]")', () => {
+    const clinical: DeterministicTableEvent[] = [
+      ev({ event_type: 'ricovero', event_date: '2024-11-14', title: 'Ricovero' }),
+      ev({ event_type: 'dimissione', event_date: '2024-11-22', title: 'Dimissione' }),
+      ev({ event_type: 'spesa_medica', event_date: '2025-09-12', title: 'RX gomito destro', description: 'Importo: €50,00' }),
+      ev({ event_type: 'spesa_medica', event_date: '2025-09-13', title: 'RM gomito destro', description: 'Importo: 160,00 EUR' }),
+    ];
+    const out = expandDeterministicBlocks(`## Epicrisi\n\n${DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS}`, clinical);
+    expect(out).toContain('Le spese mediche documentate ammontano a complessivi');
+    expect(out).toContain('210,00');
+  });
+
+  it('ITT_RICOVERO_FACTS senza spese → nessuna riga spese (niente frasi vuote)', () => {
+    const clinical: DeterministicTableEvent[] = [
+      ev({ event_type: 'ricovero', event_date: '2024-11-14', title: 'Ricovero' }),
+      ev({ event_type: 'dimissione', event_date: '2024-11-22', title: 'Dimissione' }),
+    ];
+    const out = expandDeterministicBlocks(`${DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS}`, clinical);
+    expect(out).not.toContain('spese mediche documentate ammontano');
+  });
+
   it('uses a fallback note when the data yields an empty table', () => {
     const md = DETERMINISTIC_MARKERS.SPESE;
     const out = expandDeterministicBlocks(md, []); // no expenses

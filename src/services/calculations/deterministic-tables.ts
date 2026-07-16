@@ -82,6 +82,37 @@ function cell(value: string | null | undefined): string {
  * Importo '—' when no amount could be parsed (insert it at the source).
  * Returns '' when there are no expense events.
  */
+/**
+ * Fatti deterministici in coda all'Epicrisi: giorni di ricovero/ITT + la riga
+ * col TOTALE delle spese documentate. La riga spese vive QUI e non nel testo
+ * LLM (bug 221, 2026-07-16): il CoVe non può verificare una SOMMA che non è
+ * scritta in nessun documento e la sostituiva con "[non documentato]"; un fatto
+ * calcolato va emesso a valle della generazione, sempre in sync con gli eventi
+ * e immune ai verificatori. Stesso valore della tabella Spese (analyzeExpenses).
+ */
+export function formatEpicrisiFactsBlock(events: DeterministicTableEvent[]): string {
+  const ittBlock = formatRicoveroITTFactsBlock(events);
+  const expenses = events.filter((e) => e.event_type === 'spesa_medica');
+  let speseLine = '';
+  if (expenses.length > 0) {
+    const { totalAmount } = analyzeExpenses(
+      expenses.map((e) => ({
+        event_type: e.event_type,
+        title: e.title ?? '',
+        description: e.description ?? '',
+        event_date: e.event_date ?? '',
+        facility: e.facility ?? null,
+        source_type: e.source_type ?? 'altro',
+        source_text: e.source_text ?? null,
+      })),
+    );
+    if (totalAmount !== null && totalAmount > 0) {
+      speseLine = `Le spese mediche documentate ammontano a complessivi ${formatEuro(totalAmount)} (dettaglio nella sezione delle spese).`;
+    }
+  }
+  return [ittBlock, speseLine].filter(Boolean).join('\n\n');
+}
+
 export function formatExpenseTable(events: DeterministicTableEvent[]): string {
   const expenses = events.filter((e) => e.event_type === 'spesa_medica');
   if (expenses.length === 0) return '';
@@ -497,7 +528,7 @@ export function expandDeterministicBlocks(
     [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events)) || EMPTY_FALLBACK.ITT_ITP],
     [DETERMINISTIC_MARKERS.SPESE, speseBlock],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
-    [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatRicoveroITTFactsBlock(events) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
+    [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatEpicrisiFactsBlock(events) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
   ];
   replacements.push([
     DETERMINISTIC_MARKERS.DOC_SANITARIA,

@@ -218,7 +218,7 @@ Includi:
 1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").
 2. DECORSO CLINICO successivo al primo soccorso, in forma di sintesi cronologica: visite e controlli specialistici (data + specialista, raggruppati se ravvicinati), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione. Quando il decorso è documentato è la parte SOSTANZIALE della sezione; su un caso SEMPLICE con decorso minimo (poche visite di controllo, nessun ricovero) sintetizzalo in poche righe SENZA gonfiarlo né ri-narrare l'evento.
 3. Esiti clinici documentati rilevanti per il danno biologico. NON calcolare né scrivere tu i giorni di ricovero o la durata della malattia, e NON scrivere "non desumibile": i dati medico-legali calcolati (giorni di ricovero, durata complessiva del periodo di malattia) sono inseriti AUTOMATICAMENTE in coda alla sezione.
-4. Una riga sulle spese mediche documentate: usa ESATTAMENTE l'importo totale fornito nei dati qui sotto (stesso valore della tabella Spese) e NON sommare tu le voci né inventare un totale diverso. La congruità la valuta il perito.
+4. NON scrivere importi o totali di spesa: la riga con il totale documentato è aggiunta AUTOMATICAMENTE in coda alla sezione (stesso valore della tabella Spese). La congruità la valuta il perito.
 
 NON esprimere percentuali di invalidità né giudizi sul nesso causale — il perito li formulerà nello spazio dedicato in fondo.
 
