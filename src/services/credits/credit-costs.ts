@@ -19,8 +19,12 @@ export const CREDIT_COSTS = {
   elaborazione_spese: 10,
   /** Anonymization only: OCR + redact */
   elaborazione_anonimizzazione: 5,
-  /** AI document classification (per document) */
-  categorizzazione: 1,
+  /** AI document classification (per document). GRATUITA (2026-07-16): a 1 credito
+   *  creava la trappola-trial (30 crediti = 1 analisi esatta → chi categorizzava
+   *  prima non poteva più avviare l'analisi). Il costo vivo è una chiamata
+   *  mistral-medium/doc, coperta dal margine dell'analisi; il denial-of-wallet
+   *  resta chiuso dal rate-limit sui route classify. */
+  categorizzazione: 0,
   /** Regenerate a single report section */
   rigenerazione_sezione: 5,
   /** Regenerate the entire report */

@@ -96,7 +96,7 @@ const faqItems: Array<{ question: string; answer: string }> = [
   },
   {
     question: 'Come funzionano i crediti?',
-    answer: 'Ogni operazione AI ha un costo fisso in crediti: analisi completa (30), solo estrazione (15), analisi spese (10), categorizzazione AI (1 per documento), rigenerazione sezione (5). Il piano Pro include 900 crediti/mese. Puoi acquistare crediti extra quando vuoi.',
+    answer: 'Ogni operazione AI ha un costo fisso in crediti: analisi completa (30), solo estrazione (15), analisi spese (10), rigenerazione sezione (5). La categorizzazione AI dei documenti è gratuita. Il piano Pro include 900 crediti/mese. Puoi acquistare crediti extra quando vuoi.',
   },
   {
     question: 'Cosa succede se finisco i crediti mensili?',

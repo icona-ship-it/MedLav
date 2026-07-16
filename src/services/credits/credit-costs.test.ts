@@ -1,12 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { CREDIT_COSTS, getElaborationCost } from './credit-costs';
+import { CREDIT_COSTS, PLAN_CREDITS, getElaborationCost } from './credit-costs';
 
 describe('CREDIT_COSTS', () => {
-  it('should price every metered operation with a positive integer', () => {
+  it('should price every metered operation with a non-negative integer', () => {
+    // Eccezione DOCUMENTATA: `categorizzazione` è gratuita (0) — vedi test trappola-trial
+    // sotto. Il vettore denial-of-wallet resta chiuso dal rate-limit sui route classify.
     for (const [op, cost] of Object.entries(CREDIT_COSTS)) {
+      if (op === 'categorizzazione') continue;
       expect(cost, op).toBeGreaterThan(0);
       expect(Number.isInteger(cost), op).toBe(true);
     }
+  });
+
+  it('should keep categorization FREE so the trial grant always covers one full analysis (trappola-trial)', () => {
+    // Trappola-trial (smoke test 2026-07-14): trial = 30 crediti = esattamente 1 analisi
+    // completa. Se la categorizzazione costasse anche solo 1 credito, chi categorizza
+    // PRIMA di avviare l'analisi resterebbe a 29 e non potrebbe più avviarla (vicolo
+    // cieco al primo caso). Invariante: categorizzare N documenti non deve mai erodere
+    // la capacità del trial di pagare l'analisi completa.
+    expect(CREDIT_COSTS.categorizzazione).toBe(0);
+    expect(PLAN_CREDITS.trial.initialGrant).toBeGreaterThanOrEqual(CREDIT_COSTS.elaborazione_completa);
   });
 
   it('should define the newly-metered free endpoints', () => {

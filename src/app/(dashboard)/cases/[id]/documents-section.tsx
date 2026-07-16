@@ -259,32 +259,35 @@ export function DocumentsSection({
     const docsToClassify = documents.filter((d) => d.processing_status === 'caricato');
     if (docsToClassify.length === 0) return;
 
-    // GUARD-RAIL crediti (trappola trial, smoke test 2026-07-14): la categorizzazione
-    // costa 1/doc e l'analisi ne richiede altri N — se dopo la categorizzazione il
-    // saldo non basterebbe più per l'analisi, AVVISA PRIMA (niente vicolo cieco a
-    // scoperta ritardata). Best-effort: se il check fallisce, si procede come prima.
+    // GUARD-RAIL crediti (trappola trial, smoke test 2026-07-14): se la categorizzazione
+    // costasse crediti e dopo il saldo non bastasse più per l'analisi, AVVISA PRIMA
+    // (niente vicolo cieco a scoperta ritardata). Con costo 0 (2026-07-16) il guard è
+    // saltato: un'azione gratuita non deve mai chiedere un doppio tap né parlare di
+    // saldo. Best-effort: se il check fallisce, si procede come prima.
     const classifyCost = docsToClassify.length * CREDIT_COSTS.categorizzazione;
-    try {
-      const balRes = await fetch('/api/credits/balance');
-      const bal = await balRes.json() as { success: boolean; data?: { total: number } };
-      const total = bal.data?.total;
-      if (bal.success && typeof total === 'number') {
-        const elabCost = getElaborationCost(pipelineMode ?? 'full');
-        if (total < classifyCost) {
-          toast.error(`La categorizzazione costa ${classifyCost} crediti e ne hai ${total}. Ricarica dai crediti in alto a destra.`);
-          return;
+    if (classifyCost > 0) {
+      try {
+        const balRes = await fetch('/api/credits/balance');
+        const bal = await balRes.json() as { success: boolean; data?: { total: number } };
+        const total = bal.data?.total;
+        if (bal.success && typeof total === 'number') {
+          const elabCost = getElaborationCost(pipelineMode ?? 'full');
+          if (total < classifyCost) {
+            toast.error(`La categorizzazione costa ${classifyCost} crediti e ne hai ${total}. Ricarica dai crediti in alto a destra.`);
+            return;
+          }
+          if (total - classifyCost < elabCost && !classifyDespiteLowCredits.current) {
+            classifyDespiteLowCredits.current = true;
+            setTimeout(() => { classifyDespiteLowCredits.current = false; }, 15_000);
+            toast.warning(
+              `Attenzione: dopo la categorizzazione ti resterebbero ${total - classifyCost} crediti, ma l'analisi ne richiede ${elabCost}. Se vuoi procedere comunque, premi di nuovo il pulsante.`,
+              { duration: 12_000 },
+            );
+            return;
+          }
         }
-        if (total - classifyCost < elabCost && !classifyDespiteLowCredits.current) {
-          classifyDespiteLowCredits.current = true;
-          setTimeout(() => { classifyDespiteLowCredits.current = false; }, 15_000);
-          toast.warning(
-            `Attenzione: dopo la categorizzazione ti resterebbero ${total - classifyCost} crediti, ma l'analisi ne richiede ${elabCost}. Se vuoi procedere comunque, premi di nuovo il pulsante.`,
-            { duration: 12_000 },
-          );
-          return;
-        }
-      }
-    } catch { /* check saldo best-effort: mai bloccare per un errore di rete */ }
+      } catch { /* check saldo best-effort: mai bloccare per un errore di rete */ }
+    }
 
     setClassifyingAll(true);
 
@@ -412,7 +415,9 @@ export function DocumentsSection({
                   <Sparkles className="h-3.5 w-3.5" />
                   <span className="ml-1.5">Categorizza tutti con AI</span>
                   <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
-                    {uploadedDocs.length * CREDIT_COSTS.categorizzazione} crediti
+                    {CREDIT_COSTS.categorizzazione > 0
+                      ? `${uploadedDocs.length * CREDIT_COSTS.categorizzazione} crediti`
+                      : 'Gratis'}
                   </Badge>
                 </Button>
               )}
@@ -614,7 +619,9 @@ export function DocumentsSection({
                                 )}
                                 Categorizza con AI
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  {CREDIT_COSTS.categorizzazione} crediti
+                                  {CREDIT_COSTS.categorizzazione > 0
+                                    ? `${CREDIT_COSTS.categorizzazione} crediti`
+                                    : 'Gratis'}
                                 </span>
                               </DropdownMenuItem>
                             )}
