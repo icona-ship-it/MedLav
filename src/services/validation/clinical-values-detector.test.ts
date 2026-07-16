@@ -99,4 +99,55 @@ describe('clinical-values-detector', () => {
       expect(anomalies).toHaveLength(0);
     });
   });
+
+  describe('unità SI dei laboratori italiani (bug "Emoglobina 96 g/dL" impossibile)', () => {
+    it('NON flagga Hb 96 g/L (= 9,6 g/dL, non critica) — il referto usa unità SI', () => {
+      const events = [
+        makeEvent({ description: 'Esami ematochimici: Emoglobina 96,0 g/L, nella norma per il decorso' }),
+      ];
+      expect(detectCriticalClinicalValues(events)).toHaveLength(0);
+    });
+
+    it('flagga Hb 45 g/L (= 4,5 g/dL, davvero critica) col valore CONVERTITO in g/dL', () => {
+      const events = [
+        makeEvent({ description: 'Emocromo urgente: Emoglobina 45,0 g/L, grave anemia' }),
+      ];
+      const anomalies = detectCriticalClinicalValues(events);
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0].description).toContain('4.5 g/dL');
+      expect(anomalies[0].description).not.toContain('45 g/dL');
+    });
+
+    it('SCARTA un valore implausibile in qualsiasi unità (garbage OCR), non lo flagga', () => {
+      // "Hb 96,0" senza unità: impossibile in g/dL (max fisiologico ~25) e
+      // normale in g/L — flaggarlo come critico è sempre sbagliato.
+      const events = [
+        makeEvent({ description: 'Referto: Hb 96,0 riscontrata agli esami del sangue' }),
+      ];
+      expect(detectCriticalClinicalValues(events)).toHaveLength(0);
+    });
+
+    it('NON flagga creatinina 350 µmol/L (= 3,96 mg/dL, dentro il range critico)', () => {
+      const events = [
+        makeEvent({ description: 'Esami ematochimici: creatinina 350,0 µmol/L in paziente nefropatico' }),
+      ];
+      expect(detectCriticalClinicalValues(events)).toHaveLength(0);
+    });
+
+    it('NON flagga glicemia 18,5 mmol/L (= 333 mg/dL, dentro il range critico)', () => {
+      const events = [
+        makeEvent({ description: 'Prelievo ematico: glicemia 18,5 mmol/L, paziente diabetico noto' }),
+      ];
+      expect(detectCriticalClinicalValues(events)).toHaveLength(0);
+    });
+
+    it('comportamento invariato con unità convenzionali: Hb 5,2 g/dL resta flaggata', () => {
+      const events = [
+        makeEvent({ description: 'Emoglobina Hb: 5,2 g/dL, paziente anemico' }),
+      ];
+      const anomalies = detectCriticalClinicalValues(events);
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0].description).toContain('5.2 g/dL');
+    });
+  });
 });

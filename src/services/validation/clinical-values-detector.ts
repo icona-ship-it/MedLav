@@ -17,6 +17,17 @@ interface ClinicalValuePattern {
    * tests: a urinalysis legitimately reports "Hb 1" in different units (QA
    * 2026-06-11: "Emoglobina 1 g/dL CRITICA" from an esame urine). */
   requiresBloodContext?: boolean;
+  /** Conversioni da unità SI usate dai laboratori italiani (bug "Emoglobina
+   * 96 g/dL" 2026-07-16: il referto diceva 96 g/L = 9,6 g/dL, il detector
+   * assumeva g/dL e segnalava un valore fisicamente impossibile). Se l'unità
+   * SI compare accanto al numero, il valore è convertito nell'unità canonica
+   * PRIMA del confronto coi range. */
+  unitConversions?: Array<{ unit: RegExp; factor: number; label: string }>;
+  /** Tetto di plausibilità fisiologica nell'unità canonica (post-conversione):
+   * oltre, il numero è garbage OCR o un'unità non riconosciuta — si SCARTA
+   * in silenzio invece di flaggare un'anomalia impossibile che brucerebbe la
+   * fiducia del medico. Il documento resta comunque sotto gli occhi del perito. */
+  implausibleAbove?: number;
 }
 
 /**
@@ -30,6 +41,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: 'mmHg',
     normalRange: { min: 90, max: 140 },
     criticalRange: { min: 70, max: 200 },
+    implausibleAbove: 350,
   },
   {
     name: 'Pressione arteriosa diastolica',
@@ -37,6 +49,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: 'mmHg',
     normalRange: { min: 60, max: 90 },
     criticalRange: { min: 40, max: 120 },
+    implausibleAbove: 250,
   },
   {
     name: 'Frequenza cardiaca',
@@ -44,6 +57,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: 'bpm',
     normalRange: { min: 60, max: 100 },
     criticalRange: { min: 35, max: 180 },
+    implausibleAbove: 350,
   },
   {
     name: 'Saturazione O2',
@@ -51,6 +65,7 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: '%',
     normalRange: { min: 95, max: 100 },
     criticalRange: { min: 88, max: 100 },
+    implausibleAbove: 100,
   },
   {
     name: 'Glicemia',
@@ -59,6 +74,8 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: 'mg/dL',
     normalRange: { min: 70, max: 110 },
     criticalRange: { min: 40, max: 400 },
+    unitConversions: [{ unit: /mmol\/l/i, factor: 18.02, label: 'mmol/L' }],
+    implausibleAbove: 1500,
   },
   {
     name: 'INR',
@@ -67,14 +84,19 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: '',
     normalRange: { min: 0.8, max: 1.2 },
     criticalRange: { min: 0.5, max: 5.0 },
+    implausibleAbove: 20,
   },
   {
     name: 'Emoglobina',
     requiresBloodContext: true,
-    regex: /(?:hb|emoglobina|hgb)\s*[:\s]*(\d{1,2}[.,]\d{1,2})\s*(?:g\/dl|g)?/i,
+    regex: /(?:hb|emoglobina|hgb)\s*[:\s]*(\d{1,3}[.,]\d{1,2})\s*(?:g\/dl|g)?/i,
     unit: 'g/dL',
     normalRange: { min: 12.0, max: 17.0 },
     criticalRange: { min: 6.0, max: 20.0 },
+    // I lab italiani refertano spesso in g/L (96 g/L = 9,6 g/dL). NB /g\/l/ non
+    // matcha dentro "g/dl" (lì i caratteri sono g-/-d-l, mai "g/l" contigui).
+    unitConversions: [{ unit: /g\/l/i, factor: 0.1, label: 'g/L' }],
+    implausibleAbove: 25,
   },
   {
     name: 'Temperatura',
@@ -82,14 +104,17 @@ const CLINICAL_PATTERNS: ClinicalValuePattern[] = [
     unit: '°C',
     normalRange: { min: 36.0, max: 37.5 },
     criticalRange: { min: 34.0, max: 41.0 },
+    implausibleAbove: 45,
   },
   {
     name: 'Creatinina',
     requiresBloodContext: true,
-    regex: /(?:creatinina|creat\.?)\s*[:\s]*(\d{1,2}[.,]\d{1,2})\s*(?:mg\/dl|mg)?/i,
+    regex: /(?:creatinina|creat\.?)\s*[:\s]*(\d{1,3}[.,]\d{1,2})\s*(?:mg\/dl|mg)?/i,
     unit: 'mg/dL',
     normalRange: { min: 0.6, max: 1.2 },
     criticalRange: { min: 0.3, max: 10.0 },
+    unitConversions: [{ unit: /[µu]mol\/l/i, factor: 1 / 88.4, label: 'µmol/L' }],
+    implausibleAbove: 30,
   },
 ];
 
@@ -125,10 +150,22 @@ export function detectCriticalClinicalValues(
     for (const pattern of CLINICAL_PATTERNS) {
       if (pattern.requiresBloodContext && !bloodContextOk) continue;
       const match = textToScan.match(pattern.regex);
-      if (!match || !match[1]) continue;
+      if (!match || !match[1] || match.index === undefined) continue;
 
-      const numericValue = parseItalianNumber(match[1]);
-      if (isNaN(numericValue)) continue;
+      const rawValue = parseItalianNumber(match[1]);
+      if (isNaN(rawValue)) continue;
+
+      // Unità SI accanto al numero (finestra subito dopo il match: la regex può
+      // aver già consumato una "g" di "g/L") → converti nell'unità canonica.
+      const unitWindow = textToScan.slice(match.index, match.index + match[0].length + 8);
+      const conversion = pattern.unitConversions?.find((c) => c.unit.test(unitWindow));
+      const numericValue = conversion
+        ? Math.round(rawValue * conversion.factor * 100) / 100
+        : rawValue;
+
+      // Valore implausibile in QUALSIASI unità nota = garbage OCR o unità non
+      // riconosciuta: scarta, non flaggare un'impossibilità fisiologica.
+      if (pattern.implausibleAbove !== undefined && numericValue > pattern.implausibleAbove) continue;
 
       // Check if outside critical range
       if (numericValue >= pattern.criticalRange.min && numericValue <= pattern.criticalRange.max) {
@@ -144,10 +181,14 @@ export function detectCriticalClinicalValues(
         numericValue < pattern.criticalRange.min * 0.8 ||
         numericValue > pattern.criticalRange.max * 1.2;
 
+      // Trasparenza per il perito: se il valore è stato convertito da unità SI,
+      // mostra anche il dato originale del referto.
+      const sourceNote = conversion ? ` (nel referto: ${match[1]} ${conversion.label})` : '';
+
       anomalies.push({
         anomalyType: 'valore_clinico_critico',
         severity: isLifeThreatening ? 'critica' : 'alta',
-        description: `Valore critico di ${pattern.name}: ${numericValue} ${pattern.unit} rilevato in data ${formatDate(event.eventDate)} (evento: "${event.title}"). Range normale: ${pattern.normalRange.min}-${pattern.normalRange.max} ${pattern.unit}. Range critico: <${pattern.criticalRange.min} o >${pattern.criticalRange.max} ${pattern.unit}.`,
+        description: `Valore critico di ${pattern.name}: ${numericValue} ${pattern.unit}${sourceNote} rilevato in data ${formatDate(event.eventDate)} (evento: "${event.title}"). Range normale: ${pattern.normalRange.min}-${pattern.normalRange.max} ${pattern.unit}. Range critico: <${pattern.criticalRange.min} o >${pattern.criticalRange.max} ${pattern.unit}.`,
         involvedEvents: [{
           eventId: null,
           orderNumber: event.orderNumber,
