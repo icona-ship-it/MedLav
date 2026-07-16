@@ -121,6 +121,30 @@ export function dedupeDocumentsByContent(events: ConsolidatedEvent[]): Consolida
 }
 
 /**
+ * Dedup CROSS-DOCUMENTO a livello di EVENTO (audit 2026-07-16, Bigon: 17
+ * intestazioni doppie residue): due documenti PARZIALMENTE sovrapposti (nessuno
+ * sottoinsieme dell'altro) condividono referti identici → lo stesso fatto veniva
+ * narrato in entrambi i blocchi. Tiene la PRIMA occorrenza di ogni firma
+ * (data+testo normalizzato) e scarta le successive: il fatto resta, narrato una
+ * volta, nel blocco del primo documento che lo attesta. Eventi senza contenuto
+ * testuale non sono mai deduplicati (conservativo). Pura e testabile.
+ */
+export function dedupeEventsAcrossDocuments(events: ConsolidatedEvent[]): ConsolidatedEvent[] {
+  const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const seen = new Set<string>();
+  return events.filter((e) => {
+    // Il guard "vuoto" va sul CORPO (testo), non sulla firma: la firma include
+    // la data e non è mai vuota. Eventi senza testo: mai deduplicati.
+    const body = norm(e.sourceText?.trim() || e.description?.trim() || e.title || '');
+    if (body.length === 0) return true;
+    const sig = norm(eventContentText(e));
+    if (seen.has(sig)) return false;
+    seen.add(sig);
+    return true;
+  });
+}
+
+/**
  * Variante PER-DOCUMENTO del batch-planner per la perizia RC: prima deduplica i documenti
  * a contenuto identico, poi impacchetta interi documenti senza spezzarli tra due batch
  * (un documento i cui eventi scavalcavano una finestra di 50 veniva ri-narrato → era la
@@ -130,7 +154,7 @@ export function planDocSanitariaEventBatchesByDocument(
   events: ConsolidatedEvent[],
   size: number = DOC_SANITARIA_EVENT_BATCH_SIZE,
 ): DocSanitariaEventBatch[] {
-  const deduped = dedupeDocumentsByContent(events);
+  const deduped = dedupeEventsAcrossDocuments(dedupeDocumentsByContent(events));
   const byDoc = new Map<string, ConsolidatedEvent[]>();
   const order: string[] = [];
   for (const e of deduped) {

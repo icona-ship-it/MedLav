@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, stripRepeatedSectionHeading, stripWindowArtifacts, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch, distillRcDocSanitariaEvents, planRcDocSanitariaBatches } from './doc-sanitaria-batch';
+import { planDocSanitariaEventBatches, planDocSanitariaEventBatchesByDocument, dedupeDocumentsByContent, dedupeEventsAcrossDocuments, stripRepeatedSectionHeading, stripWindowArtifacts, DOC_SANITARIA_EVENT_BATCH_SIZE, filterImagesForBatch, distillRcDocSanitariaEvents, planRcDocSanitariaBatches } from './doc-sanitaria-batch';
 import type { ConsolidatedEvent } from '@/services/consolidation/event-consolidator';
 import type { ImageAnalysisResult } from '@/services/image-analysis/diagnostic-image-analyzer';
 
@@ -198,6 +198,27 @@ describe('dedupeDocumentsByContent — anti-duplicazione (mai perdere un fatto)'
     ];
     const out = dedupeDocumentsByContent(events);
     expect(new Set(out.map((e) => e.documentId))).toEqual(new Set(['doc-x', 'doc-y']));
+  });
+});
+
+describe('dedupeEventsAcrossDocuments — stesso fatto narrato UNA volta (Bigon, 17 doppioni)', () => {
+  it('due documenti parzialmente sovrapposti: l\'evento condiviso resta solo nel PRIMO', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, documentId: 'doc-a', eventDate: '2025-11-04', sourceText: 'Ecocolordoppler TSA: nella norma.' }),
+      makeEvent({ orderNumber: 2, documentId: 'doc-a', eventDate: '2025-11-05', sourceText: 'Visita neurologica di controllo.' }),
+      makeEvent({ orderNumber: 3, documentId: 'doc-b', eventDate: '2025-11-04', sourceText: 'Ecocolordoppler TSA: nella norma.' }), // stesso fatto in altro doc
+      makeEvent({ orderNumber: 4, documentId: 'doc-b', eventDate: '2025-11-06', sourceText: 'RM encefalo di controllo.' }),
+    ];
+    const out = dedupeEventsAcrossDocuments(events);
+    expect(out.map((e) => e.orderNumber)).toEqual([1, 2, 4]);
+  });
+
+  it('eventi senza contenuto testuale non sono mai deduplicati', () => {
+    const events = [
+      makeEvent({ orderNumber: 1, sourceText: '', description: '', title: '' }),
+      makeEvent({ orderNumber: 2, sourceText: '', description: '', title: '' }),
+    ];
+    expect(dedupeEventsAcrossDocuments(events)).toHaveLength(2);
   });
 });
 
