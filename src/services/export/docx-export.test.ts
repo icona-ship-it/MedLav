@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart, validateDepositableExport } from './docx-export';
+import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart, validateDepositableExport, computeTableColumnWidths } from './docx-export';
 
 describe('docx-export — parseMarkdownTable', () => {
   it('parses a standard pipe table, filtering the separator row', () => {
@@ -17,6 +17,32 @@ describe('docx-export — parseMarkdownTable', () => {
 
   it('returns null for a single non-table pipe line', () => {
     expect(parseMarkdownTable('| nota sciolta |')).toBeNull();
+  });
+});
+
+describe('docx-export — computeTableColumnWidths', () => {
+  it('somma esattamente il totale richiesto', () => {
+    const data = [['Data', 'Descrizione', 'Importo'], ['01.01.2024', 'Visita ortopedica di controllo', '€ 120,00']];
+    const widths = computeTableColumnWidths(data, 9000);
+    expect(widths).toHaveLength(3);
+    expect(widths.reduce((a, b) => a + b, 0)).toBe(9000);
+  });
+
+  it('dà PIÙ spazio alla colonna col testo più lungo (Descrizione > Data/Importo)', () => {
+    const data = [['Data', 'Descrizione', 'Importo'], ['01.01.2024', 'Intervento di osteosintesi con placca e viti al femore', '€ 3.400,00']];
+    const [dataW, descW, impW] = computeTableColumnWidths(data, 9000);
+    expect(descW).toBeGreaterThan(dataW);
+    expect(descW).toBeGreaterThan(impW);
+  });
+
+  it('non riduce a filo le colonne corte (rispetta un minimo)', () => {
+    const data = [['#', 'Testo molto molto lungo che domina la larghezza della tabella intera'], ['1', 'x']];
+    const [shortW] = computeTableColumnWidths(data, 9000);
+    expect(shortW).toBeGreaterThanOrEqual(900);
+  });
+
+  it('colonna singola → tutta la larghezza', () => {
+    expect(computeTableColumnWidths([['Solo']], 9000)).toEqual([9000]);
   });
 });
 

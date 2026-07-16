@@ -183,10 +183,15 @@
   border-radius: 2px;
   font-family: Georgia, 'Times New Roman', serif;
   line-height: 1.7;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .dark .report-a4-page {
   background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
 }
 
 /* Prose override for serif in A4 page */
@@ -218,8 +223,38 @@
   hyphens: auto;
 }
 
-.report-a4-page .prose table {
+/* Tabelle report (spese, ITT/ITP, cronistoria): stile pieno e leggibile.
+   Prima c'era solo font-size → celle senza bordi/padding, colonne compresse.
+   Scoping su `.report-a4-page table` per coprire sia MarkdownPreview che
+   LinkedReportViewer. Tailwind typography usa :where() (specificità 0) quindi
+   queste regole vincono senza !important. */
+.report-a4-page table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25em 0;
   font-size: 0.9rem;
+  line-height: 1.45;
+  table-layout: auto;
+}
+
+.report-a4-page table th,
+.report-a4-page table td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.45em 0.7em;
+  vertical-align: top;
+  text-align: left;
+}
+
+.report-a4-page table thead th,
+.report-a4-page table tr:first-child th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+/* Righe alternate per leggibilità su tabelle lunghe (cronistoria). */
+.report-a4-page table tbody tr:nth-child(even) td {
+  background: hsl(var(--muted) / 0.35);
 }
 
 .report-a4-page .prose img {

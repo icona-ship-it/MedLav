@@ -2,7 +2,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, ShadingType,
   Header, Footer, PageNumber, Table, TableRow, TableCell, WidthType, BorderStyle,
-  ImageRun,
+  TableLayoutType, ImageRun,
 } from 'docx';
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
@@ -94,8 +94,11 @@ interface DocxExportParams {
  * Determine the watermark text based on report status.
  */
 function getDocxWatermarkText(reportStatus?: string): string {
+  // AUDIT 2026-07-16: "CONFIDENZIALE" nell'header di ogni pagina del definitivo
+  // NON è nei gold Lavini (e assente in HTML/PDF): lo togliamo. Resta solo la
+  // filigrana "BOZZA" (utile per non depositare una bozza per errore).
   if (reportStatus === 'bozza') return 'RISERVATO — BOZZA';
-  return 'CONFIDENZIALE';
+  return '';
 }
 
 /**
@@ -679,15 +682,17 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
       },
       headers: {
         default: new Header({
-          children: headerChildren.length > 0 ? headerChildren : [
-            new Paragraph({
-              children: [new TextRun({
-                text: getDocxWatermarkText(reportStatus),
-                color: 'C0C0C0', size: 18, italics: true, font: 'Courier New',
-              })],
-              alignment: AlignmentType.CENTER,
-            }),
-          ],
+          children: headerChildren.length > 0
+            ? headerChildren
+            : (getDocxWatermarkText(reportStatus)
+              ? [new Paragraph({
+                  children: [new TextRun({
+                    text: getDocxWatermarkText(reportStatus),
+                    color: 'C0C0C0', size: 18, italics: true, font: 'Courier New',
+                  })],
+                  alignment: AlignmentType.CENTER,
+                })]
+              : []),
         }),
       },
       footers: {
@@ -736,6 +741,34 @@ export function parseMarkdownTable(text: string): string[][] | null {
   return dataLines.map((line) =>
     line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, '|')),
   );
+}
+
+/**
+ * Larghezze di colonna PROPORZIONALI al contenuto (in DXA/twip), non più uguali.
+ * Prima ogni colonna riceveva `totalDxa / n`: la colonna "Descrizione" (testo lungo)
+ * finiva compressa e mandata a capo mentre "Data"/"Importo" sprecavano spazio — la
+ * tabella sembrava "stretta e sbilanciata". Qui la larghezza è proporzionale al
+ * contenuto più lungo di ciascuna colonna, con un minimo per non ridurre a filo le
+ * colonne corte, poi normalizzata così la somma resta esatta = totalDxa. Pura e testabile.
+ */
+export function computeTableColumnWidths(tableData: string[][], totalDxa: number): number[] {
+  const colCount = Math.max(1, ...tableData.map((r) => r.length));
+  const maxLen = new Array<number>(colCount).fill(1);
+  for (const row of tableData) {
+    row.forEach((cell, c) => {
+      const len = (cell ?? '').replace(/\*\*|\*/g, '').length;
+      if (len > maxLen[c]) maxLen[c] = len;
+    });
+  }
+  const MIN_DXA = Math.min(Math.floor(totalDxa / colCount), 1100); // ~0.76in di soglia minima
+  const totalLen = maxLen.reduce((a, b) => a + b, 0) || 1;
+  const raw = maxLen.map((l) => Math.max(MIN_DXA, Math.round((l / totalLen) * totalDxa)));
+  const rawSum = raw.reduce((a, b) => a + b, 0) || 1;
+  // Normalizza in modo che la somma sia ESATTAMENTE totalDxa (l'ultima assorbe l'arrotondamento).
+  const widths = raw.map((w) => Math.round((w / rawSum) * totalDxa));
+  const drift = totalDxa - widths.reduce((a, b) => a + b, 0);
+  widths[widths.length - 1] += drift;
+  return widths;
 }
 
 /**
@@ -874,11 +907,14 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
       }
       const tableData = parseMarkdownTable(tableLines.join('\n'));
       if (tableData && tableData.length > 0) {
-        const noBorder = { style: BorderStyle.SINGLE, size: 1, color: '666666' };
-        const borders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+        const TABLE_TOTAL_DXA = 9000;
+        const cellLine = { style: BorderStyle.SINGLE, size: 1, color: '999999' };
+        const borders = { top: cellLine, bottom: cellLine, left: cellLine, right: cellLine };
+        const colWidths = computeTableColumnWidths(tableData, TABLE_TOTAL_DXA);
         const rows = tableData.map((row, rowIdx) =>
           new TableRow({
-            children: row.map((cell) =>
+            tableHeader: rowIdx === 0, // ripete l'intestazione se la tabella va a pagina nuova
+            children: row.map((cell, colIdx) =>
               new TableCell({
                 children: [new Paragraph({
                   // #7 (audit 2026-06-09): parse inline **grassetto**/*corsivo* nelle
@@ -886,12 +922,22 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
                   children: parseInlineFormatting(cell, { size: 20, bold: rowIdx === 0 }),
                 })],
                 borders,
-                width: { size: Math.floor(9000 / row.length), type: WidthType.DXA },
+                // Padding interno: senza margini il testo tocca i bordi e la tabella
+                // sembra "schiacciata". ~0.08in sui lati, un filo sopra/sotto.
+                margins: { top: 40, bottom: 40, left: 108, right: 108 },
+                // Header leggermente ombreggiato = stacco visivo pulito (come nel gold).
+                ...(rowIdx === 0 ? { shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' } } : {}),
+                width: { size: colWidths[colIdx] ?? Math.floor(TABLE_TOTAL_DXA / row.length), type: WidthType.DXA },
               }),
             ),
           }),
         );
-        result.push(new Table({ rows, width: { size: 9000, type: WidthType.DXA } }));
+        result.push(new Table({
+          rows,
+          width: { size: TABLE_TOTAL_DXA, type: WidthType.DXA },
+          columnWidths: colWidths, // layout fisso rispetta le larghezze calcolate
+          layout: TableLayoutType.FIXED,
+        }));
         result.push(new Paragraph({ text: '' }));
       } else {
         // Collected pipe-lines that are NOT a real table (e.g. a stray "| nota").
@@ -1337,7 +1383,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
         default: new Header({
           children: [
             ...buildDocxHeaderContent(pm, hasCollaboratore),
-            new Paragraph({
+            ...(getDocxWatermarkText(reportStatus) ? [new Paragraph({
               children: [
                 new TextRun({
                   text: getDocxWatermarkText(reportStatus),
@@ -1347,7 +1393,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
                 }),
               ],
               alignment: AlignmentType.CENTER,
-            }),
+            })] : []),
           ],
         }),
       },
