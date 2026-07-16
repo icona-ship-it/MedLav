@@ -96,7 +96,7 @@ const CLAIM_VERIFY_SCHEMA: MistralResponseFormat = {
 };
 
 function buildJudgeSystemPrompt(): string {
-  return `Sei un verificatore fattuale INDIPENDENTE per perizie medico-legali. Ricevi una sezione di report e l'elenco degli EVENTI CLINICI documentati (unica fonte di verità).
+  return `Sei un verificatore fattuale INDIPENDENTE per perizie medico-legali. Ricevi una sezione di report e la FONTE DI VERITÀ: l'elenco degli EVENTI CLINICI documentati e, quando presenti, i RIASSUNTI DEI DOCUMENTI del fascicolo (entrambi fanno fede: un claim attestato da uno qualsiasi dei due è supportato).
 
 COMPITO: scomponi la sezione nei suoi claim fattuali (fatti clinici, date, diagnosi, terapie, dinamiche — NON giudizi valutativi o formule di stile) e per ciascuno emetti un verdetto:
 - "supportato": il claim è attestato dagli eventi (anche con parafrasi)
@@ -110,11 +110,22 @@ REGOLE:
 - Rispondi SOLO col JSON richiesto.`;
 }
 
-function buildJudgeUserPrompt(sectionTitle: string, sectionContent: string, events: ClaimEventDigest[]): string {
+/** Cap sull'evidenza aggiuntiva: i riassunti di ~80 documenti non devono
+ * dominare il prompt del judge (mistral-medium, 4K output). */
+const MAX_EXTRA_EVIDENCE_CHARS = 30_000;
+
+function buildJudgeUserPrompt(sectionTitle: string, sectionContent: string, events: ClaimEventDigest[], extraEvidence?: string): string {
   const digest = events
     .map((e) => `- [${e.eventDate ?? 'data sconosciuta'}] ${e.title}: ${e.description}${e.sourceText ? ` («${e.sourceText}»)` : ''}`)
     .join('\n');
-  return `EVENTI CLINICI DOCUMENTATI (fonte di verità):\n${digest}\n\nSEZIONE DA VERIFICARE — «${sectionTitle}»:\n${sectionContent}`;
+  // Riassunti-documento come SECONDA fonte di verità (audit 2026-07-16, Motta):
+  // il generatore li riceve legittimamente nel contesto → fatti veri narrati da
+  // lì venivano flaggati "non supportato" perché il judge vedeva solo gli eventi
+  // (6 falsi errori rossi su 222 = fiducia del medico bruciata).
+  const extra = extraEvidence?.trim()
+    ? `\n\nRIASSUNTI DEI DOCUMENTI (fonte di verità aggiuntiva):\n${extraEvidence.slice(0, MAX_EXTRA_EVIDENCE_CHARS)}${extraEvidence.length > MAX_EXTRA_EVIDENCE_CHARS ? '\n[…riassunti troncati…]' : ''}`
+    : '';
+  return `EVENTI CLINICI DOCUMENTATI (fonte di verità):\n${digest}${extra}\n\nSEZIONE DA VERIFICARE — «${sectionTitle}»:\n${sectionContent}`;
 }
 
 /**
@@ -126,6 +137,9 @@ export async function verifySectionClaims(params: {
   sectionTitle: string;
   sectionContent: string;
   events: ClaimEventDigest[];
+  /** Evidenza aggiuntiva (riassunti-documento): fatti veri narrati da lì non
+   * devono risultare "non supportato". Opzionale, retro-compatibile. */
+  extraEvidence?: string;
 }): Promise<SectionClaimResult> {
   const empty: SectionClaimResult = {
     sectionId: params.sectionId,
@@ -141,7 +155,7 @@ export async function verifySectionClaims(params: {
     model: MISTRAL_MODELS.MISTRAL_MEDIUM,
     messages: [
       { role: 'system', content: buildJudgeSystemPrompt() },
-      { role: 'user', content: buildJudgeUserPrompt(params.sectionTitle, params.sectionContent, params.events) },
+      { role: 'user', content: buildJudgeUserPrompt(params.sectionTitle, params.sectionContent, params.events, params.extraEvidence) },
     ],
     temperature: 0,
     maxTokens: 4096,

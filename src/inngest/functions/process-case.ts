@@ -1388,11 +1388,14 @@ export const processCase = inngest.createFunction(
     // scrive la lista "da verificare" nei metadata del report. MAI bloccante
     // (runClaimVerification ingoia ogni errore) — ritorna solo conteggi (O(1)).
     const claimVerify = await step.run('claim-verify-report', async () => {
-      const { runClaimVerification, toClaimEventDigest } = await import('@/inngest/steps/claim-verify');
+      const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest } = await import('@/inngest/steps/claim-verify');
       return runClaimVerification({
         caseId,
         reportId: synthesisResult.reportId,
         events: toClaimEventDigest(synthesisParams.events),
+        // I riassunti-documento sono contesto LEGITTIMO del generatore: il judge
+        // deve vederli, o flagga come "non supportato" fatti veri (audit 2026-07-16).
+        documentSummariesDigest: toDocumentSummariesDigest(documentSummaries),
       });
     });
 

@@ -41,6 +41,9 @@ export async function runClaimVerification(params: {
   /** Può mancare su output memoizzati pre-feature: la verifica si salta. */
   reportId: string | null | undefined;
   events: ClaimEventDigest[];
+  /** Riassunti-documento come evidenza aggiuntiva del judge (audit 2026-07-16):
+   * i fatti narrati dai riassunti non devono uscire "non supportato". */
+  documentSummariesDigest?: string;
 }): Promise<ClaimVerifyStepResult> {
   const zero: ClaimVerifyStepResult = {
     sectionsChecked: 0,
@@ -78,6 +81,7 @@ export async function runClaimVerification(params: {
           sectionTitle: section.title,
           sectionContent: section.content,
           events: params.events,
+          extraEvidence: params.documentSummariesDigest,
         }),
       ),
     );
@@ -159,6 +163,14 @@ export async function runClaimVerification(params: {
 }
 
 /** Digest eventi per il judge, dai ConsolidatedEvent della pipeline. */
+/** Digest compatto dei riassunti-documento per l'evidenza del judge. */
+export function toDocumentSummariesDigest(
+  summaries?: Array<{ fileName: string; documentType: string; summary: string }>,
+): string | undefined {
+  if (!summaries || summaries.length === 0) return undefined;
+  return summaries.map((s) => `### ${s.fileName} (${s.documentType})\n${s.summary}`).join('\n\n');
+}
+
 export function toClaimEventDigest(events: Array<{
   orderNumber: number;
   eventDate?: string | null;
