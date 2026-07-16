@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
-import { generateDocxReport, generateProfessionalDocxReport, validateDepositableExport } from '@/services/export/docx-export';
+import { generateDocxReport, generateProfessionalDocxReport, validateDepositableExport, validateAnonymizedExport } from '@/services/export/docx-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
@@ -23,7 +23,8 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Non autenticato' }, { status: 401 });
   }
 
-  // Feature gate: DOCX export requires Pro
+  // Feature gate abbonamento: nega solo canceled/past_due — il TRIAL esporta
+  // (il gating economico è a crediti, non a piano; vedi subscription.ts).
   const gate = await checkFeatureAccess(user.id, 'export');
   if (!gate.allowed) {
     return NextResponse.json(
@@ -70,6 +71,16 @@ export async function GET(
       : null;
     if (depositableError) {
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
+    }
+
+    // Export anonimizzato senza nome paziente = anonimizzazione inaffidabile
+    // (audit GDPR 2026-07-17): blocca con istruzione, la UI mostra la CTA.
+    const anonymizeError = validateAnonymizedExport(
+      pm as { patientFullName?: string | null } | null,
+      shouldAnonymize,
+    );
+    if (anonymizeError) {
+      return NextResponse.json({ success: false, error: anonymizeError }, { status: 400 });
     }
 
     // Gate attestazione ("verify before sign") PRIMA dell'audit: un export

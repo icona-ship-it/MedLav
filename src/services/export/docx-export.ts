@@ -266,6 +266,26 @@ export function validateDepositableExport(
   return null;
 }
 
+/**
+ * Guard dell'export ANONIMIZZATO (audit GDPR 2026-07-17): l'anonimizzatore
+ * redige in modo affidabile solo i nomi che CONOSCE — senza il nome completo
+ * del paziente nei Dati perizia, un nome presente solo nell'OCR citato nel
+ * report sfugge alla redazione (visto nello smoke test 2026-07-14). Un file
+ * chiamato "anonimizzato" che non lo è davvero è una promessa falsa su dati
+ * Art. 9: meglio bloccare con istruzione chiara. Il messaggio contiene
+ * "Dati perizia" → la CTA in UI porta direttamente al form.
+ */
+export function validateAnonymizedExport(
+  pm: { patientFullName?: string | null } | null | undefined,
+  anonymize: boolean,
+): string | null {
+  if (!anonymize) return null;
+  if (!pm?.patientFullName?.trim()) {
+    return 'Per esportare la versione anonimizzata compila prima nome e cognome del paziente nei "Dati perizia": servono a redigerli ovunque compaiano nel testo, anche dentro le citazioni dai documenti.';
+  }
+  return null;
+}
+
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
   const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
   // QA 2026-06-11: nel depositabile niente carte di lavoro (riepilogo qualità,

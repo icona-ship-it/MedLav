@@ -10,7 +10,10 @@ interface FeatureAccessResult {
 /**
  * Check if a user has access to a gated feature based on their subscription.
  *
- * - Trial: processing (capped by cases limit elsewhere), HTML export only, no RAG/section regen
+ * - Trial: TUTTO consentito — il gating economico è a CREDITI, non a piano
+ *   (audit 2026-07-17: il vecchio commento "HTML export only, no RAG/regen"
+ *   descriveva un modello mai implementato; qualcuno che "allineasse" il
+ *   codice al commento romperebbe l'export dei beta tester a saldo zero).
  * - Pro: everything allowed
  * - Canceled / past_due: deny all gated features (viewing existing data is still allowed)
  */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart, validateDepositableExport, computeTableColumnWidths } from './docx-export';
+import { parseMarkdownTable, markdownToDocxParagraphs, getImageDimensions, scaleToFit, isPlaceholderBlockStart, validateDepositableExport, validateAnonymizedExport, computeTableColumnWidths } from './docx-export';
 
 describe('docx-export — parseMarkdownTable', () => {
   it('parses a standard pipe table, filtering the separator row', () => {
@@ -154,5 +154,19 @@ describe('docx-export — isPlaceholderBlockStart', () => {
     expect(isPlaceholderBlockStart('*testo in corsivo*')).toBe(false);
     expect(isPlaceholderBlockStart('Paragrafo normale.')).toBe(false);
     expect(isPlaceholderBlockStart('[Ev. 3]')).toBe(false); // bracket senza keyword
+  });
+});
+
+describe('docx-export — validateAnonymizedExport (guard GDPR 2026-07-17)', () => {
+  it('BLOCCA l\'export anonimizzato senza nome paziente (anonimizzazione inaffidabile)', () => {
+    const err = validateAnonymizedExport({ patientFullName: null }, true);
+    expect(err).toContain('Dati perizia'); // la CTA in UI si aggancia a questa stringa
+    expect(validateAnonymizedExport(undefined, true)).not.toBeNull();
+    expect(validateAnonymizedExport({ patientFullName: '   ' }, true)).not.toBeNull();
+  });
+
+  it('PASSA con nome paziente compilato, e non tocca gli export non anonimizzati', () => {
+    expect(validateAnonymizedExport({ patientFullName: 'Demprova Giulia' }, true)).toBeNull();
+    expect(validateAnonymizedExport(null, false)).toBeNull();
   });
 });

@@ -12,7 +12,7 @@ import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { checkDepositableAttestation } from '@/services/export/attestation';
-import { validateDepositableExport } from '@/services/export/docx-export';
+import { validateDepositableExport, validateAnonymizedExport } from '@/services/export/docx-export';
 import type { PeriziaMetadata } from '@/types';
 
 export async function GET(
@@ -150,6 +150,16 @@ export async function GET(
       : null;
     if (depositableError) {
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
+    }
+
+    // Export anonimizzato senza nome paziente = anonimizzazione inaffidabile
+    // (audit GDPR 2026-07-17): blocca con istruzione, la UI mostra la CTA.
+    const anonymizeError = validateAnonymizedExport(
+      data.periziaMetadata as { patientFullName?: string | null } | null,
+      shouldAnonymize,
+    );
+    if (anonymizeError) {
+      return NextResponse.json({ success: false, error: anonymizeError }, { status: 400 });
     }
 
     // Gate attestazione ("verify before sign"): un report DEFINITIVO modificato
