@@ -194,7 +194,9 @@ export function DocumentsSection({
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success('Documento rimesso in coda');
+        // Il retry ripristina il documento ma NON rilancia da solo l'analisi
+        // (è a livello di caso): sii onesto sull'azione successiva.
+        toast.success('Documento ripristinato. Premi "Avvia Elaborazione" per rielaborarlo.');
         router.refresh();
       }
     } catch {

@@ -22,6 +22,10 @@ import * as Sentry from '@sentry/nextjs';
  */
 const ACTIVE_STAGES = ['elaborazione', 'generazione_report', 'revisione_classificazione'];
 const STUCK_AFTER_MS = 30 * 60 * 1000;
+// AUDIT 2026-07-16: oltre questa soglia il caso è quasi certamente morto (run
+// Inngest perso). Lo marchiamo 'errore' così il perito vede lo stato d'errore
+// con la via d'uscita ("Rielabora") invece di una barra ferma per sempre.
+const AUTO_FAIL_AFTER_MS = 60 * 60 * 1000;
 
 interface StuckCaseRow {
   id: string;
@@ -64,10 +68,37 @@ export const stuckCaseMonitor = inngest.createFunction(
           if (!Number.isNaN(alertedMs) && !Number.isNaN(updatedMs) && alertedMs >= updatedMs) continue;
         }
 
+        const stuckMs = Date.now() - new Date(row.updated_at).getTime();
+
         Sentry.captureMessage(
           `Caso possibilmente bloccato: ${row.code ?? row.id} fermo in '${row.processing_stage}' da oltre 30 min (ultimo aggiornamento ${row.updated_at})`,
           'error',
         );
+
+        // Oltre 60 min: auto-errore → il perito ha una via d'uscita in UI.
+        if (stuckMs > AUTO_FAIL_AFTER_MS) {
+          await supabase
+            .from('cases')
+            .update({
+              processing_stage: 'errore',
+              perizia_metadata: {
+                ...meta,
+                stuckAlertedAt: new Date().toISOString(),
+                lastError: 'L\'elaborazione si è interrotta per un problema tecnico. Puoi riavviarla dalla pagina del caso.',
+              },
+            })
+            .eq('id', row.id)
+            .in('processing_stage', ACTIVE_STAGES);
+          // Marca i documenti ancora "in lavorazione" come errore così l'UI è coerente.
+          await supabase
+            .from('documents')
+            .update({ processing_status: 'errore', processing_error: 'Elaborazione interrotta (timeout)' })
+            .eq('case_id', row.id)
+            .in('processing_status', ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso']);
+          logger.warn('stuck-monitor', `Caso ${row.code ?? row.id} auto-marcato 'errore' dopo ${Math.round(stuckMs / 60000)} min`);
+          count += 1;
+          continue;
+        }
 
         // NB: NON tocchiamo updated_at (resta l'istante reale dell'ultimo
         // progresso) — bumparlo maschererebbe lo stallo alla prossima scansione.

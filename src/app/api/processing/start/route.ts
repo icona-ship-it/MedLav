@@ -226,7 +226,16 @@ export async function POST(request: NextRequest) {
     // Re-processing cleanup: if the case was already processed, clean ALL derived data
     // including OCR pages — every analysis runs fresh for maximum quality
     // This runs AFTER validation so user doesn't lose data on rejected requests
-    const isReprocessing = caseData.processing_stage !== 'idle';
+    // AUDIT 2026-07-16: NON basta lo stage != 'idle' — un Annulla imposta 'idle'
+    // MA lascia gli eventi parziali del run interrotto. Se esistono dati derivati
+    // (eventi/report), è comunque un re-processing e la pulizia va fatta, altrimenti
+    // i dati vecchi si mescolano a quelli nuovi.
+    const { count: existingEvents } = await supabase
+      .from('events').select('id', { count: 'exact', head: true }).eq('case_id', caseId);
+    const { count: existingReports } = await supabase
+      .from('reports').select('id', { count: 'exact', head: true }).eq('case_id', caseId);
+    const isReprocessing = caseData.processing_stage !== 'idle'
+      || (existingEvents ?? 0) > 0 || (existingReports ?? 0) > 0;
     if (isReprocessing) {
       logger.info('processing/start', `Re-processing case ${caseId}: cancelling previous pipeline + cleaning all data`);
       // Cancel any running pipeline first to prevent race conditions

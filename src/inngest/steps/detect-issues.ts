@@ -20,8 +20,24 @@ export async function detectAnomaliesStep(
 ): Promise<DetectedAnomaly[]> {
   const supabase = createAdminClient();
 
-  // Delete previous anomalies for this case
-  await supabase.from('anomalies').delete().eq('case_id', caseId);
+  // PRESERVA le anomalie GIÀ VALUTATE dal perito (audit 2026-07-16): prima una
+  // re-elaborazione cancellava TUTTO, comprese le conferme/esclusioni con le note
+  // del perito. Ora teniamo le user_confirmed/user_dismissed e cancelliamo solo
+  // quelle non ancora valutate; le nuove detection duplicate vengono saltate.
+  const { data: reviewed } = await supabase
+    .from('anomalies')
+    .select('anomaly_type, description')
+    .eq('case_id', caseId)
+    .in('status', ['user_confirmed', 'user_dismissed']);
+  const reviewedKeys = new Set((reviewed ?? []).map((a) => `${a.anomaly_type}::${a.description}`));
+
+  // Cancella tutte le NON-riviste (detected/llm_*/null), tenendo user_confirmed/
+  // user_dismissed. L'OR esplicito include lo status null dei casi legacy.
+  await supabase
+    .from('anomalies')
+    .delete()
+    .eq('case_id', caseId)
+    .or('status.is.null,status.in.(detected,llm_confirmed,llm_resolved)');
 
   // Re-detect on the full event set (with case type for sequence validation)
   const detected = detectAnomalies(allEvents, {
@@ -31,8 +47,11 @@ export async function detectAnomaliesStep(
 
   logger.info('pipeline', ` Step 5: Detected ${detected.length} anomalies (full case)`);
 
-  if (detected.length > 0) {
-    const anomalyRows = detected.map((a) => ({
+  // Non re-inserire quelle già valutate dal perito (stesso tipo+descrizione).
+  const newDetections = detected.filter((a) => !reviewedKeys.has(`${a.anomalyType}::${a.description}`));
+
+  if (newDetections.length > 0) {
+    const anomalyRows = newDetections.map((a) => ({
       case_id: caseId,
       anomaly_type: a.anomalyType,
       severity: a.severity,
