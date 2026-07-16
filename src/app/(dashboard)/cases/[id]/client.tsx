@@ -396,6 +396,7 @@ export function CaseDetailClient({
               <ProcessingSection
                 caseId={caseId}
                 onProcessingStarted={handleProcessingStarted}
+                hasExistingResults={hasResults}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}
@@ -470,6 +471,7 @@ export function CaseDetailClient({
               <ProcessingSection
                 caseId={caseId}
                 onProcessingStarted={handleProcessingStarted}
+                hasExistingResults={hasResults}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}
@@ -544,6 +546,7 @@ export function CaseDetailClient({
               <ProcessingSection
                 caseId={caseId}
                 onProcessingStarted={handleProcessingStarted}
+                hasExistingResults={hasResults}
                 documents={localDocuments}
                 hasProcessingDocs={hasProcessingDocs}
                 hasUploadedDocs={hasUploadedDocs}

@@ -42,6 +42,12 @@ export function ReportSectionEditor({
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
+      // AUDIT 2026-07-16: Esc / click fuori scartavano le modifiche senza avviso.
+      // Se ci sono modifiche non salvate, chiedi conferma prima di chiudere.
+      const dirty = editedContent !== '' && editedContent !== sectionContent;
+      if (dirty && !window.confirm('Hai modifiche non salvate in questa sezione. Chiudere e scartarle?')) {
+        return; // resta aperto
+      }
       setEditedContent('');
     }
     onOpenChange(isOpen);

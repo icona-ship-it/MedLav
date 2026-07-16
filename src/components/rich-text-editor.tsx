@@ -71,6 +71,30 @@ function unresolveOcrImageUrls(markdown: string, caseId?: string): string {
   );
 }
 
+// AUDIT 2026-07-16 (bug critico): i marker deterministici <!--MEDLAV:X--> sono
+// commenti HTML che tiptap-markdown (html:false) SCARTA → al primo salvataggio
+// dell'editor la tabella spese e i dati ITT/ricovero sparivano dall'atto. Li
+// proteggiamo con un token di solo-testo (parentesi unicode, nessun significato
+// markdown) che sopravvive intatto al round-trip, poi li ripristiniamo al save.
+const MEDLAV_MARKER_REGEX = /<!--MEDLAV:([A-Z_]+)-->/g;
+const MEDLAV_TOKEN_REGEX = /⟦MEDLAV:([A-Z_]+)⟧/g;
+
+function protectMarkers(markdown: string): string {
+  return markdown.replace(MEDLAV_MARKER_REGEX, (_m, key) => `⟦MEDLAV:${key}⟧`);
+}
+function restoreMarkers(markdown: string): string {
+  return markdown.replace(MEDLAV_TOKEN_REGEX, (_m, key) => `<!--MEDLAV:${key}-->`);
+}
+
+/** Contenuto DB → editor: risolve immagini + protegge i marker. */
+function toEditorContent(content: string, caseId?: string): string {
+  return protectMarkers(resolveOcrImageUrls(content, caseId));
+}
+/** Editor → DB: ripristina immagini + marker. */
+function fromEditorContent(markdown: string, caseId?: string): string {
+  return restoreMarkers(unresolveOcrImageUrls(markdown, caseId));
+}
+
 export function RichTextEditor({ content, onChange, caseId, className, allowedHeadingLevels = [2, 3] }: RichTextEditorProps) {
   const isUpdatingRef = useRef(false);
 
@@ -91,12 +115,12 @@ export function RichTextEditor({ content, onChange, caseId, className, allowedHe
         transformCopiedText: true,
       }),
     ],
-    content: resolveOcrImageUrls(content, caseId),
+    content: toEditorContent(content, caseId),
     onUpdate: ({ editor: ed }) => {
       if (isUpdatingRef.current) return;
       const storage = ed.storage as unknown as Record<string, MarkdownStorage>;
       const md = storage.markdown.getMarkdown();
-      onChange(unresolveOcrImageUrls(md, caseId));
+      onChange(fromEditorContent(md, caseId));
     },
     editorProps: {
       attributes: {
@@ -107,10 +131,10 @@ export function RichTextEditor({ content, onChange, caseId, className, allowedHe
 
   useEffect(() => {
     if (!editor) return;
-    const resolved = resolveOcrImageUrls(content, caseId);
+    const resolved = toEditorContent(content, caseId);
     const storage = editor.storage as unknown as Record<string, MarkdownStorage>;
     const currentMd = storage.markdown.getMarkdown();
-    const currentUnresolved = unresolveOcrImageUrls(currentMd, caseId);
+    const currentUnresolved = fromEditorContent(currentMd, caseId);
     if (currentUnresolved !== content) {
       isUpdatingRef.current = true;
       editor.commands.setContent(resolved);

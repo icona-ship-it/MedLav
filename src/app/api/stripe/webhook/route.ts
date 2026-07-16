@@ -9,6 +9,25 @@ import type Stripe from 'stripe';
 
 const uuidSchema = z.string().uuid();
 
+/**
+ * Estrae current_period_end (epoch secondi) da una Subscription. AUDIT 2026-07-16:
+ * nell'API Stripe pinnata (2026-02-25.clover) il campo NON è più sul root della
+ * Subscription ma sul primo subscription item — leggerlo dal root dava undefined
+ * → new Date(undefined*1000) = Invalid Date → toISOString() LANCIA → webhook in
+ * loop 500 → abbonamento Pro mai provisionato. Fallback: +1 mese da ora.
+ */
+function subscriptionPeriodEnd(sub: unknown): Date {
+  const s = sub as { current_period_end?: number; items?: { data?: Array<{ current_period_end?: number }> } };
+  const epoch = s.items?.data?.[0]?.current_period_end ?? s.current_period_end;
+  if (typeof epoch === 'number' && Number.isFinite(epoch)) {
+    return new Date(epoch * 1000);
+  }
+  logger.warn('stripe', 'current_period_end assente sulla subscription — fallback +1 mese');
+  const fallback = new Date();
+  fallback.setMonth(fallback.getMonth() + 1);
+  return fallback;
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');
@@ -82,12 +101,13 @@ export async function POST(request: NextRequest) {
         if (session.subscription) {
           const stripe = getStripeClient();
           const subResponse = await stripe.subscriptions.retrieve(session.subscription as string);
-          const sub = subResponse as unknown as { status: string; current_period_end: number };
+          const sub = subResponse as unknown as { status: string };
+          const periodEnd = subscriptionPeriodEnd(subResponse);
           const { error: updateError } = await supabase.from('profiles').update({
             stripe_customer_id: session.customer as string,
             subscription_status: sub.status,
             subscription_plan: 'pro',
-            subscription_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+            subscription_period_end: periodEnd.toISOString(),
           }).eq('id', userId);
           if (updateError) {
             // throw (non return): così il catch fa il rollback dell'idempotenza e Stripe riprova.
@@ -95,8 +115,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Grant monthly credits for new Pro subscription
-          const resetAt = new Date(sub.current_period_end * 1000);
-          await grantMonthlyCredits(userId, PLAN_CREDITS.pro.monthlyAllowance, resetAt);
+          await grantMonthlyCredits(userId, PLAN_CREDITS.pro.monthlyAllowance, periodEnd);
 
           logger.info('stripe', `Checkout completed for user ${userId}`);
         }
@@ -104,11 +123,12 @@ export async function POST(request: NextRequest) {
       }
 
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as unknown as { customer: string; status: string; current_period_end: number };
+        const subscription = event.data.object as unknown as { customer: string; status: string };
         const customerId = subscription.customer;
+        const periodEnd = subscriptionPeriodEnd(event.data.object);
         const { error: updateError } = await supabase.from('profiles').update({
           subscription_status: subscription.status,
-          subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+          subscription_period_end: periodEnd.toISOString(),
         }).eq('stripe_customer_id', customerId);
         if (updateError) {
           throw new Error(`Subscription update failed for customer ${customerId}: ${updateError.message}`);
@@ -122,8 +142,7 @@ export async function POST(request: NextRequest) {
             .eq('stripe_customer_id', customerId)
             .single();
           if (profile) {
-            const resetAt = new Date(subscription.current_period_end * 1000);
-            await grantMonthlyCredits(profile.id, PLAN_CREDITS.pro.monthlyAllowance, resetAt);
+            await grantMonthlyCredits(profile.id, PLAN_CREDITS.pro.monthlyAllowance, periodEnd);
           }
         }
 

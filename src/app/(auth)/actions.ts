@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { grantCredits } from '@/services/credits/credit-service';
+import { grantCredits, hasTrialGrant } from '@/services/credits/credit-service';
 import { PLAN_CREDITS } from '@/services/credits/credit-costs';
 import {
   isMfaChallengeRequired,
@@ -86,8 +86,17 @@ export async function signUp(formData: FormData) {
       return { error: 'Errore durante la creazione del profilo. Riprova.' };
     }
 
-    // Grant trial credits
-    await grantCredits(data.user.id, PLAN_CREDITS.trial.initialGrant, 'trial_grant');
+    // Grant trial credits — SOLO se non già ricevuti (ri-registrazione con email
+    // non confermata regalava +30 a ogni tentativo). Non bloccare la
+    // registrazione se l'accredito fallisce: l'account è valido, i crediti si
+    // recuperano (grantCredits ora lancia, quindi lo isoliamo).
+    try {
+      if (!(await hasTrialGrant(data.user.id))) {
+        await grantCredits(data.user.id, PLAN_CREDITS.trial.initialGrant, 'trial_grant');
+      }
+    } catch (grantErr) {
+      logger.error('auth', `Trial grant fallito per ${data.user.id}: ${grantErr instanceof Error ? grantErr.message : 'unknown'}`);
+    }
   }
 
   // If email confirmation is enabled, show verification message instead of redirecting

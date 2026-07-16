@@ -258,6 +258,47 @@ export async function refundCredits(
 }
 
 /**
+ * Rimborsa la consumption più recente NON ancora rimborsata per un caso e una
+ * delle operazioni indicate (idempotente: conta consumi vs rimborsi, come
+ * onFailure della pipeline). Usato dall'annullamento manuale — prima annullare
+ * un'elaborazione bruciava i crediti senza rimborso (audit 2026-07-16).
+ * Ritorna l'importo rimborsato (0 se niente da rimborsare).
+ */
+export async function refundLatestCaseConsumption(
+  userId: string,
+  caseId: string,
+  operations: string[],
+  reason: string,
+): Promise<number> {
+  const supabase = createAdminClient();
+  for (const operation of operations) {
+    const { data: consumptions } = await supabase
+      .from('credit_transactions')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('entity_id', caseId)
+      .eq('type', 'consumption')
+      .eq('operation', operation)
+      .order('created_at', { ascending: false });
+    const { data: refunds } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('entity_id', caseId)
+      .eq('type', 'refund')
+      .eq('operation', operation);
+    const consumptionCount = consumptions?.length ?? 0;
+    const refundCount = refunds?.length ?? 0;
+    if (consumptionCount > 0 && refundCount < consumptionCount) {
+      const amount = Math.abs(consumptions![0].amount as number);
+      await refundCredits(userId, amount, operation, caseId, { reason });
+      return amount;
+    }
+  }
+  return 0;
+}
+
+/**
  * Grant monthly credits for a Pro subscription.
  * Called from Stripe webhook on subscription create/renew.
  */
@@ -310,13 +351,30 @@ export async function grantMonthlyCredits(
 
   if (error) {
     logger.error(TAG, 'Failed to grant monthly credits', { userId, error: error.message });
-    return;
+    throw new Error(`grantMonthlyCredits fallito per ${userId}: ${error.message}`);
   }
 
   const balance = await getBalance(userId);
   await recordTransaction(userId, monthlyAllowance, balance.total, 'monthly_grant', 'subscription');
 
   logger.info(TAG, 'Monthly credits granted', { userId, monthlyAllowance, resetAt: newResetIso });
+}
+
+/**
+ * Vero se l'utente ha GIÀ ricevuto il grant di prova. AUDIT 2026-07-16: ri-
+ * registrarsi con la stessa email non confermata regalava +30 crediti a ogni
+ * tentativo (Supabase ritorna l'utente esistente). Guard prima di grantare.
+ */
+export async function hasTrialGrant(userId: string): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from('credit_transactions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('type', 'trial_grant')
+    .limit(1)
+    .maybeSingle();
+  return !!data;
 }
 
 /**
@@ -333,7 +391,7 @@ export async function grantCredits(
 
   // Ensure row exists
   const row = await getOrCreateCreditsRow(userId);
-  if (!row) return;
+  if (!row) throw new Error(`grantCredits: impossibile creare la riga crediti per ${userId}`);
 
   const newBalance = (row.balance as number) + amount;
 
@@ -346,8 +404,11 @@ export async function grantCredits(
     .eq('user_id', userId);
 
   if (error) {
+    // MAI ingoiare: un pagamento riuscito senza crediti accreditati = soldi persi
+    // in silenzio. Il chiamante (webhook Stripe) DEVE fallire il 200 → Stripe
+    // ritenta gratis finché l'accredito va a buon fine (audit 2026-07-16).
     logger.error(TAG, 'Failed to grant credits', { userId, amount, type, error: error.message });
-    return;
+    throw new Error(`grantCredits fallito per ${userId}: ${error.message}`);
   }
 
   const allowance = row.monthly_allowance as number;

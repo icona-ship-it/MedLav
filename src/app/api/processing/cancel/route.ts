@@ -100,18 +100,32 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // RIMBORSO (audit 2026-07-16): annullare bruciava i crediti dell'elaborazione
+    // senza rimborso. Rimborsa la consumption più recente non ancora rimborsata
+    // (idempotente): l'utente che annulla non perde i crediti. Best-effort: un
+    // fallimento del rimborso non blocca l'annullamento.
+    let refunded = 0;
+    try {
+      const { refundLatestCaseConsumption } = await import('@/services/credits/credit-service');
+      refunded = await refundLatestCaseConsumption(
+        user.id, caseId, ['elaborazione', 'rigenerazione_report'], 'user_cancelled',
+      );
+    } catch (refundErr) {
+      logger.error('processing/cancel', 'Refund after cancel failed', { caseId, error: refundErr instanceof Error ? refundErr.message : 'unknown' });
+    }
+
     // Audit log
     await supabase.from('audit_log').insert({
       user_id: user.id,
       action: 'case.processing.cancelled',
       entity_type: 'case',
       entity_id: caseId,
-      metadata: { documentsCancelled: count ?? 0 },
+      metadata: { documentsCancelled: count ?? 0, creditsRefunded: refunded },
     });
 
     return NextResponse.json({
       success: true,
-      data: { caseId, documentsCancelled: count ?? 0 },
+      data: { caseId, documentsCancelled: count ?? 0, creditsRefunded: refunded },
     });
   } catch (error) {
     logger.error('processing/cancel', 'Unexpected error', { error: error instanceof Error ? error.message : 'unknown' });

@@ -43,6 +43,9 @@ interface ProcessingSectionProps {
    * di progresso dipendeva da un singolo router.refresh(): se tornava stantio, il
    * bottone restava congelato su "Avvio in corso…" mentre la pipeline correva. */
   onProcessingStarted?: () => void;
+  /** True se esistono già eventi/report per questo caso: riavviare li CANCELLA,
+   * quindi va chiesta conferma anche in stato 'errore' (audit 2026-07-16). */
+  hasExistingResults?: boolean;
 }
 
 /**
@@ -81,6 +84,7 @@ export function ProcessingSection({
   initialExcludedSections = [],
   processingStartedAt,
   onProcessingStarted,
+  hasExistingResults = false,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
@@ -231,9 +235,14 @@ export function ProcessingSection({
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify({ caseId }),
       });
-      const result = await response.json() as { success: boolean; error?: string };
+      const result = await response.json() as { success: boolean; error?: string; data?: { creditsRefunded?: number } };
       if (!result.success) {
         toast.error(result.error ?? 'Errore durante l\'annullamento');
+      } else {
+        const refunded = result.data?.creditsRefunded ?? 0;
+        toast.success(refunded > 0
+          ? `Elaborazione annullata — ${refunded} crediti rimborsati`
+          : 'Elaborazione annullata');
       }
       router.refresh();
     } catch {
@@ -471,7 +480,10 @@ export function ProcessingSection({
                       variant="approve"
                       className="w-full text-base py-6"
                       onClick={() => {
-                        if (processingStage === 'completato') {
+                        // Conferma se riavviare CANCELLEREBBE lavoro esistente
+                        // (caso completato, o in 'errore' ma con eventi/report già
+                        // prodotti — es. è fallita solo la stesura del report).
+                        if (processingStage === 'completato' || hasExistingResults) {
                           setShowReprocessDialog(true);
                         } else {
                           handleStartProcessing();
@@ -651,7 +663,8 @@ export function ProcessingSection({
           <AlertDialogHeader>
             <AlertDialogTitle>Annullare l&apos;elaborazione?</AlertDialogTitle>
             <AlertDialogDescription>
-              L&apos;elaborazione è in corso. Se annulli, i risultati parziali andranno persi e dovrai riavviare l&apos;analisi.
+              L&apos;elaborazione è in corso. Se annulli, i risultati parziali andranno persi e dovrai riavviare l&apos;analisi.{' '}
+              <span className="font-medium text-foreground">I crediti dell&apos;elaborazione ti verranno rimborsati.</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
