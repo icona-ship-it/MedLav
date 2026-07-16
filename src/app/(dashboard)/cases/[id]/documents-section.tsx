@@ -332,7 +332,7 @@ export function DocumentsSection({
               {documents.length === 0 ? 'Carica la documentazione clinica' : 'Aggiungi altri documenti'}
             </p>
             <p className="text-xs text-muted-foreground">
-              PDF, immagini (JPG, PNG, TIFF), documenti Word ed Excel
+              PDF, immagini (JPG, PNG, TIFF), documenti Word
             </p>
           </div>
 

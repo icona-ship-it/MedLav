@@ -1003,7 +1003,7 @@ function FailedDocumentRow({
   // Build a non-technical explanation
   let reason: string;
   if (doc?.processing_error) {
-    reason = `Errore di elaborazione: ${doc.processing_error}`;
+    reason = toUserMessage(doc.processing_error);
   } else if (doc?.processing_status === 'failed') {
     reason = 'L\'elaborazione del documento non è andata a buon fine.';
   } else if (doc?.document_type === 'memoria_difensiva' || doc?.document_type === 'documento_amministrativo' || doc?.document_type === 'spese_mediche') {

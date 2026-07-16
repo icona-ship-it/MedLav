@@ -767,6 +767,11 @@ const EURO_DATE_REGEX = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/;
  */
 function isRealCalendarDate(year: number, month: number, day: number): boolean {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  // AUDIT 2026-07-16: bound di PLAUSIBILITÀ sull'anno. Una data OCR-misread
+  // (es. "2014"→"2074" o "1014") è un calendario valido ma entrerebbe nei FATTI
+  // deterministici del report gonfiando i calcoli ITT. Range: 1900 .. anno+1
+  // (una prenotazione può essere di pochi mesi nel futuro).
+  if (year < 1900 || year > new Date().getUTCFullYear() + 1) return false;
   const dt = new Date(Date.UTC(year, month - 1, day));
   return dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day;
 }

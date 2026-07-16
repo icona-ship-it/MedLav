@@ -33,6 +33,11 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
     message: 'Impossibile leggere i documenti. Verifica che i file siano PDF, immagini (JPG, PNG) o Word validi e non corrotti.',
   },
   {
+    // AUDIT 2026-07-16: PDF protetto da password → prima "errore imprevisto".
+    pattern: /password|encrypted|protett|criptat|cannot decrypt/i,
+    message: 'Il documento è protetto da password: rimuovi la protezione (o stampalo/ri-salvalo in PDF senza password) e ricaricalo.',
+  },
+  {
     pattern: /OCR.*(?:timeout|timed out)/i,
     message: 'La lettura del documento ha richiesto troppo tempo. Prova con un file più piccolo o meno pagine.',
   },

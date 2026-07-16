@@ -102,10 +102,18 @@ export async function saveDocumentMetadata(params: {
     'application/pdf',
     'image/jpeg', 'image/png', 'image/tiff', 'image/webp',
     'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     // Text documents (XML/TXT) — ingested via direct-text path, no OCR
     'text/xml', 'application/xml', 'text/plain',
   ]);
+  // AUDIT 2026-07-16: Excel era "accettato" ma l'OCR non lo processa → documento
+  // vuoto senza eventi + messaggio fuorviante. Rifiuto ONESTO con l'azione utile.
+  const EXCEL_MIME_TYPES = new Set([
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ]);
+  if (EXCEL_MIME_TYPES.has(params.fileType)) {
+    return { error: 'I file Excel non sono ancora supportati. Esportali in PDF (o stampali in PDF) prima di caricarli.' };
+  }
 
   // Fast pre-check on the CLIENT-DECLARED size (cheap, rejects obvious lies). The
   // authoritative check is on the real stored size (blob.size) below — the client
@@ -117,7 +125,7 @@ export async function saveDocumentMetadata(params: {
     return { error: 'File vuoto o non valido.' };
   }
   if (!ALLOWED_MIME_TYPES.has(params.fileType)) {
-    return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini, Word, Excel, XML, TXT.' };
+    return { error: 'Tipo file non supportato. Formati accettati: PDF, immagini (JPG, PNG, TIFF), Word, XML, TXT. Per gli Excel, esportali in PDF.' };
   }
 
   // Real (server-verified) byte size, captured from the downloaded blob below.

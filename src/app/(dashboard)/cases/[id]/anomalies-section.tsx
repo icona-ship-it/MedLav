@@ -12,6 +12,7 @@ import { dismissAnomaly, confirmAnomaly, saveDocumentMetadata, updateCaseDocumen
 import { revertAnomalyDecision } from '../../actions/anomaly-actions';
 import { createClient } from '@/lib/supabase/client';
 import { computeFileSha256 } from '@/lib/file-hash';
+import { toUserMessage } from '@/lib/user-error-messages';
 import type { AnomalyRow, MissingDocRow, EventRow, Document } from './types';
 
 // --- Types ---
@@ -795,7 +796,7 @@ function MissingDocUploadButton({
         });
 
       if (uploadError) {
-        toast.error(`Errore upload: ${uploadError.message}`);
+        toast.error(toUserMessage(uploadError.message));
         return;
       }
 

@@ -592,3 +592,16 @@ describe('recupero JSON parziale — eventi flaggati, non silenzioso (mai perder
     expect(result.events[0].reliabilityNotes ?? '').not.toContain('verificare la completezza');
   });
 });
+
+describe('normalizeDateFormat — bound di plausibilità anni (audit 2026-07-16)', () => {
+  it('accetta anni plausibili (1900..anno+1)', () => {
+    expect(normalizeDateFormat('2024-03-15')).toBe('2024-03-15');
+    expect(normalizeDateFormat('15.03.2024')).toBe('2024-03-15');
+    expect(normalizeDateFormat('1950-01-01')).toBe('1950-01-01');
+  });
+  it('rifiuta anni impossibili da OCR-misread (troppo nel futuro o troppo antichi)', () => {
+    expect(normalizeDateFormat('2074-03-15')).toBeNull(); // 2014→2074 misread
+    expect(normalizeDateFormat('1014-03-15')).toBeNull(); // 2014→1014 misread
+    expect(normalizeDateFormat('1899-12-31')).toBeNull();
+  });
+});

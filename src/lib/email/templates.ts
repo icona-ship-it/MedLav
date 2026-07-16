@@ -78,9 +78,22 @@ interface PipelineFailureEmailParams {
   stage: string;
 }
 
+// AUDIT 2026-07-16: la fase usciva come valore DB grezzo ("generazione_report").
+// Etichette umane per l'email al medico.
+const STAGE_LABELS: Record<string, string> = {
+  elaborazione: 'analisi dei documenti',
+  ocr: 'lettura dei documenti',
+  estrazione: 'estrazione dei dati clinici',
+  classificazione: 'riconoscimento dei documenti',
+  consolidamento: 'riordino della cronologia',
+  generazione_report: 'stesura del report',
+  revisione_classificazione: 'riconoscimento dei documenti',
+};
+
 export function buildPipelineFailureEmail(params: PipelineFailureEmailParams): EmailContent {
   const { caseCode, caseId, stage } = params;
   const caseUrl = `${SITE_URL}/cases/${caseId}`;
+  const stageLabel = STAGE_LABELS[stage] ?? 'analisi';
 
   return {
     subject: `Errore elaborazione caso ${caseCode}`,
@@ -104,7 +117,7 @@ export function buildPipelineFailureEmail(params: PipelineFailureEmailParams): E
           <tr>
             <td style="padding: 24px 32px 32px;">
               <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6;">
-                L'elaborazione del caso <strong>${caseCode}</strong> si è interrotta durante la fase <em>${stage || 'elaborazione'}</em>.
+                L'elaborazione del caso <strong>${caseCode}</strong> si è interrotta durante la fase di <em>${stageLabel}</em>.
               </p>
               <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6;">
                 Puoi riprovare l'elaborazione dalla pagina del caso. Se il problema persiste, contatta il supporto tecnico.
