@@ -451,3 +451,23 @@ describe('collectSsnCosts — tabella separata costi SSN', () => {
     expect(r.total).toBeNull();
   });
 });
+
+describe('extractAmount — audit 2026-07-16: importi mai falsati in un atto depositabile', () => {
+  it('"totale" senza valuta NON vince sull\'importo vero (capacità polmonare totale)', () => {
+    expect(extractAmount('spirometria eseguita, capacita polmonare totale 5,90 litri, ticket a carico del SSN euro 36,15')).toBeCloseTo(36.15, 2);
+  });
+  it('"totale" CON valuta continua a vincere sugli importi parziali', () => {
+    expect(extractAmount('100,00 EUR + IVA 4% per un totale di 120,00 EUR')).toBeCloseTo(120, 2);
+    expect(extractAmount('Totale documento: euro 377,00')).toBeCloseTo(377, 2);
+  });
+  it('migliaia italiane SENZA decimali: "euro 1.500" = 1500, non 1.5 (errore 1000x)', () => {
+    expect(extractAmount('Il Servizio Sanitario Regionale ha impiegato euro 1.500 per il ricovero')).toBeCloseTo(1500, 2);
+    expect(extractAmount('euro 12.000 per il percorso di cura')).toBeCloseTo(12000, 2);
+  });
+  it('decimale anglosassone a 2 cifre resta tale: "euro 27.90" = 27.9', () => {
+    expect(extractAmount('il SSR ha impiegato euro 27.90 per il Suo percorso')).toBeCloseTo(27.9, 2);
+  });
+  it('formato completo italiano invariato: "euro 1.500,00" = 1500', () => {
+    expect(extractAmount('fattura di euro 1.500,00')).toBeCloseTo(1500, 2);
+  });
+});

@@ -523,6 +523,11 @@ export async function assembleSectionsAndSaveReport(
     event_type: e.eventType,
     title: e.title,
     description: e.description,
+    // Allineamento con l'espansione a read-time (audit 2026-07-16): senza
+    // source_text/facility il testo VALIDATO differiva da quello che il perito
+    // vede (importi SSR riconoscibili solo dall'ancora OCR, strutture in tabella).
+    facility: e.facility ?? null,
+    source_text: e.sourceText ?? null,
   }));
   // documentazione_sanitaria is a DETERMINISTIC placeholder (verbatim OCR via the
   // DOC_SANITARIA sentinel). The raw report only carries the marker, so validate

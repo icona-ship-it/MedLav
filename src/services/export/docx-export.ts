@@ -1040,12 +1040,14 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
 function parseInlineFormatting(text: string, opts?: { size?: number; bold?: boolean }): TextRun[] {
   const { size, bold } = opts ?? {};
   const runs: TextRun[] = [];
-  // Split on bold (**text**) and italic (*text*)
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  // Split on bold (**text** / __text__) and italic (*text* / _text_).
+  // AUDIT 2026-07-16: il corsivo markdown a underscore ("_Non risultano spese..._",
+  // riga intro tabella SSN) usciva con underscore LETTERALI nel DOCX depositabile.
+  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g);
   for (const part of parts) {
-    if (part.startsWith('**') && part.endsWith('**')) {
+    if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
       runs.push(new TextRun({ text: part.slice(2, -2), bold: true, size }));
-    } else if (part.startsWith('*') && part.endsWith('*')) {
+    } else if ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) {
       runs.push(new TextRun({ text: part.slice(1, -1), italics: true, bold, size }));
     } else if (part.length > 0) {
       runs.push(new TextRun({ text: part, bold, size }));

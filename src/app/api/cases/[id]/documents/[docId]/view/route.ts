@@ -26,6 +26,10 @@ export async function GET(
 
   const { id: caseId, docId } = await params;
 
+  // Su errore NON mostrare JSON crudo (il link apre una scheda nuova): torna
+  // alla pagina del caso — l'utente capisce che il documento non è disponibile.
+  const fallback = () => NextResponse.redirect(new URL(`/cases/${caseId}`, request.url));
+
   // Verifica ownership del caso E appartenenza del documento al caso: lo
   // storage_path viene dal DB, MAI dal client (nessun path traversal possibile).
   const { data: doc } = await supabase
@@ -38,13 +42,13 @@ export async function GET(
   const ownerId = (doc?.cases as { user_id?: string } | { user_id?: string }[] | null);
   const uid = Array.isArray(ownerId) ? ownerId[0]?.user_id : ownerId?.user_id;
   if (!doc || !doc.storage_path || uid !== user.id) {
-    return NextResponse.json({ success: false, error: 'Documento non trovato' }, { status: 404 });
+    return fallback();
   }
 
   try {
     const signedUrl = await getSignedUrl(doc.storage_path as string);
     return NextResponse.redirect(signedUrl);
   } catch {
-    return NextResponse.json({ success: false, error: 'Documento non disponibile' }, { status: 404 });
+    return fallback();
   }
 }

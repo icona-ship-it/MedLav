@@ -85,8 +85,14 @@ const AMOUNT_PATTERNS: RegExp[] = [
 // Il TOTALE dichiarato vince sugli importi parziali: su una ricevuta con
 // "100,00 EUR + IVA 4% per un totale di 120,00 EUR" la spesa sostenuta è 120
 // (è anche il numero che usa il gold). Finestra corta dopo "totale" per non
-// agganciare cifre lontane.
-const TOTAL_AMOUNT_PATTERN = /total[ei][^\d\n]{0,12}([\d.]+,\d{2})/i;
+// agganciare cifre lontane. AUDIT 2026-07-16: il pattern RICHIEDE un marcatore
+// valuta (€/euro/EUR) prima o dopo la cifra e un confine di parola prima di
+// "total": senza, "capacità polmonare totale 5,90 litri" vinceva sull'importo
+// vero ("euro 36,15") e falsava la tabella di un atto depositabile.
+const TOTAL_AMOUNT_PATTERNS: RegExp[] = [
+  /\btotal[ei][^\d\n]{0,12}(?:€|euro|eur)\s?([\d.]+,\d{2})/i,      // "totale: € 120,00"
+  /\btotal[ei][^\d\n]{0,12}([\d.]+,\d{2})\s?(?:€|euro|eur)\b/i,    // "totale 120,00 EUR"
+];
 
 /**
  * Try to extract a monetary amount from text.
@@ -95,9 +101,11 @@ const TOTAL_AMOUNT_PATTERN = /total[ei][^\d\n]{0,12}([\d.]+,\d{2})/i;
 export function extractAmount(text: string): number | null {
   if (!text || typeof text !== 'string') return null;
 
-  const total = text.match(TOTAL_AMOUNT_PATTERN);
-  if (total?.[1]) {
-    return parseItalianNumber(total[1]);
+  for (const totalPattern of TOTAL_AMOUNT_PATTERNS) {
+    const total = text.match(totalPattern);
+    if (total?.[1]) {
+      return parseItalianNumber(total[1]);
+    }
   }
 
   for (const pattern of AMOUNT_PATTERNS) {
@@ -123,8 +131,16 @@ function parseItalianNumber(raw: string): number | null {
     // virgola decimale (italiano): i punti sono migliaia
     normalized = raw.replace(/\./g, '').replace(',', '.');
   } else if (lastDot > lastComma) {
-    // punto decimale (anglosassone): le virgole sono migliaia
-    normalized = raw.replace(/,/g, '');
+    // AUDIT 2026-07-16 (errore 1000x): "euro 1.500" (migliaia italiane SENZA
+    // decimali) veniva letto come 1.5. Se non c'è virgola e dopo l'ULTIMO punto
+    // ci sono esattamente 3 cifre, è il formato migliaia italiano (1.500, 12.000):
+    // i punti si eliminano. "27.90" (2 cifre) resta decimale anglosassone.
+    if (lastComma === -1 && /\.\d{3}$/.test(raw)) {
+      normalized = raw.replace(/\./g, '');
+    } else {
+      // punto decimale (anglosassone): le virgole sono migliaia
+      normalized = raw.replace(/,/g, '');
+    }
   } else {
     // un solo tipo di separatore (o nessuno): default italiano (virgola = decimale)
     normalized = raw.replace(',', '.');

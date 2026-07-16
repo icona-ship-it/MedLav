@@ -68,10 +68,14 @@ export interface GenerationProgress {
 function isMedicoLegalJudgmentNote(finding: { claim?: string; motivo?: string }): boolean {
   const motivo = (finding.motivo ?? '').toLowerCase();
   const claim = (finding.claim ?? '').toLowerCase();
+  // Il MOTIVO del verifier è la fonte più affidabile.
   if (/valutazione medico[- ]legale|riservat|non desumibile dagli eventi|compet(e|enza) del perito/.test(motivo)) {
     return true;
   }
-  return /criteri (topografic|di modalità|temporale|di efficienza)|nesso causale|suscettibilità individuale|danno biologico|invalidità (permanente|temporanea)|postumi/.test(claim);
+  // Sul CLAIM: SOLO le formule valutative dello scaffold (giudizi veri), non
+  // parole cliniche generiche ("postumi", "danno biologico") che possono
+  // comparire in claim FATTUALI — quelli devono restare note normali col motivo.
+  return /soddisfa i criteri|criteri (topografic|di modalità|di efficienza lesiva)|suscettibilità individuale|nesso causale|appare corretto attribuire/.test(claim);
 }
 
 export interface PipelineWarningItem {
@@ -201,9 +205,11 @@ export function ReportStep({
   // alto, evidenti; le note sotto, discrete.
   const claimErrors = claimFindings.filter((f) => f.verdict === 'non_supportato');
   const claimNotes = claimFindings.filter((f) => f.verdict !== 'non_supportato');
-  // Conteggio per il badge "Qualità" (nell'overflow): le anomalie vivono lì, non
-  // più nel pannello principale.
-  const reviewCount = actionableCount + missingDocsCount + claimFindings.length;
+  // Conteggio per il badge "Dettagli analisi" (overflow ⋯): SOLO ciò che quella
+  // vista gestisce (anomalie da valutare + doc mancanti). I claim NON vi
+  // compaiono (vivono nel pannello "Da controllare" qui sotto) — contarli nel
+  // badge creava l'incoerenza "badge 5 → sheet OK" (audit 2026-07-16).
+  const reviewCount = actionableCount + missingDocsCount;
   // Primo warning di pipeline con documenti falliti → abilita "Vedi dettagli" nel pannello.
   const drillablePipelineWarning = pipelineWarnings.find((w) => w.failedItems && w.failedItems.length > 0);
   // Warning di pipeline TRADOTTI per il perito: copy calmo e specifico + gravità
@@ -499,7 +505,10 @@ export function ReportStep({
       <ReportActionBar
         caseId={caseId}
         report={report}
-        anomalyCount={anomalies.length}
+        // Solo le anomalie ANCORA da valutare: il gate di approvazione non deve
+        // chiedere di "verificare N avvisi" contando anche quelle già escluse
+        // o risolte dal perito (conteggio gonfiato → sfiducia).
+        anomalyCount={actionableCount}
         missingDocsCount={missingDocsCount}
         isRegenerating={isRegenerating || isRegeneratingReport}
         onRegenerate={handleRegenerate}
@@ -684,12 +693,13 @@ export function ReportStep({
         </div>
 
         {/* UX Ondata 3-IA Fase E: QualitySidebar destra rimossa.
-            Le sue funzioni sono distribuite:
-            - Anomalie e doc mancanti -> banner above-fold (gia' fatto)
+            Le sue funzioni sono distribuite (agg. 2026-07-16):
+            - Errori claim-verify -> pannello "Da controllare" above-fold
+            - Anomalie e doc mancanti -> overflow ⋯ > "Dettagli analisi (qualità)"
+              -> Sheet -> "Apri e gestisci anomalie" (NON più nel pannello)
             - OCR -> drawer attivato da toolbar
             - Eventi count -> badge sul bottone Eventi in toolbar
-            - Metriche residue (qualita' OCR, copertura) -> ancora disponibili
-              tramite il bottone "Qualita'" mobile (Sheet), per chi le cerca.
+            - Metriche residue (qualita' OCR, copertura) -> stesso Sheet qualità.
         */}
       </div>
 
@@ -952,9 +962,9 @@ function PipelineWarningDetailDialog({
             {warning.message}. Per ciascun documento qui sotto, trovi i dettagli e una possibile spiegazione del motivo per cui non sono stati individuati eventi clinici cronologici.
           </p>
           <div className="space-y-2">
-            {failedDocs.map(({ fileName, doc, eventCount }, idx) => (
+            {failedDocs.map(({ fileName, doc, eventCount }) => (
               <FailedDocumentRow
-                key={idx}
+                key={doc?.id ?? fileName}
                 caseId={caseId}
                 fileName={fileName}
                 doc={doc}

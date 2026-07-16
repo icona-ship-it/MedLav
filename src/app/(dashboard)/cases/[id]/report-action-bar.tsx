@@ -158,13 +158,15 @@ export function ReportActionBar({
         a.click();
         a.remove();
         URL.revokeObjectURL(objectUrl);
+        // Aggiorna subito "Ultimo export: ..." (prima restava stantio fino al reload).
+        getLastExport(caseId).then((info) => setLastExportInfo(info)).catch(() => {});
       } catch {
         toast.error('Esportazione non riuscita. Controlla la connessione e riprova.');
       } finally {
         setIsExporting(false);
       }
     })();
-  }, []);
+  }, [caseId]);
 
   return (
     <>
@@ -187,8 +189,9 @@ export function ReportActionBar({
           </div>
 
           {/* Right: Actions — gerarchia chiara per ridurre il rumore visivo:
-              VISTE (ghost, discrete) · MODIFICA · [ESPORTA] · APPROVA (primaria) · ⋯ */}
-          <div className="flex items-center gap-1.5">
+              VISTE (ghost, discrete) · MODIFICA · [ESPORTA] · APPROVA (primaria) · ⋯
+              flex-wrap: su schermi stretti i bottoni vanno a capo invece di tagliarsi. */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {/* Viste "peek" — pulsanti ghost, meno peso di azioni vere */}
             {onOpenEventsDrawer && (
               <Button
@@ -285,11 +288,19 @@ export function ReportActionBar({
               </Button>
             )}
 
-            {/* Overflow menu */}
+            {/* Overflow menu — pallino rosso sul trigger quando dentro c'è
+                qualcosa da vedere (alertCount>0): senza, un caso con SOLE
+                anomalie non mostrerebbe alcun segnale in tutta la schermata. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" title="Altre azioni" aria-label="Altre azioni">
+                <Button variant="ghost" size="sm" className="relative" title="Altre azioni" aria-label="Altre azioni">
                   <MoreHorizontal className="h-3.5 w-3.5" />
+                  {alertCount > 0 && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive"
+                      aria-label={`${alertCount} avvisi`}
+                    />
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

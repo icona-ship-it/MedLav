@@ -483,8 +483,14 @@ export function expandDeterministicBlocks(
   if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
 
   // Spese: tabella danneggiato + (se presenti) tabella SEPARATA costi a carico SSN.
-  const speseDanneggiato = formatExpenseTable(events) || EMPTY_FALLBACK.SPESE;
+  // Caso SSN-only (zero spese del danneggiato ma costi SSN presenti): fallback
+  // dedicato — "Non risultano spese... seguito da una tabella di spese" era stonato.
+  const speseTable = formatExpenseTable(events);
   const speseSsn = formatSsnCostTable(events);
+  const speseDanneggiato = speseTable
+    || (speseSsn
+      ? '_Non risultano spese a carico del danneggiato; si riportano di seguito, per completezza, i costi sostenuti dal Servizio Sanitario._'
+      : EMPTY_FALLBACK.SPESE);
   const speseBlock = speseSsn ? `${speseDanneggiato}\n\n${speseSsn}` : speseDanneggiato;
 
   const replacements: Array<[string, string]> = [
