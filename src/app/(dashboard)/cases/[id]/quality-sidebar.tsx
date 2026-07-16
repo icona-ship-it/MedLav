@@ -292,14 +292,14 @@ export function QualitySidebar({
                     </div>
                     <span className="shrink-0 text-muted-foreground ml-2">
                       {c.status === 'error'
-                        ? 'OCR fallito'
+                        ? 'Lettura non riuscita'
                         : c.status === 'processing'
-                          ? 'In elab.'
+                          ? 'In elaborazione…'
                           : c.status === 'admin-ok'
                             ? 'Documento amministrativo'
                             : c.status === 'warning' && c.eventCount === 0
                               ? '0 eventi — verifica'
-                              : `${c.eventCount} ev.`}
+                              : `${c.eventCount} eventi`}
                     </span>
                   </div>
                 );
@@ -326,7 +326,7 @@ export function QualitySidebar({
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5" /> Lettura OCR
+                  <Eye className="h-3.5 w-3.5" /> Qualità lettura
                 </span>
                 <span className={`font-medium ${confidenceColor(ocrConfidence)}`}>
                   {confidenceLabel(ocrConfidence).toLowerCase()} ({ocrConfidence}%)

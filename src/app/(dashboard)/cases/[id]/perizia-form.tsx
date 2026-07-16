@@ -371,7 +371,7 @@ export function PeriziaMetadataForm({
                 Dati per l&apos;intestazione della perizia
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                <strong>Tutti i campi sono facoltativi</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati vengono usati per compilare l&apos;intestazione formale della perizia esportata e per orientare la stesura automatica del testo. Puoi tornare a compilarli in qualsiasi momento.
+                <strong>Facoltativi per proseguire</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati compilano l&apos;intestazione formale della perizia e orientano la stesura automatica del testo. Quando esporti la <strong>versione definitiva da depositare</strong> serve almeno il nome del perito (per le perizie giudiziarie CTU/CTP anche Tribunale e numero di RG); l&apos;esportazione della bozza di lavoro non richiede nulla.
               </p>
             </div>
           </div>

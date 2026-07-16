@@ -52,15 +52,15 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
       });
       const data = await res.json() as { success: boolean; error?: string };
       if (data.success) {
-        toast.success('Elaborazione OCR avviata');
+        toast.success('Lettura documenti avviata');
         router.refresh();
       } else {
-        const msg = toUserMessage(data.error ?? 'Errore avvio OCR');
+        const msg = toUserMessage(data.error ?? 'Errore avvio lettura documenti');
         setError(msg);
         toast.error(msg);
       }
     } catch {
-      setError('Errore di rete durante l\'avvio dell\'OCR');
+      setError('Errore di rete durante l\'avvio della lettura documenti');
       toast.error('Errore di rete');
     } finally {
       setIsStartingOcr(false);
@@ -144,11 +144,11 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
                     }
                   >
                     {doc.processing_status === 'completato'
-                      ? 'OCR pronto'
+                      ? 'Testo pronto'
                       : doc.processing_status === 'caricato'
-                        ? 'In attesa OCR'
+                        ? 'In attesa di lettura'
                         : doc.processing_status === 'ocr_in_corso' || doc.processing_status === 'in_coda'
-                          ? 'OCR in corso...'
+                          ? 'Lettura in corso…'
                           : doc.processing_status}
                   </Badge>
                 </div>
@@ -159,8 +159,8 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
           {/* OCR needed warning */}
           {needsOcr && (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              {pendingDocs.length} {pendingDocs.length === 1 ? 'documento richiede' : 'documenti richiedono'} l&apos;elaborazione
-              OCR prima di poter procedere con l&apos;anonimizzazione.
+              {pendingDocs.length} {pendingDocs.length === 1 ? 'documento richiede' : 'documenti richiedono'} la lettura
+              del testo prima di poter procedere con l&apos;anonimizzazione.
             </div>
           )}
 
@@ -168,7 +168,7 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
           {isProcessing && (
             <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200 flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
-              Elaborazione OCR in corso... La pagina si aggiornera automaticamente.
+              Lettura documenti in corso… La pagina si aggiornerà automaticamente.
             </div>
           )}
 
@@ -191,12 +191,12 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
                   {isStartingOcr ? (
                     <>
                       <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
-                      Avvio OCR...
+                      Avvio lettura…
                     </>
                   ) : (
                     <>
                       <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                      Avvia OCR documenti
+                      Avvia lettura documenti
                     </>
                   )}
                 </Button>

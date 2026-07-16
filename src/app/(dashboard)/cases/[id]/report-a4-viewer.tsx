@@ -127,7 +127,7 @@ export function ReportA4Viewer({
         <div className="report-a4-page">
           <p className="py-12 text-center text-sm text-muted-foreground">
             {events.length > 0
-              ? 'Il report non \u00e8 ancora stato generato, ma gli eventi sono gi\u00e0 disponibili nella tab Timeline.'
+              ? 'Il report non \u00e8 ancora stato generato, ma gli eventi sono gi\u00e0 disponibili nel passo Cronistoria.'
               : 'Nessuna sintesi generata. Avvia l\'elaborazione dei documenti.'}
           </p>
         </div>
@@ -179,7 +179,7 @@ export function ReportA4Viewer({
                       <Badge variant="success" title="Confermata — protetta dalla rigenerazione"><Lock className="mr-1 h-3 w-3" />Confermata</Badge>
                     )}
                     {hasDeterministic && !isDocSanitaria && (
-                      <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Timeline.">Tabella automatica</Badge>
+                      <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Cronistoria.">Tabella automatica</Badge>
                     )}
                     {isDocSanitaria && docSanitariaHasSentinel && (
                       <Badge variant="info" title="Documentazione riprodotta verbatim dall'OCR (nessuna modifica AI). Puoi modificarla a mano in fase finale: l'edit la rende testo tuo.">Trascrizione automatica</Badge>

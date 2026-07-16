@@ -126,7 +126,7 @@ export async function anonymizeCaseDocuments(caseId: string): Promise<AnonymizeC
   }
 
   if (!pages || pages.length === 0) {
-    return { success: false, error: 'Nessun testo OCR disponibile. I documenti devono prima essere elaborati (OCR).' };
+    return { success: false, error: 'Nessun testo disponibile. I documenti devono prima essere letti (avvia la lettura dei documenti).' };
   }
 
   // Build document name lookup
@@ -147,7 +147,7 @@ export async function anonymizeCaseDocuments(caseId: string): Promise<AnonymizeC
   }
 
   if (sections.length === 0) {
-    return { success: false, error: 'Nessun testo OCR disponibile nei documenti.' };
+    return { success: false, error: 'Nessun testo disponibile nei documenti.' };
   }
 
   const combinedText = sections.join('\n\n\n');
