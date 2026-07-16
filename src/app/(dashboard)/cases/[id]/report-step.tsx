@@ -301,6 +301,39 @@ export function ReportStep({
     setShowVersionCompare(true);
   }, []);
 
+  // "Correggi con AI" per-errore (richiesta founder 2026-07-17): rigenera la SOLA
+  // sezione con un'istruzione mirata a correggere il claim segnalato. Riusa per
+  // intero la macchina esistente (versioning, validatore, quote-check, pruning
+  // dei finding stantii, rimborso su fallimento): il lavoro fatto non si perde —
+  // la versione attuale resta consultabile e il perito rilegge il punto corretto.
+  const [fixingClaimKey, setFixingClaimKey] = useState<string | null>(null);
+  const handleFixClaim = useCallback((f: { sectionId: string; sectionTitle: string; claim: string; motivo?: string }) => {
+    const key = `${f.sectionId}:${f.claim}`;
+    const instruction = `CORREZIONE MIRATA — un verificatore indipendente segnala che questo dato non trova riscontro nei documenti: «${f.claim.slice(0, 200)}»${f.motivo ? ` (${f.motivo.slice(0, 120)})` : ''}. Correggi SOLO questo punto usando i fatti forniti; se il dato corretto non è disponibile, rimuovi l'affermazione. NON riscrivere il resto della sezione.`.slice(0, 500);
+    if (!window.confirm(`L'AI rigenererà la sezione «${f.sectionTitle}» correggendo il dato segnalato (5 crediti). La versione attuale resta consultabile tra le versioni precedenti. Procedere?`)) return;
+    setFixingClaimKey(key);
+    (async () => {
+      try {
+        const res = await fetch('/api/processing/regenerate-section', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+          body: JSON.stringify({ caseId, sectionId: f.sectionId, instruction, expectedVersion: report?.version }),
+        });
+        const data = await res.json() as { success: boolean; error?: string };
+        if (data.success) {
+          toast.success('Sezione corretta. Rileggi il punto segnalato per conferma.');
+          router.refresh();
+        } else {
+          toast.error(toUserMessage(data.error ?? 'Correzione non riuscita. Riprova.'));
+        }
+      } catch {
+        toast.error('Errore di rete. Verifica la connessione e riprova.');
+      } finally {
+        setFixingClaimKey(null);
+      }
+    })();
+  }, [caseId, report?.version, router]);
+
   // --- No report yet ---
   if (!report) {
     if (processingStage === 'generazione_report') {
@@ -575,20 +608,40 @@ export function ReportStep({
                   {claimErrors.length === 1 ? 'Un dato del report non torna coi documenti' : `${claimErrors.length} dati del report non tornano coi documenti`}
                 </p>
                 <ul className="mt-2 ml-6 space-y-2 border-l border-destructive/20 pl-3">
-                  {claimErrors.map((f) => (
-                    <li key={`err:${f.sectionId}:${f.claim}`} className="text-sm">
-                      <span className="font-medium">{f.sectionTitle}:</span>{' '}«{f.claim}»
-                      {f.motivo && <span className="text-muted-foreground"> — {f.motivo}</span>}
-                      {' '}
-                      <button
-                        type="button"
-                        className="font-medium text-primary hover:underline"
-                        onClick={() => scrollToReportSection({ canonicalId: f.sectionId, title: f.sectionTitle })}
-                      >
-                        Vedi nel report
-                      </button>
-                    </li>
-                  ))}
+                  {claimErrors.map((f) => {
+                    const fixKey = `${f.sectionId}:${f.claim}`;
+                    const isFixing = fixingClaimKey === fixKey;
+                    // Sezione confermata dal perito: la correzione AI non deve toccarla.
+                    const isLocked = getSectionStatus(report?.generation_metadata, f.sectionId) === 'locked';
+                    return (
+                      <li key={`err:${fixKey}`} className="text-sm">
+                        <span className="font-medium">{f.sectionTitle}:</span>{' '}«{f.claim}»
+                        {f.motivo && <span className="text-muted-foreground"> — {f.motivo}</span>}
+                        {' '}
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => scrollToReportSection({ canonicalId: f.sectionId, title: f.sectionTitle })}
+                        >
+                          Vedi nel report
+                        </button>
+                        {!isLocked && (
+                          <>
+                            {' · '}
+                            <button
+                              type="button"
+                              disabled={isFixing || fixingClaimKey !== null}
+                              className="font-medium text-primary hover:underline disabled:opacity-50 disabled:no-underline"
+                              title="Rigenera la sola sezione chiedendo all'AI di correggere questo dato (5 crediti). La versione attuale resta consultabile."
+                              onClick={() => handleFixClaim(f)}
+                            >
+                              {isFixing ? 'Correzione in corso…' : 'Correggi con AI'}
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
