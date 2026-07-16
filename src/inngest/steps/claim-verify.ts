@@ -171,6 +171,30 @@ export function toDocumentSummariesDigest(
   return summaries.map((s) => `### ${s.fileName} (${s.documentType})\n${s.summary}`).join('\n\n');
 }
 
+/**
+ * Evidenza OCR per i casi PICCOLI senza riassunti map-reduce (audit 2026-07-16,
+ * Motta): lì il generatore vede l'OCR grezzo, quindi anche il judge deve vederlo
+ * o flagga "non supportato" fatti veri (ecocardiogramma, trasfusione…). Cap a
+ * monte per non costruire stringhe enormi; il verifier ri-cappa comunque.
+ */
+export function toOcrEvidenceDigest(
+  docs: Array<{ fileName: string; documentType: string; pages: Array<{ ocrText: string }> }>,
+  maxChars = 30_000,
+): string | undefined {
+  if (!docs || docs.length === 0) return undefined;
+  const parts: string[] = [];
+  let used = 0;
+  for (const d of docs) {
+    if (used >= maxChars) break;
+    const text = d.pages.map((p) => p.ocrText).join('\n').trim();
+    if (!text) continue;
+    const slice = text.slice(0, maxChars - used);
+    parts.push(`### ${d.fileName} (${d.documentType})\n${slice}`);
+    used += slice.length;
+  }
+  return parts.length > 0 ? parts.join('\n\n') : undefined;
+}
+
 export function toClaimEventDigest(events: Array<{
   orderNumber: number;
   eventDate?: string | null;

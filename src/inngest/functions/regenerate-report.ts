@@ -595,14 +595,20 @@ export const regenerateReport = inngest.createFunction(
     // Verifica claim-level anti-misgrounded (come in process-case): judge
     // Medium ≠ generatore, mai bloccante, ritorna solo conteggi.
     await step.run('regen-claim-verify', async () => {
-      const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest } = await import('../steps/claim-verify');
+      const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest, toOcrEvidenceDigest } = await import('../steps/claim-verify');
+      // Evidenza del judge = ciò che il GENERATORE ha legittimamente visto:
+      // riassunti map-reduce (casi grandi) o OCR grezzo cappato (casi piccoli).
+      // Senza, fatti veri uscivano "non supportato" (audit 2026-07-16).
+      let extraEvidence = toDocumentSummariesDigest(documentSummaries);
+      if (!extraEvidence) {
+        const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
+        extraEvidence = toOcrEvidenceDigest(await fetchDocumentsOcrContext(caseId));
+      }
       return runClaimVerification({
         caseId,
         reportId: regenSynthesisResult.reportId,
         events: toClaimEventDigest(synthesisParams.events),
-        // I riassunti-documento sono contesto LEGITTIMO del generatore: il judge
-        // deve vederli, o flagga come "non supportato" fatti veri (audit 2026-07-16).
-        documentSummariesDigest: toDocumentSummariesDigest(documentSummaries),
+        documentSummariesDigest: extraEvidence,
       });
     });
 

@@ -42,7 +42,7 @@ import {
   parseHeaderData,
   type HeaderData,
 } from './header-schema';
-import { renderHeaderMarkdown } from './header-template';
+import { renderHeaderMarkdown, genderFromCodiceFiscale } from './header-template';
 import { buildTailPrioritizedOcrInput } from './document-summarizer';
 import { mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
@@ -154,6 +154,14 @@ export function buildSectionUserPrompt(params: {
   const parts: string[] = [];
 
   parts.push(`Genera la sezione "${spec.title}" del report medico-legale.\n`);
+
+  // Genere del periziando come DATO CERTO quando il CF è nei metadati (audit
+  // 2026-07-16: "Il paziente giunge" per una donna): non è un'inferenza — nel
+  // CF italiano il giorno di nascita >40 identifica il sesso femminile.
+  const patientGender = genderFromCodiceFiscale(synthesisParams.periziaMetadata?.patientFiscalCode);
+  if (patientGender) {
+    parts.push(`DATO CERTO — SESSO DEL PERIZIANDO (dal codice fiscale): ${patientGender === 'f' ? 'FEMMINILE' : 'MASCHILE'}. Declina SEMPRE articoli, sostantivi e participi di conseguenza (${patientGender === 'f' ? '"la paziente", "la perizianda", "è stata trasferita"' : '"il paziente", "il periziando", "è stato trasferito"'}), tranne dentro le citazioni verbatim «...».\n`);
+  }
 
   // Add context from previous sections
   if (spec.dataSources.includes('context-summaries') && previousContext.length > 0) {

@@ -1388,14 +1388,20 @@ export const processCase = inngest.createFunction(
     // scrive la lista "da verificare" nei metadata del report. MAI bloccante
     // (runClaimVerification ingoia ogni errore) — ritorna solo conteggi (O(1)).
     const claimVerify = await step.run('claim-verify-report', async () => {
-      const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest } = await import('@/inngest/steps/claim-verify');
+      const { runClaimVerification, toClaimEventDigest, toDocumentSummariesDigest, toOcrEvidenceDigest } = await import('@/inngest/steps/claim-verify');
+      // Evidenza del judge = ciò che il GENERATORE ha legittimamente visto:
+      // riassunti map-reduce (casi grandi) o OCR grezzo cappato (casi piccoli).
+      // Senza, fatti veri uscivano "non supportato" (audit 2026-07-16).
+      let extraEvidence = toDocumentSummariesDigest(documentSummaries);
+      if (!extraEvidence) {
+        const { fetchDocumentsOcrContext } = await import('@/inngest/steps/generate-report');
+        extraEvidence = toOcrEvidenceDigest(await fetchDocumentsOcrContext(caseId));
+      }
       return runClaimVerification({
         caseId,
         reportId: synthesisResult.reportId,
         events: toClaimEventDigest(synthesisParams.events),
-        // I riassunti-documento sono contesto LEGITTIMO del generatore: il judge
-        // deve vederli, o flagga come "non supportato" fatti veri (audit 2026-07-16).
-        documentSummariesDigest: toDocumentSummariesDigest(documentSummaries),
+        documentSummariesDigest: extraEvidence,
       });
     });
 
