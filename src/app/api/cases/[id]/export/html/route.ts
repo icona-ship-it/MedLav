@@ -141,9 +141,13 @@ export async function GET(
     // AUDIT 2026-07-16: stesso gate della route DOCX. Senza, un'anteprima
     // "depositabile" di un caso SENZA dati perito usciva col layout basic =
     // fascicolo tecnico di lavoro (anomalie, doc mancanti, stats) spacciato per
-    // perizia — la prima esperienza di ogni beta.
+    // perizia — la prima esperienza di ogni beta. Solo se ESISTE un report:
+    // l'export cronistoria di un caso senza report non è una perizia e non deve
+    // chiedere il nome del perito (vicolo cieco sul tool estrazione-only).
     const pmForGate = data.periziaMetadata as { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null;
-    const depositableError = validateDepositableExport(pmForGate, data.caseData.case_role as string, exportMode);
+    const depositableError = data.report
+      ? validateDepositableExport(pmForGate, data.caseData.case_role as string, exportMode)
+      : null;
     if (depositableError) {
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }

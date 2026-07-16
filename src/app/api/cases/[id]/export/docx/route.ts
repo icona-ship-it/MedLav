@@ -58,11 +58,16 @@ export async function GET(
 
     // Blocca un export "depositabile" senza i dati del perito (uscirebbe incompleto via
     // il flusso basic). In modalità lavoro/bozza i parziali sono ammessi.
-    const depositableError = validateDepositableExport(
-      pm as { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null,
-      data.caseData.case_role as string,
-      exportMode,
-    );
+    // Solo se ESISTE un report (audit 2026-07-16): un caso senza report (export
+    // cronistoria da estrazione-only) non può produrre una perizia depositabile —
+    // chiedere il nome del perito per scaricare una cronologia era un vicolo cieco.
+    const depositableError = data.report
+      ? validateDepositableExport(
+          pm as { ctuName?: string | null; tribunale?: string | null; rgNumber?: string | null } | null,
+          data.caseData.case_role as string,
+          exportMode,
+        )
+      : null;
     if (depositableError) {
       return NextResponse.json({ success: false, error: depositableError }, { status: 400 });
     }

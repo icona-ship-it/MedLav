@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -145,6 +145,32 @@ export function ReportStep({
   // Drives the staleness check (which sections may be out of date) and the
   // "scegli cosa rigenerare" panel.
   const [mutatedEventTypes, setMutatedEventTypes] = useState<Set<string>>(new Set());
+  // Persistenza (audit 2026-07-16): prima viveva solo nello stato React → un
+  // reload della pagina perdeva il banner "sezioni da aggiornare" dopo l'edit
+  // di un evento. sessionStorage con chiave caso+versione report: la
+  // rigenerazione (versione nuova) lo azzera da sola; idratato in useEffect
+  // post-mount per non creare mismatch SSR. Best-effort: storage negato = solo
+  // stato in-memory, comportamento di prima.
+  const staleStorageKey = `legmed:stale:${caseId}:${report?.version ?? 0}`;
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(staleStorageKey);
+      if (raw) {
+        const stored = new Set(JSON.parse(raw) as string[]);
+        if (stored.size > 0) setMutatedEventTypes(stored);
+      }
+    } catch { /* storage non disponibile */ }
+  }, [staleStorageKey]);
+  const updateMutatedEventTypes = useCallback((updater: (prev: Set<string>) => Set<string>) => {
+    setMutatedEventTypes((prev) => {
+      const next = updater(prev);
+      try {
+        if (next.size === 0) window.sessionStorage.removeItem(staleStorageKey);
+        else window.sessionStorage.setItem(staleStorageKey, JSON.stringify([...next]));
+      } catch { /* best-effort */ }
+      return next;
+    });
+  }, [staleStorageKey]);
   const [regeneratePanelOpen, setRegeneratePanelOpen] = useState(false);
   // Pannello "Avvisi" unificato: dettagli per-documento dei problemi di lettura
   // (stato sollevato qui da PipelineWarningsBanner, così la riga vive nel pannello).
@@ -620,7 +646,7 @@ export function ReportStep({
                   <Button variant="outline" size="sm" onClick={() => setRegeneratePanelOpen(true)}>
                     Scegli cosa rigenerare
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Ignora" onClick={() => setMutatedEventTypes(new Set())}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Ignora" onClick={() => updateMutatedEventTypes(() => new Set())}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -757,7 +783,7 @@ export function ReportStep({
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
-              onEventMutated={(t) => setMutatedEventTypes((prev) => {
+              onEventMutated={(t) => updateMutatedEventTypes((prev) => {
                 const next = new Set(prev);
                 next.add(t ?? 'altro');
                 return next;
@@ -840,7 +866,7 @@ export function ReportStep({
           onOpenChange={setRegeneratePanelOpen}
           caseId={caseId}
           sections={staleForPanel}
-          onDone={() => { setMutatedEventTypes(new Set()); router.refresh(); }}
+          onDone={() => { updateMutatedEventTypes(() => new Set()); router.refresh(); }}
         />
       )}
     </div>
