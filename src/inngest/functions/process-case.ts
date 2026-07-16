@@ -28,6 +28,7 @@ import type { ExpenseAnalysisResult } from '@/services/expenses/expense-analyzer
 import { extractExpensesFromOcr } from '@/services/expenses/expense-extractor';
 import type { ExpenseExtractionResult } from '@/services/expenses/expense-extractor';
 import { shouldUseMapReduce, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
+import { heartbeatCase } from '@/inngest/steps/heartbeat';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
@@ -306,7 +307,14 @@ export const processCase = inngest.createFunction(
     // Each step.run is a separate Inngest step (serverless invocation).
     const ocrSettled = await Promise.allSettled(
       documents.map((doc) =>
-        step.run(`ocr-doc-${doc.id}`, () => ocrSingleDocument(doc)),
+        step.run(`ocr-doc-${doc.id}`, async () => {
+          const result = await ocrSingleDocument(doc);
+          // Heartbeat anti stuck-monitor (2026-07-17): su un caso enorme l'OCR
+          // può durare >60 min senza scritture sulla riga del caso → il monitor
+          // auto-fallirebbe (e rimborserebbe) un caso VIVO. Un tocco per doc.
+          await heartbeatCase(caseId);
+          return result;
+        }),
       ),
     );
     for (const r of ocrSettled) {
@@ -519,7 +527,11 @@ export const processCase = inngest.createFunction(
     const extractionBatches = chunkArray(allChunkJobs, EXTRACTION_BATCH_SIZE);
     const batchSettled = await Promise.allSettled(
       extractionBatches.map((batch, idx) =>
-        step.run(`extract-batch-${idx}`, () => extractChunkBatch(batch)),
+        step.run(`extract-batch-${idx}`, async () => {
+          const result = await extractChunkBatch(batch);
+          await heartbeatCase(caseId); // fase lunga: vedi commento sull'OCR
+          return result;
+        }),
       ),
     );
 
@@ -954,7 +966,11 @@ export const processCase = inngest.createFunction(
       const summaryBatches = chunkArray(docRefs, SUMMARY_BATCH_SIZE);
       const summarySettled = await Promise.allSettled(
         summaryBatches.map((batch, idx) =>
-          step.run(`summarize-batch-${idx}`, () => summarizeDocumentBatchByIds(batch)),
+          step.run(`summarize-batch-${idx}`, async () => {
+            const result = await summarizeDocumentBatchByIds(batch);
+            await heartbeatCase(caseId); // fase lunga: vedi commento sull'OCR
+            return result;
+          }),
         ),
       );
       documentSummaries = summarySettled

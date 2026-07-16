@@ -22,6 +22,7 @@ import {
   shouldUseMapReduce,
   summarizeDocumentBatchByIds,
 } from '@/services/synthesis/document-summarizer';
+import { heartbeatCase } from '../steps/heartbeat';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
 import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripWindowArtifacts, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
@@ -280,7 +281,11 @@ export const regenerateReport = inngest.createFunction(
         const summaryBatches = chunkArray(prep.docRefs, SUMMARY_BATCH_SIZE);
         const summarySettled = await Promise.allSettled(
           summaryBatches.map((batch, idx) =>
-            step.run(`regen-summarize-batch-${idx}`, () => summarizeDocumentBatchByIds(batch)),
+            step.run(`regen-summarize-batch-${idx}`, async () => {
+              const result = await summarizeDocumentBatchByIds(batch);
+              await heartbeatCase(caseId); // caso enorme: >60min di riassunti senza scritture = auto-fail ingiusto
+              return result;
+            }),
           ),
         );
         documentSummaries = summarySettled
