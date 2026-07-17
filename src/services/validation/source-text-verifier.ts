@@ -45,6 +45,19 @@ const LCS_WINDOW_MULTIPLIER = 3;
 export const SOURCE_UNVERIFIED_CONFIDENCE_CAP = 30;
 
 /**
+ * PROPORZIONALITÀ del flag (caso 225, 2026-07-17): su documenti scansionati
+ * l'estrattore parafrasa l'anchor su ~metà degli eventi → 95/180 "da verificare"
+ * = coda che nessun medico revisionerà mai (alert fatigue = zero verifiche reali).
+ * L'anchor parafrasato NON rende falsi i fatti dell'evento (estratti dallo stesso
+ * OCR), e le citazioni nel REPORT hanno già la loro verifica dedicata contro
+ * l'OCR. Quindi: il flag "da verificare" scatta SOLO sui tipi load-bearing
+ * (dove una citazione distorta può cambiare la perizia); i tipi di routine
+ * ricevono un cap morbido + nota, senza entrare nella coda del perito.
+ */
+const ANCHOR_FLAG_TYPES = new Set(['diagnosi', 'intervento', 'complicanza', 'ricovero']);
+export const ROUTINE_ANCHOR_MISS_CAP = 55;
+
+/**
  * Verify that each event's sourceText actually exists in the OCR text.
  * Returns events with requiresVerification updated for unverified ones.
  */
@@ -70,11 +83,17 @@ export function verifySourceTexts(
         lcsRatio: null,
         verified: false,
       });
+      const loadBearingEmpty = ANCHOR_FLAG_TYPES.has(event.eventType);
       updatedEvents.push({
         ...event,
-        confidence: Math.min(event.confidence, SOURCE_UNVERIFIED_CONFIDENCE_CAP),
-        requiresVerification: true,
-        reliabilityNotes: appendNote(event.reliabilityNotes, 'Testo sorgente assente — verificare.'),
+        confidence: Math.min(event.confidence, loadBearingEmpty ? SOURCE_UNVERIFIED_CONFIDENCE_CAP : ROUTINE_ANCHOR_MISS_CAP),
+        requiresVerification: loadBearingEmpty ? true : event.requiresVerification,
+        reliabilityNotes: appendNote(
+          event.reliabilityNotes,
+          loadBearingEmpty
+            ? 'Testo sorgente assente — verificare.'
+            : 'Citazione sorgente assente (evento di routine).',
+        ),
       });
       continue;
     }
@@ -90,13 +109,16 @@ export function verifySourceTexts(
     verifications.push(verification);
 
     if (!verification.verified) {
+      const loadBearing = ANCHOR_FLAG_TYPES.has(event.eventType);
       updatedEvents.push({
         ...event,
-        confidence: Math.min(event.confidence, SOURCE_UNVERIFIED_CONFIDENCE_CAP),
-        requiresVerification: true,
+        confidence: Math.min(event.confidence, loadBearing ? SOURCE_UNVERIFIED_CONFIDENCE_CAP : ROUTINE_ANCHOR_MISS_CAP),
+        requiresVerification: loadBearing ? true : event.requiresVerification,
         reliabilityNotes: appendNote(
           event.reliabilityNotes,
-          'Testo sorgente non riscontrato nel documento — verificare.',
+          loadBearing
+            ? 'Testo sorgente non riscontrato nel documento — verificare.'
+            : 'Citazione sorgente non riscontrata nell\'OCR (possibile parafrasi in estrazione).',
         ),
       });
     } else {

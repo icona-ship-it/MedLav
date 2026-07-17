@@ -139,6 +139,10 @@ export function ReportStep({
   // UX Ondata 3-IA Fase A: drawer additivi (eventi/ocr).
   // Per ora coesistono con i tab esistenti. La Fase B rimuovera' i tab.
   const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
+  // Apertura del drawer già filtrata sulla coda "da verificare" (riga del
+  // pannello "Da controllare", founder 2026-07-17). Il key sul componente
+  // forza il remount così il filtro iniziale viene riapplicato.
+  const [eventsDrawerVerifyMode, setEventsDrawerVerifyMode] = useState(false);
   const [ocrDrawerOpen, setOcrDrawerOpen] = useState(false);
 
   // Track the EVENT TYPES the perito mutated since the report was generated.
@@ -236,6 +240,9 @@ export function ReportStep({
   const autoRepairedCount = typeof autoRepairMeta?.findingsBefore === 'number'
     ? Math.max(0, autoRepairMeta.findingsBefore - claimErrors.length)
     : 0;
+  // Eventi in coda di verifica: la coda vive nel drawer Eventi ma DEVE essere
+  // visibile nel pannello di triage, o resta nascosta (founder 2026-07-17).
+  const eventsToVerifyCount = events.filter((e) => e.requires_verification || !e.event_date).length;
   const claimNotes = claimFindings.filter((f) => f.verdict !== 'non_supportato');
   // Conteggio per il badge "Dettagli analisi" (overflow ⋯): SOLO ciò che quella
   // vista gestisce (anomalie da valutare + doc mancanti). I claim NON vi
@@ -601,7 +608,7 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0) && (
+      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
           <div className="space-y-2">
@@ -660,6 +667,27 @@ export function ReportStep({
                     );
                   })}
                 </ul>
+              </div>
+            )}
+            {/* Eventi in coda di verifica: visibili QUI (triage unico), non solo
+                dentro il drawer Eventi dove nessuno li scopriva. */}
+            {eventsToVerifyCount > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="text-sm">
+                    {eventsToVerifyCount} {eventsToVerifyCount === 1 ? 'evento estratto attende una tua conferma' : 'eventi estratti attendono una tua conferma'}
+                    <span className="text-muted-foreground"> — un click su «Verificato» per ciascuno, o verifica in blocco</span>
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => { setEventsDrawerVerifyMode(true); setEventsDrawerOpen(true); }}
+                >
+                  Rivedili
+                </Button>
               </div>
             )}
             {missingDocsCount > 0 && (
@@ -848,17 +876,19 @@ export function ReportStep({
 
       {/* UX Ondata 3-IA Fase A: support panel drawers (additivi).
           Wrappa i tab esistenti in Sheet a destra, attivati da bottoni in toolbar. */}
-      <Sheet open={eventsDrawerOpen} onOpenChange={setEventsDrawerOpen}>
+      <Sheet open={eventsDrawerOpen} onOpenChange={(open) => { setEventsDrawerOpen(open); if (!open) setEventsDrawerVerifyMode(false); }}>
         <SheetContent side="right" className="w-full sm:max-w-3xl lg:max-w-4xl overflow-y-auto">
           <SheetHeader className="pb-3 border-b">
             <SheetTitle>Eventi clinici</SheetTitle>
           </SheetHeader>
           <div className="py-4">
             <EventsTab
+              key={eventsDrawerVerifyMode ? 'verify-mode' : 'normal-mode'}
               caseId={caseId}
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
+              initialShowVerification={eventsDrawerVerifyMode}
               onEventMutated={(t) => updateMutatedEventTypes((prev) => {
                 const next = new Set(prev);
                 next.add(t ?? 'altro');

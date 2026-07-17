@@ -103,7 +103,7 @@ Ricevi testo OCR con marker [PAGE_START:N] e [PAGE_END:N] per ogni pagina. Tipo 
 Segui questi 5 passi IN ORDINE:
 1. **SCORRI** il testo e identifica TUTTE le date menzionate
 2. **PER OGNI DATA**, identifica cosa e' successo (visita, esame, diagnosi, intervento, terapia, ricovero, referto, spesa_medica, documento_amministrativo)
-3. **PER OGNI EVENTO**, copia una frase chiave esatta dal testo OCR (sourceText, max 200 char)
+3. **PER OGNI EVENTO**, copia una frase chiave ESATTA dal testo OCR (sourceText, max 200 char). COPIA CARATTERE-PER-CARATTERE, inclusi errori/abbreviazioni dell'OCR: MAI riassumere, riformulare o "ripulire" — un sourceText parafrasato è inutilizzabile come ancora di verifica. Se non riesci a individuare una frase copiabile, lascia sourceText vuoto ("").
 4. **COMPILA extraction_reasoning** PRIMA degli altri campi — spiega dove hai trovato l'evento
 5. **VERIFICA FINALE**: nessuna data del testo omessa, nessun dato inventato
 

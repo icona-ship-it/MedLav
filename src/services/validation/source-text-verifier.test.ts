@@ -83,8 +83,11 @@ describe('verifySourceTexts', () => {
     expect(result.verifications[0].lcsRatio).toBeGreaterThanOrEqual(0.80);
   });
 
-  it('should mark fabricated sourceText as unverified', () => {
+  it('anchor fabbricata su evento di ROUTINE (visita): cap morbido + nota, NIENTE coda di verifica', () => {
+    // Proporzionalità (caso 225: 95/180 flaggati = coda inutilizzabile): la
+    // parafrasi dell anchor non rende falsi i fatti di un evento di routine.
     const events = [makeEvent({
+      eventType: 'visita',
       sourceText: 'Il paziente ha subito un trapianto di cuore presso il Policlinico Gemelli di Roma il 15 marzo 2024',
     })];
 
@@ -92,18 +95,34 @@ describe('verifySourceTexts', () => {
 
     expect(result.unverifiedCount).toBe(1);
     expect(result.verifications[0].verified).toBe(false);
-    expect(result.events[0].requiresVerification).toBe(true);
-    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente non riscontrato');
+    expect(result.events[0].requiresVerification).toBe(false);
+    expect(result.events[0].confidence).toBe(55); // ROUTINE_ANCHOR_MISS_CAP
+    expect(result.events[0].reliabilityNotes).toContain('possibile parafrasi');
   });
 
-  it('should handle empty sourceText', () => {
-    const events = [makeEvent({ sourceText: '' })];
+  it('anchor fabbricata su evento LOAD-BEARING (diagnosi): cap 30 + coda di verifica', () => {
+    const events = [makeEvent({
+      eventType: 'diagnosi',
+      sourceText: 'Il paziente ha subito un trapianto di cuore presso il Policlinico Gemelli di Roma il 15 marzo 2024',
+    })];
 
     const result = verifySourceTexts(events, FULL_TEXT);
 
     expect(result.unverifiedCount).toBe(1);
     expect(result.events[0].requiresVerification).toBe(true);
-    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente assente');
+    expect(result.events[0].confidence).toBe(30);
+    expect(result.events[0].reliabilityNotes).toContain('Testo sorgente non riscontrato');
+  });
+
+  it('sourceText vuoto su routine: nota morbida senza coda; su intervento: flag', () => {
+    const routine = verifySourceTexts([makeEvent({ eventType: 'visita', sourceText: '' })], FULL_TEXT);
+    expect(routine.unverifiedCount).toBe(1);
+    expect(routine.events[0].requiresVerification).toBe(false);
+    expect(routine.events[0].reliabilityNotes).toContain('Citazione sorgente assente');
+
+    const loadBearing = verifySourceTexts([makeEvent({ eventType: 'intervento', sourceText: '' })], FULL_TEXT);
+    expect(loadBearing.events[0].requiresVerification).toBe(true);
+    expect(loadBearing.events[0].reliabilityNotes).toContain('Testo sorgente assente');
   });
 
   it('should skip LCS for very short sourceText', () => {
@@ -124,6 +143,7 @@ describe('verifySourceTexts', () => {
 
   it('should preserve existing reliability notes when appending', () => {
     const events = [makeEvent({
+      eventType: 'diagnosi', // nota "dura" solo sui load-bearing (policy 2026-07-17)
       sourceText: 'Testo completamente inventato che non esiste da nessuna parte nel documento',
       reliabilityNotes: 'Testo manoscritto',
     })];
@@ -151,6 +171,7 @@ describe('verifySourceTexts', () => {
 describe('verifySourceTexts — gate di confidenza (anchor non riscontrato)', () => {
   it('should cap confidence for an event whose sourceText is absent from the OCR', () => {
     const events = [makeEvent({
+      eventType: 'diagnosi', // gate duro: solo tipi load-bearing (policy 2026-07-17)
       confidence: 90,
       sourceText: 'citazione completamente inventata che non esiste nel documento originale',
     })];
@@ -163,7 +184,7 @@ describe('verifySourceTexts — gate di confidenza (anchor non riscontrato)', ()
   });
 
   it('should cap confidence when sourceText is empty', () => {
-    const events = [makeEvent({ confidence: 85, sourceText: '' })];
+    const events = [makeEvent({ eventType: 'diagnosi', confidence: 85, sourceText: '' })];
 
     const result = verifySourceTexts(events, FULL_TEXT);
 

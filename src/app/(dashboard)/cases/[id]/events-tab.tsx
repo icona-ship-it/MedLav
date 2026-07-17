@@ -181,7 +181,7 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 export function EventsTab({
   caseId, events, eventImages,
   highlightedEventOrderNumber, documents,
-  onEventMutated,
+  onEventMutated, initialShowVerification,
 }: {
   caseId: string;
   events: EventRow[];
@@ -195,15 +195,18 @@ export function EventsTab({
   /** UX Ondata 3-IA Fase D: chiamato dopo save/delete evento dal drawer.
       Permette al parent (report-step) di mostrare banner "rigenera sezione?". */
   onEventMutated?: (eventType?: string) => void;
+  /** Apre direttamente sulla coda "da verificare" (vista Tutti + filtro attivo):
+      usato dalla riga del pannello "Da controllare" (founder 2026-07-17). */
+  initialShowVerification?: boolean;
 }) {
   const router = useRouter();
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
   const docNameMap = new Map((documents ?? []).map((d) => [d.id, d.file_name]));
-  const [eventViewTab, setEventViewTab] = useState<EventViewTab>('clinical');
+  const [eventViewTab, setEventViewTab] = useState<EventViewTab>(initialShowVerification ? 'all' : 'clinical');
   const [eventTypeFilter, setEventTypeFilter] = useState<string | null>(null);
-  const [showOnlyVerification, setShowOnlyVerification] = useState(false);
+  const [showOnlyVerification, setShowOnlyVerification] = useState(initialShowVerification ?? false);
   const [verificationSubFilter, setVerificationSubFilter] = useState<VerificationSubFilter>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
