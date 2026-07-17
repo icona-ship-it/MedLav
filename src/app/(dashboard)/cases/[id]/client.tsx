@@ -406,6 +406,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                onGoToResults={() => handleSetStep(3)}
               />
             </div>
           )}
@@ -482,6 +483,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                onGoToResults={() => handleSetStep(3)}
               />
             </div>
           )}
@@ -558,6 +560,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                onGoToResults={() => handleSetStep(4)}
               />
             </div>
           )}

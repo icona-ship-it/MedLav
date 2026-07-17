@@ -51,6 +51,10 @@ interface ProcessingSectionProps {
    * l'estrazione, la fase più lunga, in cui % e contatore documenti restano
    * fermi per decine di minuti sui fascicoli grandi (caso 226, 117 pagine). */
   extractedEventsCount?: number;
+  /** Porta al passo dei risultati (Report/Cronistoria/Spese). Senza, il passo
+   * Elaborazione a caso finito era un vicolo cieco: "Tutti i documenti sono
+   * già stati elaborati." e basta (collaudo live 2026-07-17). */
+  onGoToResults?: () => void;
 }
 
 /**
@@ -91,6 +95,7 @@ export function ProcessingSection({
   onProcessingStarted,
   hasExistingResults = false,
   extractedEventsCount = 0,
+  onGoToResults,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
@@ -613,9 +618,16 @@ export function ProcessingSection({
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Tutti i documenti sono già stati elaborati.
-                </p>
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Elaborazione completata: {pipelineMode === 'full' ? 'il report è pronto.' : 'i risultati sono pronti.'}
+                  </p>
+                  {onGoToResults && (
+                    <Button variant="outline" size="sm" onClick={onGoToResults}>
+                      {pipelineMode === 'full' ? 'Vai al Report' : 'Vai ai risultati'}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}
