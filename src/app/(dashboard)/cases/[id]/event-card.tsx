@@ -31,6 +31,46 @@ import type { EventRow } from './types';
 
 // --- Source Text Section (collapsible) ---
 
+/** Traduce le note tecniche della pipeline in italiano piano per il perito
+ * (founder 2026-07-17: "è chiaro al 100% PERCHÉ viene segnalato?"). Le note
+ * sono salvate nel DB col wording interno; la traduzione avviene in display
+ * così copre anche gli eventi già estratti. Segmenti sconosciuti (note libere
+ * dell'AI, es. deduzione dell'imposta di bollo) passano com'erano: sono già
+ * scritte per l'utente. */
+function translateReliabilityNote(segment: string): string {
+  const s = segment.trim();
+  if (/testo sorgente non riscontrato/i.test(s) || /citazione sorgente non riscontrata/i.test(s)) {
+    return 'La citazione estratta non coincide alla lettera col testo del documento: controlla che date, diagnosi e lateralità corrispondano alla pagina qui sotto.';
+  }
+  if (/testo sorgente assente/i.test(s) || /citazione sorgente assente/i.test(s)) {
+    return 'L\'AI non ha indicato il punto esatto del documento da cui ha preso questi dati: verificali sulla pagina qui sotto.';
+  }
+  if (/diagnosi discordanti/i.test(s)) {
+    return 'I documenti riportano diagnosi tra loro discordanti: decidi tu quale prevale.';
+  }
+  if (/inferit/i.test(s)) {
+    return 'La data non è scritta nel documento: l\'AI l\'ha dedotta dal contesto. Confermala o correggila.';
+  }
+  return s;
+}
+
+/** Spiegazione completa del flag "da valutare" per il riquadro dedicato. */
+function verificationReasons(event: EventRow): string[] {
+  const reasons: string[] = [];
+  if (!event.event_date) {
+    reasons.push('L\'evento non ha una data certa: assegnala o confermala.');
+  }
+  const segments = (event.reliability_notes ?? '').split('; ').filter((s) => s.trim().length > 0);
+  for (const seg of segments) {
+    reasons.push(translateReliabilityNote(seg));
+  }
+  if (reasons.length === 0) {
+    reasons.push('L\'AI chiede una tua conferma su questo evento: controlla i dati principali contro il documento.');
+  }
+  // Dedup: due note diverse possono tradursi nella stessa spiegazione.
+  return [...new Set(reasons)];
+}
+
 /** Il testo OCR salvato contiene segnaposto ([tbl-0.html]) e tabelle in HTML
  * grezzo: per il perito sono rumore. Le celle diventano testo leggibile
  * ("Data e ora di accesso · 13/09/2025 11:08"), una riga per riga di tabella. */
@@ -306,7 +346,25 @@ export function EventCard({
               <span>Includi nella cronologia esportata</span>
             </label>
           )}
-          {event.reliability_notes && <p className="text-sm text-muted-foreground italic">{event.reliability_notes}</p>}
+          {/* PERCHÉ è da valutare — riquadro esplicito (founder 2026-07-17): il
+              motivo era una riga in corsivo grigio col wording interno della
+              pipeline; il perito deve leggere il perché e il cosa fare. */}
+          {event.requires_verification ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Perché è da valutare</p>
+              <ul className="mt-1 space-y-0.5">
+                {verificationReasons(event).map((r) => (
+                  <li key={r} className="text-sm text-amber-800/90 dark:text-amber-200/90">{r}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            event.reliability_notes && (
+              <p className="text-sm text-muted-foreground italic">
+                {(event.reliability_notes.split('; ')).map(translateReliabilityNote).join(' ')}
+              </p>
+            )
+          )}
           {event.expert_notes && (
             <div className="rounded bg-muted p-2">
               <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
