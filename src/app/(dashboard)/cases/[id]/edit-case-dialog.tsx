@@ -12,10 +12,10 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { updateCase } from '../../actions';
-import { CASE_TYPES } from '@/lib/constants';
+import { CASE_TYPES, CASE_TYPE_GROUPS, caseTypeLabels } from '@/lib/constants';
 import type { CaseData } from './types';
 import type { CaseType, CaseRole } from '@/types';
 
@@ -84,11 +84,20 @@ function EditCaseDialogInner({
             <Select value={form.caseType} onValueChange={(v) => setForm({ ...form, caseType: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CASE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {CASE_TYPE_GROUPS.map((g) => (
+                  <SelectGroup key={g.label}>
+                    <SelectLabel>{g.label}</SelectLabel>
+                    {g.values.map((v) => (
+                      <SelectItem key={v} value={v}>{caseTypeLabels[v]}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Guida l&apos;analisi: documenti attesi, controlli automatici e impostazione del report.
+              Guida l&apos;analisi: documenti attesi, controlli automatici e impostazione
+              del report. I nuovi casi partono da &laquo;Incidente stradale&raquo;:
+              cambiala se il caso è di altra natura.
             </p>
           </div>
           <div>

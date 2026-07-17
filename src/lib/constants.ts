@@ -37,15 +37,27 @@ export function getModuleFullLabel(moduleId: ModuleId): string {
 
 // rc-mvp: solo il tipo del modulo RC, il fallback e le specialità cliniche
 // che un caso RC può assumere (allineato a CaseType in src/types).
+// Ordine e label sono UI-driven (2026-07-17): il modulo RC preimposta rc_auto,
+// quindi le voci RC vengono prima e le label stanno corte (niente troncamento
+// nella select del dialog Modifica Caso).
 export const CASE_TYPES = [
+  { value: 'rc_auto', label: 'Incidente stradale (RC Auto)' },
+  { value: 'generica', label: 'Responsabilità civile generica' },
   { value: 'ortopedica', label: 'Malasanità Ortopedica' },
   { value: 'oncologica', label: 'Ritardo Diagnostico Oncologico' },
   { value: 'ostetrica', label: 'Errore Ostetrico' },
   { value: 'anestesiologica', label: 'Errore Anestesiologico' },
   { value: 'infezione_nosocomiale', label: 'Infezione Nosocomiale' },
   { value: 'errore_diagnostico', label: 'Errore Diagnostico' },
-  { value: 'rc_auto', label: 'RC Auto — Responsabilità Civile Automobilistica' },
-  { value: 'generica', label: 'Responsabilità Professionale Generica' },
+] as const;
+
+/** Raggruppamento per la select del dialog Modifica Caso (leggibilità). */
+export const CASE_TYPE_GROUPS = [
+  { label: 'Responsabilità civile', values: ['rc_auto', 'generica'] },
+  {
+    label: 'Responsabilità sanitaria',
+    values: ['ortopedica', 'oncologica', 'ostetrica', 'anestesiologica', 'infezione_nosocomiale', 'errore_diagnostico'],
+  },
 ] as const;
 
 export const caseTypeLabels: Record<string, string> = Object.fromEntries(
