@@ -30,6 +30,7 @@ import { MissingDocsSection } from './anomalies-section';
 import { RegeneratePanelDialog } from './regenerate-panel-dialog';
 import { ReportA4Viewer } from './report-a4-viewer';
 import { ReportTocSidebar } from './report-toc-sidebar';
+import { isPlaceholderBlockStart } from '@/services/export/markdown-to-html';
 import { QualitySidebar } from './quality-sidebar';
 import { ReportActionBar } from './report-action-bar';
 import type {
@@ -256,6 +257,22 @@ export function ReportStep({
   const warningDisplays = useMemo(() => groupPipelineWarnings(pipelineWarnings), [pipelineWarnings]);
 
   const sections = report?.synthesis ? parseSections(report.synthesis) : [];
+
+  // Stato per l'INDICE laterale: ogni voce dice se la sezione è da compilare
+  // (placeholder = parte del perito), generata dall'AI (da rivedere) o già
+  // confermata — così l'indice è una checklist di lavoro, non una lista di
+  // nomi (founder 2026-07-17: "non si capisce se sono da fare o meno").
+  const tocStatuses: Record<string, 'todo' | 'ai' | 'confirmed'> = {};
+  for (const s of sections) {
+    if (s.id === 'preamble' || s.id === 'full_report') continue;
+    if (getSectionStatus(report?.generation_metadata, s.canonicalId) === 'locked') {
+      tocStatuses[s.id] = 'confirmed';
+    } else if (s.content.split('\n').some(isPlaceholderBlockStart)) {
+      tocStatuses[s.id] = 'todo';
+    } else {
+      tocStatuses[s.id] = 'ai';
+    }
+  }
 
   // Which sections may be out of date after the perito's event edits? Pure,
   // dependency-based. Deterministic/placeholder/locked sections are excluded.
@@ -608,7 +625,7 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0) && (
+      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0 || actionableCount > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
           <div className="space-y-2">
@@ -687,6 +704,23 @@ export function ReportStep({
                   onClick={() => { setEventsDrawerVerifyMode(true); setEventsDrawerOpen(true); }}
                 >
                   Rivedili
+                </Button>
+              </div>
+            )}
+            {/* Anomalie cliniche: PRIMA vivevano solo dietro ⋯ → "Dettagli analisi"
+                col badge rosso — invisibili. Il triage è UNICO: tutto ciò che chiede
+                una decisione al perito sta in questo pannello (founder 2026-07-17). */}
+            {actionableCount > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="text-sm">
+                    {actionableCount} {actionableCount === 1 ? 'segnalazione clinica attende una tua decisione' : 'segnalazioni cliniche attendono una tua decisione'}
+                    <span className="text-muted-foreground"> — accettala o scartala{actionableCount === 1 ? '' : ', una per una'}</span>
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
+                  Valuta
                 </Button>
               </div>
             )}
@@ -799,7 +833,7 @@ export function ReportStep({
 
       <div className="flex gap-6">
         {/* Left: TOC sidebar (xl only) — naviga le sezioni del report */}
-        <ReportTocSidebar sections={sections} />
+        <ReportTocSidebar sections={sections} statuses={tocStatuses} />
 
         {/* Center: A4 viewer */}
         <div className="flex-1 min-w-0">

@@ -430,6 +430,10 @@ export function EventsTab({
                     const otherCount = verificationEvents.filter((e) => getVerificationType(e) === 'other').length;
                     return (
                       <>
+                        {/* Le sotto-chip sono un BREAKDOWN del totale: senza il
+                            "di cui:" due chip si chiamavano entrambe "Da verificare"
+                            con numeri diversi (founder 2026-07-17). */}
+                        <span className="self-center text-xs text-muted-foreground">di cui:</span>
                         {dateCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'date' ? 'all' : 'date')}
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'date' ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-800 dark:hover:bg-yellow-900/50'}`}>
@@ -445,7 +449,7 @@ export function EventsTab({
                         {otherCount > 0 && (
                           <button type="button" onClick={() => setVerificationSubFilter(verificationSubFilter === 'other' ? 'all' : 'other')}
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${verificationSubFilter === 'other' ? 'bg-red-400 text-red-900' : 'bg-red-50 text-red-700 border border-red-300 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800 dark:hover:bg-red-900/50'}`}>
-                            Da verificare ({otherCount})
+                            Altre segnalazioni ({otherCount})
                           </button>
                         )}
                       </>
