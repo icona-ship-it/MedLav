@@ -31,6 +31,21 @@ import type { EventRow } from './types';
 
 // --- Source Text Section (collapsible) ---
 
+/** Il testo OCR salvato contiene segnaposto ([tbl-0.html]) e tabelle in HTML
+ * grezzo: per il perito sono rumore. Le celle diventano testo leggibile
+ * ("Data e ora di accesso · 13/09/2025 11:08"), una riga per riga di tabella. */
+function cleanOcrForDisplay(text: string): string {
+  return text
+    .replace(/\[tbl-\d+\.html\]\(tbl-\d+\.html\)/g, '')
+    .replace(/\[TABLE_HTML_(?:START|END)\]/g, '')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/t[dh]>/gi, ' · ')
+    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function SourceTextSection({
   sourceText, sourcePages, fullPageText, viewDocumentUrl, defaultOpen = false,
 }: {
@@ -309,7 +324,7 @@ export function EventCard({
                 && p.ocr_text)
               .sort((a, b) => a.page_number - b.page_number);
             const fullPageText = pageTexts.length > 0
-              ? pageTexts.map((p) => `— pag. ${p.page_number} —\n${p.ocr_text}`).join('\n\n')
+              ? pageTexts.map((p) => `— pag. ${p.page_number} —\n${cleanOcrForDisplay(p.ocr_text ?? '')}`).join('\n\n')
               : null;
             return (
               <SourceTextSection

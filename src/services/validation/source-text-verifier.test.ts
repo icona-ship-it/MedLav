@@ -2,6 +2,43 @@ import { describe, it, expect } from 'vitest';
 import { verifySourceTexts, groundCitation } from './source-text-verifier';
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
 
+describe('verifySourceTexts — tabelle HTML nell\'OCR (caso 229, 2026-07-17)', () => {
+  // Mistral OCR restituisce le tabelle come HTML appeso al testo pagina.
+  // L'estrattore cita fedelmente il CONTENUTO delle celle; senza lo strip dei
+  // tag, "<td>Data" non combacia mai con "Data" → flag ingiusto su ogni
+  // evento estratto da tabella (i verbali PS sono quasi solo tabelle).
+  const TABLE_TEXT = `Verbale di Pronto Soccorso.
+[TABLE_HTML_START]
+<table><tr><td>Data e ora di accesso</td><td>13/09/2025 11:08</td></tr>
+<tr><td>Dinamica Evento</td><td>INC. STRADALE PEDONE</td></tr>
+<tr><td>DIAGNOSI</td><td>frattura olecrano dx</td><td>Note</td><td>come da consulenza ortopedica</td></tr></table>
+[TABLE_HTML_END]`;
+
+  it('una citazione presa dalle celle di una tabella HTML risulta verificata', () => {
+    const events = [makeEvent({
+      eventType: 'diagnosi',
+      confidence: 90,
+      sourceText: 'Data e ora di accesso 13/09/2025 11:08. Dinamica Evento INC. STRADALE PEDONE.',
+    })];
+
+    const result = verifySourceTexts(events, TABLE_TEXT);
+
+    expect(result.verifications[0].verified).toBe(true);
+    expect(result.events[0].requiresVerification).toBe(false);
+    expect(result.events[0].confidence).toBe(90);
+  });
+
+  it('groundCitation trova il contenuto delle celle attraverso i tag', () => {
+    expect(groundCitation('DIAGNOSI frattura olecrano dx Note come da consulenza ortopedica', TABLE_TEXT)).not.toBe('absent');
+  });
+
+  it('un confronto "minore di" nel testo clinico NON viene mangiato come tag', () => {
+    // "< 5" non è un tag: lo strip deve colpire solo <parola...>.
+    const ocr = 'PCR < 5 mg/L e leucociti > 10.000, quadro nella norma.';
+    expect(groundCitation('PCR < 5 mg/L e leucociti > 10.000', ocr)).not.toBe('absent');
+  });
+});
+
 describe('groundCitation — marker markdown (audit 2026-06-09 #4: no fusione parole)', () => {
   it('una citazione fedele combacia anche quando l\'OCR ha il grassetto', () => {
     const ocr = 'Diagnosi: frattura **composta** del radio distale destro, conservativa.';

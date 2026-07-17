@@ -221,10 +221,26 @@ function stripPageMarkers(text: string): string {
 }
 
 /**
+ * Tag HTML → spazio (caso 229, 2026-07-17): Mistral OCR appende le tabelle
+ * come HTML ([TABLE_HTML_START]<table>…). L'estrattore cita fedelmente il
+ * CONTENUTO delle celle, ma senza questo strip "<td>Data" non combacia mai
+ * con "Data" → ogni evento estratto da tabella veniva flaggato "non
+ * riscontrato" (i verbali PS sono quasi solo tabelle). Il pattern richiede
+ * una lettera dopo "<" o "</": un confronto clinico "PCR < 5" NON è un tag
+ * e non viene toccato. Spazio (mai ''), per non fondere celle adiacenti.
+ */
+function stripHtmlTags(text: string): string {
+  return text
+    .replace(/\[TABLE_HTML_(?:START|END)\]/g, ' ')
+    .replace(/\[tbl-\d+\.html\]\(tbl-\d+\.html\)/g, ' ')
+    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, ' ');
+}
+
+/**
  * Normalize text for fuzzy comparison: lowercase, collapse whitespace.
  */
 function normalizeText(text: string): string {
-  return text
+  return stripHtmlTags(text)
     .toLowerCase()
     .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
     .replace(/\[TABLE_(?:START|END)\]/g, '')
@@ -244,7 +260,7 @@ function normalizeText(text: string): string {
  * Normalize text for word-level LCS: lowercase, strip markers and punctuation.
  */
 function normalizeForWords(text: string): string[] {
-  return text
+  return stripHtmlTags(text)
     .toLowerCase()
     .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
     .replace(/\[TABLE_(?:START|END)\]/g, '')
