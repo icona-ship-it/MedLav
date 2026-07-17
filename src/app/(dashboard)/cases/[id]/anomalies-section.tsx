@@ -668,7 +668,7 @@ export function AnomaliesSection({ anomalies, events, documents, caseId, onChang
             Anomalie Rilevate
             {actionable.length > 0 && (
               <Badge variant="warning" className="text-xs ml-1">
-                {actionable.length} da revisionare
+                {actionable.length} da valutare
               </Badge>
             )}
           </CardTitle>

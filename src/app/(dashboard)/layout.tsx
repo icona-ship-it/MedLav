@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { MobileSidebar } from '@/components/mobile-sidebar';
@@ -30,10 +31,14 @@ export default async function DashboardLayout({
   }
   const showOnboarding = caseCount === 0;
 
+  // Stato del menu laterale dal cookie: il server renderizza già lo stato
+  // giusto (niente flash né mismatch di idratazione).
+  const sidebarCollapsed = (await cookies()).get('legmed-sidebar-collapsed')?.value === '1';
+
   return (
     <div className="flex h-screen">
       <Suspense>
-        <Sidebar isAdmin={isAdmin} />
+        <Sidebar isAdmin={isAdmin} initialCollapsed={sidebarCollapsed} />
       </Suspense>
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile top bar */}
