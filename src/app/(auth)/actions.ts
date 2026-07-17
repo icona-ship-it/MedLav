@@ -13,6 +13,15 @@ import {
   normalizeTotpCode,
   pickVerifiedTotpFactorId,
 } from '@/lib/auth/mfa-utils';
+import { resolveRequestOrigin } from '@/lib/request-origin';
+
+// Base per i link email Supabase: il dominio su cui l'utente sta navigando
+// (legmed/medlav), MAI il fallback localhost in produzione. L'URL deve essere
+// nella allow-list Redirect URLs di Supabase, altrimenti viene sostituito col
+// Site URL e il token atterra sulla landing senza essere consumato.
+async function getAuthRedirectBase(): Promise<string> {
+  return resolveRequestOrigin(await headers(), process.env.NEXT_PUBLIC_SITE_URL);
+}
 
 export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
@@ -47,7 +56,7 @@ export async function signUp(formData: FormData) {
       data: {
         full_name: fullName,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: `${await getAuthRedirectBase()}/auth/callback`,
     },
   });
 
@@ -130,7 +139,7 @@ export async function requestPasswordReset(formData: FormData) {
     // code for a session) and only THEN continue to the update form — landing
     // directly on /auth/update-password leaves the user without a session and
     // updateUser fails every time.
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback?next=/auth/update-password`,
+    redirectTo: `${await getAuthRedirectBase()}/auth/callback?next=/auth/update-password`,
   });
 
   if (error) {
