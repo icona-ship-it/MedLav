@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { buildDeterministicDocs } from '@/services/calculations/deterministic-tables';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Download, AlertTriangle, RefreshCw, X, Info, ExternalLink } from 'lucide-react';
+import { Loader2, Download, AlertTriangle, X, Info, ExternalLink } from 'lucide-react';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { groupPipelineWarnings } from '@/lib/pipeline-warning-display';
 import { scrollToReportSection } from '@/lib/report-navigation';
@@ -103,6 +103,21 @@ interface ReportStepProps {
   pipelineWarnings?: PipelineWarningItem[];
   /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
   lastError?: string;
+}
+
+/** Numeretto del passaggio nella checklist "Da controllare": dà ordine di
+ * lavoro e senso di completezza (founder 2026-07-17: "tanta confusione"). */
+function StepBadge({ n, tone }: { n: number; tone: 'red' | 'amber' | 'muted' }) {
+  const toneClass = tone === 'red'
+    ? 'bg-destructive/10 text-destructive'
+    : tone === 'amber'
+      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+      : 'bg-muted text-muted-foreground';
+  return (
+    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${toneClass}`}>
+      {n}
+    </span>
+  );
 }
 
 // --- Component ---
@@ -291,6 +306,20 @@ export function ReportStep({
     title: sections.find((s) => s.canonicalId === st.canonicalId)?.title ?? st.canonicalId,
     edited: st.edited,
   }));
+
+  // Numerazione dei passaggi della checklist "Da controllare": il perito deve
+  // vedere quante cose sono, in che ordine farle e quando ha finito.
+  const panelSteps = (() => {
+    let n = 0;
+    const claims = claimErrors.length > 0 ? ++n : 0;
+    const events = eventsToVerifyCount > 0 ? ++n : 0;
+    const anomalies = actionableCount > 0 ? ++n : 0;
+    const missing = missingDocsCount > 0 ? ++n : 0;
+    const warningsBase = n;
+    n += warningDisplays.length;
+    const stale = staleForPanel.length > 0 ? ++n : 0;
+    return { claims, events, anomalies, missing, warningsBase, stale, total: n };
+  })();
 
   const handleSectionRegenerated = useCallback((sectionId?: string) => {
     setRegeneratingSection(null);
@@ -629,28 +658,27 @@ export function ReportStep({
           resta separato sopra. */}
       {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0 || actionableCount > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
-          <p className="mb-2 text-sm font-semibold">Da controllare prima della consegna</p>
-          <div className="space-y-2">
-            {/* Trasparenza revisione automatica: cosa è stato corretto PRIMA di
-                arrivare qui (il perito deve sapere che c'è stato un giro di
-                auto-correzione verificata, non una magia silenziosa). */}
-            {autoRepairedCount > 0 && (
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span>
-                  La revisione automatica ha corretto {autoRepairedCount} {autoRepairedCount === 1 ? 'dato che non tornava' : 'dati che non tornavano'} coi documenti; la verifica è stata rieseguita dopo la correzione.
-                </span>
-              </div>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold">Da controllare prima della consegna</p>
+            {panelSteps.total > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {panelSteps.total === 1 ? '1 passaggio' : `${panelSteps.total} passaggi`}
+              </span>
             )}
-            {/* ERRORI DA CORREGGERE — l'AI ha scritto cose che NON tornano coi
-                documenti (date, somme, fatti). In alto, evidenti, sempre aperti. */}
+          </div>
+          <div className="space-y-2.5">
+            {/* PASSO: errori veri dell'AI — titolo-azione compatto, motivo in
+                chiaro, citazione integrale COLLASSATA (prima occupava mezzo
+                pannello e affogava tutto il resto — founder 2026-07-17). */}
             {claimErrors.length > 0 && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
-                <p className="flex items-center gap-2 text-sm font-medium text-destructive">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  {claimErrors.length === 1 ? 'Un dato del report non torna coi documenti' : `${claimErrors.length} dati del report non tornano coi documenti`}
-                </p>
-                <ul className="mt-2 ml-6 space-y-2 border-l border-destructive/20 pl-3">
+                <div className="flex items-start gap-2">
+                  <StepBadge n={panelSteps.claims} tone="red" />
+                  <p className="text-sm font-medium text-destructive">
+                    Correggi {claimErrors.length === 1 ? 'il dato che non torna coi documenti' : `${claimErrors.length} dati che non tornano coi documenti`}
+                  </p>
+                </div>
+                <ul className="mt-2 ml-7 space-y-2">
                   {claimErrors.map((f) => {
                     const fixKey = `${f.sectionId}:${f.claim}`;
                     const isFixing = fixingClaimKey === fixKey;
@@ -658,8 +686,8 @@ export function ReportStep({
                     const isLocked = getSectionStatus(report?.generation_metadata, f.sectionId) === 'locked';
                     return (
                       <li key={`err:${fixKey}`} className="text-sm">
-                        <span className="font-medium">{f.sectionTitle}:</span>{' '}«{f.claim}»
-                        {f.motivo && <span className="text-muted-foreground"> — {f.motivo}</span>}
+                        <span className="font-medium">{f.sectionTitle}</span>
+                        {f.motivo ? <span className="text-muted-foreground"> — {f.motivo}</span> : <span className="text-muted-foreground"> — «{f.claim}»</span>}
                         {' '}
                         <button
                           type="button"
@@ -682,6 +710,14 @@ export function ReportStep({
                             </button>
                           </>
                         )}
+                        {f.motivo && (
+                          <details className="mt-0.5">
+                            <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">
+                              ▸ mostra la frase citata
+                            </summary>
+                            <p className="mt-1 rounded bg-muted/60 p-2 text-xs">«{f.claim}»</p>
+                          </details>
+                        )}
                       </li>
                     );
                   })}
@@ -693,10 +729,10 @@ export function ReportStep({
             {eventsToVerifyCount > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <StepBadge n={panelSteps.events} tone="amber" />
                   <span className="text-sm">
-                    {eventsToVerifyCount} {eventsToVerifyCount === 1 ? 'evento estratto attende una tua conferma' : 'eventi estratti attendono una tua conferma'}
-                    <span className="text-muted-foreground"> — un click su «Segna verificato» per ciascuno, o verifica in blocco</span>
+                    Conferma {eventsToVerifyCount === 1 ? 'l’evento estratto da verificare' : `i ${eventsToVerifyCount} eventi estratti da verificare`}
+                    <span className="text-muted-foreground"> — ogni scheda spiega perché è segnalata; «Segna verificato» o correggi</span>
                   </span>
                 </div>
                 <Button
@@ -715,9 +751,9 @@ export function ReportStep({
             {actionableCount > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <StepBadge n={panelSteps.anomalies} tone="amber" />
                   <span className="text-sm">
-                    {actionableCount} {actionableCount === 1 ? 'segnalazione clinica attende una tua decisione' : 'segnalazioni cliniche attendono una tua decisione'}
+                    Valuta {actionableCount === 1 ? 'la segnalazione clinica' : `le ${actionableCount} segnalazioni cliniche`}
                     <span className="text-muted-foreground"> — accettala o scartala{actionableCount === 1 ? '' : ', una per una'}</span>
                   </span>
                 </div>
@@ -729,9 +765,9 @@ export function ReportStep({
             {missingDocsCount > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <StepBadge n={panelSteps.missing} tone="amber" />
                   <span className="text-sm">
-                    {missingDocsCount} {missingDocsCount === 1 ? 'documento atteso non presente nel fascicolo' : 'documenti attesi non presenti nel fascicolo'}
+                    Controlla {missingDocsCount === 1 ? 'il documento atteso non presente nel fascicolo' : `i ${missingDocsCount} documenti attesi non presenti nel fascicolo`}
                   </span>
                 </div>
                 <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAnomalyDialogOpen(true)}>
@@ -742,13 +778,10 @@ export function ReportStep({
             {warningDisplays.map((wd, i) => (
               <div key={`wd-${i}`} className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  {wd.severity === 'critical' ? (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                  ) : wd.severity === 'warning' ? (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  ) : (
-                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
+                  <StepBadge
+                    n={panelSteps.warningsBase + i + 1}
+                    tone={wd.severity === 'critical' ? 'red' : wd.severity === 'warning' ? 'amber' : 'muted'}
+                  />
                   <span className="text-sm">{wd.title}</span>
                 </div>
                 {wd.action === 'view-documents' && drillablePipelineWarning && (
@@ -776,9 +809,9 @@ export function ReportStep({
             {staleForPanel.length > 0 && (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <StepBadge n={panelSteps.stale} tone="muted" />
                   <span className="text-sm">
-                    Hai modificato degli eventi: {staleForPanel.length} {staleForPanel.length === 1 ? 'sezione' : 'sezioni'} da aggiornare.{' '}
+                    Aggiorna {staleForPanel.length === 1 ? 'la sezione' : `le ${staleForPanel.length} sezioni`} dopo le tue modifiche agli eventi.{' '}
                     <span className="text-muted-foreground">Le tabelle (ITT/ITP, spese) si aggiornano da sole.</span>
                   </span>
                 </div>
@@ -792,12 +825,19 @@ export function ReportStep({
                 </div>
               </div>
             )}
-            {/* NOTE — affermazioni non verificabili (negazioni, dettagli, giudizi
-                medico-legali del perito): NON sono errori. In fondo, discrete,
-                collassate. I giudizi ML etichettati per evitare che il perito
-                pensi di dover correggere qualcosa. */}
+            {/* FONDO PANNELLO — informazioni, non azioni: la trasparenza della
+                revisione automatica (prima stava in cima e rubava il posto
+                d'onore alle cose DA FARE) e le note non bloccanti, collassate. */}
+            {autoRepairedCount > 0 && (
+              <div className="flex items-start gap-2 border-t pt-2 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  La revisione automatica ha già corretto {autoRepairedCount} {autoRepairedCount === 1 ? 'dato che non tornava' : 'dati che non tornavano'} coi documenti e riverificato il report.
+                </span>
+              </div>
+            )}
             {claimNotes.length > 0 && (
-              <details className="group border-t pt-2">
+              <details className={`group ${autoRepairedCount > 0 ? '' : 'border-t pt-2'}`}>
                 <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground">
                   <Info className="h-4 w-4 shrink-0" />
                   {claimNotes.length} {claimNotes.length === 1 ? 'nota' : 'note'} — affermazioni da verificare all&apos;occorrenza (non sono errori)
