@@ -21,7 +21,9 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { updateEvent, deleteEvent } from '../../actions';
+import { detectQuickFixes, stripResolvedNoteSegments } from '@/lib/event-quick-fix';
 import { EVENT_TYPES, isClinicalEvent } from '@/lib/constants';
 import {
   formatDate, confidenceColor, confidenceLabel,
@@ -39,6 +41,12 @@ import type { EventRow } from './types';
  * scritte per l'utente. */
 function translateReliabilityNote(segment: string): string {
   const s = segment.trim();
+  if (/struttura[^.;|]*(?:non riscontrat|rimoss)/i.test(s)) {
+    return 'Il nome della struttura non risultava nel documento e per prudenza è stato tolto: se lo leggi nel testo qui sotto, inseriscilo.';
+  }
+  if (/medico[^.;|]*(?:non riscontrat|rimoss)/i.test(s)) {
+    return 'Il nome del medico non risultava nel documento e per prudenza è stato tolto: se lo leggi nel testo qui sotto, inseriscilo.';
+  }
   if (/testo sorgente non riscontrato/i.test(s) || /citazione sorgente non riscontrata/i.test(s)) {
     return 'La citazione estratta non coincide alla lettera col testo del documento: controlla che date, diagnosi e lateralità corrispondano al documento originale.';
   }
@@ -219,6 +227,44 @@ export function EventCard({
     });
   };
 
+  // Quick-fix inline (founder 2026-07-17): se la segnalazione riguarda UN dato
+  // mancante (struttura/medico/data), il campo si compila direttamente nel
+  // riquadro "Perché è da verificare" — niente giro dalla matita.
+  const quickFixes = event.requires_verification ? detectQuickFixes(event) : [];
+  const [quickFixValues, setQuickFixValues] = useState<Record<string, string>>({});
+
+  const handleQuickFixSave = () => {
+    setIsVerifying(true);
+    startTransition(async () => {
+      const filled = quickFixes.filter((f) => (quickFixValues[f.field] ?? '').trim().length > 0);
+      const payload: Parameters<typeof updateEvent>[0] = {
+        eventId: event.id,
+        caseId,
+        requiresVerification: false,
+      };
+      for (const f of filled) {
+        const v = quickFixValues[f.field].trim();
+        if (f.field === 'eventDate') {
+          payload.eventDate = v;
+          payload.datePrecision = 'giorno';
+        } else {
+          payload[f.field] = v;
+        }
+      }
+      // La nota "rimosso per verifica" va tolta SOLO per i campi davvero compilati.
+      const cleaned = stripResolvedNoteSegments(event.reliability_notes, filled.map((f) => f.field));
+      if (cleaned !== event.reliability_notes) payload.reliabilityNotes = cleaned;
+      const result = await updateEvent(payload);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(filled.length > 0 ? 'Dati salvati — evento verificato' : 'Evento segnato come verificato');
+        onVerified?.();
+      }
+      setIsVerifying(false);
+    });
+  };
+
   const handleDelete = () => {
     toast('Eliminare questo evento?', {
       description: "L'evento potrà essere recuperato.",
@@ -368,6 +414,41 @@ export function EventCard({
                   <li key={r} className="text-sm text-amber-800/90 dark:text-amber-200/90">{r}</li>
                 ))}
               </ul>
+              {/* Quick-fix: il dato mancante si compila QUI, leggendo il testo
+                  del documento qui sotto — un campo e un click. */}
+              {quickFixes.length > 0 && (
+                <div className="mt-2 space-y-2 border-t border-amber-200 pt-2 dark:border-amber-800">
+                  {quickFixes.map((f) => (
+                    <div key={f.field} className="flex items-center gap-2">
+                      <label className="w-20 shrink-0 text-sm font-medium text-amber-900 dark:text-amber-200" htmlFor={`qf-${event.id}-${f.field}`}>
+                        {f.label}
+                      </label>
+                      <Input
+                        id={`qf-${event.id}-${f.field}`}
+                        type={f.inputType}
+                        value={quickFixValues[f.field] ?? ''}
+                        onChange={(e) => setQuickFixValues((prev) => ({ ...prev, [f.field]: e.target.value }))}
+                        placeholder={f.placeholder}
+                        className="h-8 bg-background text-sm"
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-7 bg-green-600 text-xs text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                      onClick={handleQuickFixSave}
+                      disabled={isPending || isVerifying}
+                    >
+                      <Check className="mr-1 h-3.5 w-3.5" />
+                      {isVerifying ? 'Salvo…' : 'Salva e segna verificato'}
+                    </Button>
+                    <span className="text-xs text-amber-800/70 dark:text-amber-200/70">
+                      Puoi lasciare vuoto ciò che non risulta dal documento.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             event.reliability_notes && (

@@ -41,6 +41,10 @@ export async function updateEvent(params: {
   expertNotes?: string | null;
   requiresVerification?: boolean;
   isRelevantForChronology?: boolean;
+  /** Quick-fix inline (2026-07-17): quando il perito risolve un dato rimosso
+   * ("Nome struttura non riscontrato"), la nota corrispondente va tolta o
+   * resterebbe una segnalazione ormai falsa. */
+  reliabilityNotes?: string | null;
 }) {
   const supabase = await createClient();
 
@@ -89,6 +93,7 @@ export async function updateEvent(params: {
   if (params.expertNotes !== undefined) updateFields.expert_notes = params.expertNotes;
   if (params.requiresVerification !== undefined) updateFields.requires_verification = params.requiresVerification;
   if (params.isRelevantForChronology !== undefined) updateFields.is_relevant_for_chronology = params.isRelevantForChronology;
+  if (params.reliabilityNotes !== undefined) updateFields.reliability_notes = params.reliabilityNotes;
 
   const { error } = await supabase
     .from('events')
