@@ -40,10 +40,10 @@ import type { EventRow } from './types';
 function translateReliabilityNote(segment: string): string {
   const s = segment.trim();
   if (/testo sorgente non riscontrato/i.test(s) || /citazione sorgente non riscontrata/i.test(s)) {
-    return 'La citazione estratta non coincide alla lettera col testo del documento: controlla che date, diagnosi e lateralità corrispondano alla pagina qui sotto.';
+    return 'La citazione estratta non coincide alla lettera col testo del documento: controlla che date, diagnosi e lateralità corrispondano al documento originale.';
   }
   if (/testo sorgente assente/i.test(s) || /citazione sorgente assente/i.test(s)) {
-    return 'L\'AI non ha indicato il punto esatto del documento da cui ha preso questi dati: verificali sulla pagina qui sotto.';
+    return 'L\'AI non ha indicato il punto esatto del documento da cui ha preso questi dati: verificali sul documento originale.';
   }
   if (/diagnosi discordanti/i.test(s)) {
     return 'I documenti riportano diagnosi tra loro discordanti: decidi tu quale prevale.';
@@ -54,7 +54,7 @@ function translateReliabilityNote(segment: string): string {
   return s;
 }
 
-/** Spiegazione completa del flag "da valutare" per il riquadro dedicato. */
+/** Spiegazione completa del flag "da verificare" per il riquadro dedicato. */
 function verificationReasons(event: EventRow): string[] {
   const reasons: string[] = [];
   if (!event.event_date) {
@@ -111,19 +111,25 @@ function SourceTextSection({
   return (
     <div className="pt-2 border-t">
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          Testo documento originale
-          {parsedPages.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-1">
-              (pag. {parsedPages.join(', ')})
-            </span>
-          )}
-        </button>
+        {/* Niente chevron se non c'è testo da mostrare (toggle morto, audit
+            2026-07-17): resta solo il link al file. */}
+        {boxText ? (
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setIsOpen(!isOpen)}
+          >
+            {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            Testo documento originale
+            {parsedPages.length > 0 && (
+              <span className="text-xs text-muted-foreground ml-1">
+                (pag. {parsedPages.join(', ')})
+              </span>
+            )}
+          </button>
+        ) : (
+          <span className="text-xs text-muted-foreground">Testo non disponibile in questa vista</span>
+        )}
         {viewDocumentUrl && (
           <a
             href={viewDocumentUrl}
@@ -157,6 +163,10 @@ interface EventCardProps {
   onStartEdit: () => void;
   /** Chiamato dopo eliminazione riuscita (parent fa router.refresh). */
   onDeleted: () => void;
+  /** Chiamato dopo «Segna verificato» riuscito (parent fa router.refresh):
+   * senza, badge/contatori/coda restavano fermi finché non si faceva altro
+   * (audit 2026-07-17). */
+  onVerified?: () => void;
   eventImages: Record<string, string[]>;
   isHighlighted?: boolean;
   documentName?: string;
@@ -166,7 +176,7 @@ interface EventCardProps {
 }
 
 export function EventCard({
-  event, caseId, isExpanded, onToggle, onStartEdit, onDeleted,
+  event, caseId, isExpanded, onToggle, onStartEdit, onDeleted, onVerified,
   eventImages, isHighlighted, documentName, documentPages,
 }: EventCardProps) {
   const [isPending, startTransition] = useTransition();
@@ -203,6 +213,7 @@ export function EventCard({
         toast.error(result.error);
       } else {
         toast.success('Evento segnato come verificato');
+        onVerified?.();
       }
       setIsVerifying(false);
     });
@@ -256,7 +267,7 @@ export function EventCard({
                   title="L'AI chiede una tua conferma su questo evento: controllalo e premi «Segna verificato»"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
-                  da valutare
+                  da verificare
                 </span>
               )}
               {isClinical && !includeInChrono && (
@@ -277,7 +288,7 @@ export function EventCard({
               className="h-7 text-xs bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 mr-1"
               onClick={(e) => { e.stopPropagation(); handleQuickVerify(); }}
               disabled={isPending || isVerifying}
-              title="Confermi di aver controllato questo evento: esce dalla coda «da valutare»"
+              title="Confermi di aver controllato questo evento: esce dalla coda «da verificare»"
             >
               <Check className="mr-1 h-3.5 w-3.5" />
               {isVerifying ? 'Confermo…' : 'Segna verificato'}
@@ -346,12 +357,12 @@ export function EventCard({
               <span>Includi nella cronologia esportata</span>
             </label>
           )}
-          {/* PERCHÉ è da valutare — riquadro esplicito (founder 2026-07-17): il
+          {/* PERCHÉ è da verificare — riquadro esplicito (founder 2026-07-17): il
               motivo era una riga in corsivo grigio col wording interno della
               pipeline; il perito deve leggere il perché e il cosa fare. */}
           {event.requires_verification ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Perché è da valutare</p>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Perché è da verificare</p>
               <ul className="mt-1 space-y-0.5">
                 {verificationReasons(event).map((r) => (
                   <li key={r} className="text-sm text-amber-800/90 dark:text-amber-200/90">{r}</li>

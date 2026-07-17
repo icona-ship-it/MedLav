@@ -21,9 +21,13 @@ const STATUS_DOT: Record<TocSectionStatus, string> = {
   confirmed: 'bg-green-500',
 };
 
+// 'ai' copre generata-dall'AI, compilata-dai-documenti (doc sanitaria
+// deterministica, intestazione) e modificata-a-mano non ancora confermata:
+// l'etichetta onesta comune è "da rivedere, non ancora confermata" (audit
+// 2026-07-17: "Generata dall'AI" era falsa su deterministiche ed editate).
 const STATUS_TITLE: Record<TocSectionStatus, string> = {
   todo: 'Da compilare: contiene una parte riservata a te',
-  ai: 'Generata dall’AI: da rivedere',
+  ai: 'Da rivedere: non ancora confermata da te',
   confirmed: 'Confermata da te',
 };
 
@@ -125,7 +129,7 @@ export function ReportTocSidebar({ sections, statuses }: ReportTocSidebarProps) 
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" /> da compilare (tua parte)
             </p>
             <p className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" /> generata dall&apos;AI — da rivedere
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" /> da rivedere — non ancora confermata
             </p>
             <p className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" /> confermata da te

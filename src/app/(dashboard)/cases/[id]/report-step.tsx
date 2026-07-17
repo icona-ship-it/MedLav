@@ -258,7 +258,9 @@ export function ReportStep({
     : 0;
   // Eventi in coda di verifica: la coda vive nel drawer Eventi ma DEVE essere
   // visibile nel pannello di triage, o resta nascosta (founder 2026-07-17).
-  const eventsToVerifyCount = events.filter((e) => e.requires_verification || !e.event_date).length;
+  // SOLO requires_verification (audit 2026-07-17): stesso predicato del drawer,
+  // così «Segna verificato» fa sempre scendere il contatore fino a zero.
+  const eventsToVerifyCount = events.filter((e) => e.requires_verification).length;
   const claimNotes = claimFindings.filter((f) => f.verdict !== 'non_supportato');
   // Conteggio per il badge "Dettagli analisi" (overflow ⋯): SOLO ciò che quella
   // vista gestisce (anomalie da valutare + doc mancanti). I claim NON vi
@@ -305,7 +307,11 @@ export function ReportStep({
     canonicalId: st.canonicalId,
     title: sections.find((s) => s.canonicalId === st.canonicalId)?.title ?? st.canonicalId,
     edited: st.edited,
-  }));
+  }))
+    // Dedup per canonicalId: due heading che mappano sulla stessa sezione
+    // canonica producevano conteggio doppio e chiavi React duplicate nel
+    // dialog di rigenerazione (audit 2026-07-17).
+    .filter((st, i, arr) => arr.findIndex((x) => x.canonicalId === st.canonicalId) === i);
 
   // Numerazione dei passaggi della checklist "Da controllare": il perito deve
   // vedere quante cose sono, in che ordine farle e quando ha finito.

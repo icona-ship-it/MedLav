@@ -37,6 +37,18 @@ describe('verifySourceTexts — tabelle HTML nell\'OCR (caso 229, 2026-07-17)', 
     const ocr = 'PCR < 5 mg/L e leucociti > 10.000, quadro nella norma.';
     expect(groundCitation('PCR < 5 mg/L e leucociti > 10.000', ocr)).not.toBe('absent');
   });
+
+  it('un "<SIGLA " clinico senza ">" NON divora il testo fino al tag successivo (audit 2026-07-17)', () => {
+    // Col pattern generico "<LOD ng/mL. Creatinina …" veniva inghiottito fino
+    // al ">" di "Leucociti > 10.000" → citazioni VERE flaggate come assenti.
+    const ocr = 'Troponina <LOD ng/mL. Creatinina 1,2 mg/dL. Leucociti > 10.000 nella norma';
+    expect(groundCitation('Creatinina  1,2  mg/dL.  Leucociti', ocr)).not.toBe('absent');
+  });
+
+  it('i marker [TABLE_START]/[PAGE_START] vengono strippati (erano dead code case-sensitive)', () => {
+    const ocr = '[PAGE_START:1]\n[TABLE_START]\nDiagnosi: frattura del radio distale sinistro composta\n[TABLE_END]\n[PAGE_END:1]';
+    expect(groundCitation('Diagnosi: frattura del radio distale sinistro composta', ocr)).not.toBe('absent');
+  });
 });
 
 describe('groundCitation — marker markdown (audit 2026-06-09 #4: no fusione parole)', () => {

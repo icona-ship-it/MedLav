@@ -161,8 +161,12 @@ function AddEventDialog({
 
 // --- Helpers ---
 
+// SOLO requires_verification (audit 2026-07-17): includere anche !event_date
+// creava membri della coda NON chiudibili («Segna verificato» azzera solo il
+// flag) → contatore che non arriva mai a zero. La pipeline flagga già gli
+// eventi con data assente/incerta, quindi il flag è l'unica fonte di verità.
 function isVerificationEvent(e: EventRow): boolean {
-  return e.requires_verification || !e.event_date || e.event_date === '';
+  return e.requires_verification;
 }
 
 type VerificationSubFilter = 'all' | 'date' | 'data' | 'other';
@@ -285,6 +289,7 @@ export function EventsTab({
       isHighlighted={highlightedEventOrderNumber === event.order_number}
       documentName={event.document_id ? docNameMap.get(event.document_id) : undefined}
       documentPages={documentPages}
+      onVerified={() => router.refresh()}
     />
   );
 

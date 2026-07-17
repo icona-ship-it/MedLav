@@ -95,8 +95,8 @@ function EditCaseDialogInner({
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Guida l&apos;analisi: documenti attesi, controlli automatici e impostazione
-              del report. I nuovi casi partono da &laquo;Incidente stradale&raquo;:
+              Guida l&apos;analisi: documenti attesi e impostazione del report.
+              I nuovi casi partono da &laquo;Incidente stradale&raquo;:
               cambiala se il caso è di altra natura.
             </p>
           </div>
@@ -130,7 +130,8 @@ function EditCaseDialogInner({
               placeholder="es. M.R."
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Compaiono nel report al posto del nome, per riservatezza.
+              Identificano il caso in elenchi e ricerche. Nel report va il nome
+              inserito nei Dati perizia.
             </p>
           </div>
           <div>

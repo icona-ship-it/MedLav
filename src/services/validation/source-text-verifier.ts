@@ -230,20 +230,26 @@ function stripPageMarkers(text: string): string {
  * e non viene toccato. Spazio (mai ''), per non fondere celle adiacenti.
  */
 function stripHtmlTags(text: string): string {
+  // ALLOWLIST dei tag che Mistral OCR emette davvero nelle tabelle (audit
+  // 2026-07-17): il pattern generico <lettera[^>]*> era ingordo — un "<LOD "
+  // clinico senza ">" divorava tutto fino al primo ">" successivo, anche a
+  // pagine di distanza → flag falsi. Attributi bounded e senza </>/newline.
   return text
     .replace(/\[TABLE_HTML_(?:START|END)\]/g, ' ')
     .replace(/\[tbl-\d+\.html\]\(tbl-\d+\.html\)/g, ' ')
-    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, ' ');
+    .replace(/<\/?(?:table|thead|tbody|tfoot|tr|td|th|caption|col|colgroup|br|hr|p|div|span|b|i|u|em|strong|sup|sub)(?:\s[^<>\n]{0,300})?\s*\/?>/gi, ' ');
 }
 
 /**
  * Normalize text for fuzzy comparison: lowercase, collapse whitespace.
  */
 function normalizeText(text: string): string {
+  // I marker vanno strippati case-insensitive (il testo è già lowercase a
+  // questo punto) e con SPAZIO, mai '' (audit 2026-06-09: no fusione parole).
   return stripHtmlTags(text)
     .toLowerCase()
-    .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
-    .replace(/\[TABLE_(?:START|END)\]/g, '')
+    .replace(/\[page_(?:start|end):\d+\]/gi, ' ')
+    .replace(/\[table_(?:start|end)\]/gi, ' ')
     .replace(/-{2,}\s*pagina\s+\d+\s*-{2,}/gi, '')
     // Strip markdown emphasis/heading/code markers — Mistral OCR returns markdown,
     // so a faithful quote (plain) must still match an OCR term wrapped in **bold**.
@@ -262,8 +268,8 @@ function normalizeText(text: string): string {
 function normalizeForWords(text: string): string[] {
   return stripHtmlTags(text)
     .toLowerCase()
-    .replace(/\[PAGE_(?:START|END):\d+\]/g, '')
-    .replace(/\[TABLE_(?:START|END)\]/g, '')
+    .replace(/\[page_(?:start|end):\d+\]/gi, ' ')
+    .replace(/\[table_(?:start|end)\]/gi, ' ')
     // Markdown emphasis/heading/code markers → split boundary (OCR is markdown).
     .replace(/[.,;:!?()[\]{}"'«»\-–—/\\*_`#~]/g, ' ')
     .split(/\s+/)
