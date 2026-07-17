@@ -405,6 +405,7 @@ export function CaseDetailClient({
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
+                extractedEventsCount={events.length}
               />
             </div>
           )}
@@ -480,6 +481,7 @@ export function CaseDetailClient({
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
+                extractedEventsCount={events.length}
               />
             </div>
           )}
@@ -555,6 +557,7 @@ export function CaseDetailClient({
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
+                extractedEventsCount={events.length}
               />
             </div>
           )}

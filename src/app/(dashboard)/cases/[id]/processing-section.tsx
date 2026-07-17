@@ -47,6 +47,10 @@ interface ProcessingSectionProps {
   /** True se esistono già eventi/report per questo caso: riavviare li CANCELLA,
    * quindi va chiesta conferma anche in stato 'errore' (audit 2026-07-16). */
   hasExistingResults?: boolean;
+  /** Eventi estratti finora (dal polling della pagina): segno di vita durante
+   * l'estrazione, la fase più lunga, in cui % e contatore documenti restano
+   * fermi per decine di minuti sui fascicoli grandi (caso 226, 117 pagine). */
+  extractedEventsCount?: number;
 }
 
 /**
@@ -86,6 +90,7 @@ export function ProcessingSection({
   processingStartedAt,
   onProcessingStarted,
   hasExistingResults = false,
+  extractedEventsCount = 0,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
   const creditLabel = getElaborationLabel(pipelineMode);
@@ -327,6 +332,15 @@ export function ProcessingSection({
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                    {/* Segno di vita durante l'estrazione: % e contatore documenti
+                        restano fermi per decine di minuti sui fascicoli grandi,
+                        ma gli eventi salvati crescono a ogni blocco analizzato. */}
+                    {extractedEventsCount > 0 && (
+                      <p className="text-center text-sm text-muted-foreground">
+                        <span className="font-medium tabular-nums">{extractedEventsCount}</span>{' '}
+                        eventi clinici individuati finora — il numero cresce man mano che l&apos;analisi procede
+                      </p>
+                    )}
                   </div>
                 );
               })()}
