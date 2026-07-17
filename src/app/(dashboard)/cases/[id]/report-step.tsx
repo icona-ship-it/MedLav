@@ -465,6 +465,7 @@ export function ReportStep({
             events={events}
             eventImages={eventImages}
             highlightedEventOrderNumber={highlightedEventId}
+            documentPages={documentPages}
           />
         </div>
       );
@@ -526,6 +527,7 @@ export function ReportStep({
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
+              documentPages={documentPages}
             />
           )}
         </div>
@@ -694,7 +696,7 @@ export function ReportStep({
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <span className="text-sm">
                     {eventsToVerifyCount} {eventsToVerifyCount === 1 ? 'evento estratto attende una tua conferma' : 'eventi estratti attendono una tua conferma'}
-                    <span className="text-muted-foreground"> — un click su «Verificato» per ciascuno, o verifica in blocco</span>
+                    <span className="text-muted-foreground"> — un click su «Segna verificato» per ciascuno, o verifica in blocco</span>
                   </span>
                 </div>
                 <Button
@@ -922,6 +924,7 @@ export function ReportStep({
               events={events}
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
+              documentPages={documentPages}
               initialShowVerification={eventsDrawerVerifyMode}
               onEventMutated={(t) => updateMutatedEventTypes((prev) => {
                 const next = new Set(prev);

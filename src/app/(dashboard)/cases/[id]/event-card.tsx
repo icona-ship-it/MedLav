@@ -13,7 +13,7 @@
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
-  Check, ChevronDown, ChevronUp, Pencil, Trash2, ZoomIn,
+  Check, ChevronDown, ChevronUp, ExternalLink, Pencil, Trash2, ZoomIn,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -31,31 +31,60 @@ import type { EventRow } from './types';
 
 // --- Source Text Section (collapsible) ---
 
-function SourceTextSection({ sourceText, sourcePages }: { sourceText: string; sourcePages: string | null }) {
-  const [isOpen, setIsOpen] = useState(false);
+function SourceTextSection({
+  sourceText, sourcePages, fullPageText, viewDocumentUrl, defaultOpen = false,
+}: {
+  sourceText: string | null;
+  sourcePages: string | null;
+  /** Testo OCR COMPLETO delle pagine sorgente (founder 2026-07-17: per
+   * verificare serve la pagina intera in un box scrollabile, non solo la
+   * citazione estratta). Null se le pagine non sono disponibili nel contesto. */
+  fullPageText: string | null;
+  /** Link che apre il file originale caricato (route /view, nuova scheda). */
+  viewDocumentUrl: string | null;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   const parsedPages: number[] = sourcePages ? (() => {
     try { return JSON.parse(sourcePages) as number[]; } catch { return []; }
   })() : [];
 
+  const boxText = fullPageText ?? sourceText;
+  if (!boxText && !viewDocumentUrl) return null;
+
   return (
     <div className="pt-2 border-t">
-      <button
-        type="button"
-        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        Testo documento originale
-        {parsedPages.length > 0 && (
-          <span className="text-xs text-muted-foreground ml-1">
-            (pag. {parsedPages.join(', ')})
-          </span>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Testo documento originale
+          {parsedPages.length > 0 && (
+            <span className="text-xs text-muted-foreground ml-1">
+              (pag. {parsedPages.join(', ')})
+            </span>
+          )}
+        </button>
+        {viewDocumentUrl && (
+          <a
+            href={viewDocumentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0"
+            title="Apre il file caricato in una nuova scheda"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Apri documento originale
+          </a>
         )}
-      </button>
-      {isOpen && (
-        <pre className="mt-2 rounded bg-muted p-3 text-xs whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
-          {sourceText}
+      </div>
+      {isOpen && boxText && (
+        <pre className="mt-2 rounded bg-muted p-3 text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+          {boxText}
         </pre>
       )}
     </div>
@@ -76,11 +105,14 @@ interface EventCardProps {
   eventImages: Record<string, string[]>;
   isHighlighted?: boolean;
   documentName?: string;
+  /** Pagine OCR del caso (per mostrare il testo COMPLETO della pagina sorgente
+   * nel box di verifica). Tipizzato strutturale: basta ciò che serve qui. */
+  documentPages?: Array<{ document_id: string; page_number: number; ocr_text: string | null }>;
 }
 
 export function EventCard({
   event, caseId, isExpanded, onToggle, onStartEdit, onDeleted,
-  eventImages, isHighlighted, documentName,
+  eventImages, isHighlighted, documentName, documentPages,
 }: EventCardProps) {
   const [isPending, startTransition] = useTransition();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -166,7 +198,7 @@ export function EventCard({
               {event.requires_verification && (
                 <span
                   className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400"
-                  title="L'AI chiede una tua conferma su questo evento: controllalo e premi Verificato"
+                  title="L'AI chiede una tua conferma su questo evento: controllalo e premi «Segna verificato»"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
                   da valutare
@@ -182,17 +214,18 @@ export function EventCard({
         <div className="flex items-center gap-0.5 ml-2">
           {/* Bottone di verifica ESPLICITO (founder 2026-07-17): prima l'unica via
               era il badge cliccabile — sembrava un'etichetta, nessuno lo scopriva. */}
+          {/* Azione, non etichetta (founder 2026-07-17): "Verificato" sembrava
+              uno STATO già raggiunto — il verbo dice cosa succede al click. */}
           {event.requires_verification && (
             <Button
-              variant="outline"
               size="sm"
-              className="h-7 text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/30 mr-1"
+              className="h-7 text-xs bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 mr-1"
               onClick={(e) => { e.stopPropagation(); handleQuickVerify(); }}
               disabled={isPending || isVerifying}
-              title="Segna questo evento come verificato da te"
+              title="Confermi di aver controllato questo evento: esce dalla coda «da valutare»"
             >
               <Check className="mr-1 h-3.5 w-3.5" />
-              {isVerifying ? 'Verifico…' : 'Verificato'}
+              {isVerifying ? 'Confermo…' : 'Segna verificato'}
             </Button>
           )}
           <Button
@@ -264,9 +297,30 @@ export function EventCard({
               <p className="text-sm"><span className="font-medium">Note perito:</span> {event.expert_notes}</p>
             </div>
           )}
-          {event.source_text && (
-            <SourceTextSection sourceText={event.source_text} sourcePages={event.source_pages} />
-          )}
+          {(event.source_text || event.document_id) && (() => {
+            // Testo completo delle pagine sorgente (se disponibili nel contesto):
+            // per la verifica serve leggere la pagina vera, non solo la citazione.
+            const parsedPages: number[] = event.source_pages ? (() => {
+              try { return JSON.parse(event.source_pages) as number[]; } catch { return []; }
+            })() : [];
+            const pageTexts = (documentPages ?? [])
+              .filter((p) => p.document_id === event.document_id
+                && (parsedPages.length === 0 || parsedPages.includes(p.page_number))
+                && p.ocr_text)
+              .sort((a, b) => a.page_number - b.page_number);
+            const fullPageText = pageTexts.length > 0
+              ? pageTexts.map((p) => `— pag. ${p.page_number} —\n${p.ocr_text}`).join('\n\n')
+              : null;
+            return (
+              <SourceTextSection
+                sourceText={event.source_text}
+                sourcePages={event.source_pages}
+                fullPageText={fullPageText}
+                viewDocumentUrl={event.document_id ? `/api/cases/${caseId}/documents/${event.document_id}/view` : null}
+                defaultOpen={event.requires_verification}
+              />
+            );
+          })()}
           {images.length > 0 && (
             <div className="pt-2 border-t">
               <p className="text-xs font-medium text-muted-foreground mb-2">Immagini associate</p>

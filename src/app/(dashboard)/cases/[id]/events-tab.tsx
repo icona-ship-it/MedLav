@@ -181,11 +181,13 @@ function getVerificationType(e: EventRow): VerificationSubFilter {
 export function EventsTab({
   caseId, events, eventImages,
   highlightedEventOrderNumber, documents,
-  onEventMutated, initialShowVerification,
+  onEventMutated, initialShowVerification, documentPages,
 }: {
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
+  /** Pagine OCR del caso: testo completo della pagina sorgente nelle card. */
+  documentPages?: Array<{ document_id: string; page_number: number; ocr_text: string | null }>;
   highlightedEventOrderNumber?: number | null;
   /** Deprecated, kept for backward compat with parent passing it. */
   patientInitials?: string | null;
@@ -282,6 +284,7 @@ export function EventsTab({
       eventImages={eventImages}
       isHighlighted={highlightedEventOrderNumber === event.order_number}
       documentName={event.document_id ? docNameMap.get(event.document_id) : undefined}
+      documentPages={documentPages}
     />
   );
 
@@ -505,7 +508,7 @@ export function EventsTab({
               </div>
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs text-muted-foreground">
-                  Controlla ogni evento e premi <span className="font-medium text-green-700 dark:text-green-400">Verificato</span>, oppure correggilo con la matita.
+                  Controlla ogni evento e premi <span className="font-medium text-green-700 dark:text-green-400">Segna verificato</span>, oppure correggilo con la matita.
                   {verificationEvents.length > displayVerification.length && (
                     <>
                       {' '}Altri {verificationEvents.length - displayVerification.length} tra Documenti e spese —{' '}
