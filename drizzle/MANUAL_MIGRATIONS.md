@@ -1,12 +1,20 @@
 # Manual Migrations — Stato journal Drizzle
 
-**Stato al 2026-06-10**: il journal `drizzle/meta/_journal.json` include ORA
-tutte le migration `0000` → `0030` (incluse quelle scritte a mano). Lo snapshot
-`meta/0030_snapshot.json` riflette lo schema Drizzle TS corrente (verificato:
-`pnpm db:generate` → "No schema changes"). Resta UN passo manuale per chiudere
-il debt: eseguire `drizzle/resync_journal.sql` su Supabase (vedi sotto).
+**Stato al 2026-07-20: RE-SYNC ESEGUITO SU SUPABASE.** Applicate 0025 + 0030 e
+`resync_journal.sql` (via `scripts/apply-sql-tmp.ts`, gitignored). Verificato sul
+DB: `drizzle.__drizzle_migrations` = **32 righe**, `last_created_at =
+1781175312000` (0031); tabelle 0025 con RLS + 4 policy + RPC presenti; bucket a
+104857600. **`pnpm db:migrate` è di nuovo il workflow normale** (vedi "Procedura
+per future migration" in fondo).
 
-## Come completare il re-sync (azione utente, ~10 min)
+⚠️ **Connessione DB da locale/CI**: l'host diretto `db.<ref>.supabase.co` è
+IPv6-only (ENOTFOUND da reti IPv4) e la password contiene caratteri
+URL-speciali (`#`, `$`) che rompono i parser URL. Usare il **Session pooler**:
+host `aws-1-eu-central-1.pooler.supabase.com:5432` (aws-1, NON aws-0), utente
+`postgres.<project-ref>`, password percent-encoded. Helper gitignored:
+`scripts/pooler-url-tmp.ts` stampa la stringa pronta.
+
+## Procedura re-sync (ESEGUITA il 2026-07-20 — conservata come storico)
 
 1. **Backup**: verificare che il PITR Supabase sia attivo (o fare un dump manuale)
 2. **Applicare le 2 migration ancora pendenti** via Supabase SQL editor
@@ -80,12 +88,12 @@ blocchi `DO $$`) — innocuo per prod, la dedup usa solo `created_at`.
 | `0022_hybrid_rag_bm25.sql` | 2026-05-05 | parzialmente (DROP FUNCTION + CREATE) | verificato via 5 query SQL |
 | `0023_hybrid_rag_multilingua.sql` | 2026-05-11 | parzialmente (DROP COLUMN + ADD) | usare `verify_0023_hybrid_rag_multilingua.sql` |
 | `0024_add_document_content_hash.sql` | 2026-05-11 | si | usare `verify_0024_add_document_content_hash.sql` |
-| `0025_perizie_benchmark.sql` | **DA APPLICARE — prerequisito del re-sync (passo 2)** | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC) | usare `verify_0025_perizie_benchmark.sql` |
+| `0025_perizie_benchmark.sql` | APPLICATA 2026-07-20 (via pooler; verificato: 2 tabelle, RLS, 4 policy, RPC) | si (`CREATE TABLE IF NOT EXISTS`, RLS, RPC) | usare `verify_0025_perizie_benchmark.sql` |
 | `0026_rls_user_owned.sql` | APPLICATA 2026-06-01 (testata in BEGIN…ROLLBACK; 2 bug colonne corretti pre-applicazione) | si | verificata via `pg_policies` |
 | `0027_audit_archive.sql` | APPLICATA 2026-06-01 | si | `to_regclass('public.audit_archive')` non-null, RLS=true |
 | `0028_stripe_event_idempotency.sql` | APPLICATA 2026-06-01 (+ ENABLE RLS) | si | tabella esiste, RLS=true |
 | `0029_add_event_chronology_relevance.sql` | APPLICATA 2026-06-01 | si | usare `verify_0029_event_chronology_relevance.sql` |
-| `0030_storage_bucket_size_limit.sql` | **DA APPLICARE — prerequisito del re-sync (passo 2)** | si (`UPDATE` puntuale) | usare `verify_0030.sql` (atteso `104857600`) |
+| `0030_storage_bucket_size_limit.sql` | APPLICATA 2026-07-20 (limite già 104857600 dal 07/07 — UPDATE no-op) | si (`UPDATE` puntuale) | usare `verify_0030.sql` (atteso `104857600`) |
 | `0031_*` (future) | — | vedi procedura sotto | — |
 
 ## Procedura per future migration (DOPO il re-sync)
@@ -101,7 +109,7 @@ Una volta eseguito `resync_journal.sql` su Supabase:
    `__drizzle_migrations` (hash sha256 del file, created_at = `when` del journal)
 5. Aggiornare questa tabella
 
-**FINCHE' il re-sync non e' stato eseguito**: NON lanciare `pnpm db:migrate`
-(proverebbe ad applicare 0018→0030 in blocco perche' la tracking table e' ferma
-a 0017 — i file sono idempotenti ma e' un rischio inutile su prod). Continuare
-con la vecchia procedura manuale (SQL editor + verify file + tabella qui sopra).
+Il re-sync è stato eseguito il 2026-07-20: il vincolo storico "NON lanciare
+`pnpm db:migrate`" è decaduto. NB: da questa macchina `db:migrate` richiede la
+connection string del pooler (vedi ⚠️ in cima) — l'URL diretto in `.env.local`
+non risolve (IPv6-only) e la password non-encoded rompe il parser URL.

@@ -19,10 +19,10 @@ Web app per medici legali: upload documentazione clinica → report medico-legal
 
 ## Database / Migration — IMPORTANTE
 
-**Re-sync journal Drizzle preparato (2026-06-10), in attesa di esecuzione su Supabase**: il journal `drizzle/meta/_journal.json` ora include tutte le migration `0000`→`0030` (snapshot `0030` allineato allo schema TS, `pnpm db:generate` verde). Per completare: applicare `0025` + `0030` (pendenti, idempotenti) e poi incollare `drizzle/resync_journal.sql` su Supabase. Procedura completa in `drizzle/MANUAL_MIGRATIONS.md`.
+**Re-sync journal Drizzle ESEGUITO su Supabase il 2026-07-20** (verificato: `drizzle.__drizzle_migrations` = 32 righe, ultima = 0031). `pnpm db:migrate` è di nuovo il workflow normale.
 
-- **FINCHE' il re-sync non e' eseguito su Supabase, NON lanciare `pnpm db:migrate`** (proverebbe ad applicare 0018→0030 in blocco; 0022/0023 sono solo parzialmente idempotenti — rischio inutile su prod)
-- **DOPO il re-sync**: workflow normale — modificare `src/db/schema/`, `pnpm db:generate` (rivedere il SQL generato: RLS/policy/RPC vanno aggiunte a mano nel file), applicare, aggiornare `MANUAL_MIGRATIONS.md`
+- **Workflow migration**: modificare `src/db/schema/`, `pnpm db:generate` (rivedere il SQL generato: RLS/policy/RPC vanno aggiunte a mano nel file), applicare, aggiornare `MANUAL_MIGRATIONS.md`
+- **Connessione DB da locale/CI**: l'host diretto `db.<ref>.supabase.co` è IPv6-only (ENOTFOUND da reti IPv4) e la password contiene caratteri URL-speciali → usare il **Session pooler** `aws-1-eu-central-1.pooler.supabase.com:5432` con utente `postgres.<ref>` e password percent-encoded (helper gitignored: `scripts/pooler-url-tmp.ts`). Dettagli in `MANUAL_MIGRATIONS.md`
 - **Rebuild da zero NON ancora testato** (serve staging): caveat multi-statement + dipendenze Supabase documentati in `MANUAL_MIGRATIONS.md`
 - **Verifica idempotente**: ogni migration manuale ha un file `verify_*.sql` da incollare nel SQL editor (es. `verify_0030.sql`)
 
