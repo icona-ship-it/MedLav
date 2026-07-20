@@ -80,7 +80,15 @@ export function formatStimaDannoBlock(
   todayIso?: string,
   incidentDate?: string | null,
 ): string {
-  const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  // Data sinistro esplicita del perito (periziaMetadata.dataSinistro): gli
+  // eventi ANTECEDENTI sono preesistenze — non devono né guidare la scelta
+  // della tabella né gonfiare la stima (es. un intervento preesistente che
+  // alza il range o innesca la nota Balthazard). Stesso filtro dei calcoli
+  // deterministici (calculateMedicoLegalPeriods): un solo numero per fatto.
+  const incidentIso = incidentDate ? normalizeItalianDateToIso(incidentDate) : null;
+  const clinical = events
+    .filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))
+    .filter((e) => !incidentIso || !ISO_DATE_RE.test(e.event_date) || e.event_date >= incidentIso);
   const calcEvents = clinical.map((e) => ({
     event_date: e.event_date,
     event_type: e.event_type,
@@ -88,10 +96,6 @@ export function formatStimaDannoBlock(
     description: e.description,
   }));
 
-  // Data sinistro esplicita del perito (periziaMetadata.dataSinistro) quando
-  // disponibile: un evento preesistente (es. intervento in anamnesi) non deve
-  // guidare la scelta della tabella danno. Fallback storico: primo evento.
-  const incidentIso = incidentDate ? normalizeItalianDateToIso(incidentDate) : null;
   const estimate = estimateBiologicalDamage(
     calcEvents,
     caseType as CaseType,
