@@ -7,7 +7,7 @@ import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { CASE_TYPES } from '@/lib/constants';
 import { logger } from '@/lib/logger';
-import { getSelectableSections } from '@/services/synthesis/section-catalog';
+import { getSelectableSections, applySectionOrder } from '@/services/synthesis/section-catalog';
 import { deleteCaseAndRelatedData } from '@/services/retention/delete-case-data';
 import { revalidateCase, revalidateCases } from '@/lib/cache';
 import { isEmptyOrValidItalianDate } from '@/lib/validators/date-format';
@@ -75,6 +75,7 @@ const periziaMetadataFields = z.object({
   anamnesiFarmacologica: z.string().max(5000).optional(),
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
+  sectionOrder: z.array(z.string().max(80)).max(50).optional(),
 }).strict();
 
 const periziaMetadataSchema = periziaMetadataFields.nullable().optional();
@@ -567,8 +568,55 @@ export async function getReportSectionOptions(
     .single();
   if (!caseRow) return { sections: [], error: 'Caso non trovato' };
 
-  const sections = getSelectableSections();
+  // Opzioni già nell'ordine scelto dal perito (sectionOrder), così il selettore
+  // riflette e modifica l'ordine reale di generazione.
+  const savedOrder = ((caseRow.perizia_metadata as Record<string, unknown> | null)
+    ?.sectionOrder as string[] | undefined);
+  const sections = applySectionOrder(getSelectableSections(), savedOrder);
   return { sections };
+}
+
+/**
+ * Salva SOLO l'ordine dei capitoli scelto dal perito (frecce del selettore
+ * "Sezioni del report"), con merge sicuro nel perizia_metadata esistente.
+ * L'ordine si applica alla prossima generazione/rigenerazione del report.
+ */
+export async function updateReportSectionOrder(
+  caseId: string,
+  sectionOrder: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = z
+    .object({
+      caseId: z.string().min(1),
+      sectionOrder: z.array(z.string().max(80)).max(50),
+    })
+    .safeParse({ caseId, sectionOrder });
+  if (!parsed.success) return { success: false, error: 'Dati non validi' };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Non autenticato' };
+
+  const { data: caseRow } = await supabase
+    .from('cases')
+    .select('perizia_metadata')
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseRow) return { success: false, error: 'Caso non trovato' };
+
+  const current = (caseRow.perizia_metadata as Record<string, unknown> | null) ?? {};
+  const merged = { ...current, sectionOrder: parsed.data.sectionOrder };
+
+  const { error } = await supabase
+    .from('cases')
+    .update({ perizia_metadata: merged, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id);
+  if (error) return { success: false, error: 'Errore salvataggio ordine sezioni' };
+
+  revalidateCase(parsed.data.caseId);
+  return { success: true };
 }
 
 /**

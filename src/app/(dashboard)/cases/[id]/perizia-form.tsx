@@ -168,6 +168,9 @@ export function PeriziaMetadataForm({
   // updateCase riscrive l'intero perizia_metadata, quindi reinseriamo il valore
   // salvato per non azzerare le esclusioni impostate nello step successivo.
   const [excludedSections, setExcludedSections] = useState<string[]>(existing.excludedReportSections ?? []);
+  // Ordine capitoli (frecce nel selettore dello step Elaborazione): come per le
+  // esclusioni, updateCase riscrive l'intero perizia_metadata → va preservato.
+  const savedSectionOrder = existing.sectionOrder ?? [];
 
   // Latest form state for async callbacks (prefill) without stale closures.
   const formRef = useRef(form);
@@ -317,6 +320,7 @@ export function PeriziaMetadataForm({
         ...(form.anamnesiFarmacologica ? { anamnesiFarmacologica: form.anamnesiFarmacologica } : {}),
         ...(form.anamnesiLavorativa ? { anamnesiLavorativa: form.anamnesiLavorativa } : {}),
         ...(excludedSections.length > 0 ? { excludedReportSections: excludedSections } : {}),
+        ...(savedSectionOrder.length > 0 ? { sectionOrder: savedSectionOrder } : {}),
       };
 
       const hasAnyValue = Object.keys(metadata).length > 0;

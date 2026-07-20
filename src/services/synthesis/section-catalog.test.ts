@@ -248,6 +248,65 @@ describe('section-catalog', () => {
       expect(ids).not.toContain('conclusioni');
     });
 
+    // Feedback beta 2026-07-20: "sarebbe utile che il perito scegliesse l'ordine
+    // dei capitoli" (es. documentazione valutata prima degli accertamenti clinici).
+    describe('sectionOrder (ordine capitoli del perito)', () => {
+      it('rispetta l\'ordine richiesto: documentazione_sanitaria prima di anamnesi', () => {
+        const plan = resolveSectionPlan({
+          ...STRAGIUDIZIALE_PARAMS,
+          periziaMetadata: {
+            sectionOrder: [
+              'intestazione_stragiudiziale',
+              'documentazione_sanitaria',
+              'anamnesi',
+              'il_fatto_e_storia_clinica',
+              'visita_clinica',
+              'spese_mediche',
+              'epicrisi',
+            ],
+          },
+        });
+        const ids = plan.map((s) => s.id);
+        expect(ids.indexOf('documentazione_sanitaria')).toBeLessThan(ids.indexOf('anamnesi'));
+        expect(ids.indexOf('documentazione_sanitaria')).toBeLessThan(ids.indexOf('visita_clinica'));
+      });
+
+      it('intestazione SEMPRE prima ed epicrisi SEMPRE ultima, anche se l\'ordine prova a spostarle', () => {
+        const plan = resolveSectionPlan({
+          ...STRAGIUDIZIALE_PARAMS,
+          periziaMetadata: {
+            sectionOrder: ['epicrisi', 'documentazione_sanitaria', 'intestazione_stragiudiziale'],
+          },
+        });
+        const ids = plan.map((s) => s.id);
+        expect(ids[0]).toBe('intestazione_stragiudiziale');
+        expect(ids[ids.length - 1]).toBe('epicrisi');
+      });
+
+      it('id sconosciuti ignorati; sezioni non elencate restano in ordine di catalogo dopo quelle elencate', () => {
+        const plan = resolveSectionPlan({
+          ...STRAGIUDIZIALE_PARAMS,
+          periziaMetadata: {
+            sectionOrder: ['sezione_inesistente', 'visita_clinica'],
+          },
+        });
+        const ids = plan.map((s) => s.id);
+        expect(ids[0]).toBe('intestazione_stragiudiziale');
+        expect(ids[ids.length - 1]).toBe('epicrisi');
+        // visita_clinica (elencata) viene prima delle non-elencate (anamnesi, fatto...)
+        expect(ids.indexOf('visita_clinica')).toBeLessThan(ids.indexOf('anamnesi'));
+        // le non-elencate mantengono l'ordine relativo di catalogo
+        expect(ids.indexOf('anamnesi')).toBeLessThan(ids.indexOf('il_fatto_e_storia_clinica'));
+        expect(ids).not.toContain('sezione_inesistente');
+      });
+
+      it('senza sectionOrder l\'ordine di catalogo resta invariato (regressione)', () => {
+        const plan = resolveSectionPlan(STRAGIUDIZIALE_PARAMS);
+        const ids = plan.map((s) => s.id);
+        expect(ids.indexOf('anamnesi')).toBeLessThan(ids.indexOf('documentazione_sanitaria'));
+      });
+    });
+
     it('should include spese_mediche when expense events exist', () => {
       const plan = resolveSectionPlan({
         ...STRAGIUDIZIALE_PARAMS,

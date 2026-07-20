@@ -130,6 +130,32 @@ export function getSelectableSections(): Array<{ id: string; title: string; mand
 }
 
 /**
+ * Ordine capitoli del perito (feedback beta 2026-07-20): riordina le sezioni
+ * secondo `sectionOrder` (id canonici). Invarianti di documento valido:
+ * l'intestazione resta SEMPRE prima e l'epicrisi SEMPRE ultima, qualunque cosa
+ * dica l'ordine salvato. Id sconosciuti ignorati; sezioni non elencate mantengono
+ * l'ordine di catalogo e vanno DOPO quelle elencate (prima dell'epicrisi).
+ * Generica su {id} così ordina sia le SectionSpec sia le opzioni del selettore.
+ */
+export function applySectionOrder<T extends { id: string }>(
+  items: T[],
+  sectionOrder?: string[],
+): T[] {
+  if (!sectionOrder || sectionOrder.length === 0) return items;
+  const pos = new Map(sectionOrder.map((id, i) => [id, i]));
+  const rank = (item: T, catalogIndex: number): number => {
+    if (item.id === 'intestazione_stragiudiziale') return Number.MIN_SAFE_INTEGER;
+    if (item.id === 'epicrisi') return Number.MAX_SAFE_INTEGER;
+    const p = pos.get(item.id);
+    return p !== undefined ? p : sectionOrder.length + catalogIndex;
+  };
+  return items
+    .map((item, i) => ({ item, r: rank(item, i) }))
+    .sort((a, b) => a.r - b.r)
+    .map(({ item }) => item);
+}
+
+/**
  * Resolve the full section plan for a case.
  * Returns an ordered array of SectionSpec with conditional sections filtered
  * by available data.
@@ -178,8 +204,11 @@ export function resolveSectionPlan(params: {
     ? conditionFiltered.filter((spec) => MANDATORY_SECTION_IDS.has(spec.id) || !excluded.includes(spec.id))
     : conditionFiltered;
 
+  // Ordine capitoli del perito (intestazione/epicrisi restano fisse agli estremi).
+  const ordered = applySectionOrder(selectorFiltered, periziaMetadata?.sectionOrder);
+
   // RC medico-legale: anamnesi + il_fatto compilati dal perito → deterministici
-  return applyRcPeritoSections(selectorFiltered, periziaMetadata);
+  return applyRcPeritoSections(ordered, periziaMetadata);
 }
 
 /**

@@ -20,7 +20,7 @@ import { ProcessingProgress, computeWeightedProgress } from '@/components/proces
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
-import { getReportSectionOptions, updateReportSectionExclusions } from '../../actions';
+import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder } from '../../actions';
 import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
 
@@ -165,6 +165,21 @@ export function ProcessingSection({
       include ? prev.filter((x) => x !== sectionId) : [...prev, sectionId],
     );
   }, []);
+
+  // Ordine capitoli (feedback beta 2026-07-20): il picker riordina localmente e
+  // persiste subito; l'ordine si applica alla prossima (ri)generazione.
+  const handleReorderSections = useCallback((orderedIds: string[]) => {
+    setSectionOptions((prev) => {
+      const byId = new Map(prev.map((o) => [o.id, o]));
+      const next = orderedIds
+        .map((id) => byId.get(id))
+        .filter((o): o is ReportSectionOption => o !== undefined);
+      return next.length === prev.length ? next : prev;
+    });
+    void updateReportSectionOrder(caseId, orderedIds).then((res) => {
+      if (!res.success) toast.error(res.error ?? 'Errore nel salvataggio dell\'ordine delle sezioni');
+    });
+  }, [caseId]);
 
   // Count failed documents (excluding warning-only)
   const failedDocs = documents.filter((d) => {
@@ -463,15 +478,17 @@ export function ProcessingSection({
                   {showSectionPicker && sectionOptions.length > 0 && (
                     <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
                       <div>
-                        <p className="text-sm font-semibold">Quali sezioni vuoi nel report?</p>
+                        <p className="text-sm font-semibold">Quali sezioni vuoi nel report, e in che ordine?</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Le obbligatorie ci sono sempre. Spegni quelle che non ti servono: il report risulta più mirato.
+                          Le obbligatorie ci sono sempre. Spegni quelle che non ti servono e usa le frecce per
+                          ordinare i capitoli come preferisci (intestazione ed epicrisi restano agli estremi).
                         </p>
                       </div>
                       <ReportSectionsPicker
                         options={sectionOptions}
                         excluded={excludedSections}
                         onToggle={handleToggleSection}
+                        onReorder={handleReorderSections}
                         disabled={isStartingProcessing}
                       />
                       <p className="text-xs font-medium text-muted-foreground">
