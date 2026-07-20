@@ -105,6 +105,15 @@ export interface GeneratedSection {
   wordCount: number;
   /** Token usage from LLM call */
   usage?: TokenUsage;
+  /**
+   * Doc-sanitaria: citazioni «...» NON riscontrate esattamente nell'OCR
+   * (cap 12, troncate a ~160 char). Alimentano il warning "fedeltà citazioni"
+   * del pannello "Da controllare" — prima il conteggio restava solo nei log
+   * server e le divergenze arrivavano al documento in silenzio (beta 2026-07-20).
+   */
+  ungroundedQuotes?: string[];
+  /** Totale citazioni «...» esaminate dal verificatore (per il rapporto N/tot). */
+  quoteTotal?: number;
   /** True when Chain-of-Verification post-processing was applied to this section. */
   coveApplied?: boolean;
   /** Number of verification questions generated, if CoVe was applied. */

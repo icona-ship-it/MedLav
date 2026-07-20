@@ -1091,6 +1091,9 @@ export const processCase = inngest.createFunction(
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
       let okBatches = 0;
+      // Citazioni «...» non riscontrate esattamente nell'OCR (dal verificatore
+      // per-finestra): diventano UN warning drillabile nel pannello del perito.
+      const ungroundedQuotesAll: string[] = [];
 
       for (let b = 0; b < batches.length; b++) {
         const batch = batches[b];
@@ -1131,7 +1134,13 @@ export const processCase = inngest.createFunction(
             }
             const { saveSectionPart } = await import('../steps/section-part-store');
             const partPath = await saveSectionPart(caseId, spec.id, `batch-${b}`, body);
-            return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
+            return {
+              partPath,
+              contextSummary: generated.contextSummary,
+              usage: generated.usage,
+              // Output piccolo e bounded (cap 12 citazioni ≤160 char per finestra).
+              ungroundedQuotes: generated.ungroundedQuotes,
+            };
           });
 
           const legacyInline = (batchResult as { content?: string }).content?.trim() ?? '';
@@ -1153,6 +1162,8 @@ export const processCase = inngest.createFunction(
             totalPromptTokens += batchResult.usage.promptTokens;
             totalCompletionTokens += batchResult.usage.completionTokens;
           }
+          const bq = (batchResult as { ungroundedQuotes?: string[] }).ungroundedQuotes;
+          if (bq && bq.length > 0) ungroundedQuotesAll.push(...bq);
         } catch (batchError) {
           // Resilienza (mirror di generateDocSanitariaChunked): una finestra
           // fallita lascia un marker localizzato e si prosegue; si rilancia solo
@@ -1164,6 +1175,19 @@ export const processCase = inngest.createFunction(
 
       if (okBatches === 0) {
         throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
+      }
+
+      // Fedeltà citazioni (feedback beta 2026-07-20): le «...» che non trovano
+      // riscontro esatto nell'OCR non restano più solo nei log — un warning
+      // drillabile porta l'elenco nel pannello "Da controllare" del perito.
+      if (ungroundedQuotesAll.length > 0) {
+        pipelineWarnings.push({
+          step: 'quote-verification',
+          severity: 'warning',
+          message: `${ungroundedQuotesAll.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
+          failedCount: ungroundedQuotesAll.length,
+          failedItems: ungroundedQuotesAll.slice(0, 24),
+        });
       }
 
       // COMBINE dentro uno step: legge le parti da Storage, unisce, applica il

@@ -66,4 +66,32 @@ describe('groupPipelineWarnings — copy calmo e gravità corretta per il perito
     expect(out).toHaveLength(1);
     expect(out[0].title).toBe('Messaggio inatteso');
   });
+
+  // Feedback beta 2026-07-20 (CASO-2026-027): 5 divergenze DENTRO le «...» sono
+  // arrivate al DOCX in silenzio — il verificatore le contava ma il conteggio
+  // restava solo nei log server. Ora sono una voce del pannello, drillabile.
+  it('citazioni non riscontrate (quote-verification) → WARNING con azione verso la doc-sanitaria e citazioni nel dettaglio', () => {
+    const out = groupPipelineWarnings([
+      w({
+        step: 'quote-verification',
+        message: '3 citazioni non corrispondono al testo OCR',
+        failedCount: 3,
+        failedItems: ['piacca+ vite 2022', 'artroscopia di caviglia', 'riesce a deambulare'],
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].severity).toBe('warning');
+    expect(out[0].title).toContain('3 citazioni');
+    expect(out[0].title.toLowerCase()).toContain('non corrispond');
+    expect(out[0].action).toBe('goto-docsanitaria');
+    expect(out[0].sources[0].failedItems).toContain('piacca+ vite 2022');
+  });
+
+  it('quote-verification singolare: "1 citazione ... non corrisponde"', () => {
+    const out = groupPipelineWarnings([
+      w({ step: 'quote-verification', message: '1 citazione non riscontrata', failedCount: 1, failedItems: ['solo una'] }),
+    ]);
+    expect(out[0].title).toContain('1 citazione');
+    expect(out[0].title).toContain('non corrisponde esattamente');
+  });
 });

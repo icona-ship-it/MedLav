@@ -95,6 +95,20 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
     });
   }
 
+  // 4bis. Citazioni «...» non riscontrate esattamente nell'OCR — WARNING drillabile
+  // (feedback beta 2026-07-20: le divergenze dentro le virgolette arrivavano al
+  // documento in silenzio; il dettaglio elenca le citazioni da confrontare).
+  const quoteFidelity = warnings.filter((w) => w.step === 'quote-verification');
+  if (quoteFidelity.length > 0) {
+    const n = quoteFidelity.reduce((s, w) => s + count(w), 0);
+    out.push({
+      severity: 'warning',
+      title: `${n} ${n === 1 ? 'citazione della Documentazione Sanitaria non corrisponde esattamente' : 'citazioni della Documentazione Sanitaria non corrispondono esattamente'} al testo dei documenti — confrontarle con l'originale prima della consegna.`,
+      action: 'goto-docsanitaria',
+      sources: quoteFidelity,
+    });
+  }
+
   // 5. Documenti duplicati esclusi — INFO (rassicurazione, non un problema).
   const dedup = warnings.filter((w) => w.step === 'dedup');
   if (dedup.length > 0) {
@@ -119,7 +133,7 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
   }
 
   // 7. Qualunque altro warning non categorizzato — non perderlo mai.
-  const known = new Set([...sectionFailed, ...calc, ...unread, ...coverage, ...dedup, ...lang]);
+  const known = new Set([...sectionFailed, ...calc, ...unread, ...coverage, ...quoteFidelity, ...dedup, ...lang]);
   const rest = warnings.filter((w) => !known.has(w));
   for (const w of rest) {
     out.push({

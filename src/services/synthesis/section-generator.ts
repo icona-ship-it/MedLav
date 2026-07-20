@@ -576,14 +576,24 @@ export async function generateSingleSection(params: {
   // viene hard-verificata contro l'OCR sorgente — una citazione non riscontrata
   // viene annotata visibilmente, mai consegnata come fedele. Gira in TUTTI i
   // path (pipeline batched, pipeline singola, rigenerazione).
+  let quoteFidelityMeta: { ungroundedQuotes: string[]; quoteTotal: number } | undefined;
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder
     && documentsOcrText && documentsOcrText.length > 0) {
     // RC (excludeLabTests): NIENTE marker ⚠️ inline nella perizia firmata (Lavini
-    // 2026-06-28) — il contenuto resta pulito, resta solo il log di audit.
+    // 2026-06-28) — il contenuto resta pulito; le citazioni non riscontrate
+    // arrivano però al perito via pipelineWarnings (pannello "Da controllare"),
+    // non solo al log di audit (beta 2026-07-20: 5 divergenze consegnate in silenzio).
     const checked = annotateDocSanitariaQuotesGated(finalContent, documentsOcrText, { excludeLabTests: spec.excludeLabTests });
     finalContent = checked.annotatedMarkdown;
     if (checked.ungroundedCount > 0) {
-      const auditOnly = spec.excludeLabTests ? ' (audit; marker non renderizzati)' : ' — annotate per il perito';
+      quoteFidelityMeta = {
+        ungroundedQuotes: checked.verifications
+          .filter((v) => !v.grounded)
+          .slice(0, 12)
+          .map((v) => (v.quote.length > 160 ? `${v.quote.slice(0, 160)}…` : v.quote)),
+        quoteTotal: checked.total,
+      };
+      const auditOnly = spec.excludeLabTests ? ' (marker non renderizzati; segnalate nel pannello)' : ' — annotate per il perito';
       logger.warn('section-generator', `Doc-sanitaria: ${checked.ungroundedCount}/${checked.total} citazioni non riscontrate nell'OCR${auditOnly}`);
     }
   } else if (spec.verifyQuotes && !spec.isPlaceholder
@@ -633,6 +643,7 @@ export async function generateSingleSection(params: {
     wordCount,
     usage,
     ...coveMeta,
+    ...(quoteFidelityMeta ?? {}),
     ...(truncatedByCap ? { truncatedByCap, originalCharLength } : {}),
     ...(fidelity.mode ? { fidelityMode: fidelity.mode } : {}),
     ...(fidelity.mode === 'summaries' ? { fidelitySummaryCount: summaryCount } : {}),
