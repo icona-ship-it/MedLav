@@ -175,6 +175,12 @@ export function CaseDetailClient({
     (caseData.perizia_metadata as Record<string, unknown> | null)?.generationProgress as GenerationProgress | undefined
   ) ?? null;
 
+  // Nota di esito di una rigenerazione asincrona (fallita o no-op) — scritta dai
+  // job Inngest regenerate-report/regenerate-section, ripulita al run successivo.
+  const regenerateNote = (
+    (caseData.perizia_metadata as Record<string, unknown> | null)?.lastRegenerateError as string | undefined
+  ) ?? null;
+
   // Extract pipeline warnings from perizia_metadata (saved at finalize when any step had issues)
   const pipelineWarnings = (
     (caseData.perizia_metadata as Record<string, unknown> | null)?.pipelineWarnings as Array<{
@@ -443,6 +449,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
+                regenerateNote={regenerateNote}
               />
             </div>
           )}
@@ -504,6 +511,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
+                regenerateNote={regenerateNote}
               />
             </div>
           )}
@@ -581,6 +589,7 @@ export function CaseDetailClient({
                 onNavigateToStep={handleSetStep}
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
+                regenerateNote={regenerateNote}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
               />
             </div>

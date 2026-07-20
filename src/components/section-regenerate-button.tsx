@@ -70,7 +70,9 @@ export function SectionRegenerateButton({
         toast.error(result.error ?? 'Errore rigenerazione sezione');
         return;
       }
-      toast.success(`Sezione "${sectionTitle}" rigenerata`);
+      // Async (Inngest): la pagina passa allo stato di avanzamento e si
+      // aggiorna da sola al termine — qui si conferma solo l'avvio.
+      toast.success(`Rigenerazione di "${sectionTitle}" avviata — il report si aggiornerà a breve.`);
       setOpen(false);
       setInstruction('');
       setBlockedReason(null);

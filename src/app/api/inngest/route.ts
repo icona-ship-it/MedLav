@@ -1,6 +1,6 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/lib/inngest/client';
-import { processCase, regenerateReport, dataRetentionCleanup, classifyBatchJob, stuckCaseMonitor } from '@/inngest';
+import { processCase, regenerateReport, regenerateSectionJob, dataRetentionCleanup, classifyBatchJob, stuckCaseMonitor } from '@/inngest';
 
 export const maxDuration = 800;
 
@@ -9,6 +9,7 @@ export const { GET, POST, PUT } = serve({
   functions: [
     processCase,
     regenerateReport,
+    regenerateSectionJob,
     dataRetentionCleanup,
     classifyBatchJob,
     stuckCaseMonitor,

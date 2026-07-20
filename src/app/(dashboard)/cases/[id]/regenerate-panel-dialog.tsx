@@ -62,31 +62,30 @@ export function RegeneratePanelDialog({
     const targets = sections.filter((s) => selected.has(s.canonicalId));
     if (targets.length === 0) return;
     setIsRunning(true);
-    let ok = 0;
     try {
-      // Sequential: each regeneration builds on the previous version (avoids
-      // races on the report version). force:true — the perito chose these
-      // explicitly in the panel (the panel is the confirmation).
-      for (let i = 0; i < targets.length; i++) {
-        const target = targets[i];
-        setProgress(`Rigenerazione ${i + 1}/${targets.length}: ${target.title}`);
-        const response = await fetch('/api/processing/regenerate-section', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-          body: JSON.stringify({ caseId, sectionId: target.canonicalId, force: true }),
-        });
-        const json = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
-        if (!response.ok || !json?.success) {
-          toast.error(`"${target.title}": ${json?.error ?? 'errore'}`);
-          break;
-        }
-        ok += 1;
+      // UNA chiamata con tutte le sezioni: il job Inngest le processa in fila
+      // (ognuna costruisce sulla versione precedente). force:true — il perito
+      // le ha scelte esplicitamente nel pannello (il pannello è la conferma).
+      setProgress('Avvio rigenerazione…');
+      const response = await fetch('/api/processing/regenerate-section', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId, sectionIds: targets.map((t) => t.canonicalId), force: true }),
+      });
+      const json = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
+      if (!response.ok || !json?.success) {
+        toast.error(json?.error ?? 'Errore avvio rigenerazione');
+        return;
       }
-      if (ok > 0) {
-        toast.success(`${ok} ${ok === 1 ? 'sezione rigenerata' : 'sezioni rigenerate'}.`);
-        onOpenChange(false);
-        onDone();
-      }
+      toast.success(
+        targets.length === 1
+          ? 'Rigenerazione avviata — il report si aggiornerà a breve.'
+          : `Rigenerazione di ${targets.length} sezioni avviata — il report si aggiornerà a breve.`,
+      );
+      onOpenChange(false);
+      onDone();
+    } catch {
+      toast.error('Errore di rete. Verifica la connessione.');
     } finally {
       setIsRunning(false);
       setProgress(null);

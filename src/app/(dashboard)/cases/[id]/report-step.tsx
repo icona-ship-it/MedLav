@@ -103,6 +103,8 @@ interface ReportStepProps {
   pipelineWarnings?: PipelineWarningItem[];
   /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
   lastError?: string;
+  /** Esito di una rigenerazione asincrona (fallita o no-op) — perizia_metadata.lastRegenerateError. */
+  regenerateNote?: string | null;
 }
 
 /** Numeretto del passaggio nella checklist "Da controllare": dà ordine di
@@ -136,8 +138,11 @@ export function ReportStep({
   generationProgress,
   pipelineWarnings = [],
   lastError,
+  regenerateNote,
 }: ReportStepProps) {
   const router = useRouter();
+  // Nota di esito rigenerazione: chiudibile, torna solo se il server la riscrive.
+  const [regenNoteDismissed, setRegenNoteDismissed] = useState(false);
 
   // Verbatim documentation (deterministic): group OCR pages by document so the
   // DOC_SANITARIA sentinel expands to the doctor's text — same as the export.
@@ -386,7 +391,7 @@ export function ReportStep({
         });
         const data = await res.json() as { success: boolean; error?: string };
         if (data.success) {
-          toast.success('Sezione corretta. Rileggi il punto segnalato per conferma.');
+          toast.success('Correzione avviata — al termine rileggi il punto segnalato per conferma.');
           router.refresh();
         } else {
           toast.error(toUserMessage(data.error ?? 'Correzione non riuscita. Riprova.'));
@@ -629,6 +634,27 @@ export function ReportStep({
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Esito di una rigenerazione asincrona (fallita o senza modifiche): prima
+          questa nota veniva scritta nei metadata ma non mostrata da nessuno. */}
+      {!isRegeneratingReport && regenerateNote && !regenNoteDismissed && (
+        <div
+          role="status"
+          className="mb-4 flex items-start gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm dark:border-amber-700/50 dark:bg-amber-900/20"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="flex-1 text-amber-900 dark:text-amber-200">{regenerateNote}</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setRegenNoteDismissed(true)}
+          >
+            <X className="h-3.5 w-3.5" />
+            <span className="sr-only">Chiudi avviso</span>
+          </Button>
         </div>
       )}
 
