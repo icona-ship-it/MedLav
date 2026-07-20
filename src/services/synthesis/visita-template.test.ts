@@ -12,9 +12,27 @@ describe('visita-template — facsimile esame obiettivo (feedback beta 2026-07-2
     expect(ESAME_OBIETTIVO_FACSIMILE).toContain('Si tralascia l\'obiettività');
   });
 
-  it('è una traccia generica: solo slot [tra parentesi], nessun valore clinico precompilato', () => {
-    // Nessun numero "vero" fuori dagli slot (peso/altezza/gradi restano [...])
+  it('è una traccia generica: solo slot "…", nessun valore clinico precompilato', () => {
+    // Nessun numero "vero" negli slot (peso/altezza/gradi restano "…")
     expect(ESAME_OBIETTIVO_FACSIMILE).not.toMatch(/\d{2,} ?(kg|cm|°)/);
+  });
+
+  // Review 2026-07-21: la grammatica dei blocchi-placeholder degli export chiude
+  // il blocco alla prima riga che termina con "]" e riapre su "*[" — il facsimile
+  // deve restare UN blocco unico (apertura in testa, chiusura in coda).
+  it('la variante placeholder è UN solo blocco per i parser di export: nessuna riga interna chiude ("]") o riapre ("*[") il blocco', () => {
+    const CLOSE_RE = /\]\*?[.\s]*$/;
+    const lines = VISITA_CLINICA_PLACEHOLDER.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const isLast = i === lines.length - 1;
+      if (!isLast) {
+        expect(CLOSE_RE.test(lines[i]), `riga ${i + 1} chiude il blocco: "${lines[i]}"`).toBe(false);
+      }
+      if (i > 0) {
+        expect(lines[i].startsWith('*['), `riga ${i + 1} riapre un blocco: "${lines[i]}"`).toBe(false);
+      }
+    }
+    expect(CLOSE_RE.test(lines[lines.length - 1])).toBe(true);
   });
 
   it('la variante placeholder apre con *[ ed è riconosciuta come blocco da compilare', () => {

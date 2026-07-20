@@ -6,6 +6,33 @@ import {
   EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA,
 } from '@/lib/document-type-labels';
 import { formatDate } from '@/lib/format';
+import { isPlaceholderBlockStart } from './markdown-to-html';
+
+/**
+ * Rimuove i blocchi-placeholder "da compilare" (`*[ ... ]*`) da una sezione —
+ * stessa grammatica dei parser di export: apertura su isPlaceholderBlockStart,
+ * chiusura alla prima riga che termina con `]`/`]*`. Usata quando il contenuto
+ * reale (es. l'esame obiettivo del form) sostituisce lo scaffold.
+ */
+export function stripPlaceholderScaffold(content: string): string {
+  const CLOSE_RE = /\]\*?[.\s]*$/;
+  const lines = content.split('\n');
+  const kept: string[] = [];
+  let inBlock = false;
+  for (const line of lines) {
+    if (!inBlock && isPlaceholderBlockStart(line)) {
+      inBlock = true;
+      if (CLOSE_RE.test(line.trim())) inBlock = false; // blocco su riga singola
+      continue;
+    }
+    if (inBlock) {
+      if (CLOSE_RE.test(line.trim())) inBlock = false;
+      continue;
+    }
+    kept.push(line);
+  }
+  return kept.join('\n').trim();
+}
 
 export interface PeriziaMetadataExport {
   tribunale?: string;
@@ -241,7 +268,13 @@ export function assembleFullReport(params: {
           pendingIntro = '';
         }
         if (pm.esameObiettivo && !esameObiettivoInjected && /visita|esame\s+obiettivo/i.test(title)) {
-          content = `${content}\n\n**Esame obiettivo (rilevato dal perito):**\n\n${pm.esameObiettivo}`;
+          // SOSTITUISCE il facsimile-placeholder, non lo appende (review
+          // 2026-07-21: prima l'export mostrava traccia completa + esame reale
+          // duplicati). Il testo del perito già scritto nella sezione resta.
+          content = stripPlaceholderScaffold(content);
+          content = content.length > 0
+            ? `${content}\n\n**Esame obiettivo (rilevato dal perito):**\n\n${pm.esameObiettivo}`
+            : `**Esame obiettivo (rilevato dal perito):**\n\n${pm.esameObiettivo}`;
           esameObiettivoInjected = true;
         }
         if (content.length > 0) {

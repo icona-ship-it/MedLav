@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { synthesisHasOwnHeader } from './report-assembler';
+import { synthesisHasOwnHeader, stripPlaceholderScaffold, assembleFullReport } from './report-assembler';
+import { VISITA_CLINICA_PLACEHOLDER } from '@/services/synthesis/visita-template';
 import { generateHtmlReport, generateProfessionalHtmlReport } from './html-export';
 
 describe('synthesisHasOwnHeader', () => {
@@ -92,5 +93,40 @@ describe('export: nota del perito sulle anomalie (promessa mantenuta 2026-07-14)
     const html = generateHtmlReport(params as any);
     expect(html).toContain('Nota del perito');
     expect(html).toContain('relazione successiva non depositata');
+  });
+});
+
+describe('stripPlaceholderScaffold — il facsimile lascia il posto al testo reale (review 2026-07-21)', () => {
+  it('rimuove per intero il facsimile della Visita Clinica', () => {
+    const out = stripPlaceholderScaffold(VISITA_CLINICA_PLACEHOLDER);
+    expect(out).toBe('');
+  });
+
+  it('conserva il testo reale attorno al blocco placeholder', () => {
+    const content = `Prosa del perito prima.\n\n${VISITA_CLINICA_PLACEHOLDER}\n\nProsa del perito dopo.`;
+    const out = stripPlaceholderScaffold(content);
+    expect(out).toContain('Prosa del perito prima.');
+    expect(out).toContain('Prosa del perito dopo.');
+    expect(out).not.toContain('SOGGETTIVAMENTE');
+  });
+
+  it('rimuove anche il vecchio placeholder legacy a poche righe', () => {
+    const legacy = '*[Inserire qui i risultati della visita:\n- esame locale\n- deambulazione]*';
+    expect(stripPlaceholderScaffold(legacy)).toBe('');
+  });
+
+  it('assembleFullReport: esame obiettivo del perito SOSTITUISCE il facsimile (mai duplicati)', () => {
+    const synthesis = `## La Visita Clinica\n\n${VISITA_CLINICA_PLACEHOLDER}`;
+    const sections = assembleFullReport({
+      caseCode: 'X', caseType: 'rc_auto', caseRole: 'stragiudiziale', patientInitials: 'S.S.',
+      events: [], anomalies: [], missingDocs: [], documentsWithPages: [],
+      periziaMetadata: { ctuName: 'Dr. Prova', esameObiettivo: 'Caviglia destra: ROM conservato.' },
+      reportStatus: 'completato', synthesis, exportMode: 'lavoro',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const visita = sections.sections.find((s) => /visita/i.test(s.title));
+    expect(visita).toBeDefined();
+    expect(visita!.content).toContain('Caviglia destra: ROM conservato.');
+    expect(visita!.content).not.toContain('SOGGETTIVAMENTE');
   });
 });
