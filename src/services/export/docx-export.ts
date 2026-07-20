@@ -89,6 +89,10 @@ interface DocxExportParams {
   reportStatus?: string;
   /** 'depositabile' = solo il documento firmabile, niente carte di lavoro. */
   exportMode?: ExportMode;
+  /** Pipeline del caso: gli strumenti standalone (extraction_only/expenses_only)
+   * NON producono una perizia — l'export deve dirlo, non fingersi un report
+   * monco ("Sintesi non ancora generata", feedback beta 2026-07-20). */
+  pipelineMode?: string;
 }
 
 /**
@@ -357,21 +361,33 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     children.push(new Paragraph({ text: '' }));
   }
 
+  // Strumenti standalone (cronistoria/spese): il documento dichiara cosa è,
+  // non si presenta come un report medico-legale a cui "manca la sintesi".
+  const isStandaloneTool = params.pipelineMode === 'extraction_only' || params.pipelineMode === 'expenses_only';
+  const docTitle = params.pipelineMode === 'extraction_only'
+    ? 'CRONISTORIA DOCUMENTALE'
+    : params.pipelineMode === 'expenses_only'
+      ? 'ANALISI SPESE MEDICHE'
+      : 'REPORT MEDICO-LEGALE';
+
   // Title
   children.push(
     new Paragraph({
-      text: 'REPORT MEDICO-LEGALE',
+      text: docTitle,
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({ text: '' }),
   );
 
-  // Header info
+  // Header info ("Tipo/Ruolo" solo per la perizia: su uno strumento standalone
+  // "Ruolo: Perito Stragiudiziale" era fuorviante).
   children.push(
     new Paragraph({ children: [new TextRun({ text: `Caso: ${caseCode}`, bold: true })] }),
     new Paragraph({ children: [new TextRun({ text: `Paziente: ${patientInitials ?? 'N/D'}` })] }),
-    new Paragraph({ children: [new TextRun({ text: `Tipo: ${caseType} | Ruolo: ${DOCX_ROLE_DESCRIPTIONS[caseRole] ?? caseRole.toUpperCase()}` })] }),
+    ...(isStandaloneTool
+      ? []
+      : [new Paragraph({ children: [new TextRun({ text: `Tipo: ${caseType} | Ruolo: ${DOCX_ROLE_DESCRIPTIONS[caseRole] ?? caseRole.toUpperCase()}` })] })]),
     new Paragraph({ children: [new TextRun({ text: `Data report: ${now}` })] }),
     new Paragraph({
       children: [new TextRun({ text: `Eventi: ${events.length} | Anomalie: ${anomalies.length} | Doc. Mancanti: ${missingDocs.length}` })],
@@ -408,10 +424,12 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     children.push(new Paragraph({ text: '' }));
   }
 
-  // Section 1: Synthesis
+  // Section 1: Synthesis — per gli strumenti standalone diventa una nota onesta
+  // su cosa contiene il documento (mai "Sintesi non ancora generata" su un caso
+  // che una sintesi non la prevede).
   children.push(
     new Paragraph({
-      text: '1. SINTESI MEDICO-LEGALE',
+      text: isStandaloneTool && !synthesis ? '1. NOTA SUL DOCUMENTO' : '1. SINTESI MEDICO-LEGALE',
       heading: HeadingLevel.HEADING_1,
     }),
     new Paragraph({ text: '' }),
@@ -419,6 +437,13 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   if (synthesis) {
     children.push(...markdownToDocxParagraphs(synthesis));
+  } else if (isStandaloneTool) {
+    children.push(new Paragraph({
+      children: [new TextRun({
+        text: 'Questo caso è stato creato con uno strumento di analisi: il documento raccoglie in ordine cronologico gli eventi estratti dalla documentazione caricata e non è una perizia. Per il report medico-legale completo (trascrizione della documentazione, visita, calcoli ed epicrisi) crea un nuovo caso con il modulo "Responsabilità civile".',
+        italics: true,
+      })],
+    }));
   } else {
     children.push(new Paragraph({ text: 'Sintesi non ancora generata.' }));
   }

@@ -72,10 +72,13 @@ export interface ModuleDefinition {
 }
 
 export const MODULE_CATALOG: readonly ModuleDefinition[] = [
+  // Copy card riviste (feedback beta 2026-07-20: un caso di prova è stato creato
+  // con la cronistoria credendola la perizia): ogni card dice cosa PRODUCE e gli
+  // strumenti dichiarano esplicitamente di non produrre la perizia.
   {
     id: 'perizia_ml_rc_civile',
     label: 'Responsabilità civile',
-    description: 'Perizia medico-legale per responsabilità civile generale',
+    description: 'La perizia medico-legale completa: trascrizione fedele della documentazione, visita, calcoli ITT/ITP, spese ed epicrisi in un report strutturato pronto per la revisione',
     categoryId: 1,
     impliedRole: 'stragiudiziale',
     pipelineMode: 'full',
@@ -85,7 +88,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
   {
     id: 'analisi_doc_sanitari',
     label: 'Analisi e cronistoria documenti sanitari',
-    description: 'Trascrizione estrattiva e cronistoria della documentazione medico-sanitaria',
+    description: 'Solo la cronistoria: estrae e ordina gli eventi dai documenti. Non produce la perizia — per il report completo scegli "Responsabilità civile"',
     categoryId: 2,
     impliedRole: null,
     pipelineMode: 'extraction_only',
@@ -95,7 +98,7 @@ export const MODULE_CATALOG: readonly ModuleDefinition[] = [
   {
     id: 'analisi_spese_mediche',
     label: 'Analisi spese mediche',
-    description: 'Gestione della congruità delle spese mediche e farmacologiche',
+    description: 'Solo le spese: estrae e tabula le spese mediche e farmacologiche documentate. Non produce la perizia',
     categoryId: 2,
     impliedRole: null,
     pipelineMode: 'expenses_only',

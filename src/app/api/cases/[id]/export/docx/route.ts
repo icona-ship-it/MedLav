@@ -106,7 +106,10 @@ export async function GET(
     // pm.tribunale non è più nel tipo ma esiste nei JSONB legacy: senza il
     // check, un caso legacy col solo tribunale perderebbe il layout
     // professional in mode=lavoro (review 2026-07-03).
-    const useProfessional = pm && (pm.tribunale || pm.ctuName);
+    // Gli strumenti standalone (cronistoria/spese) non sono una perizia:
+    // usano sempre il layout basic etichettato, mai il professional.
+    const pipelineModeDocx = (data.caseData.pipeline_mode as string | null) ?? 'full';
+    const useProfessional = pipelineModeDocx === 'full' && pm && (pm.tribunale || pm.ctuName);
 
     // Resolve ocr-image: placeholders to base64 data URIs
     let synthesis = data.report?.synthesis as string | null ?? null;
@@ -180,6 +183,7 @@ export async function GET(
         periziaMetadata: data.periziaMetadata,
         reportStatus,
         exportMode,
+        pipelineMode: pipelineModeDocx,
       });
 
     const suffix = shouldAnonymize ? '-anonimizzato' : '';
