@@ -351,7 +351,16 @@ export async function updateCase(params: {
       const preservedLegacy = Object.fromEntries(
         Object.entries(existingMeta).filter(([key]) => !PERIZIA_METADATA_KNOWN_KEYS.has(key)),
       );
-      updateFields.perizia_metadata = { ...preservedLegacy, ...params.periziaMetadata };
+      // Campi di PROPRIETÀ del selettore "Sezioni del report" (step Elaborazione),
+      // non del form perizia: se il payload non li porta, si preservano dal DB —
+      // altrimenti un salvataggio del form con uno snapshot stale cancellerebbe
+      // in silenzio l'ordine/le esclusioni appena scelti (review 2026-07-21).
+      const preservedSectionPrefs = Object.fromEntries(
+        (['excludedReportSections', 'sectionOrder'] as const)
+          .filter((k) => !(k in params.periziaMetadata!) && k in existingMeta)
+          .map((k) => [k, existingMeta[k]]),
+      );
+      updateFields.perizia_metadata = { ...preservedLegacy, ...preservedSectionPrefs, ...params.periziaMetadata };
     } else {
       updateFields.perizia_metadata = null;
     }
