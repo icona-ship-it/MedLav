@@ -94,4 +94,16 @@ describe('groupPipelineWarnings — copy calmo e gravità corretta per il perito
     expect(out[0].title).toContain('1 citazione');
     expect(out[0].title).toContain('non corrisponde esattamente');
   });
+
+  it('quote-verification: il titolo usa failedCount (totale vero), non la lista troncata', () => {
+    const out = groupPipelineWarnings([
+      w({
+        step: 'quote-verification',
+        message: '30 citazioni non riscontrate',
+        failedCount: 30,
+        failedItems: Array.from({ length: 24 }, (_, i) => `citazione ${i + 1}`),
+      }),
+    ]);
+    expect(out[0].title).toContain('30 citazioni');
+  });
 });

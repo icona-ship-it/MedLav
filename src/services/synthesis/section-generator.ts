@@ -904,6 +904,8 @@ async function generateDocSanitariaChunked(params: {
   let rollingContext: SectionContext[] = [...previousContext];
   let totalUsage = createEmptyUsage();
   let okChunks = 0;
+  const ungroundedQuotes: string[] = [];
+  let quoteTotal = 0;
 
   for (let i = 0; i < chunks.length; i++) {
     try {
@@ -921,6 +923,10 @@ async function generateDocSanitariaChunked(params: {
         rollingContext = [...rollingContext, { id: spec.id, title: spec.title, contextSummary: sub.contextSummary }];
         if (sub.usage) totalUsage = mergeUsage(totalUsage, sub.usage);
         okChunks++;
+        // Fedeltà citazioni: i sotto-blocchi non devono perdere le «...» non
+        // riscontrate — risalgono aggregate nella sezione combinata.
+        if (sub.ungroundedQuotes?.length) ungroundedQuotes.push(...sub.ungroundedQuotes);
+        if (sub.quoteTotal) quoteTotal += sub.quoteTotal;
       }
     } catch (err) {
       const chunk = chunks[i];
@@ -943,7 +949,15 @@ async function generateDocSanitariaChunked(params: {
   const contextSummary = spec.contextMaxChars > 0 ? summarizeForContext(content, spec.contextMaxChars) : '';
   logger.info('section-generator', `Doc-sanitaria auto-split completato: ${okChunks}/${chunks.length} blocchi ok, ${wordCount} parole`);
 
-  return { id: spec.id, title: spec.title, content, contextSummary, wordCount, usage: totalUsage };
+  return {
+    id: spec.id,
+    title: spec.title,
+    content,
+    contextSummary,
+    wordCount,
+    usage: totalUsage,
+    ...(ungroundedQuotes.length > 0 ? { ungroundedQuotes: ungroundedQuotes.slice(0, 24), quoteTotal } : {}),
+  };
 }
 
 /**

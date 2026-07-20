@@ -820,7 +820,26 @@ export function ReportStep({
                     n={panelSteps.warningsBase + i + 1}
                     tone={wd.severity === 'critical' ? 'red' : wd.severity === 'warning' ? 'amber' : 'muted'}
                   />
-                  <span className="text-sm">{wd.title}</span>
+                  <div className="min-w-0">
+                    <span className="text-sm">{wd.title}</span>
+                    {/* Fedeltà citazioni: il warning è drillabile QUI — l'elenco
+                        delle «...» da confrontare con l'originale, non solo il conteggio. */}
+                    {wd.sources.some((s) => s.step === 'quote-verification' && (s.failedItems?.length ?? 0) > 0) && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                          Vedi le citazioni da confrontare
+                        </summary>
+                        <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                          {wd.sources
+                            .filter((s) => s.step === 'quote-verification')
+                            .flatMap((s) => s.failedItems ?? [])
+                            .map((q, qi) => (
+                              <li key={qi} className="border-l-2 border-amber-300 pl-2">«{q}»</li>
+                            ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
                 </div>
                 {wd.action === 'view-documents' && drillablePipelineWarning && (
                   <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setPipelineDetail(drillablePipelineWarning)}>

@@ -100,7 +100,9 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
   // documento in silenzio; il dettaglio elenca le citazioni da confrontare).
   const quoteFidelity = warnings.filter((w) => w.step === 'quote-verification');
   if (quoteFidelity.length > 0) {
-    const n = quoteFidelity.reduce((s, w) => s + count(w), 0);
+    // failedCount porta il totale VERO (failedItems è troncato a 24 voci):
+    // mai titolare "24 citazioni" quando le divergenze sono 30.
+    const n = quoteFidelity.reduce((s, w) => s + (w.failedCount ?? count(w)), 0);
     out.push({
       severity: 'warning',
       title: `${n} ${n === 1 ? 'citazione della Documentazione Sanitaria non corrisponde esattamente' : 'citazioni della Documentazione Sanitaria non corrispondono esattamente'} al testo dei documenti — confrontarle con l'originale prima della consegna.`,

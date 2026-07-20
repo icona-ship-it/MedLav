@@ -232,6 +232,9 @@ export const regenerateSectionJob = inngest.createFunction(
         const documentsOcrText = await fetchDocumentsOcrContext(caseId);
 
         const { regenerateSection } = await import('@/services/synthesis/section-regenerator');
+        // Fedeltà citazioni: valorizzato solo quando la doc-sanitaria selettiva
+        // viene davvero rigenerata — guida il refresh del warning in finalize.
+        let quoteCheck: { ungroundedQuotes: string[]; quoteTotal: number } | undefined;
         const updatedSynthesis = await regenerateSection({
           sectionId: target.sectionId,
           currentSynthesis: currentReport.synthesis as string,
@@ -250,6 +253,7 @@ export const regenerateSectionJob = inngest.createFunction(
           imageAnalysis,
           elaborated: target.elaborated,
           selective: target.selective,
+          onQuoteCheck: (info) => { quoteCheck = info; },
         });
 
         // No-op (es. doc-sanitaria in variante AI rigenerata in modo generico):
@@ -271,12 +275,43 @@ export const regenerateSectionJob = inngest.createFunction(
           imageAnalysis,
           auditExtra: { batchId, async: true },
         });
-        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version };
+        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version, quoteCheck };
       });
       outcomes.push(result);
     }
 
     await step.run('section-regen-finalize', async () => {
+      // Fedeltà citazioni: se la doc-sanitaria è stata rigenerata, il warning
+      // quote-verification viene RIALLINEATO al nuovo testo (sostituito con le
+      // nuove citazioni, o rimosso se il nuovo testo è tutto riscontrato) —
+      // mai un warning stantio che accusa citazioni non più presenti.
+      const freshQuoteCheck = outcomes.find(
+        (o): o is typeof o & { quoteCheck: { ungroundedQuotes: string[]; quoteTotal: number } } =>
+          'quoteCheck' in o && o.quoteCheck !== undefined,
+      )?.quoteCheck;
+      if (freshQuoteCheck) {
+        const admin = createAdminClient();
+        const { data: caseRow } = await admin.from('cases').select('perizia_metadata').eq('id', caseId).single();
+        const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        const prev = Array.isArray(meta.pipelineWarnings) ? meta.pipelineWarnings as Array<Record<string, unknown>> : [];
+        const kept = prev.filter((w) => w?.step !== 'quote-verification');
+        const n = freshQuoteCheck.ungroundedQuotes.length;
+        const next = n > 0
+          ? [...kept, {
+              step: 'quote-verification',
+              severity: 'warning',
+              message: `${n} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
+              failedCount: n,
+              failedItems: freshQuoteCheck.ungroundedQuotes,
+            }]
+          : kept;
+        const restMeta = Object.fromEntries(Object.entries(meta).filter(([k]) => k !== 'pipelineWarnings'));
+        await admin.from('cases').update({
+          perizia_metadata: next.length > 0 ? { ...restMeta, pipelineWarnings: next } : restMeta,
+          updated_at: new Date().toISOString(),
+        }).eq('id', caseId);
+      }
+
       const unchanged = outcomes.filter((o) => o.outcome === 'unchanged');
       if (unchanged.length > 0) {
         const { refundCredits } = await import('@/services/credits/credit-service');

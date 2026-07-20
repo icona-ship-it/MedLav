@@ -377,6 +377,8 @@ export const regenerateReport = inngest.createFunction(
       let promptTokens = 0;
       let completionTokens = 0;
       let okBatches = 0;
+      // Fedeltà citazioni: raccolte per finestra, risalgono sulla sezione combinata.
+      const ungroundedQuotesAll: string[] = [];
 
       for (let b = 0; b < batches.length; b++) {
         const batch = batches[b];
@@ -410,7 +412,13 @@ export const regenerateReport = inngest.createFunction(
             }
             const { saveSectionPart } = await import('../steps/section-part-store');
             const partPath = await saveSectionPart(caseId, spec.id, `batch-${b}`, body);
-            return { partPath, contextSummary: generated.contextSummary, usage: generated.usage };
+            return {
+              partPath,
+              contextSummary: generated.contextSummary,
+              usage: generated.usage,
+              // Output piccolo e bounded (cap 12 citazioni ≤160 char per finestra).
+              ungroundedQuotes: generated.ungroundedQuotes,
+            };
           });
           const legacyInline = (batchResult as { content?: string }).content?.trim() ?? '';
           if (batchResult.partPath) {
@@ -430,6 +438,8 @@ export const regenerateReport = inngest.createFunction(
             promptTokens += batchResult.usage.promptTokens;
             completionTokens += batchResult.usage.completionTokens;
           }
+          const bq = (batchResult as { ungroundedQuotes?: string[] }).ungroundedQuotes;
+          if (bq && bq.length > 0) ungroundedQuotesAll.push(...bq);
         } catch (batchError) {
           logger.error('regenerate-report', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
           batchMetas.push({ partPath: null, fallbackText: `*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*` });
@@ -715,9 +725,26 @@ export const regenerateReport = inngest.createFunction(
       const cleaned = Object.fromEntries(
         Object.entries(existingMeta).filter(([k]) => k !== 'generationProgress' && k !== 'lastRegenerateError'),
       );
+      // Fedeltà citazioni: il warning quote-verification riflette SEMPRE l'ultima
+      // generazione — via le voci del report precedente, dentro quelle nuove.
+      const freshQuotes = Array.from(completedSections.values()).flatMap((sec) => sec.ungroundedQuotes ?? []);
+      const prevWarnings = Array.isArray(cleaned.pipelineWarnings)
+        ? cleaned.pipelineWarnings as Array<Record<string, unknown>>
+        : [];
+      const keptWarnings = prevWarnings.filter((w) => w?.step !== 'quote-verification');
+      const nextWarnings = freshQuotes.length > 0
+        ? [...keptWarnings, {
+            step: 'quote-verification',
+            severity: 'warning',
+            message: `${freshQuotes.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
+            failedCount: freshQuotes.length,
+            failedItems: freshQuotes.slice(0, 24),
+          }]
+        : keptWarnings;
+      const restMeta = Object.fromEntries(Object.entries(cleaned).filter(([k]) => k !== 'pipelineWarnings'));
       await supabase.from('cases').update({
         processing_stage: 'completato',
-        perizia_metadata: cleaned,
+        perizia_metadata: nextWarnings.length > 0 ? { ...restMeta, pipelineWarnings: nextWarnings } : restMeta,
         updated_at: new Date().toISOString(),
       }).eq('id', caseId);
       // Cleanup best-effort delle parti di sezione transitorie (il report è

@@ -43,6 +43,11 @@ interface RegenerateSectionParams {
    * the LLM reproduction (translation / lab tables / grouping) instead of the
    * deterministic verbatim default. */
   elaborated?: boolean;
+  /** Fedeltà citazioni (feedback beta 2026-07-20): chiamata SEMPRE quando la
+   * doc-sanitaria selettiva viene rigenerata, con l'elenco (eventualmente
+   * vuoto) delle «...» senza riscontro esatto nell'OCR — il chiamante aggiorna
+   * il warning quote-verification in perizia_metadata (mai stantio). */
+  onQuoteCheck?: (info: { ungroundedQuotes: string[]; quoteTotal: number }) => void;
   /** On-demand "selective (AI)" variant of documentazione_sanitaria: a
    * chronological narrative that quotes significant findings verbatim and
    * paraphrases routine content. Verbatim quotes are hard-verified against the
@@ -192,6 +197,13 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     // perdere un fatto") NON è toccata — è un segnale diverso e load-bearing.
     const checked = annotateDocSanitariaQuotesGated(finalContent, documentsOcrText, { excludeLabTests: spec.excludeLabTests });
     finalContent = checked.annotatedMarkdown;
+    params.onQuoteCheck?.({
+      ungroundedQuotes: checked.verifications
+        .filter((v) => !v.grounded)
+        .slice(0, 24)
+        .map((v) => (v.quote.length > 160 ? `${v.quote.slice(0, 160)}…` : v.quote)),
+      quoteTotal: checked.total,
+    });
 
     const coverage = checkSelectiveCoverage(finalContent, events);
     if (coverage.missing.length > 0) {

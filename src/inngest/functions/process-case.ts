@@ -1177,19 +1177,6 @@ export const processCase = inngest.createFunction(
         throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
       }
 
-      // Fedeltà citazioni (feedback beta 2026-07-20): le «...» che non trovano
-      // riscontro esatto nell'OCR non restano più solo nei log — un warning
-      // drillabile porta l'elenco nel pannello "Da controllare" del perito.
-      if (ungroundedQuotesAll.length > 0) {
-        pipelineWarnings.push({
-          step: 'quote-verification',
-          severity: 'warning',
-          message: `${ungroundedQuotesAll.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
-          failedCount: ungroundedQuotesAll.length,
-          failedItems: ungroundedQuotesAll.slice(0, 24),
-        });
-      }
-
       // COMBINE dentro uno step: legge le parti da Storage, unisce, applica il
       // check di copertura (che prima viveva nell'orchestratore: ora il testo
       // combinato non transita più nello stato del run) e salva il combinato.
@@ -1265,6 +1252,9 @@ export const processCase = inngest.createFunction(
           completionTokens: totalCompletionTokens,
           totalTokens: totalPromptTokens + totalCompletionTokens,
         } : undefined,
+        // Fedeltà citazioni: le «...» senza riscontro raccolte per finestra
+        // risalgono sulla sezione combinata (aggregazione unica a valle).
+        ...(ungroundedQuotesAll.length > 0 ? { ungroundedQuotes: ungroundedQuotesAll.slice(0, 24) } : {}),
       };
     };
 
@@ -1337,6 +1327,22 @@ export const processCase = inngest.createFunction(
           error: sectionError instanceof Error ? sectionError.message : 'unknown',
         });
       }
+    }
+
+    // Fedeltà citazioni (feedback beta 2026-07-20): aggrega da TUTTE le sezioni
+    // completate — wave parallela, tail sequenziale, doc-sanitaria batched e
+    // auto-split — le «...» senza riscontro esatto nell'OCR. Prima il segnale
+    // esisteva solo nei log: le divergenze arrivavano al DOCX in silenzio.
+    const ungroundedQuotesReport = Array.from(completedSections.values())
+      .flatMap((s) => s.ungroundedQuotes ?? []);
+    if (ungroundedQuotesReport.length > 0) {
+      pipelineWarnings.push({
+        step: 'quote-verification',
+        severity: 'warning',
+        message: `${ungroundedQuotesReport.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
+        failedCount: ungroundedQuotesReport.length,
+        failedItems: ungroundedQuotesReport.slice(0, 24),
+      });
     }
 
     // ULTIMA CHANCE prima del fallback (CASO-2026-219, 2026-07-14: Anamnesi+Fatto
