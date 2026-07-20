@@ -6,6 +6,7 @@
  */
 import type { SectionSpec } from './section-generation-types';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
+import { VISITA_CLINICA_PLACEHOLDER } from './visita-template';
 import {
   TOKENS_TINY,
   TOKENS_SMALL,
@@ -166,15 +167,11 @@ ${ANTI_DISTORSIONE_RULE}`,
     contextMaxChars: 0,
     needsOcr: false,
     isPlaceholder: true,
-    placeholderText: `*[Inserire qui i risultati della visita medico-legale:*
-
-*SOGGETTIVAMENTE — Il/La periziando/a riferisce:*
-*- Sintomatologia attuale*
-*- Limitazioni funzionali*
-
-*OBIETTIVAMENTE — All'esame obiettivo:*
-*- Esame obiettivo generale e locale*
-*- Eventuali esami strumentali]*`,
+    // Facsimile modificabile (feedback beta 2026-07-20): traccia completa di
+    // esame obiettivo con slot, non più uno scheletro a 4 righe. Il campo
+    // "Esame obiettivo" del form perizia, se compilato, sostituisce il blocco
+    // a export-time (report-assembler).
+    placeholderText: VISITA_CLINICA_PLACEHOLDER,
     promptDirective: '',
   },
   {

@@ -17,6 +17,7 @@ import { usePeriziaDraft } from './use-perizia-draft';
 import { buildVisibleSections } from './perizia-form-sections';
 import { mergeDraftForm, formatDraftAge, type PeriziaDraft } from '@/lib/perizia-draft-storage';
 import { isValidItalianDate } from '@/lib/validators/date-format';
+import { ESAME_OBIETTIVO_FACSIMILE } from '@/services/synthesis/visita-template';
 import type { CaseData, PeriziaMetadataUI } from './types';
 import { computeBMI } from '@/services/synthesis/anamnesi-template';
 
@@ -621,9 +622,22 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'esameObiettivo' && (
                   <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-muted-foreground">
+                        Inserisci i risultati dell&apos;esame obiettivo eseguito durante la visita medico-legale. Queste informazioni appariranno nella sezione &quot;Visita del Periziando&quot; del report.
+                      </p>
+                      {!form.esameObiettivo?.trim() && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => setForm({ ...form, esameObiettivo: ESAME_OBIETTIVO_FACSIMILE })}
+                        >
+                          Inserisci facsimile
+                        </Button>
+                      )}
+                    </div>
                     <Textarea
                       value={form.esameObiettivo ?? ''}
                       onChange={(e) => setForm({ ...form, esameObiettivo: e.target.value })}
