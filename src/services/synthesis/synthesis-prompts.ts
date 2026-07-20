@@ -192,20 +192,28 @@ export function formatEventsByDocumentForPrompt(
   return groups.map((evs, i) => {
     const rep = evs.find((e) => e.facility) ?? evs[0];
     // DATA DEL BLOCCO dai fatti, mai inventata (feedback beta 2026-07-20): una
-    // data unica solo se il documento ha UNA data-evento; più date (storici,
+    // data unica se il documento ne ha una sola O se una data DOMINA nettamente
+    // (≥60% degli eventi datati — es. verbale di PS del 18.04 il cui testo
+    // anamnestico cita un intervento preesistente del 03.03: la data del
+    // documento è il 18.04, non un falso intervallo che ingloba la
+    // preesistenza); date sparse senza dominante (storici appuntamenti,
     // cartelle di ricovero) → intervallo "dal X al Y"; nessuna data valida →
     // la data del rappresentativo precision-aware ('2002', 's.d.', ...).
-    const dayIso = Array.from(new Set(
-      evs
-        .filter((e) => e.datePrecision == null || e.datePrecision === 'giorno')
-        .map((e) => e.eventDate)
-        .filter((d): d is string => !!d && d !== '1900-01-01' && /^\d{4}-\d{2}-\d{2}$/.test(d)),
-    )).sort();
-    const date = dayIso.length > 1
-      ? `dal ${formatEventDateByPrecision(dayIso[0], 'giorno')} al ${formatEventDateByPrecision(dayIso[dayIso.length - 1], 'giorno')}`
-      : dayIso.length === 1
-        ? formatEventDateByPrecision(dayIso[0], 'giorno')
-        : formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
+    const datedIso = evs
+      .filter((e) => e.datePrecision == null || e.datePrecision === 'giorno')
+      .map((e) => e.eventDate)
+      .filter((d): d is string => !!d && d !== '1900-01-01' && /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const dayIso = Array.from(new Set(datedIso)).sort();
+    const dateCounts = new Map<string, number>();
+    for (const d of datedIso) dateCounts.set(d, (dateCounts.get(d) ?? 0) + 1);
+    const dominant = Array.from(dateCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+    const date = dayIso.length === 1
+      ? formatEventDateByPrecision(dayIso[0], 'giorno')
+      : dayIso.length > 1 && dominant[1] / datedIso.length >= 0.6
+        ? formatEventDateByPrecision(dominant[0], 'giorno')
+        : dayIso.length > 1
+          ? `dal ${formatEventDateByPrecision(dayIso[0], 'giorno')} al ${formatEventDateByPrecision(dayIso[dayIso.length - 1], 'giorno')}`
+          : formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
     // Il LABEL della doc-sanitaria NON deve portare il codice classificatore (A-/B-/C-/D-):
     // l'LLM lo copiava nel titolo grassetto del blocco ("**B - Referto...:**" su Bigon).
     // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP

@@ -99,6 +99,21 @@ describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
     expect(out).not.toContain('in data 15.05.2026');
   });
 
+  // Review 2026-07-21: un verbale di PS con UNA data-visita dominante non deve
+  // diventare un intervallo solo perché l'anamnesi cita un intervento
+  // preesistente (evento estratto con data antecedente, stesso documentId).
+  it('data DOMINANTE (≥60% degli eventi datati) → data unica, non un falso intervallo con la preesistenza', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'ps', eventDate: '2026-03-03', title: 'Artroscopia (anamnesi)', sourceText: 'pregresso intervento' }),
+      makeEvent({ documentId: 'ps', eventDate: '2026-04-18', title: 'Accesso PS', sourceText: 'accesso' }),
+      makeEvent({ documentId: 'ps', eventDate: '2026-04-18', title: 'RX', sourceText: 'rx' }),
+      makeEvent({ documentId: 'ps', eventDate: '2026-04-18', title: 'Visita ortopedica', sourceText: 'visita' }),
+      makeEvent({ documentId: 'ps', eventDate: '2026-04-18', title: 'Dimissione', sourceText: 'dimesso' }),
+    ]);
+    expect(out).toContain('in data 18.04.2026');
+    expect(out).not.toContain('dal 03.03.2026');
+  });
+
   it('documento con una sola data → resta "in data X" (invariato)', () => {
     const out = formatEventsByDocumentForPrompt([
       makeEvent({ documentId: 'doc-1', eventDate: '2024-03-15', title: 'Visita', sourceText: 'visita' }),
