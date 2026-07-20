@@ -211,41 +211,47 @@ ${NO_EVN_RULE}`;
 
 /**
  * Directive AUTONOMA per la "Documentazione Medica Prodotta" della perizia RC
- * stragiudiziale "SEMPLICE" (direttiva del perito Lavini + utente 2026-06-27).
+ * stragiudiziale (feedback beta Del Balzo, decisione founder 2026-07-20:
+ * TRASCRIZIONE fedele, non recensione).
  *
- * Differenza chiave vs DOC_SANITARIA_SELECTIVE_DIRECTIVE (CTU/CTP): NIENTE
- * elenco-inventario degli atti e NIENTE parafrasi/narrazione interpretativa sopra il
- * testo del medico. Il contenuto clinico scritto dai sanitari va riprodotto VERBATIM,
- * "esattamente come l'ha scritto il medico". Riusa le stesse regole «...» di formato e
+ * Sostituisce la variante "recensione selettiva" (Lavini 2026-06-27: distillazione
+ * + PS condensato): la beta tester — e il suo parere gold — vogliono RILEGGERE il
+ * documento nel report ("che il sistema ricopiasse fedelmente ciò che è riportato
+ * nella documentazione"), con il PS trascritto integralmente. La narrazione
+ * interpretata vive nelle sezioni anamnestiche, MAI qui. Restano esclusi lab e
+ * rumore amministrativo/infermieristico. Riusa le stesse regole «...» di formato e
  * anti-invenzione (verifica automatica vs OCR). Usata SOLO per la stragiudiziale RC.
  */
-export const DOC_SANITARIA_RC_DIRECTIVE = `Redigi la sezione "La Documentazione Medica Prodotta" come RECENSIONE FEDELE E SELETTIVA, in ordine cronologico, di ciò che i sanitari hanno scritto nei documenti in atti: per ogni documento UN SOLO blocco con le citazioni-chiave VERBATIM del medico. Come nelle perizie di riferimento del perito: si riporta il SALIENTE, esattamente com'è scritto, UNA volta.
+export const DOC_SANITARIA_RC_DIRECTIVE = `Redigi la sezione "La Documentazione Medica Prodotta" come TRASCRIZIONE FEDELE, in ordine cronologico, di ciò che i sanitari hanno scritto nei documenti in atti: per ogni documento UN SOLO blocco con la riproduzione VERBATIM del suo contenuto clinico. Il perito vuole RILEGGERE il documento dentro la perizia, non un racconto: qui NON si interpreta e NON si riassume — si ricopia.
 
 PRINCIPIO (direttiva del perito):
-- Ciò che il medico ha scritto di SALIENTE sul paziente (diagnosi, descrizione di lesioni/reperti principali, esito dell'intervento, indicazioni alla dimissione, prognosi, giudizio clinico conclusivo) va riportato VERBATIM, tra «...», esattamente come nel documento. NON parafrasare, NON riassumere dentro le «...», NON aggiungere una narrazione interpretativa sopra il testo del medico.
-- DISTILLAZIONE (default osservato nei benchmark del perito): NON riprodurre integralmente pagine di testo. Il decorso ordinario, i passaggi ripetitivi e la routine NON si riproducono: di ogni documento si citano i passaggi salienti, non tutto il contenuto.
-- NIENTE ELENCO/INVENTARIO iniziale degli atti: non elencare i documenti esaminati. Vai direttamente, documento per documento in ordine di data, alle citazioni-chiave del loro contenuto clinico.
-- La prosa di raccordo è ridotta al minimo indispensabile (solo per introdurre il documento), MAI una parafrasi del suo contenuto.
+- Il contenuto clinico scritto dai sanitari (anamnesi, esame obiettivo, diario clinico, referti e consulenze, diagnosi, terapie prescritte, indicazioni, esito/dimissione, prognosi) va riprodotto VERBATIM tra «...», esattamente com'è scritto nel documento, in modo SOSTANZIALMENTE INTEGRALE.
+- VIETATA la narrazione o parafrasi sopra, sotto o accanto al testo del medico. ESEMPIO SBAGLIATO: "Il paziente giunge in Pronto Soccorso in data 18.04 alle ore 17:56 per incidente stradale, indossando la cintura..." seguito dalla citazione — quella frase È il contenuto del documento e va data SOLO dentro «...». La tua prosa non deve MAI raccontare ciò che il documento dice.
+- Ometti SOLO il rumore non clinico (anagrafiche e dati amministrativi ripetuti, tabelle di triage, codici tariffari/ticket, diciture di stampa, timbri) e le categorie escluse più sotto. Segnala le omissioni interne a una citazione con l'ellissi: «... prima parte ... seconda parte ...».
+- Conserva DENTRO le «...» le rubriche originali del documento (ANAMNESI:, ESAME OBIETTIVO:, DIAGNOSI:, ESITO:, Si consiglia: ...): sono parte del testo del medico e orientano il perito.
+- NIENTE ELENCO/INVENTARIO iniziale degli atti: non elencare i documenti esaminati. Vai direttamente, documento per documento in ordine di data, alla trascrizione del loro contenuto clinico.
 
-STRUTTURA (UN blocco per documento, ordine cronologico — benchmark Antoniazzi/MOTTA):
-- PRIMA RIGA del blocco: copia IDENTICA l'INTESTAZIONE-BLOCCO fornita nei dati per quel documento (è già in grassetto, formato "**Tipo documento, struttura, in data GG.MM.AAAA:**"). VIETATO riformularla, anteporre la data, trasformarla in un titolo-evento o aggiungere qualsiasi altra riga di intestazione.
+STRUTTURA (UN blocco per documento, ordine cronologico):
+- PRIMA RIGA del blocco: copia IDENTICA l'INTESTAZIONE-BLOCCO fornita nei dati per quel documento (è già in grassetto, formato "**Tipo documento, struttura, in data GG.MM.AAAA:**" — oppure con intervallo "dal ... al ..." o "s.d."). VIETATO riformularla, anteporre la data, trasformarla in un titolo-evento o aggiungere qualsiasi altra riga di intestazione.
 - Se la struttura/autore NON è documentata è già omessa dall'intestazione fornita: non aggiungere formule come "[dato non risultante...]".
-- CORPO: MASSIMO 1-3 frasi brevi di raccordo in tutto il blocco + le citazioni-chiave VERBATIM tra «...» (diagnosi, reperti principali, conclusioni, indicazioni, prognosi). VIETATO il paragrafo narrativo lungo che riassume il documento: il contenuto clinico sta DENTRO le «...», non nella tua prosa. Il grassetto è riservato ALLA SOLA riga di intestazione.
-- Ogni documento compare UNA SOLA VOLTA: se un fatto è già stato citato da un documento precedente, NON ripeterlo.
+- CORPO: le citazioni «...» nell'ORDINE in cui i contenuti compaiono nel documento. Tra una citazione e l'altra è ammessa SOLO una micro-etichetta di orientamento quando il documento contiene più atti interni (es. "Referto RX:", "Consulenza ortopedica:") — MAI una frase che riassume, racconta o commenta. Il grassetto è riservato ALLA SOLA riga di intestazione.
+- Ogni documento compare UNA SOLA VOLTA: se un documento è l'esatto duplicato di uno già trascritto, non ripeterlo (una riga: "Duplicato del documento precedente.").
 - Più referti con la stessa data e struttura (es. proiezioni RX dello stesso giorno) → un'unica intestazione di data.
 
 CONTENUTI DA NON RIPRODURRE (esclusi su indicazione del perito, come i lab):
 - log di somministrazione terapia giorno-per-giorno, diario/consegne infermieristiche, cartella anestesiologica e checklist di sala operatoria, scale di valutazione (Barthel, Braden, SVAMA, rischio cadute...), documentazione trasfusionale (sacche, prove crociate). Se questi contenuti compaiono in mezzo a un documento tenuto, semplicemente NON citarli. ECCEZIONE (mai perdere un fatto): un reperto/diagnosi load-bearing documentato SOLO lì va comunque citato verbatim.
 
 CASI SPECIALI:
-- VERBALE / ACCETTAZIONE DI PRONTO SOCCORSO (riconoscibile da "Pronto Soccorso", "P.S.", "PS", "triage", "codice" colore, "118", "accettazione"): riporta SOLO la DIAGNOSI e le indicazioni di DIMISSIONE (più prognosi/giorni se indicati). NON riprodurre triage, anamnesi estesa, esame obiettivo completo né parametri vitali. ECCEZIONE (mai perdere un fatto): se una LESIONE, un REPERTO rilevante o una PROGNOSI è documentato SOLO nel PS e non altrove, includilo comunque, verbatim tra «...».
+- VERBALE / ACCETTAZIONE DI PRONTO SOCCORSO: si trascrive INTEGRALMENTE come ogni altro documento clinico (anamnesi, esame obiettivo, diario, consulenze, diagnosi, terapie, dimissione, prognosi). NON condensarlo: ometti solo la tabella di triage, i parametri amministrativi e le ripetizioni anagrafiche.
 - ESAMI EMATOCHIMICI / DI LABORATORIO (emocromo, biochimica, coagulazione): NON riprodurli — esclusi su indicazione del perito.
+- DIARI CLINICI PLURI-GIORNALIERI di degenza: trascrivi ogni giorno con variazioni cliniche; i giorni clinicamente identici possono essere raggruppati con UNA citazione rappresentativa e l'indicazione dell'intervallo.
 
-MAI PERDERE UN FATTO: ogni documento clinico rilevante e ogni reperto/diagnosi/prognosi del medico DEVE comparire. La selettività riguarda SOLO il rumore amministrativo/infermieristico di routine e i lab, MAI un fatto clinico.
+MAI PERDERE UN FATTO: ogni documento clinico rilevante e ogni reperto/diagnosi/prognosi del medico DEVE comparire. Le omissioni riguardano SOLO il rumore amministrativo/infermieristico di routine e i lab, MAI un fatto clinico.
 
 REGOLA DELLE CITAZIONI VERBATIM (caporali «...»):
 - USA «...» SOLO ed ESCLUSIVAMENTE per testo COPIATO ALLA LETTERA dal documento originale. Mai parafrasare dentro «...».
-- Riproduci la citazione ESATTAMENTE come nel documento (stesse parole, stessa punteggiatura essenziale). La citazione-chiave va riportata PER ESTESO E FEDELE (mai troncarla alterandone il senso), ma NON estenderla all'intero documento: si cita il saliente, non tutto.
+- Riproduci la citazione ESATTAMENTE come nel documento (stesse parole, stessa punteggiatura essenziale, stesse maiuscole quando il documento è in maiuscolo).
+- NON CORREGGERE I REFUSI del documento originale: se il medico ha scritto "distorsico", "dicaviglia" o "dembulare", la citazione riporta ESATTAMENTE "distorsico", "dicaviglia", "dembulare". Correggere in silenzio un refuso dentro «...» è un errore di fedeltà: il perito deve poter confrontare la citazione col documento carattere per carattere.
 - NON ristrutturare il referto in campi tuoi né riassumerlo. ESEMPIO SBAGLIATO (parafrasi/ristrutturazione): «Clinica: lieve dolore al trocantere. Terapie in corso: FKT da proseguire.» ESEMPIO CORRETTO (verbatim del medico): «Lieve algia a livello del grande trocantere. Si consiglia: proseguire FKT, utile idrokinesiterapia.» Copia ciò che il medico ha scritto, non una tua sintesi etichettata.
 
 REGOLA ASSOLUTA ANTI-INVENZIONE:

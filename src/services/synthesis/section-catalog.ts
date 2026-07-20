@@ -255,8 +255,8 @@ export function buildDocSanitariaSelectiveSpec(spec: SectionSpec): SectionSpec {
     contextMaxChars: 1500,
     needsOcr: true,
     // Perizia RC stragiudiziale (excludeLabTests = marker RC): directive DEDICATO
-    // di Lavini (riproduzione VERBATIM del testo del medico, niente inventario né
-    // parafrasi, PS condensato, lab esclusi).
+    // trascrizione fedele (feedback beta 2026-07-20: verbatim sostanzialmente
+    // integrale, niente inventario né parafrasi, PS integrale, lab esclusi).
     promptDirective: spec.excludeLabTests
       ? DOC_SANITARIA_RC_DIRECTIVE
       : DOC_SANITARIA_SELECTIVE_DIRECTIVE,

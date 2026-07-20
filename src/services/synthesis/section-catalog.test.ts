@@ -482,20 +482,24 @@ describe('section-catalog', () => {
       expect(buildDocSanitariaSelectiveSpec(intestazione!)).toBe(intestazione);
     });
 
-    it('RC stragiudiziale: directive DEDICATO distillato (citazioni-chiave verbatim, un blocco per documento)', () => {
-      // Distillazione v2 (default gold-osservato): un blocco per documento con
-      // citazioni-chiave verbatim, niente inventario, niente parafrasi, niente
-      // riproduzione integrale, categorie escluse (log-terapia, diario, scale...).
+    it('RC stragiudiziale: directive TRASCRIZIONE FEDELE (feedback beta 2026-07-20: verbatim-first, PS integrale)', () => {
+      // Trascrizione (decisione founder 2026-07-20, su feedback Del Balzo): un
+      // blocco per documento con riproduzione verbatim sostanzialmente integrale,
+      // niente inventario, niente narrazione/parafrasi sopra il testo del medico,
+      // PS trascritto integralmente (non più condensato), refusi conservati,
+      // categorie escluse (lab, log-terapia, diario infermieristico, scale...).
       const stragBase = getSectionSpecById('documentazione_sanitaria');
       expect(stragBase?.excludeLabTests).toBe(true);
       const stragSelective = buildDocSanitariaSelectiveSpec(stragBase!);
-      expect(stragSelective.promptDirective).toContain('RECENSIONE FEDELE E SELETTIVA');
-      expect(stragSelective.promptDirective).toContain('UN SOLO blocco'); // 1 blocco/documento (Domanda 1, opzione A)
-      expect(stragSelective.promptDirective).toContain('NON riprodurre integralmente'); // distillazione
+      expect(stragSelective.promptDirective).toContain('TRASCRIZIONE FEDELE');
+      expect(stragSelective.promptDirective).toContain('UN SOLO blocco'); // 1 blocco/documento
+      expect(stragSelective.promptDirective).toContain('SOSTANZIALMENTE INTEGRALE'); // trascrizione, non distillazione
       expect(stragSelective.promptDirective).toContain('NIENTE ELENCO'); // no inventario...
       expect(stragSelective.promptDirective).not.toContain('ELENCO ANALITICO'); // ...l'inventario CTU non c'è
-      expect(stragSelective.promptDirective).toMatch(/NON parafrasare/); // verbatim, no parafrasi
-      expect(stragSelective.promptDirective).toContain('SOLO la DIAGNOSI'); // PS condensato
+      expect(stragSelective.promptDirective).toContain('VIETATA la narrazione o parafrasi'); // la critica #1 della beta
+      expect(stragSelective.promptDirective).toContain('si trascrive INTEGRALMENTE'); // PS integrale (non condensato)
+      expect(stragSelective.promptDirective).not.toContain('SOLO la DIAGNOSI'); // il PS condensato è superato
+      expect(stragSelective.promptDirective).toContain('NON CORREGGERE I REFUSI'); // fedeltà char-per-char
       expect(stragSelective.promptDirective).toContain('NON riprodurli'); // lab esclusi
       expect(stragSelective.promptDirective).toContain('diario/consegne infermieristiche'); // categorie policy nel prompt
       expect(stragSelective.promptDirective).toContain('«...»'); // grounding/verifica
