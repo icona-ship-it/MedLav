@@ -875,7 +875,7 @@ export const processCase = inngest.createFunction(
         detectMissingDocumentsStep(caseId, allEvents, updatedMetadata.caseType, updatedMetadata.caseTypes),
       ),
       step.run('calculate-periods', () =>
-        calculatePeriodsStep(allEvents, updatedMetadata.caseType),
+        calculatePeriodsStep(allEvents, updatedMetadata.caseType, updatedMetadata.periziaMetadata?.dataSinistro),
       ),
     ]);
 

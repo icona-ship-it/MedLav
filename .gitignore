@@ -53,6 +53,9 @@ benchmark/
 # Report generati reali da confrontare coi gold (dati paziente Art. 9). Local only.
 Report fatti da confrontare con reali/
 
+# Feedback beta tester con documentazione clinica reale (GDPR Art. 9). Local only.
+Feedback Giovanna/
+
 # Claude Code internal lock files
 .claude/scheduled_tasks.lock
 

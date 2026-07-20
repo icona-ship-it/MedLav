@@ -27,7 +27,7 @@ export async function GET(
   // Verify case ownership
   const { data: caseData } = await supabase
     .from('cases')
-    .select('id')
+    .select('id, perizia_metadata')
     .eq('id', caseId)
     .eq('user_id', user.id)
     .single();
@@ -43,7 +43,8 @@ export async function GET(
     .eq('is_deleted', false)
     .order('order_number', { ascending: true });
 
-  const calculations = calculateMedicoLegalPeriods(eventsData ?? []);
+  const pmForCalc = (caseData.perizia_metadata ?? null) as { dataSinistro?: string } | null;
+  const calculations = calculateMedicoLegalPeriods(eventsData ?? [], undefined, pmForCalc?.dataSinistro);
 
   return NextResponse.json({
     success: true,

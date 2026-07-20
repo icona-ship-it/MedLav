@@ -186,7 +186,11 @@ export function EventsTab({
   caseId, events, eventImages,
   highlightedEventOrderNumber, documents,
   onEventMutated, initialShowVerification, documentPages,
+  incidentDate,
 }: {
+  /** Data sinistro (periziaMetadata.dataSinistro): esclude le preesistenze dalla
+      tabella ITT/ITP proposta — stessi numeri del report. */
+  incidentDate?: string | null;
   caseId: string;
   events: EventRow[];
   eventImages: Record<string, string[]>;
@@ -382,7 +386,7 @@ export function EventsTab({
       <CardContent>
         <>
         {/* A2: graduated ITT/ITP summary (clinical / all views only) */}
-        {eventViewTab !== 'admin' && <IttItpSummary events={events} />}
+        {eventViewTab !== 'admin' && <IttItpSummary events={events} incidentDate={incidentDate} />}
         {/* Filters */}
         {events.length > 0 && (
           <div className="mb-4 space-y-2">

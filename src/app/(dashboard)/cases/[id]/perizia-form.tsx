@@ -27,7 +27,7 @@ const RC_CIVILE_MODULE_ID = 'perizia_ml_rc_civile';
 
 /** Campi data dell'intestazione: testo libero, validati come date reali (1.4). */
 const HEADER_DATE_FIELDS = [
-  'dataIncarico', 'dataOperazioni', 'dataDeposito',
+  'dataIncarico', 'dataOperazioni', 'dataDeposito', 'dataSinistro',
 ] as const;
 
 const DATE_FORMAT_HINT = 'Data non valida — usa il formato GG/MM/AAAA (es. 15/01/2025)';
@@ -141,6 +141,7 @@ export function PeriziaMetadataForm({
     ctpResistente: existing.ctpResistente ?? '',
     parteRicorrente: existing.parteRicorrente ?? '',
     parteResistente: existing.parteResistente ?? '',
+    dataSinistro: existing.dataSinistro ?? '',
     dataIncarico: existing.dataIncarico ?? '',
     dataOperazioni: existing.dataOperazioni ?? '',
     dataDeposito: existing.dataDeposito ?? '',
@@ -299,6 +300,7 @@ export function PeriziaMetadataForm({
         ...(form.collaboratoreTitle ? { collaboratoreTitle: form.collaboratoreTitle } : {}),
         ...(form.parteRicorrente ? { parteRicorrente: form.parteRicorrente } : {}),
         ...(form.parteResistente ? { parteResistente: form.parteResistente } : {}),
+        ...(form.dataSinistro ? { dataSinistro: form.dataSinistro } : {}),
         ...(form.dataIncarico ? { dataIncarico: form.dataIncarico } : {}),
         ...(form.dataOperazioni ? { dataOperazioni: form.dataOperazioni } : {}),
         ...(form.dataDeposito ? { dataDeposito: form.dataDeposito } : {}),
@@ -578,6 +580,12 @@ export function PeriziaMetadataForm({
 
                 {section.id === 'date' && (
                   <div className="grid gap-4 sm:grid-cols-3">
+                    <HeaderDateInput
+                      label="Data del sinistro / evento indice"
+                      hint="Ancora i calcoli medico-legali: gli eventi clinici precedenti a questa data sono trattati come preesistenze ed esclusi dai computi (periodo di malattia, ITT/ITP)"
+                      value={form.dataSinistro}
+                      onChange={(t) => setForm({ ...form, dataSinistro: t })}
+                    />
                     <HeaderDateInput
                       label="Data conferimento incarico"
                       value={form.dataIncarico}

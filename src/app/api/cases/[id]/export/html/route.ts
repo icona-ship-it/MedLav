@@ -198,6 +198,7 @@ export async function GET(
         synthesis,
         toDeterministicEvents(data.events ?? []),
         toDeterministicDocs(data.documentsWithPages ?? []),
+        { incidentDate: (pm?.dataSinistro as string | undefined) ?? null },
       );
       const images = await resolveOcrImages(synthesis, caseId);
       // Sempre, anche con 0 immagini risolte (es. Storage down): replaceWithDataUris

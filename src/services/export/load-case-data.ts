@@ -105,8 +105,10 @@ export async function loadCaseDataForExport(caseId: string) {
     pages: pagesByDoc.get(doc.id as string) ?? [],
   }));
 
-  // Calculate medico-legal periods from events
+  // Calculate medico-legal periods from events. La data sinistro del form
+  // perizia esclude le preesistenze dal computo (stessi numeri della pipeline).
   const eventsList = eventsRes.data ?? [];
+  const pmForCalc = (caseRow.perizia_metadata ?? null) as { dataSinistro?: string } | null;
   const calculations = calculateMedicoLegalPeriods(
     eventsList.map((e) => ({
       event_date: e.event_date as string,
@@ -114,6 +116,8 @@ export async function loadCaseDataForExport(caseId: string) {
       title: e.title as string,
       description: e.description as string,
     })),
+    undefined,
+    pmForCalc?.dataSinistro,
   );
 
   // Load user's signature image path

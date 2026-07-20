@@ -90,8 +90,8 @@ function cell(value: string | null | undefined): string {
  * calcolato va emesso a valle della generazione, sempre in sync con gli eventi
  * e immune ai verificatori. Stesso valore della tabella Spese (analyzeExpenses).
  */
-export function formatEpicrisiFactsBlock(events: DeterministicTableEvent[]): string {
-  const ittBlock = formatRicoveroITTFactsBlock(events);
+export function formatEpicrisiFactsBlock(events: DeterministicTableEvent[], incidentDate?: string | null): string {
+  const ittBlock = formatRicoveroITTFactsBlock(events, incidentDate);
   const expenses = events.filter((e) => e.event_type === 'spesa_medica');
   let speseLine = '';
   if (expenses.length > 0) {
@@ -510,6 +510,11 @@ export function expandDeterministicBlocks(
   synthesis: string,
   events: DeterministicTableEvent[],
   docs?: DeterministicDoc[],
+  opts?: {
+    /** Data sinistro (periziaMetadata.dataSinistro, IT o ISO): esclude le
+     * preesistenze dai blocchi calcolati (ITT/ITP, durata malattia, stima danno). */
+    incidentDate?: string | null;
+  },
 ): string {
   if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
 
@@ -525,10 +530,10 @@ export function expandDeterministicBlocks(
   const speseBlock = speseSsn ? `${speseDanneggiato}\n\n${speseSsn}` : speseDanneggiato;
 
   const replacements: Array<[string, string]> = [
-    [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events)) || EMPTY_FALLBACK.ITT_ITP],
+    [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events, opts?.incidentDate)) || EMPTY_FALLBACK.ITT_ITP],
     [DETERMINISTIC_MARKERS.SPESE, speseBlock],
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
-    [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatEpicrisiFactsBlock(events) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
+    [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatEpicrisiFactsBlock(events, opts?.incidentDate) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
   ];
   replacements.push([
     DETERMINISTIC_MARKERS.DOC_SANITARIA,
@@ -543,5 +548,5 @@ export function expandDeterministicBlocks(
   }
   // STIMA_DANNO is parameterized (case type embedded in the marker): expanded by
   // its own module from the same CURRENT events, on every read surface.
-  return expandStimaDannoMarkers(out, events);
+  return expandStimaDannoMarkers(out, events, opts?.incidentDate);
 }

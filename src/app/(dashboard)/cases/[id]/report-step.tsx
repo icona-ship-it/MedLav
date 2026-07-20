@@ -105,6 +105,9 @@ interface ReportStepProps {
   lastError?: string;
   /** Esito di una rigenerazione asincrona (fallita o no-op) — perizia_metadata.lastRegenerateError. */
   regenerateNote?: string | null;
+  /** Data sinistro (periziaMetadata.dataSinistro): esclude le preesistenze dai
+      blocchi calcolati (ITT/ITP, durata malattia) in viewer e tabella eventi. */
+  incidentDate?: string | null;
 }
 
 /** Numeretto del passaggio nella checklist "Da controllare": dà ordine di
@@ -139,6 +142,7 @@ export function ReportStep({
   pipelineWarnings = [],
   lastError,
   regenerateNote,
+  incidentDate,
 }: ReportStepProps) {
   const router = useRouter();
   // Nota di esito rigenerazione: chiudibile, torna solo se il server la riscrive.
@@ -506,6 +510,7 @@ export function ReportStep({
             eventImages={eventImages}
             highlightedEventOrderNumber={highlightedEventId}
             documentPages={documentPages}
+            incidentDate={incidentDate}
           />
         </div>
       );
@@ -568,6 +573,7 @@ export function ReportStep({
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
               documentPages={documentPages}
+              incidentDate={incidentDate}
             />
           )}
         </div>
@@ -916,6 +922,7 @@ export function ReportStep({
             report={report}
             events={events}
             docs={deterministicDocs}
+            incidentDate={incidentDate}
             onEventClick={(orderNumber) => {
               // UX Ondata 3-IA: click su [Ev.N] -> apre il drawer eventi
               // e highlighta l'evento, invece di switchare di tab.
@@ -997,6 +1004,7 @@ export function ReportStep({
               eventImages={eventImages}
               highlightedEventOrderNumber={highlightedEventId}
               documentPages={documentPages}
+              incidentDate={incidentDate}
               initialShowVerification={eventsDrawerVerifyMode}
               onEventMutated={(t) => updateMutatedEventTypes((prev) => {
                 const next = new Set(prev);

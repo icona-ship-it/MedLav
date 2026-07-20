@@ -25,6 +25,7 @@ export interface PeriziaMetadataUI {
   ctpResistente?: string;
   parteRicorrente?: string;
   parteResistente?: string;
+  dataSinistro?: string;
   dataIncarico?: string;
   dataOperazioni?: string;
   dataDeposito?: string;

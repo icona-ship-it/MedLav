@@ -17,6 +17,7 @@
 import { formatEuro } from '@/lib/format';
 import type { CaseType } from '@/types';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { estimateBiologicalDamage } from './damage-estimator';
 import type { DeterministicTableEvent } from './deterministic-tables';
 
@@ -77,6 +78,7 @@ export function formatStimaDannoBlock(
   events: DeterministicTableEvent[],
   caseType: string,
   todayIso?: string,
+  incidentDate?: string | null,
 ): string {
   const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
   const calcEvents = clinical.map((e) => ({
@@ -86,10 +88,14 @@ export function formatStimaDannoBlock(
     description: e.description,
   }));
 
+  // Data sinistro esplicita del perito (periziaMetadata.dataSinistro) quando
+  // disponibile: un evento preesistente (es. intervento in anamnesi) non deve
+  // guidare la scelta della tabella danno. Fallback storico: primo evento.
+  const incidentIso = incidentDate ? normalizeItalianDateToIso(incidentDate) : null;
   const estimate = estimateBiologicalDamage(
     calcEvents,
     caseType as CaseType,
-    earliestValidDate(calcEvents),
+    incidentIso ?? earliestValidDate(calcEvents),
     todayIso,
   );
   if (!estimate.estimatedRange || estimate.midpointPercentage === null || !estimate.lookupResult) {
@@ -134,11 +140,12 @@ export function formatStimaDannoBlock(
 export function expandStimaDannoMarkers(
   synthesis: string,
   events: DeterministicTableEvent[],
+  incidentDate?: string | null,
 ): string {
   if (!synthesis.includes(STIMA_DANNO_MARKER_PREFIX)) return synthesis;
   return synthesis.replace(
     STIMA_DANNO_MARKER_RE,
     (_match: string, caseType: string) =>
-      formatStimaDannoBlock(events, caseType) || STIMA_DANNO_EMPTY_FALLBACK,
+      formatStimaDannoBlock(events, caseType, undefined, incidentDate) || STIMA_DANNO_EMPTY_FALLBACK,
   );
 }

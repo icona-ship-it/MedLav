@@ -314,6 +314,8 @@ export const regenerateReport = inngest.createFunction(
     });
     const calculations = calculateMedicoLegalPeriods(
       allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
+      undefined,
+      prep.metadata.periziaMetadata?.dataSinistro,
     );
     // imageAnalysis: ri-letto dal metadata dell'ultimo report (prep) cosi' le
     // immagini sopravvivono alla rigenerazione — NON ri-eseguito via Pixtral.

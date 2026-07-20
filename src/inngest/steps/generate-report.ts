@@ -94,6 +94,7 @@ export async function fetchDocumentsOcrContext(caseId: string, onlyDocIds?: stri
 export function calculatePeriodsStep(
   allEvents: ConsolidatedEvent[],
   caseType: CaseMetadata['caseType'],
+  incidentDate?: string | null,
 ): MedicoLegalCalculation[] {
   const calcEvents = allEvents.map((e) => ({
     event_date: e.eventDate,
@@ -101,7 +102,7 @@ export function calculatePeriodsStep(
     title: e.title,
     description: e.description,
   }));
-  return calculateMedicoLegalPeriods(calcEvents, caseType);
+  return calculateMedicoLegalPeriods(calcEvents, caseType, incidentDate);
 }
 
 /**
@@ -543,7 +544,9 @@ export async function assembleSectionsAndSaveReport(
       pages: d.pages.map((p) => ({ pageNumber: p.pageNumber, ocrText: p.ocrText })),
     }));
   }
-  const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents, docsForValidation);
+  const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents, docsForValidation, {
+    incidentDate: synthesisParams.periziaMetadata?.dataSinistro,
+  });
   let validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
   // #5 (audit 2026-06-09): quando la doc-sanitaria verbatim viene espansa nel testo
   // validato, un documento-FONTE può legittimamente contenere "01/01/1900" o un

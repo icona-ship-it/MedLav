@@ -10,7 +10,7 @@ import type { EventRow } from './types';
  * (ITT 100% / ITP 75% / 50% / 25%) computed from the case timeline. These are
  * PROPOSED values — the perito verifies and adjusts them in the report.
  */
-export function IttItpSummary({ events }: { events: EventRow[] }) {
+export function IttItpSummary({ events, incidentDate }: { events: EventRow[]; incidentDate?: string | null }) {
   const segments = calculateITTITP(
     events.map((e) => ({
       event_date: e.event_date,
@@ -18,6 +18,7 @@ export function IttItpSummary({ events }: { events: EventRow[] }) {
       title: e.title,
       description: e.description,
     })),
+    incidentDate,
   );
 
   if (segments.length === 0) return null;

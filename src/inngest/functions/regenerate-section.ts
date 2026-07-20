@@ -175,6 +175,8 @@ export const regenerateSectionJob = inngest.createFunction(
     });
     const calculations = calculateMedicoLegalPeriods(
       events.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description })),
+      undefined,
+      prep.periziaMetadata?.dataSinistro,
     );
 
     const updateProgress = async (index: number, title: string) => {

@@ -1,6 +1,7 @@
 import { formatDate } from '@/lib/format';
 import type { CaseType } from '@/types';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { estimateBiologicalDamage } from './damage-estimator';
 import { numberToItalianWords } from '@/lib/number-to-words-it';
 
@@ -22,6 +23,17 @@ const SENTINEL_EVENT_DATE = '1900-01-01';
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Normalizza la DATA SINISTRO fornita dal perito (periziaMetadata.dataSinistro,
+ * formato italiano o ISO) in ISO YYYY-MM-DD. null = assente o malformata: in
+ * entrambi i casi il filtro preesistenze NON si applica (mai un crash o un
+ * filtro sbagliato per un refuso di form).
+ */
+function normalizeIncidentIso(incidentDate?: string | null): string | null {
+  if (!incidentDate || incidentDate.trim() === '') return null;
+  return normalizeItalianDateToIso(incidentDate);
+}
+
+/**
  * Keep only clinical events with a real, well-formed date, in chronological
  * order. The whole module assumes chronological input (events[0] = first,
  * events[last] = last; the recovery endpoint is the last visita/follow-up after
@@ -29,14 +41,21 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * consolidated/sorted events, but the UI path (calculateITTITP) passes RAW DB
  * rows — without this, unsorted rows produced ITP periods running BACKWARD
  * (endDate < startDate) and totals anchored on the wrong events.
+ *
+ * `incidentIso` (data sinistro, ISO): quando presente, gli eventi ANTECEDENTI
+ * sono esclusi dal computo — sono preesistenze (es. un'artroscopia citata in
+ * anamnesi) che ancoravano il "periodo di malattia" mesi prima del sinistro
+ * (CASO-2026-027: 116 giorni invece di 74). L'evento NEL giorno del sinistro
+ * è incluso (>=).
  */
-function clinicalSortedByDate(events: CalcEvent[]): CalcEvent[] {
+function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null): CalcEvent[] {
   return events
     .filter(
       (e) =>
         !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
         e.event_date !== SENTINEL_EVENT_DATE &&
-        ISO_DATE_RE.test(e.event_date),
+        ISO_DATE_RE.test(e.event_date) &&
+        (!incidentIso || e.event_date >= incidentIso),
     )
     .slice()
     .sort((a, b) => a.event_date.localeCompare(b.event_date));
@@ -151,12 +170,12 @@ export function calculationsToITTITPSegments(
  * Returns a typed, ordered array (ITT first, then ITP 75 → 50 → 25). Pure and
  * client-safe — also used by the UI summary table in events-tab.
  */
-export function calculateITTITP(events: CalcEvent[]): ITPSegment[] {
+export function calculateITTITP(events: CalcEvent[], incidentDate?: string | null): ITPSegment[] {
   // Drop non-clinical/sentinel/malformed events AND sort chronologically. The UI
   // path (itt-itp-summary.tsx) passes RAW DB rows: undated events carry the
   // sentinel '1900-01-01' (→ multi-decade rows) and rows are not guaranteed
   // sorted (→ ITP periods running backward). clinicalSortedByDate fixes both.
-  const clinical = clinicalSortedByDate(events);
+  const clinical = clinicalSortedByDate(events, normalizeIncidentIso(incidentDate));
   if (clinical.length === 0) return [];
   return calculationsToITTITPSegments(calculateGraduatedITTITP(clinical));
 }
@@ -195,6 +214,7 @@ export function formatITTITPTable(segments: ITPSegment[]): string {
 export function calculateMedicoLegalPeriods(
   events: CalcEvent[],
   caseType?: CaseType,
+  incidentDate?: string | null,
 ): MedicoLegalCalculation[] {
   if (events.length === 0) return [];
 
@@ -203,7 +223,9 @@ export function calculateMedicoLegalPeriods(
   // Non-clinical events distort periods (Passaniti regression: SSN cost notices
   // dated weeks after the last clinical event); sentinel dates would anchor the
   // total-illness period in 1900; sorting guarantees first/last are correct.
-  events = clinicalSortedByDate(events);
+  // `incidentDate` (data sinistro del form perizia): esclude le preesistenze.
+  const incidentIso = normalizeIncidentIso(incidentDate);
+  events = clinicalSortedByDate(events, incidentIso);
   if (events.length === 0) return [];
 
   const calculations: MedicoLegalCalculation[] = [];
@@ -237,9 +259,10 @@ export function calculateMedicoLegalPeriods(
 
   // 7. Biological damage estimate with table reference
   if (caseType) {
-    // Extract earliest event date as incident date approximation
-    const incidentDate = extractEarliestEventDate(events);
-    const damageEstimate = estimateBiologicalDamage(events, caseType, incidentDate);
+    // Data sinistro esplicita del perito quando c'è; altrimenti il primo evento
+    // clinico come approssimazione (comportamento storico).
+    const damageIncidentDate = incidentIso ?? extractEarliestEventDate(events);
+    const damageEstimate = estimateBiologicalDamage(events, caseType, damageIncidentDate);
     if (damageEstimate.lookupResult && damageEstimate.estimatedRange) {
       const lr = damageEstimate.lookupResult;
       calculations.push({
@@ -285,8 +308,8 @@ export function calculateMedicoLegalPeriods(
       if (damageEstimate.tableSelectionNote) {
         calculations.push({
           label: 'Nota: selezione tabella',
-          value: incidentDate
-            ? `Data sinistro: ${incidentDate}`
+          value: damageIncidentDate
+            ? `Data sinistro: ${damageIncidentDate}`
             : 'Data sinistro non disponibile',
           days: null,
           startDate: null,
@@ -370,11 +393,15 @@ function calculateTotalIllnessPeriod(events: CalcEvent[]): MedicoLegalCalculatio
  * escluse, così non gonfiano lo span né reintroducono il giorno fabbricato.
  * '' se nulla è calcolabile. Pure + client-safe (espanso a read-time dal marker ITT_RICOVERO_FACTS).
  */
-export function formatRicoveroITTFactsBlock(events: CalcEvent[]): string {
+export function formatRicoveroITTFactsBlock(events: CalcEvent[], incidentDate?: string | null): string {
   // Escludi le date imprecise (anno/mese/sconosciuta): un FATTO deterministico (giorni
   // esatti, date esatte) si fonda solo su date a precisione di giorno.
   const precise = events.filter((e) => e.date_precision == null || e.date_precision === 'giorno');
-  const clinical = clinicalSortedByDate(precise);
+  // Data sinistro del perito: le preesistenze (eventi antecedenti) escono dal
+  // computo — e la loro esclusione viene DICHIARATA in una riga di trasparenza.
+  const incidentIso = normalizeIncidentIso(incidentDate);
+  const clinical = clinicalSortedByDate(precise, incidentIso);
+  const excludedCount = incidentIso ? clinicalSortedByDate(precise).length - clinical.length : 0;
   if (clinical.length === 0) return '';
   const lines: string[] = [];
 
@@ -389,6 +416,12 @@ export function formatRicoveroITTFactsBlock(events: CalcEvent[]): string {
   const span = calculateTotalIllnessPeriod(clinical);
   if (span.days !== null && span.days > 0 && span.startDate && span.endDate) {
     lines.push(`- **Durata complessiva del periodo di malattia:** ${span.days} (${numberToItalianWords(span.days)}) giorni, dal primo evento documentato (${formatDate(span.startDate)}) all'ultimo (${formatDate(span.endDate)}) — intervallo calendariale, non una valutazione di inabilità (riservata al perito).`);
+  }
+
+  // (3) Trasparenza: se la data sinistro ha escluso eventi, il perito deve saperlo
+  // (le preesistenze restano in cronistoria/anamnesi, semplicemente non nei computi).
+  if (excludedCount > 0 && incidentIso && lines.length > 0) {
+    lines.push(`- Gli eventi antecedenti alla data del sinistro (${formatDate(incidentIso)}) sono esclusi dal computo in quanto preesistenze.`);
   }
 
   if (lines.length === 0) return '';

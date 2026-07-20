@@ -372,3 +372,90 @@ describe('QA 2026-06-11 — dedup ricoveri e sanity check (caso Tedesco, PDF dup
     }
   });
 });
+
+describe('Data sinistro — eventi preesistenti esclusi dai calcoli (feedback beta 2026-07-20)', () => {
+  // Scenario reale (CASO-2026-027): un'artroscopia PREESISTENTE del 03.03, citata
+  // nell'anamnesi del PS, ancorava il "periodo di malattia" a 116 giorni. Col
+  // sinistro del 18.04 il periodo corretto è 18.04→30.06 = 74 giorni inclusivi.
+  const eventsWithPreexisting = [
+    makeEvent('2026-03-03', 'intervento', 'Artroscopia caviglia destra', 'intervento preesistente citato in anamnesi'),
+    makeEvent('2026-04-18', 'visita', 'Accesso in PS per incidente stradale'),
+    makeEvent('2026-06-30', 'certificazione', 'Certificato definitivo con postumi'),
+  ];
+
+  it('calculateMedicoLegalPeriods: il periodo totale parte dal sinistro, non dalla preesistenza', () => {
+    const calcs = calculateMedicoLegalPeriods(eventsWithPreexisting, undefined, '18/04/2026');
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total).toBeDefined();
+    expect(total!.startDate).toBe('2026-04-18');
+    expect(total!.endDate).toBe('2026-06-30');
+    expect(total!.days).toBe(74);
+  });
+
+  it('senza data sinistro il comportamento resta invariato (retrocompatibile)', () => {
+    const calcs = calculateMedicoLegalPeriods(eventsWithPreexisting);
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.startDate).toBe('2026-03-03');
+  });
+
+  it('accetta la data sinistro sia in formato italiano sia ISO', () => {
+    for (const d of ['18/04/2026', '18.04.2026', '2026-04-18']) {
+      const calcs = calculateMedicoLegalPeriods(eventsWithPreexisting, undefined, d);
+      const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+      expect(total!.startDate).toBe('2026-04-18');
+    }
+  });
+
+  it('data sinistro malformata o vuota → ignorata, nessun crash e nessun filtro', () => {
+    for (const d of ['15/13/2026', 'boh', '', '  ', undefined]) {
+      const calcs = calculateMedicoLegalPeriods(eventsWithPreexisting, undefined, d);
+      const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+      expect(total!.startDate).toBe('2026-03-03');
+    }
+  });
+
+  it('un evento NEL giorno del sinistro è incluso (>=, non >)', () => {
+    const calcs = calculateMedicoLegalPeriods(eventsWithPreexisting, undefined, '2026-04-18');
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.startDate).toBe('2026-04-18');
+  });
+
+  it('tutti gli eventi antecedenti al sinistro → nessun calcolo (mai numeri assurdi)', () => {
+    const calcs = calculateMedicoLegalPeriods(
+      [makeEvent('2026-03-03', 'intervento', 'Artroscopia')],
+      undefined,
+      '2026-04-18',
+    );
+    expect(calcs).toEqual([]);
+  });
+
+  it('calculateITTITP filtra le preesistenze con la data sinistro', () => {
+    const events = [
+      makeEvent('2026-03-03', 'intervento', 'Artroscopia preesistente'),
+      makeEvent('2026-04-18', 'ricovero', 'Ricovero'),
+      makeEvent('2026-04-25', 'ricovero', 'Dimissione', 'dimissione a domicilio'),
+      makeEvent('2026-06-30', 'follow-up', 'Controllo finale'),
+    ];
+    const withFilter = calculateITTITP(events, '18/04/2026');
+    for (const s of withFilter) {
+      expect(s.startDate === null || s.startDate >= '2026-04-18').toBe(true);
+    }
+  });
+
+  it('formatRicoveroITTFactsBlock: parte dal sinistro e dichiara le preesistenze escluse', () => {
+    const block = formatRicoveroITTFactsBlock(eventsWithPreexisting, '18/04/2026');
+    expect(block).toContain('18.04.2026');
+    expect(block).not.toContain('03.03.2026');
+    expect(block).toContain('74 (settantaquattro)');
+    expect(block.toLowerCase()).toContain('preesistenz'); // nota di trasparenza per il perito
+  });
+
+  it('formatRicoveroITTFactsBlock: senza eventi esclusi nessuna nota preesistenze', () => {
+    const events = [
+      makeEvent('2026-04-18', 'visita', 'Accesso in PS'),
+      makeEvent('2026-06-30', 'certificazione', 'Certificato definitivo'),
+    ];
+    const block = formatRicoveroITTFactsBlock(events, '18/04/2026');
+    expect(block.toLowerCase()).not.toContain('preesistenz');
+  });
+});

@@ -136,6 +136,10 @@ export function CaseDetailClient({
   const pipelineMode = caseData.pipeline_mode ?? 'full';
   const reportSectionExclusions = (caseData.perizia_metadata as Record<string, unknown> | null)
     ?.excludedReportSections as string[] | undefined;
+  // Data sinistro (form perizia): esclude le preesistenze dai blocchi calcolati
+  // di viewer report e tabella ITT/ITP eventi.
+  const incidentDate = ((caseData.perizia_metadata as Record<string, unknown> | null)
+    ?.dataSinistro as string | undefined) ?? null;
   const isExtractionOnly = pipelineMode === 'extraction_only';
   const isExpensesOnly = pipelineMode === 'expenses_only';
   const isAnonymizeOnly = pipelineMode === 'anonymize_only';
@@ -450,6 +454,7 @@ export function CaseDetailClient({
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
+                incidentDate={incidentDate}
               />
             </div>
           )}
@@ -512,6 +517,7 @@ export function CaseDetailClient({
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
+                incidentDate={incidentDate}
               />
             </div>
           )}
@@ -590,6 +596,7 @@ export function CaseDetailClient({
                 generationProgress={generationProgress}
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
+                incidentDate={incidentDate}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
               />
             </div>

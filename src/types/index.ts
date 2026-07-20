@@ -94,6 +94,10 @@ export interface PeriziaMetadata {
   dataIncarico?: string;       // data conferimento incarico
   dataOperazioni?: string;     // data visita/operazioni
   dataDeposito?: string;       // termine consegna elaborato
+  // Data del sinistro/evento indice (feedback beta 2026-07-20): ancora i calcoli
+  // medico-legali — gli eventi clinici ANTECEDENTI sono preesistenze e non
+  // entrano nel periodo di malattia / ITT / scelta tabelle danno.
+  dataSinistro?: string;       // data sinistro/evento indice (GG/MM/AAAA o ISO)
   speseMediche?: string;       // testo libero spese mediche
   esameObiettivo?: string;     // testo libero esame del paziente
   fondoSpese?: string;         // "Euro 1.800,00"

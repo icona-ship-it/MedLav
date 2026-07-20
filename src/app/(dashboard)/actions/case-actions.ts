@@ -60,6 +60,7 @@ const periziaMetadataFields = z.object({
   dataIncarico: headerDateSchema.optional(),
   dataOperazioni: headerDateSchema.optional(),
   dataDeposito: headerDateSchema.optional(),
+  dataSinistro: headerDateSchema.optional(),
   speseMediche: z.string().max(5000).optional(),
   esameObiettivo: z.string().max(10000).optional(),
   fondoSpese: z.string().max(100).optional(),
