@@ -40,6 +40,30 @@ const DOC_BLOCK_TYPE_LABELS: Record<string, string> = {
   altro: 'Documento sanitario',
 };
 
+// Etichette-blocco dal TIPO DOCUMENTO CLASSIFICATO (documents.document_type):
+// più affidabile del sourceType del singolo evento estratto (feedback beta
+// 2026-07-20: uno storico appuntamenti era intestato "Referto di controllo
+// medico" perché i suoi eventi-appuntamento avevano quel sourceType).
+const DOCUMENT_TYPE_BLOCK_LABELS: Record<string, string> = {
+  cartella_clinica: 'Cartella clinica',
+  referto_specialistico: 'Referto specialistico',
+  esame_strumentale: 'Referto di esame strumentale',
+  esame_laboratorio: 'Referto di esami di laboratorio',
+  lettera_dimissione: 'Lettera di dimissione',
+  certificato: 'Certificato medico',
+  perizia_precedente: 'Perizia precedente',
+  perizia_ctp: 'Perizia di parte',
+  perizia_ctu: "Perizia d'ufficio",
+  spese_mediche: 'Documento di spesa',
+  memoria_difensiva: 'Memoria difensiva',
+};
+
+/** Metadati minimi per-documento per l'intestazione-blocco della doc-sanitaria. */
+export interface DocBlockMeta {
+  documentId: string;
+  documentType?: string | null;
+}
+
 const CHRONOLOGY_SOURCES_GUIDE = `Le categorie delle fonti sono:
 **(A) CARTELLA CLINICA** — diagnosi, parametri vitali, esami, anamnesi, terapie, descrizioni operatorie, diari clinici, lettere di dimissione
 **(B) REFERTI CONTROLLI MEDICI** — visite specialistiche, follow-up, certificati
@@ -150,27 +174,51 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
  * (es. una lettera di dimissione) in decine di voci quasi-duplicate. Usato dalla
  * "Documentazione Medica Prodotta" della perizia RC (driver del gonfiore 3,7x su Bigon).
  */
-export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): string {
+export function formatEventsByDocumentForPrompt(
+  events: ConsolidatedEvent[],
+  docsMeta?: ReadonlyArray<DocBlockMeta>,
+): string {
   const byDoc = new Map<string, ConsolidatedEvent[]>();
   for (const e of events) {
     const arr = byDoc.get(e.documentId);
     if (arr) arr.push(e);
     else byDoc.set(e.documentId, [e]);
   }
+  const metaByDoc = new Map((docsMeta ?? []).map((d) => [d.documentId, d.documentType ?? null]));
   const earliest = (evs: ConsolidatedEvent[]): string =>
     evs.reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
   const groups = Array.from(byDoc.values()).sort((a, b) => earliest(a).localeCompare(earliest(b)));
 
   return groups.map((evs, i) => {
     const rep = evs.find((e) => e.facility) ?? evs[0];
-    const date = formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
+    // DATA DEL BLOCCO dai fatti, mai inventata (feedback beta 2026-07-20): una
+    // data unica solo se il documento ha UNA data-evento; più date (storici,
+    // cartelle di ricovero) → intervallo "dal X al Y"; nessuna data valida →
+    // la data del rappresentativo precision-aware ('2002', 's.d.', ...).
+    const dayIso = Array.from(new Set(
+      evs
+        .filter((e) => e.datePrecision == null || e.datePrecision === 'giorno')
+        .map((e) => e.eventDate)
+        .filter((d): d is string => !!d && d !== '1900-01-01' && /^\d{4}-\d{2}-\d{2}$/.test(d)),
+    )).sort();
+    const date = dayIso.length > 1
+      ? `dal ${formatEventDateByPrecision(dayIso[0], 'giorno')} al ${formatEventDateByPrecision(dayIso[dayIso.length - 1], 'giorno')}`
+      : dayIso.length === 1
+        ? formatEventDateByPrecision(dayIso[0], 'giorno')
+        : formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
     // Il LABEL della doc-sanitaria NON deve portare il codice classificatore (A-/B-/C-/D-):
     // l'LLM lo copiava nel titolo grassetto del blocco ("**B - Referto...:**" su Bigon).
     // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP
     // restano in formatEventsForPrompt / CHRONOLOGY_SOURCES_GUIDE, non toccate.
-    // Etichetta sentence-case singolare per il titolo del blocco (formato gold),
-    // NON la categoria plurale maiuscola dell'indice cronologico.
-    const sourceLabel = DOC_BLOCK_TYPE_LABELS[rep.sourceType] ?? 'Documento sanitario';
+    // PRIORITÀ ETICHETTA: (1) tipo documento CLASSIFICATO quando informativo
+    // (≠ altro); (2) sourceType degli eventi quando CONCORDI; (3) neutro
+    // "Documento sanitario" — su un atto legale un'etichetta neutra-ma-vera
+    // batte una specifica-ma-sbagliata.
+    const docType = metaByDoc.get(rep.documentId);
+    const classifiedLabel = docType && docType !== 'altro' ? DOCUMENT_TYPE_BLOCK_LABELS[docType] : undefined;
+    const eventTypes = new Set(evs.map((e) => e.sourceType));
+    const consensusLabel = eventTypes.size === 1 ? DOC_BLOCK_TYPE_LABELS[rep.sourceType] : undefined;
+    const sourceLabel = classifiedLabel ?? consensusLabel ?? 'Documento sanitario';
     // Intestazione DETERMINISTICA pronta (formato gold Antoniazzi): "**Tipo, struttura,
     // in data DATA:**". Fornita all'LLM da copiare IDENTICA come prima riga del blocco,
     // così smette di comporre titoli-evento data-prima. Backstop deterministico in
@@ -189,10 +237,14 @@ export function formatEventsByDocumentForPrompt(events: ConsolidatedEvent[]): st
   }).join('\n\n');
 }
 
-/** Intestazione canonica del blocco doc-sanitaria (formato gold Antoniazzi). */
+/** Intestazione canonica del blocco doc-sanitaria (formato gold Antoniazzi).
+ * `date` può essere una data singola ("16.07.2023" → "in data 16.07.2023"),
+ * un intervallo già costruito ("dal X al Y") o "s.d." (senza data): negli
+ * ultimi due casi il prefisso "in data" viene omesso. */
 export function buildDocSanitariaBlockHeader(label: string, facility: string | null, date: string): string {
   const fac = facility ? `, ${facility}` : '';
-  return `**${label}${fac}, in data ${date}:**`;
+  const dateClause = date === 's.d.' || date.startsWith('dal ') ? date : `in data ${date}`;
+  return `**${label}${fac}, ${dateClause}:**`;
 }
 
 /** Taglia un testo a maxLen su confine di parola, aggiungendo "…" se tagliato. */

@@ -84,6 +84,66 @@ describe('formatEventsByDocumentForPrompt — un atto = un blocco', () => {
     expect(out).toContain('data 2002');
     expect(out).not.toContain('01.01.2002');
   });
+
+  // Feedback beta 2026-07-20 (CASO-2026-027): uno storico appuntamenti multi-data
+  // era intestato "Referto di controllo medico, in data 15.05.2026" — data del primo
+  // appuntamento spacciata per data-documento. Un documento con più date-evento deve
+  // dichiarare l'INTERVALLO, non fingere una data unica.
+  it('documento con più date-evento → intestazione "dal X al Y", mai una data unica inventata', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'storico', eventDate: '2026-05-15', title: 'Seduta FKT', sourceText: 'seduta del 15/05' }),
+      makeEvent({ documentId: 'storico', eventDate: '2026-05-19', title: 'Seduta FKT', sourceText: 'seduta del 19/05' }),
+      makeEvent({ documentId: 'storico', eventDate: '2026-06-05', title: 'Seduta FKT', sourceText: 'seduta del 05/06' }),
+    ]);
+    expect(out).toContain('dal 15.05.2026 al 05.06.2026');
+    expect(out).not.toContain('in data 15.05.2026');
+  });
+
+  it('documento con una sola data → resta "in data X" (invariato)', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'doc-1', eventDate: '2024-03-15', title: 'Visita', sourceText: 'visita' }),
+    ]);
+    expect(out).toContain('in data 15.03.2024');
+  });
+
+  it('nessuna data valida (sentinella) → "s.d." senza "in data"', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ documentId: 'doc-nd', eventDate: '1900-01-01', title: 'Documento senza data', sourceText: 'testo' }),
+    ]);
+    expect(out).toContain(', s.d.:');
+    expect(out).not.toContain('in data s.d.');
+  });
+
+  // Il TIPO DOCUMENTO classificato (documents.document_type) è più affidabile del
+  // sourceType del singolo evento estratto: quando è informativo (≠ altro) vince.
+  it('label dal documentType classificato quando informativo (vince sul sourceType evento)', () => {
+    const out = formatEventsByDocumentForPrompt(
+      [makeEvent({ documentId: 'doc-cert', sourceType: 'referto_controllo', title: 'Certificato', sourceText: 'prognosi 40 giorni' })],
+      [{ documentId: 'doc-cert', documentType: 'certificato' }],
+    );
+    expect(out).toContain('Certificato medico');
+    expect(out).not.toContain('Referto di controllo medico');
+  });
+
+  it('documentType "altro" + eventi concordi → fallback al label del sourceType (invariato)', () => {
+    const out = formatEventsByDocumentForPrompt(
+      [makeEvent({ documentId: 'doc-x', sourceType: 'referto_controllo', title: 'Controllo', sourceText: 'controllo' })],
+      [{ documentId: 'doc-x', documentType: 'altro' }],
+    );
+    expect(out).toContain('Referto di controllo medico');
+  });
+
+  it('documentType "altro" + eventi con sourceType DISCORDI → etichetta neutra "Documento sanitario"', () => {
+    const out = formatEventsByDocumentForPrompt(
+      [
+        makeEvent({ documentId: 'doc-mix', sourceType: 'referto_controllo', title: 'Controllo', sourceText: 'controllo' }),
+        makeEvent({ documentId: 'doc-mix', sourceType: 'esame_strumentale', title: 'RX', sourceText: 'rx' }),
+      ],
+      [{ documentId: 'doc-mix', documentType: 'altro' }],
+    );
+    expect(out).toContain('Documento sanitario');
+    expect(out).not.toContain('Referto di controllo medico');
+  });
 });
 
 describe('synthesis-prompts', () => {

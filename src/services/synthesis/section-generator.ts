@@ -216,7 +216,11 @@ export function buildSectionUserPrompt(params: {
     // Doc-sanitaria RC: gli eventi vanno RAGGRUPPATI PER DOCUMENTO (un atto = un blocco,
     // come il gold), non per-evento (564 voci frammentate = il gonfiore 3,7x su Bigon).
     if (spec.id === 'documentazione_sanitaria') {
-      parts.push(`## DOCUMENTAZIONE SANITARIA RAGGRUPPATA PER DOCUMENTO (${new Set(medical.map((e) => e.documentId)).size} documenti, ${medical.length} reperti)\n\n${formatEventsByDocumentForPrompt(medical)}\n`);
+      // Metadati per-documento (tipo classificato) per le intestazioni-blocco:
+      // dall'OCR context quando presente, dalle sintesi (map-reduce) altrimenti.
+      const docsMeta = (documentsOcrText && documentsOcrText.length > 0 ? documentsOcrText : synthesisParams.documentSummaries)
+        ?.map((d) => ({ documentId: d.documentId, documentType: d.documentType }));
+      parts.push(`## DOCUMENTAZIONE SANITARIA RAGGRUPPATA PER DOCUMENTO (${new Set(medical.map((e) => e.documentId)).size} documenti, ${medical.length} reperti)\n\n${formatEventsByDocumentForPrompt(medical, docsMeta)}\n`);
     } else {
       parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
     }
