@@ -204,4 +204,56 @@ describe('anonymizer', () => {
       expect(result.anonymizedText).not.toMatch(/\bCosta\b/); // il NOME (Capitalizzato) redatto
     });
   });
+
+  describe('nomi solo-OCR (fix beta 2026-07-20)', () => {
+    it('should redact an ALL-CAPS patient name after an anagraphic header with colon', () => {
+      const result = anonymizeText({ text: 'Paziente: DEMPROVA Testina. Ricovero ordinario, decorso regolare.' });
+
+      expect(result.anonymizedText).not.toContain('DEMPROVA');
+      expect(result.anonymizedText).not.toContain('Testina');
+    });
+
+    it('should redact a CAPS surname plus name preceding nato-il', () => {
+      const result = anonymizeText({ text: 'DEMPROVA Testina Nato/a il 15/05/1985, giungeva in Pronto Soccorso.' });
+
+      expect(result.anonymizedText).not.toContain('DEMPROVA');
+      expect(result.anonymizedText).not.toContain('Testina');
+    });
+
+    it('should redact every other occurrence of a detected name even without trigger words', () => {
+      const text = 'Paziente: DEMPROVA Testina. Alla dimissione Demprova Testina deambulava; risultando invece DEMPROVA Testina.';
+
+      const result = anonymizeText({ text });
+
+      expect(result.anonymizedText).not.toMatch(/demprova/i);
+    });
+
+    it('should redact the reversed order occurrence of a two-token detected name', () => {
+      const text = 'Paziente: DEMPROVA Testina. In calce: Testina Demprova.';
+
+      const result = anonymizeText({ text });
+
+      expect(result.anonymizedText).not.toMatch(/demprova/i);
+      expect(result.anonymizedText).not.toMatch(/testina/i);
+    });
+
+    it('should keep clinical ALL-CAPS phrasing without colon intact', () => {
+      const text = 'Il paziente VIGILE COLLABORANTE riferisce dolore al ginocchio destro.';
+
+      const result = anonymizeText({ text });
+
+      expect(result.anonymizedText).toContain('VIGILE COLLABORANTE');
+    });
+
+    it('should use the same placeholder for case variants of the same detected name', () => {
+      const text = 'Paziente: DEMPROVA Testina. Successivamente Demprova Testina veniva dimessa.';
+
+      const result = anonymizeText({ text });
+
+      const placeholders = new Set(
+        result.replacements.filter((r) => r.type === 'nome').map((r) => r.replacement),
+      );
+      expect(placeholders.size).toBe(1);
+    });
+  });
 });

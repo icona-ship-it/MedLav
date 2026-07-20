@@ -99,6 +99,32 @@ const ADDRESS_REGEX = /(?:Via|Piazza|Corso|Viale|Largo|Vicolo|Piazzale|Piazzetta
 const CONTEXT_NAME_REGEX = /(?:(?:sig\.?\s|signor[ae]?\s|paziente\s|periziando\s|perizianda\s|attore\s|attrice\s|ricorrente\s|convenuto\s|assistit[oa]\s|infortunat[oa]\s|parte\s|figlio di\s|figlia di\s|nat[oa]\s))([A-Z][a-z\u00E0-\u00FA]{1,}\s+[A-Z][a-z\u00E0-\u00FA]{1,}(?:\s+[A-Z][a-z\u00E0-\u00FA]{1,})?)/g;
 
 /**
+ * Token di nome proprio: Capitalizzato ("Testina") o TUTTO MAIUSCOLO ("DEMPROVA",
+ * formato tipico delle anagrafiche nei documenti clinici, che i pattern
+ * Titlecase non coprivano — fix nomi solo-OCR 2026-07-20).
+ */
+const NAME_TOKEN = String.raw`(?:[A-ZÀ-Ü][a-zà-ü'’-]+|[A-ZÀ-Ü][A-ZÀ-Ü'’-]+)`;
+
+/**
+ * Intestazioni anagrafiche CON due punti seguite da un nome di 2-3 token,
+ * anche in maiuscolo ("Paziente: DEMPROVA Testina"). Il colon è OBBLIGATORIO:
+ * senza, frasi cliniche come "paziente VIGILE COLLABORANTE" verrebbero redatte.
+ */
+const HEADER_NAME_CAPS_REGEX = new RegExp(
+  String.raw`(?:[Pp]aziente|[Aa]ssistit[oa]|[Pp]eriziand[oa]|[Nn]ominativo|[Cc]ognome(?:\s+e\s+[Nn]ome)?|[Ii]ntestatario)\s*:\s*(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2})`,
+  'g',
+);
+
+/**
+ * Nome PRIMA di "nato/a il|a" ("DEMPROVA Testina Nato/a il 15/05/1985"):
+ * l'anagrafica in testa a referti e intestazioni. Richiede 2-3 token.
+ */
+const NAME_BEFORE_NATO_REGEX = new RegExp(
+  String.raw`(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2})\s*,?\s+[Nn]at[oa](?:\/[oa])?\s+(?:il|a)\b`,
+  'g',
+);
+
+/**
  * Hospital and healthcare facility names.
  * Matches: "Ospedale San Raffaele", "ASST Spedali Civili", "Policlinico Gemelli"
  */
@@ -233,6 +259,19 @@ export function detectPii(params: {
 
   // 4. Patronymic patterns (figlio di, nato da, etc.)
   collectRegexCaptureGroupMatches(text, PATRONYMIC_REGEX, 'nome', tracker, matches);
+
+  // 4b. Intestazioni anagrafiche (anche MAIUSCOLO) + nome prima di "nato/a il"
+  // — i nomi presenti SOLO nell'OCR arrivano nel report attraverso le citazioni
+  // verbatim con questi formati (fix beta 2026-07-20).
+  collectRegexCaptureGroupMatches(text, HEADER_NAME_CAPS_REGEX, 'nome', tracker, matches);
+  collectRegexCaptureGroupMatches(text, NAME_BEFORE_NATO_REGEX, 'nome', tracker, matches);
+
+  // 4c. PROPAGAZIONE: ogni nome multi-parola rilevato viene redatto in TUTTE le
+  // sue occorrenze (anche senza parola-trigger vicina — es. «risultando invece
+  // NOME Cognome» citato dall'AI dal solo OCR) e, per i nomi di 2 token,
+  // nell'ordine invertito. MAI su token singoli: troppi cognomi italiani sono
+  // parole comuni o cliniche.
+  propagateDetectedNameMatches(text, tracker, matches);
 
   // 5. Codice Fiscale
   collectRegexMatches(text, CF_REGEX, 'codice_fiscale', tracker, matches);
@@ -404,6 +443,51 @@ function collectRegexCaptureGroupMatches(
       index,
       length: captured.length,
     });
+  }
+}
+
+/**
+ * Redige TUTTE le occorrenze dei nomi multi-parola già rilevati (e la forma a
+ * ordine invertito per i nomi di 2 token), con placeholder coerente via tracker.
+ * Opera su uno snapshot dei match correnti: non si auto-alimenta.
+ */
+function propagateDetectedNameMatches(
+  text: string,
+  tracker: ReplacementTracker,
+  matches: PiiMatch[],
+): void {
+  const detectedNames = matches
+    .filter((m) => m.category === 'nome')
+    .map((m) => m.original.trim())
+    .filter((name) => name.split(/\s+/).length >= 2);
+
+  const seen = new Set<string>();
+  for (const name of detectedNames) {
+    const tokens = name.split(/\s+/);
+    const variants = [tokens.join(' ')];
+    if (tokens.length === 2) {
+      variants.push(`${tokens[1]} ${tokens[0]}`);
+    }
+    for (const variant of variants) {
+      const key = variant.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const pattern = new RegExp(
+        `\\b${variant.split(/\s+/).map(escapeRegex).join('\\s+')}\\b`,
+        'gi',
+      );
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(text)) !== null) {
+        const replacement = tracker.getOrCreate(match[0], 'nome');
+        matches.push({
+          original: match[0],
+          replacement,
+          category: 'nome',
+          index: match.index,
+          length: match[0].length,
+        });
+      }
+    }
   }
 }
 
