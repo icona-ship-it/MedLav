@@ -2,6 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import { verifySourceTexts } from '@/services/validation/source-text-verifier';
 import { buildLowQualityPageSet, capEventsFromLowQualityPages } from '@/services/extraction/low-quality-page-guard';
+import { buildHandwrittenPageSet, capEventsFromHandwrittenPages, applyTemporalSanityFlags } from '@/services/extraction/event-sanity';
+import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { createEmptyUsage, mergeUsage, type TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
@@ -304,7 +306,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     // Read pages from DB (no large data from Inngest)
     let { data: pages } = await supabase
       .from('pages')
-      .select('page_number, ocr_text, ocr_confidence')
+      .select('page_number, ocr_text, ocr_confidence, has_handwriting')
       .eq('document_id', ocrResult.documentId)
       .gte('page_number', range.start)
       .lte('page_number', range.end)
@@ -317,7 +319,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         const { data: retryPages } = await supabase
           .from('pages')
-          .select('page_number, ocr_text, ocr_confidence')
+          .select('page_number, ocr_text, ocr_confidence, has_handwriting')
           .eq('document_id', ocrResult.documentId)
           .gte('page_number', range.start)
           .lte('page_number', range.end)
@@ -354,6 +356,9 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     // Pagine sotto soglia di qualità OCR: gli eventi che ne derivano verranno
     // cappati (LOW_QUALITY_PAGE_CONFIDENCE_CAP) e marcati per la revisione.
     const lowQualityPages = buildLowQualityPageSet(nonEmptyPages);
+    // Pagine manoscritte (OCR): gli eventi che ne derivano vengono cappati e
+    // marcati per la revisione — mai piena confidenza su un manoscritto.
+    const handwrittenPages = buildHandwrittenPageSet(nonEmptyPages);
 
     let chunkText = nonEmptyPages.map((p) =>
       `[PAGE_START:${p.page_number}]\n${p.ocr_text}\n[PAGE_END:${p.page_number}]`,
@@ -413,6 +418,16 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     // Catena di guardie UNICA per main e retry path (review 2026-07-04: due
     // copie divergono al primo guard nuovo, e il retry è il ramo meno esercitato):
     // verify sourceText (skip su chunk troncato) → cap pagine OCR sotto soglia.
+    // Data sinistro (form perizia) per la sanity temporale: contenuti di
+    // guarigione/esiti datati prima del sinistro = data impossibile da flaggare.
+    const { data: caseSanityRow } = await supabase
+      .from('cases')
+      .select('dataSinistro:perizia_metadata->>dataSinistro')
+      .eq('id', caseId)
+      .single();
+    const incidentIso = normalizeItalianDateToIso((caseSanityRow as { dataSinistro?: string | null } | null)?.dataSinistro ?? null);
+    const todayIso = new Date().toISOString().slice(0, 10);
+
     const gateChunkEvents = (
       events: Parameters<typeof verifySourceTexts>[0],
       label: string,
@@ -422,7 +437,14 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       if (guard.cappedCount > 0) {
         logger.info('pipeline', ` Chunk ${chunkIndex + 1}${label}: ${guard.cappedCount} eventi cappati (pagine OCR sotto soglia)`);
       }
-      return guard.events;
+      // Manoscritti + sanity temporale (date future, guarigione pre-sinistro,
+      // appuntamenti programmati): flag persistiti → coda "Da controllare".
+      const hand = capEventsFromHandwrittenPages(guard.events, handwrittenPages);
+      const sanity = applyTemporalSanityFlags(hand.events, { todayIso, incidentIso });
+      if (hand.flaggedCount > 0 || sanity.flaggedCount > 0) {
+        logger.info('pipeline', ` Chunk ${chunkIndex + 1}${label}: ${hand.flaggedCount} eventi da pagine manoscritte, ${sanity.flaggedCount} flag temporali/appuntamento`);
+      }
+      return sanity.events;
     };
 
     const result = await extractEventsFromChunk({
