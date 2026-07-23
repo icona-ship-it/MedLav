@@ -317,7 +317,9 @@ export function CaseDetailClient({
                 : step.number === 2
                 ? (hasProcessingDocs || processingStage === 'elaborazione'
                     ? (processingProgress?.phase === 'extraction'
-                        ? `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`
+                        ? (events.length > 0
+                            ? `Analisi in corso — ${events.length} eventi individuati finora`
+                            : `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`)
                         : processingProgress?.phase === 'ocr'
                           ? 'Lettura documenti...'
                           : 'In elaborazione...')
@@ -329,7 +331,9 @@ export function CaseDetailClient({
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
                 ? (processingProgress?.phase === 'extraction'
-                    ? `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`
+                    ? (events.length > 0
+                            ? `Analisi in corso — ${events.length} eventi individuati finora`
+                            : `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`)
                     : processingProgress?.phase === 'ocr'
                       ? 'Lettura documenti...'
                       : 'In elaborazione...')

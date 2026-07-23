@@ -21,6 +21,7 @@ import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
 import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder } from '../../actions';
+import { estimateAnalysisTime } from '@/lib/analysis-time-estimate';
 import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
 
@@ -55,20 +56,6 @@ interface ProcessingSectionProps {
    * Elaborazione a caso finito era un vicolo cieco: "Tutti i documenti sono
    * già stati elaborati." e basta (collaudo live 2026-07-17). */
   onGoToResults?: () => void;
-}
-
-/**
- * Stima indicativa del tempo di analisi in base al NUMERO di documenti.
- * I documenti sono elaborati in parallelo, ma il tempo cresce comunque col
- * volume (OCR + estrazione + sintesi). Il vecchio "5–15 minuti" fisso era
- * fuorviante su fascicoli grandi (79 doc → decine di minuti reali). Range
- * volutamente ampi e onesti: meglio non promettere una precisione che non c'è.
- */
-function estimateAnalysisTime(docCount: number): string {
-  if (docCount <= 5) return 'di solito pochi minuti';
-  if (docCount <= 20) return 'di solito 5–15 minuti';
-  if (docCount <= 50) return 'di solito 15–35 minuti';
-  return 'anche 30–60 minuti su fascicoli molto voluminosi';
 }
 
 // --- Pipeline steps preview ---
@@ -450,7 +437,7 @@ export function ProcessingSection({
                         </Badge>
                         <Badge variant="outline" className="text-sm px-3 py-1">
                           <Clock className="mr-1.5 h-3.5 w-3.5" />
-                          Tempo stimato: {estimateAnalysisTime(uploadedCount)}
+                          Tempo stimato: {estimateAnalysisTime(uploadedCount, documents.reduce((sum, d) => sum + (d.file_size ?? 0), 0))}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground text-center">
