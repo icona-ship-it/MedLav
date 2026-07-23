@@ -450,6 +450,23 @@ describe('Data sinistro — eventi preesistenti esclusi dai calcoli (feedback be
     expect(block.toLowerCase()).toContain('preesistenz'); // nota di trasparenza per il perito
   });
 
+  // Collaudo live 2026-07-24 (CASO-2026-029): un "controllo ortopedico
+  // programmato" con data futura (estratto da una prescrizione) allungava il
+  // periodo di malattia fino all'appuntamento mai avvenuto.
+  it('un evento con data FUTURA (appuntamento programmato) NON entra nel periodo di malattia', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      makeEvent('2026-06-05', 'terapia', 'Ultima seduta'),
+      makeEvent('2099-01-01', 'follow-up', 'Controllo ortopedico programmato'),
+    ], undefined, '2026-04-18');
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.endDate).toBe('2026-06-05');
+  });
+
+  it('solo eventi futuri → nessun calcolo', () => {
+    expect(calculateMedicoLegalPeriods([makeEvent('2099-01-01', 'follow-up', 'Programmato')])).toEqual([]);
+  });
+
   it('formatRicoveroITTFactsBlock: senza eventi esclusi nessuna nota preesistenze', () => {
     const events = [
       makeEvent('2026-04-18', 'visita', 'Accesso in PS'),

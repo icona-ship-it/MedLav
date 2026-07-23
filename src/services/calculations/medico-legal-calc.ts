@@ -33,6 +33,15 @@ function normalizeIncidentIso(incidentDate?: string | null): string | null {
   return normalizeItalianDateToIso(incidentDate);
 }
 
+/** Data civile italiana di oggi (Europe/Rome). Un evento clinico datato nel
+ * FUTURO è un appuntamento programmato (o una data mal letta), mai un
+ * accadimento: non deve entrare nei computi (collaudo 2026-07-24: un
+ * "controllo programmato" allungava il periodo di malattia fino
+ * all'appuntamento mai avvenuto). */
+function todayRomeIso(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+}
+
 /**
  * Keep only clinical events with a real, well-formed date, in chronological
  * order. The whole module assumes chronological input (events[0] = first,
@@ -49,12 +58,14 @@ function normalizeIncidentIso(incidentDate?: string | null): string | null {
  * è incluso (>=).
  */
 function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null): CalcEvent[] {
+  const today = todayRomeIso();
   return events
     .filter(
       (e) =>
         !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
         e.event_date !== SENTINEL_EVENT_DATE &&
         ISO_DATE_RE.test(e.event_date) &&
+        e.event_date <= today &&
         (!incidentIso || e.event_date >= incidentIso),
     )
     .slice()
