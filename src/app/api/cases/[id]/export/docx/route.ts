@@ -184,6 +184,7 @@ export async function GET(
         reportStatus,
         exportMode,
         pipelineMode: pipelineModeDocx,
+        documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
       });
 
     const suffix = shouldAnonymize ? '-anonimizzato' : '';

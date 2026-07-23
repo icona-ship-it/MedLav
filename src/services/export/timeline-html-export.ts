@@ -1,4 +1,5 @@
 import { formatDate } from '@/lib/format';
+import { groupEventsByDocument } from './event-grouping';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
@@ -8,6 +9,8 @@ import { sortEventsChrono } from '@/lib/event-order';
 
 export interface TimelineHtmlEvent {
   order_number: number;
+  /** Per il raggruppamento "un documento = un blocco" (feedback beta 2026-07-20). */
+  document_id?: string | null;
   event_date: string;
   event_type: string;
   title: string;
@@ -31,6 +34,8 @@ interface TimelineHtmlParams {
   events: TimelineHtmlEvent[];
   /** Non più renderizzato (dicitura interna dell'app). */
   moduleName?: string;
+  /** Tipi documento classificati per le intestazioni-blocco (mai nomi file). */
+  documents?: Array<{ id: string; documentType?: string | null }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,9 +89,9 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   // Il documento parte direttamente dagli eventi sotto il watermark RISERVATO;
   // la testata di ogni evento è "data — titolo", l'attribuzione resta
   // "Dr. — Struttura".
-  const eventsHtml = events.length === 0
-    ? '<p style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</p>'
-    : events.map((ev) => {
+  // Un documento = UN blocco (feedback beta 2026-07-20): intestazione per
+  // documento (tipo + struttura + data/intervallo) e gli eventi come sotto-voci.
+  const renderEvent = (ev: TimelineHtmlEvent): string => {
       const meta: string[] = [];
       if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? escapeHtml(ev.doctor) : `Dr. ${escapeHtml(ev.doctor)}`);
       if (ev.facility) meta.push(escapeHtml(ev.facility));
@@ -106,6 +111,17 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
       ${diag}
       ${metaStr}
     </div>`;
+  };
+
+  const eventsHtml = events.length === 0
+    ? '<p style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</p>'
+    : groupEventsByDocument(events, params.documents).map((group) => {
+      const body = group.events.map(renderEvent).join('\n');
+      if (!group.heading) return body; // eventi senza documento: lista piatta
+      return `<section class="doc-group">
+      <h2 class="doc-group-head">${escapeHtml(group.heading)}</h2>
+      ${body}
+    </section>`;
     }).join('\n');
 
   return `<!DOCTYPE html>
@@ -124,6 +140,14 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     margin: 0 auto;
     padding: 20px;
   }
+  .doc-group { margin: 18px 0; }
+  .doc-group-head {
+    font-size: 15px;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+  .doc-group .event-block { margin-left: 14px; }
   .watermark-wrapper { position: relative; }
   .watermark-wrapper::after {
     content: 'RISERVATO';

@@ -103,6 +103,7 @@ export async function GET(
         .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
         .map((e: Record<string, unknown>) => ({
           order_number: (e.order_number as number) ?? 0,
+          document_id: (e.document_id as string | null) ?? null,
           event_date: (e.event_date as string) ?? '',
           event_type: (e.event_type as string) ?? 'altro',
           title: (e.title as string) ?? '',
@@ -121,6 +122,7 @@ export async function GET(
         patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
         events: timelineEvents,
         moduleName,
+        documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
       });
 
       const timelineHeaders: Record<string, string> = {

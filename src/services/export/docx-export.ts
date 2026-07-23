@@ -11,6 +11,7 @@ import type { MedicoLegalCalculation } from '@/services/calculations/medico-lega
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
 import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
+import { groupEventsByDocument } from './event-grouping';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
   ctu: 'CTU - Consulente Tecnico d\'Ufficio (prospettiva neutrale)',
@@ -20,6 +21,8 @@ const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
 
 interface DocxEvent {
   order_number: number;
+  /** Per il raggruppamento "un documento = un blocco" nella cronologia basic. */
+  document_id?: string | null;
   event_date: string;
   date_precision: string;
   event_type: string;
@@ -93,6 +96,8 @@ interface DocxExportParams {
    * NON producono una perizia — l'export deve dirlo, non fingersi un report
    * monco ("Sintesi non ancora generata", feedback beta 2026-07-20). */
   pipelineMode?: string;
+  /** Tipi documento classificati per le intestazioni-blocco della cronologia. */
+  documents?: Array<{ id: string; documentType?: string | null }>;
 }
 
 /**
@@ -464,7 +469,18 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // medical timeline.
   const clinicalEvents = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
 
-  for (const event of clinicalEvents) {
+  // Un documento = UN blocco (feedback beta 2026-07-20): il verbale di PS
+  // estratto in 6 eventi resta un blocco unico con le sue sotto-voci, invece
+  // di 6 intestazioni indipendenti. Eventi senza documento: lista piatta.
+  for (const group of groupEventsByDocument(clinicalEvents, params.documents)) {
+    if (group.heading) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: group.heading, bold: true, size: 26 })],
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 260 },
+      }));
+    }
+    for (const event of group.events) {
     const datePrecNote = event.date_precision !== 'giorno' ? ` [${event.date_precision}]` : '';
     const source = sourceLabels[event.source_type] ?? event.source_type;
     // Wave B.1/B.2: surface confidence + verification flag in DOCX export.
@@ -518,6 +534,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
         ],
         shading: { type: ShadingType.SOLID, color: 'EFF6FF' },
       }));
+    }
     }
   }
 

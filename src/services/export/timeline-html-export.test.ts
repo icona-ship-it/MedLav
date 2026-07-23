@@ -102,4 +102,27 @@ describe('generateTimelineHtml — documento scritto (non tabella)', () => {
     const html = generateTimelineHtml({ caseCode: 'C1', patientInitials: null, events: [] });
     expect(html).toContain('Nessun evento estratto.');
   });
+
+  // Feedback beta 2026-07-20: un documento = UN blocco con intestazione
+  // (tipo + data), non tante intestazioni indipendenti per ogni evento.
+  it('raggruppa gli eventi per documento con intestazione-blocco (tipo classificato, mai nomi file)', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C1',
+      patientInitials: null,
+      events: [
+        ev({ title: 'Accesso PS', document_id: 'doc-ps' }),
+        ev({ title: 'Dimissione PS', document_id: 'doc-ps' }),
+        ev({ title: 'Controllo ortopedico', document_id: 'doc-visita', event_date: '2024-04-01' }),
+      ],
+      documents: [
+        { id: 'doc-ps', documentType: 'cartella_clinica' },
+        { id: 'doc-visita', documentType: 'referto_specialistico' },
+      ],
+    });
+    const groups = html.match(/<h2 class="doc-group-head">/g) ?? [];
+    expect(groups).toHaveLength(2);
+    expect(html).toContain('Cartella Clinica');
+    // gli eventi dello stesso documento stanno nello stesso blocco
+    expect(html.indexOf('Accesso PS')).toBeLessThan(html.indexOf('Dimissione PS'));
+  });
 });
