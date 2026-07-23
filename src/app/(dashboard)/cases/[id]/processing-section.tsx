@@ -23,6 +23,7 @@ import { getElaborationCost, getElaborationLabel } from '@/services/credits/cred
 import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder } from '../../actions';
 import { estimateAnalysisTime } from '@/lib/analysis-time-estimate';
 import { stallNotice } from '@/lib/processing-stall';
+import { DIAGNOSTIC_CODE_LABELS, type DiagnosticCode } from '@/lib/pipeline-diagnostics';
 import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
 
@@ -53,6 +54,9 @@ interface ProcessingSectionProps {
    * l'estrazione, la fase più lunga, in cui % e contatore documenti restano
    * fermi per decine di minuti sui fascicoli grandi (caso 226, 117 pagine). */
   extractedEventsCount?: number;
+  /** Registro diagnostica recente (pipeline_diagnostics): alimenta il banner
+      "rallentata dai limiti AI" e il pannello Dettagli tecnici. */
+  recentDiagnostics?: Array<{ step: string; code: string; count: number; last_at: string; detail: Record<string, unknown> | null }>;
   /** Porta al passo dei risultati (Report/Cronistoria/Spese). Senza, il passo
    * Elaborazione a caso finito era un vicolo cieco: "Tutti i documenti sono
    * già stati elaborati." e basta (collaudo live 2026-07-17). */
@@ -83,6 +87,7 @@ export function ProcessingSection({
   onProcessingStarted,
   hasExistingResults = false,
   extractedEventsCount = 0,
+  recentDiagnostics = [],
   onGoToResults,
 }: ProcessingSectionProps) {
   const creditCost = getElaborationCost(pipelineMode);
@@ -121,6 +126,13 @@ export function ProcessingSection({
   }, [hasProcessingDocs]);
   const stallMinutes = Math.floor((Date.now() - lastEventChangeRef.current.at) / 60_000);
   const stall = stallNotice(stallMinutes);
+  // Diagnostica viva: se negli ultimi 15 min il registro ha visto rate-limit,
+  // il rallentamento ha un NOME — il banner lo dice invece di lasciar dedurre
+  // un blocco (il "perché" del CASO-2026-235, ora visibile in tempo reale).
+  const recentRateLimit = recentDiagnostics.find((d) =>
+    (d.code === 'rate_limited' || d.code === 'timeout') &&
+    Date.now() - new Date(d.last_at).getTime() < 15 * 60_000,
+  );
 
   // Il caso è morto su un blocco del VALIDATORE (non un errore tecnico): il
   // messaggio salvato da assemble-and-save-report inizia con "Report non valido".
@@ -370,6 +382,13 @@ export function ProcessingSection({
                         )}
                       </p>
                     )}
+                    {hasProcessingDocs && recentRateLimit && (
+                      <div className="mx-auto max-w-xl rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                        L&apos;analisi in questo momento è rallentata dai limiti del fornitore AI
+                        ({recentRateLimit.count > 1 ? `${recentRateLimit.count} attese registrate` : 'attesa in corso'}):
+                        riprende da sola, non serve annullare.
+                      </div>
+                    )}
                     {extractedEventsCount > 0 && stall.tone !== 'none' && (
                       <div className={`mx-auto max-w-xl rounded-lg border p-3 text-sm ${
                         stall.tone === 'warn'
@@ -397,6 +416,24 @@ export function ProcessingSection({
                   e riceverai un&apos;email al completamento.
                 </p>
               </div>
+
+              {/* Dettagli tecnici (registro diagnostica): il PERCHÉ di pause ed
+                  errori, leggibile — mai codici macchina nudi. */}
+              {recentDiagnostics.length > 0 && (
+                <details className="rounded-lg border p-3">
+                  <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                    Dettagli tecnici dell&apos;elaborazione ({recentDiagnostics.length})
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    {recentDiagnostics.map((d, i) => (
+                      <li key={i} className="flex items-baseline justify-between gap-3 border-l-2 border-border pl-2">
+                        <span>{DIAGNOSTIC_CODE_LABELS[d.code as DiagnosticCode] ?? d.code}</span>
+                        <span className="shrink-0 tabular-nums">×{d.count} · {new Date(d.last_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
 
               {/* Cancel link — at bottom, text-only, requires confirmation */}
               <div className="pt-2 border-t text-center">

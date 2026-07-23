@@ -50,6 +50,20 @@ export default async function CaseDetailPage({
     isActivelyProcessing ? Promise.resolve([] as Awaited<ReturnType<typeof getCaseDocumentPages>>) : getCaseDocumentPages(id),
   ]);
 
+  // Registro diagnostica (post-235): righe recenti per il banner "rallentata"
+  // e il pannello "Dettagli tecnici". Best-effort: senza la migration 0032 la
+  // query fallisce e si degrada a lista vuota, nulla si rompe.
+  let recentDiagnostics: Array<{ step: string; code: string; count: number; last_at: string; detail: Record<string, unknown> | null }> = [];
+  try {
+    const { data: diagRows } = await supabase
+      .from('pipeline_diagnostics')
+      .select('step, code, count, last_at, detail')
+      .eq('case_id', id)
+      .order('last_at', { ascending: false })
+      .limit(20);
+    recentDiagnostics = (diagRows ?? []) as typeof recentDiagnostics;
+  } catch { /* tabella non ancora migrata: degrada in silenzio */ }
+
   // Pass raw storage paths to client — images are loaded via proxy API on demand
   // (avoids N signed URL API calls that cause timeout on large cases)
 
@@ -66,6 +80,7 @@ export default async function CaseDetailPage({
         processingLabels={processingLabels}
         eventImages={eventImagesMap}
         documentPages={documentPages}
+        recentDiagnostics={recentDiagnostics}
       />
     </div>
   );

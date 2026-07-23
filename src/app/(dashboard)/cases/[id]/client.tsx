@@ -18,9 +18,18 @@ import type { DocumentPage } from '../../actions';
 
 // --- Types ---
 
+export interface CaseDiagnosticRow {
+  step: string;
+  code: string;
+  count: number;
+  last_at: string;
+  detail: Record<string, unknown> | null;
+}
+
 interface CaseDetailClientProps {
   caseId: string;
   caseData: CaseData;
+  recentDiagnostics?: CaseDiagnosticRow[];
   documents: Document[];
   events: EventRow[];
   anomalies: AnomalyRow[];
@@ -117,6 +126,7 @@ function computeAutoStep(
 // --- Main Component ---
 
 export function CaseDetailClient({
+  recentDiagnostics = [],
   caseId,
   caseData,
   documents: initialDocuments,
@@ -440,6 +450,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                recentDiagnostics={recentDiagnostics}
                 onGoToResults={() => handleSetStep(3)}
               />
             </div>
@@ -519,6 +530,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                recentDiagnostics={recentDiagnostics}
                 onGoToResults={() => handleSetStep(3)}
               />
             </div>
@@ -598,6 +610,7 @@ export function CaseDetailClient({
                 initialExcludedSections={reportSectionExclusions}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
+                recentDiagnostics={recentDiagnostics}
                 onGoToResults={() => handleSetStep(4)}
               />
             </div>
