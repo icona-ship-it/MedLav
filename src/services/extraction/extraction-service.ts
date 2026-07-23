@@ -817,7 +817,10 @@ export function normalizeDateFormat(dateStr: string): string | null {
  * Prevents LLM hallucination of names that don't exist in the original document.
  * Names not found in OCR are nullified and confidence is lowered.
  */
-function validateExtractedNamesAgainstOcr(
+/** Titoli/onorifici da ignorare nel confronto col testo OCR (non identificano). */
+const DOCTOR_TITLE_TOKENS = new Set(['dr', 'dott', 'drssa', 'dottssa', 'ssa', 'prof', 'med', 'dssa', 'sig', 'sigra']);
+
+export function validateExtractedNamesAgainstOcr(
   events: ExtractedEvent[],
   ocrText: string,
 ): ExtractedEvent[] {
@@ -834,12 +837,18 @@ function validateExtractedNamesAgainstOcr(
     let newRequiresVerification = event.requiresVerification;
     let notes = event.reliabilityNotes;
 
-    // Validate doctor name: must appear in OCR text (case-insensitive, word boundary)
+    // Validate doctor name: must appear in OCR text (case-insensitive, word boundary).
+    // TUTTI i token del nome (titoli esclusi) devono trovarsi nell'OCR — il vecchio
+    // criterio "almeno un token" lasciava passare nomi interamente inventati quando
+    // UNA parola coincideva per caso (es. il nome di battesimo in un toponimo tipo
+    // "via Vittorio Veneto": beta 2026-07-20, medico inesistente su 3 eventi).
     if (newDoctor && newDoctor.length >= 3) {
       const doctorLower = newDoctor.toLowerCase();
-      // Check if at least the surname (last word, >= 3 chars) appears as whole word in OCR
-      const parts = doctorLower.split(/\s+/).filter((p) => p.length >= 3);
-      const surnameFound = parts.some((part) => {
+      const parts = doctorLower
+        .replace(/[.']/g, ' ')
+        .split(/\s+/)
+        .filter((p) => p.length >= 3 && !DOCTOR_TITLE_TOKENS.has(p));
+      const surnameFound = parts.length > 0 && parts.every((part) => {
         const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp(`\\b${escaped}\\b`).test(ocrLower);
       });

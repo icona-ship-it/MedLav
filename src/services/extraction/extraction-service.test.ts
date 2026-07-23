@@ -321,6 +321,69 @@ describe('extraction-service', () => {
       expect(result.events[0].facility).toBeNull();
       expect(result.events[0].confidence).toBeLessThanOrEqual(50);
     });
+
+    // Beta 2026-07-20 (CASO-2026-028): "Dr. Scapolo Vittorio" — nome interamente
+    // inventato attribuito a 3 eventi — passava perché UNA parola del nome
+    // coincideva per caso col testo (es. "Vittorio" in un indirizzo). Ora TUTTI
+    // i token del nome (titoli esclusi) devono trovarsi nell'OCR.
+    it('nullifica un nome inventato anche se UNA parola coincide per caso (es. toponimo)', async () => {
+      const llmResponse = JSON.stringify({
+        events: [{
+          eventDate: '2026-05-13',
+          datePrecision: 'giorno',
+          eventType: 'visita',
+          title: 'Visita ortopedica',
+          description: 'Consulenza.',
+          sourceType: 'referto_controllo',
+          doctor: 'Dr. Scapolo Vittorio',
+          facility: null,
+          confidence: 90,
+          sourceText: 'Visita ortopedica in urgenza',
+          sourcePages: [1],
+        }],
+      });
+      mockStreamChat.mockResolvedValue({ content: llmResponse, usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        // "vittorio" compare nel testo (via Vittorio Veneto), "scapolo" no.
+        chunkText: 'Visita ortopedica in urgenza. Ambulatorio di via Vittorio Veneto 12. Referto firmato.',
+        chunkLabel: 'test.pdf',
+        documentType: 'referto_controllo',
+        caseType: 'ortopedica',
+      });
+
+      expect(result.events[0].doctor).toBeNull();
+      expect(result.events[0].requiresVerification).toBe(true);
+    });
+
+    it('accetta il nome reale anche con ordine invertito e titolo diverso (Piccoli Dr. Marco → Dr. Marco Piccoli)', async () => {
+      const llmResponse = JSON.stringify({
+        events: [{
+          eventDate: '2026-05-13',
+          datePrecision: 'giorno',
+          eventType: 'visita',
+          title: 'Consulenza ortopedica',
+          description: 'Risposta consulenza.',
+          sourceType: 'referto_controllo',
+          doctor: 'Dott. Marco Piccoli',
+          facility: null,
+          confidence: 90,
+          sourceText: 'Risposta consulenza',
+          sourcePages: [1],
+        }],
+      });
+      mockStreamChat.mockResolvedValue({ content: llmResponse, usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        chunkText: 'Risposta consulenza. Il Medico Piccoli Dr. Marco. Frattura composta malleolo.',
+        chunkLabel: 'test.pdf',
+        documentType: 'referto_controllo',
+        caseType: 'ortopedica',
+      });
+
+      expect(result.events[0].doctor).toBe('Dott. Marco Piccoli');
+      expect(result.events[0].confidence).toBe(90);
+    });
   });
 
   describe('inferMissingDates (C3 fix)', () => {
