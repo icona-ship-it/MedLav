@@ -9,9 +9,20 @@ import { buildVisibleSections, BASE_SECTIONS } from './perizia-form-sections';
 describe('buildVisibleSections', () => {
   it('should never include court-only sections (tribunale/date/quesiti)', () => {
     const ids = buildVisibleSections({ isRC: true }).map((s) => s.id);
-    for (const courtId of ['intestazione', 'date', 'quesiti']) {
+    for (const courtId of ['intestazione', 'quesiti']) {
       expect(ids).not.toContain(courtId);
     }
+  });
+
+  // Collaudo 2026-07-24 (CASO-2026-029): la sezione Date era assente su RC →
+  // il campo "Data del sinistro" (àncora dei calcoli, feedback beta) era
+  // invisibile. Ora c'è, ma SOLO coi campi persistiti dallo schema RC.
+  it('RC: la sezione date esiste con dataSinistro, senza i termini giudiziali', () => {
+    const date = buildVisibleSections({ isRC: true }).find((s) => s.id === 'date');
+    expect(date).toBeDefined();
+    expect(date!.fields).toContain('dataSinistro');
+    expect(date!.fields).not.toContain('termineBozza');
+    expect(date!.fields).not.toContain('termineOsservazioni');
   });
 
   it('should keep paziente, parti and esameObiettivo', () => {

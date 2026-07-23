@@ -600,18 +600,7 @@ export function PeriziaMetadataForm({
                       onChange={(t) => setForm({ ...form, dataOperazioni: t })}
                     />
                     <HeaderDateInput
-                      label="Termine bozza ai CC.TT.P."
-                      hint="Termine per l'inoltro della bozza ai consulenti di parte"
-                      value={form.termineBozza}
-                      onChange={(t) => setForm({ ...form, termineBozza: t })}
-                    />
-                    <HeaderDateInput
-                      label="Termine osservazioni CC.TT.P."
-                      value={form.termineOsservazioni}
-                      onChange={(t) => setForm({ ...form, termineOsservazioni: t })}
-                    />
-                    <HeaderDateInput
-                      label="Termine deposito"
+                      label="Termine consegna"
                       value={form.dataDeposito}
                       onChange={(t) => setForm({ ...form, dataDeposito: t })}
                     />

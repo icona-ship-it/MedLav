@@ -21,6 +21,10 @@ export interface SectionDef {
 export const BASE_SECTIONS: SectionDef[] = [
   { id: 'paziente', title: 'Dati Paziente', fields: ['patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone'] },
   { id: 'parti', title: 'Il Perito', fields: ['ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec', 'collaboratoreName', 'collaboratoreTitle'] },
+  // Collaudo 2026-07-24 (CASO-2026-029): la sezione date NON era in elenco →
+  // il campo "Data del sinistro" (che ancora i calcoli, feedback beta) era
+  // invisibile su RC. Solo campi persistiti dallo schema zod RC.
+  { id: 'date', title: 'Date', fields: ['dataSinistro', 'dataIncarico', 'dataOperazioni', 'dataDeposito'] },
   { id: 'esameObiettivo', title: 'Esame Obiettivo', fields: ['esameObiettivo'] },
 ];
 
