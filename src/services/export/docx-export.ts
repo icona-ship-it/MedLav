@@ -98,6 +98,10 @@ interface DocxExportParams {
   pipelineMode?: string;
   /** Tipi documento classificati per le intestazioni-blocco della cronologia. */
   documents?: Array<{ id: string; documentType?: string | null }>;
+  /** Export anonimizzato: le intestazioni-blocco omettono la struttura
+   * (l'anonimizzatore copre solo la synthesis, non la cronologia da eventi raw
+   * — audit 2026-07-23: la facility nel titolo-gruppo sarebbe trapelata). */
+  anonymized?: boolean;
 }
 
 /**
@@ -472,7 +476,10 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Un documento = UN blocco (feedback beta 2026-07-20): il verbale di PS
   // estratto in 6 eventi resta un blocco unico con le sue sotto-voci, invece
   // di 6 intestazioni indipendenti. Eventi senza documento: lista piatta.
-  for (const group of groupEventsByDocument(clinicalEvents, params.documents)) {
+  const groupableEvents = params.anonymized
+    ? clinicalEvents.map((e) => ({ ...e, facility: null }))
+    : clinicalEvents;
+  for (const group of groupEventsByDocument(groupableEvents, params.documents)) {
     if (group.heading) {
       children.push(new Paragraph({
         children: [new TextRun({ text: group.heading, bold: true, size: 26 })],

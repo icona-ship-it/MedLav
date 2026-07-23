@@ -15,15 +15,13 @@
 
 /** Cap per un evento con data FUTURA rispetto all'elaborazione. */
 export const FUTURE_DATE_CONFIDENCE_CAP = 40;
-/** Cap per contenuti di guarigione/esiti datati PRIMA del sinistro. */
-export const IMPOSSIBLE_DATE_CONFIDENCE_CAP = 30;
 /** Cap per eventi provenienti da pagine manoscritte. */
 export const HANDWRITTEN_PAGE_CONFIDENCE_CAP = 55;
 
 const FUTURE_DATE_NOTE =
   '[AUTO] Data futura rispetto all\'elaborazione: probabile appuntamento programmato o data mal letta — verificare sul documento originale';
 const HEALING_BEFORE_INCIDENT_NOTE =
-  '[AUTO] Data incompatibile: contenuto di guarigione/esiti datato PRIMA del sinistro — probabile data mal letta (documento manoscritto?) — verificare sull\'originale';
+  '[AUTO] Guarigione/esiti con data PRIMA del sinistro: possibile preesistenza documentata (stato anteriore) OPPURE data mal letta — verificare a quale patologia si riferisce';
 const PLANNED_APPOINTMENT_NOTE =
   '[AUTO] Possibile appuntamento/controllo PROGRAMMATO, non un accadimento — verificare se effettivamente eseguito';
 const HANDWRITTEN_NOTE =
@@ -80,8 +78,9 @@ export interface SanityFlagResult<T> {
  * Flagga (mai rimuove) gli eventi con date impossibili o contenuti-appuntamento:
  * - data FUTURA rispetto all'elaborazione → cap 40 + nota (il "controllo del
  *   10.07 mai avvenuto" del caso beta);
- * - contenuto di guarigione/esiti datato PRIMA del sinistro → cap 30 + nota
- *   (il manoscritto 08.07 letto 08.01);
+ * - contenuto di guarigione/esiti datato PRIMA del sinistro → nota neutra di
+ *   verifica SENZA cap (può essere il manoscritto 08.07 letto 08.01, ma anche
+ *   una preesistenza legittima documentata per lo stato anteriore);
  * - testo "programmato/da eseguire" senza marcatori di esecuzione → nota
  *   di verifica (senza cap: la data può essere legittima).
  */
@@ -103,9 +102,22 @@ export function applyTemporalSanityFlags<T extends SanityEvent>(
     }
     if (validDate && incidentIso && d < incidentIso && HEALING_RE.test(text)) {
       flaggedCount++;
-      return flag(event, HEALING_BEFORE_INCIDENT_NOTE, IMPOSSIBLE_DATE_CONFIDENCE_CAP);
+      // Niente cap: può essere una preesistenza vera (es. certificato di
+      // guarigione di un infortunio precedente, prodotto per lo stato
+      // anteriore). Il perito decide; se la pagina è manoscritta il cap
+      // arriva comunque dal guard manoscritti.
+      return {
+        ...event,
+        requiresVerification: true,
+        reliabilityNotes: appendNote(event.reliabilityNotes, HEALING_BEFORE_INCIDENT_NOTE),
+      };
     }
-    if (PLANNED_RE.test(text) && !EXECUTED_RE.test(text)) {
+    // Solo titolo o INCIPIT della descrizione (audit 2026-07-23): una dimissione
+    // reale che cita in coda il follow-up "programmato a 30 giorni" non è un
+    // appuntamento — il segnale vale quando "programmato" È il soggetto
+    // dell'evento, non una prescrizione citata di passaggio.
+    const plannedSignal = PLANNED_RE.test(event.title) || PLANNED_RE.test(event.description.slice(0, 80));
+    if (plannedSignal && !EXECUTED_RE.test(text)) {
       flaggedCount++;
       // Nessun cap: la data dell'appuntamento può essere corretta — è il suo
       // essere "accadimento" a dover essere verificato dal perito.

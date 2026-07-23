@@ -426,7 +426,9 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
       .eq('id', caseId)
       .single();
     const incidentIso = normalizeItalianDateToIso((caseSanityRow as { dataSinistro?: string | null } | null)?.dataSinistro ?? null);
-    const todayIso = new Date().toISOString().slice(0, 10);
+    // Data civile ITALIANA (audit 2026-07-23): con l'UTC, tra mezzanotte e le
+    // 2 di notte un certificato datato "oggi" risultava futuro e veniva flaggato.
+    const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
 
     const gateChunkEvents = (
       events: Parameters<typeof verifySourceTexts>[0],

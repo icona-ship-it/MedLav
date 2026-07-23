@@ -4,7 +4,6 @@ import {
   buildHandwrittenPageSet,
   capEventsFromHandwrittenPages,
   FUTURE_DATE_CONFIDENCE_CAP,
-  IMPOSSIBLE_DATE_CONFIDENCE_CAP,
   HANDWRITTEN_PAGE_CONFIDENCE_CAP,
 } from './event-sanity';
 
@@ -35,7 +34,7 @@ describe('event-sanity — date impossibili e appuntamenti (CASO-2026-028, beta 
     expect(events[0].reliabilityNotes).toContain('Data futura');
   });
 
-  it('guarigione/esiti PRIMA del sinistro → cap 30 + nota "data mal letta" (il manoscritto 08.07→08.01)', () => {
+  it('guarigione/esiti PRIMA del sinistro → nota NEUTRA di verifica, SENZA cap (audit: può essere preesistenza legittima)', () => {
     const { events } = applyTemporalSanityFlags(
       [makeEvent({
         eventDate: '2026-01-08',
@@ -44,9 +43,24 @@ describe('event-sanity — date impossibili e appuntamenti (CASO-2026-028, beta 
       })],
       OPTS,
     );
-    expect(events[0].confidence).toBeLessThanOrEqual(IMPOSSIBLE_DATE_CONFIDENCE_CAP);
+    // Flag sì (il manoscritto 08.07→08.01 del caso beta), ma nessun cap e
+    // wording neutro: un certificato di guarigione di un infortunio PRECEDENTE
+    // (stato anteriore) è un fatto vero e legalmente rilevante.
     expect(events[0].requiresVerification).toBe(true);
-    expect(events[0].reliabilityNotes).toContain('PRIMA del sinistro');
+    expect(events[0].confidence).toBe(90);
+    expect(events[0].reliabilityNotes).toContain('preesistenza');
+    expect(events[0].reliabilityNotes).not.toContain('probabile data mal letta (documento manoscritto?)');
+  });
+
+  it('appuntamento citato solo in CODA alla descrizione (dimissione reale) → NON flaggato', () => {
+    const { flaggedCount } = applyTemporalSanityFlags(
+      [makeEvent({
+        title: 'Dimissione',
+        description: 'Paziente in buone condizioni. Prosecuzione tutore per due settimane. Si consiglia inoltre controllo ortopedico programmato a 30 giorni presso ambulatorio.',
+      })],
+      OPTS,
+    );
+    expect(flaggedCount).toBe(0);
   });
 
   it('evento PRE-sinistro SENZA semantica di guarigione (preesistenza legittima) → NON flaggato', () => {

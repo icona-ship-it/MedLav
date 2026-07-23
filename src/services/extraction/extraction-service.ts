@@ -818,7 +818,10 @@ export function normalizeDateFormat(dateStr: string): string | null {
  * Names not found in OCR are nullified and confidence is lowered.
  */
 /** Titoli/onorifici da ignorare nel confronto col testo OCR (non identificano). */
-const DOCTOR_TITLE_TOKENS = new Set(['dr', 'dott', 'drssa', 'dottssa', 'ssa', 'prof', 'med', 'dssa', 'sig', 'sigra']);
+const DOCTOR_TITLE_TOKENS = new Set([
+  'dr', 'dott', 'drssa', 'dottssa', 'ssa', 'prof', 'med', 'dssa', 'sig', 'sigra',
+  'dottor', 'dottoressa', 'professor', 'professoressa', 'medico',
+]);
 
 export function validateExtractedNamesAgainstOcr(
   events: ExtractedEvent[],
@@ -845,14 +848,21 @@ export function validateExtractedNamesAgainstOcr(
     if (newDoctor && newDoctor.length >= 3) {
       const doctorLower = newDoctor.toLowerCase();
       const parts = doctorLower
-        .replace(/[.']/g, ' ')
+        .replace(/[.'\u2019]/g, ' ')
         .split(/\s+/)
         .filter((p) => p.length >= 3 && !DOCTOR_TITLE_TOKENS.has(p));
-      const surnameFound = parts.length > 0 && parts.every((part) => {
+      // Confini di parola UNICODE-aware (audit 2026-07-23): il \b di JS è
+      // ASCII-only — /\bviganò\b/ non matcha MAI "viganò" (la ò non è \w) e
+      // col criterio all-token un solo cognome accentato (Nicolò, Cannavò...)
+      // azzerava un nome REALE. Lookaround \p{L} con flag u.
+      const surnameFound = parts.every((part) => {
         const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`\\b${escaped}\\b`).test(ocrLower);
+        return new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, 'u').test(ocrLower);
       });
-      if (!surnameFound) {
+      // Nessun token confrontabile (es. cognomi di 1-2 lettere: Re, Wu, Bo):
+      // niente evidenza di allucinazione né di riscontro → si lascia intatto,
+      // MAI azzerare per un limite del validatore.
+      if (parts.length > 0 && !surnameFound) {
         newDoctor = null;
         newConfidence = Math.min(newConfidence, 50);
         newRequiresVerification = true;

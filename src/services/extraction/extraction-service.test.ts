@@ -356,6 +356,44 @@ describe('extraction-service', () => {
       expect(result.events[0].requiresVerification).toBe(true);
     });
 
+    // Audit 2026-07-23: il \b di JS è ASCII-only — /\bcannavò\b/ non matcha MAI
+    // un cognome accentato, e col criterio all-token il nome REALE veniva azzerato.
+    it('conserva un cognome ACCENTATO presente verbatim nell\'OCR (Cannavò)', async () => {
+      const llmResponse = JSON.stringify({
+        events: [{
+          eventDate: '2026-05-13', datePrecision: 'giorno', eventType: 'visita',
+          title: 'Visita', description: 'Controllo.', sourceType: 'referto_controllo',
+          doctor: 'Dott. Cannavò Marco', facility: null, confidence: 90,
+          sourceText: 'Visita di controllo', sourcePages: [1],
+        }],
+      });
+      mockStreamChat.mockResolvedValue({ content: llmResponse, usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+      const result = await extractEventsFromChunk({
+        chunkText: 'Visita di controllo. Referto firmato Dott. Cannavò Marco in data odierna.',
+        chunkLabel: 'test.pdf', documentType: 'referto_controllo', caseType: 'ortopedica',
+      });
+      expect(result.events[0].doctor).toBe('Dott. Cannavò Marco');
+      expect(result.events[0].confidence).toBe(90);
+    });
+
+    it('cognome di 2 lettere (Dr. Re): nessun token confrontabile → lasciato INTATTO, mai azzerato', async () => {
+      const llmResponse = JSON.stringify({
+        events: [{
+          eventDate: '2026-05-13', datePrecision: 'giorno', eventType: 'visita',
+          title: 'Visita', description: 'Controllo.', sourceType: 'referto_controllo',
+          doctor: 'Dr. Re', facility: null, confidence: 90,
+          sourceText: 'Visita di controllo', sourcePages: [1],
+        }],
+      });
+      mockStreamChat.mockResolvedValue({ content: llmResponse, usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+      const result = await extractEventsFromChunk({
+        chunkText: 'Visita di controllo. Firmato Dr. Re.',
+        chunkLabel: 'test.pdf', documentType: 'referto_controllo', caseType: 'ortopedica',
+      });
+      expect(result.events[0].doctor).toBe('Dr. Re');
+      expect(result.events[0].requiresVerification).toBe(false);
+    });
+
     it('accetta il nome reale anche con ordine invertito e titolo diverso (Piccoli Dr. Marco → Dr. Marco Piccoli)', async () => {
       const llmResponse = JSON.stringify({
         events: [{

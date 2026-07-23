@@ -68,7 +68,8 @@ function verificationReasons(event: EventRow): string[] {
   if (!event.event_date) {
     reasons.push('L\'evento non ha una data certa: assegnala o confermala.');
   }
-  const segments = (event.reliability_notes ?? '').split('; ').filter((s) => s.trim().length > 0);
+  // Le note usano DUE separatori storici: '; ' e ' | ' (validazione nomi, event-sanity).
+  const segments = (event.reliability_notes ?? '').split(' | ').flatMap((s) => s.split('; ')).filter((s) => s.trim().length > 0);
   for (const seg of segments) {
     reasons.push(translateReliabilityNote(seg));
   }
@@ -453,7 +454,7 @@ export function EventCard({
           ) : (
             event.reliability_notes && (
               <p className="text-sm text-muted-foreground italic">
-                {(event.reliability_notes.split('; ')).map(translateReliabilityNote).join(' ')}
+                {(event.reliability_notes.split(' | ').flatMap((s) => s.split('; '))).map(translateReliabilityNote).join(' ')}
               </p>
             )
           )}
