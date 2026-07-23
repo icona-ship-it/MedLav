@@ -229,7 +229,7 @@ export function ReportActionBar({
             <span className="text-xs text-muted-foreground">v{report.version}</span>
             {lastExportInfo && (
               <span className="text-xs text-muted-foreground hidden sm:inline">
-                · Ultimo export: {lastExportInfo.format.toUpperCase()},{' '}
+                · Ultimo download: {lastExportInfo.format === 'docx' ? 'Word' : lastExportInfo.format.toUpperCase()},{' '}
                 {formatTimeAgo(lastExportInfo.exportedAt)}
               </span>
             )}

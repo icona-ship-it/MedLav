@@ -100,9 +100,9 @@ export function SectionRegenerateButton({
           disabled={disabled || isRegenerating}
           title={
             selective
-              ? `Genera la versione sintetica (AI) di "${sectionTitle}": cita verbatim i reperti rilevanti, parafrasa la routine`
+              ? `Genera la Versione sintetica di "${sectionTitle}": riporta parola per parola i passaggi importanti dei documenti e riassume il resto`
               : elaborated
-                ? `Genera la versione elaborata (AI) di "${sectionTitle}"`
+                ? `Genera la Versione integrale AI di "${sectionTitle}": ricopia i documenti per intero, riorganizzati in forma leggibile`
                 : `Rigenera "${sectionTitle}"`
           }
         >

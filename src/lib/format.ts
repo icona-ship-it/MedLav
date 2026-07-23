@@ -62,7 +62,7 @@ export function getFileIcon(type: string) {
  */
 export function confidenceLabel(confidence: number): string {
   if (confidence >= 80) return 'Alta affidabilità';
-  if (confidence >= 50) return 'Da verificare';
+  if (confidence >= 50) return 'Affidabilità media';
   return 'Bassa affidabilità';
 }
 

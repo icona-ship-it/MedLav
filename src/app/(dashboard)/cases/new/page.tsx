@@ -77,7 +77,7 @@ export default function NewCasePage() {
             <Scale className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Nuovo elaborato</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Nuovo caso</h1>
             <p className="mt-1 text-muted-foreground">Scegli cosa creare, poi caricherai i documenti.</p>
           </div>
         </div>

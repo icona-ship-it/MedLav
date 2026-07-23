@@ -39,7 +39,7 @@ const FULL_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },
   { number: 2, label: 'Info Perizia', hint: 'Compila i dati della perizia (facoltativo)' },
   { number: 3, label: 'Elaborazione', hint: 'Avvia l\'analisi AI dei documenti' },
-  { number: 4, label: 'Report', hint: 'Il tuo report è pronto' },
+  { number: 4, label: 'Perizia', hint: 'La bozza di perizia è pronta da rivedere' },
 ] as const;
 
 const EXTRACTION_WIZARD_STEPS = [
@@ -138,6 +138,22 @@ export function CaseDetailClient({
     ?.excludedReportSections as string[] | undefined;
   // Data sinistro (form perizia): esclude le preesistenze dai blocchi calcolati
   // di viewer report e tabella ITT/ITP eventi.
+  // Stato "Compilata" del passo Info Perizia: derivato dai SOLI campi che il
+  // form salva davvero — perizia_metadata è scritto anche da categorizzazione,
+  // avvio e selettore sezioni, e mostrava "Compilato" a form mai aperto
+  // (sweep chiarezza 2026-07-24). Basta un campo valorizzato.
+  const PERIZIA_FORM_FIELDS = [
+    'patientFullName', 'patientDateOfBirth', 'patientAddress', 'patientFiscalCode', 'patientPhone',
+    'ctuName', 'ctuTitle', 'specialita', 'alboNumber', 'ctuEmail', 'ctuPec',
+    'collaboratoreName', 'collaboratoreTitle', 'dataSinistro', 'dataIncarico', 'dataOperazioni',
+    'dataDeposito', 'esameObiettivo', 'ilFattoEStoriaClinica', 'anamnesiFamiliare',
+    'anamnesiFisiologica', 'pesoKg', 'altezzaCm', 'anamnesiPatologicaRemota',
+    'anamnesiPatologicaProssima', 'anamnesiFarmacologica', 'anamnesiLavorativa',
+  ] as const;
+  const infoPeriziaCompilata = PERIZIA_FORM_FIELDS.some((k) => {
+    const v = (caseData.perizia_metadata as Record<string, unknown> | null)?.[k];
+    return v != null && v !== '';
+  });
   const incidentDate = ((caseData.perizia_metadata as Record<string, unknown> | null)
     ?.dataSinistro as string | undefined) ?? null;
   const isExtractionOnly = pipelineMode === 'extraction_only';
@@ -319,7 +335,9 @@ export function CaseDetailClient({
                     ? (processingProgress?.phase === 'extraction'
                         ? (events.length > 0
                             ? `Analisi in corso — ${events.length} eventi individuati finora`
-                            : `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`)
+                            : (processingProgress.ocrCompleted != null
+                                ? `Estrazione eventi da ${processingProgress.ocrCompleted} ${processingProgress.ocrCompleted === 1 ? 'documento' : 'documenti'}…`
+                                : 'Estrazione eventi in corso…'))
                         : processingProgress?.phase === 'ocr'
                           ? 'Lettura documenti...'
                           : 'In elaborazione...')
@@ -327,13 +345,15 @@ export function CaseDetailClient({
                     : processingStage === 'completato' ? 'Completata' : 'Pronto')
                 : hasEvents ? `${events.length} eventi estratti` : processingStage === 'completato' ? 'Nessun evento trovato' : 'In attesa')
             : (step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
-            : step.number === 2 ? (caseData.perizia_metadata ? 'Compilato' : 'Facoltativo')
+            : step.number === 2 ? (infoPeriziaCompilata ? 'Compilata' : 'Facoltativa')
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
                 ? (processingProgress?.phase === 'extraction'
                     ? (events.length > 0
                             ? `Analisi in corso — ${events.length} eventi individuati finora`
-                            : `Estrazione da ${processingProgress.ocrCompleted ?? '?'} doc...`)
+                            : (processingProgress.ocrCompleted != null
+                                ? `Estrazione eventi da ${processingProgress.ocrCompleted} ${processingProgress.ocrCompleted === 1 ? 'documento' : 'documenti'}…`
+                                : 'Estrazione eventi in corso…'))
                     : processingProgress?.phase === 'ocr'
                       ? 'Lettura documenti...'
                       : 'In elaborazione...')
@@ -343,7 +363,7 @@ export function CaseDetailClient({
                 ? (generationProgress
                     ? `Sezione ${generationProgress.currentSection}/${generationProgress.totalSections}`
                     : 'Generazione in corso...')
-                : hasReport ? 'Report pronto' : 'In attesa'),
+                : hasReport ? 'Perizia pronta' : 'In attesa'),
           hint: activeStep === step.number ? step.hint : undefined,
         }))}
         activeStep={activeStep}

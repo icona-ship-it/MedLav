@@ -200,7 +200,7 @@ export function DocumentsSection({
         router.refresh();
       }
     } catch {
-      toast.error('Errore durante il retry');
+      toast.error('Non è stato possibile ripristinare il documento. Riprova.');
     } finally {
       setRetryingDocId(null);
     }

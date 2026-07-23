@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       logger.error('processing/retry', `inngest.send failed for case ${caseId}`, {
         error: sendError instanceof Error ? sendError.message : 'unknown',
       });
-      return NextResponse.json({ success: false, error: 'Errore durante il retry. Riprova.' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Non è stato possibile riavviare l\'analisi. Riprova tra qualche istante.' }, { status: 500 });
     }
 
     // Audit log

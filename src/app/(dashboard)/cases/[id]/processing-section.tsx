@@ -65,7 +65,7 @@ const PIPELINE_STEPS = [
   { icon: FileSearch, label: 'Lettura documenti', desc: 'Acquisizione testo dai documenti caricati' },
   { icon: BrainCircuit, label: 'Analisi clinica', desc: 'Estrazione eventi e dati clinici' },
   { icon: ShieldCheck, label: 'Verifica completezza', desc: 'Controllo anomalie e coerenza documentale' },
-  { icon: FileText, label: 'Generazione report', desc: 'Report medico-legale strutturato' },
+  { icon: FileText, label: 'Stesura perizia', desc: 'Bozza di perizia medico-legale strutturata' },
 ];
 
 // --- Component ---
@@ -236,7 +236,7 @@ export function ProcessingSection({
         if (typeof result.creditsNeeded === 'number' && typeof result.creditsAvailable === 'number') {
           setInsufficientCredits({ needed: result.creditsNeeded, available: result.creditsAvailable });
         } else {
-          setProcessingError(result.error ?? 'Errore sconosciuto');
+          setProcessingError(result.error ?? 'Non è stato possibile avviare l\'analisi. Riprova; se succede ancora, scrivici.');
         }
         setIsStartingProcessing(false);
         return;
@@ -321,9 +321,9 @@ export function ProcessingSection({
       });
       const result = await response.json() as { success: boolean; error?: string; data?: { retriedCount: number } };
       if (!result.success) {
-        toast.error(result.error ?? 'Errore durante il retry');
+        toast.error(result.error ?? 'Non è stato possibile riavviare l\'analisi dei documenti. Riprova.');
       } else {
-        toast.success(`${result.data?.retriedCount ?? 0} documenti rimessi in coda`);
+        toast.success(`Analisi riavviata per ${result.data?.retriedCount ?? 0} ${(result.data?.retriedCount ?? 0) === 1 ? 'documento' : 'documenti'}: prosegue da sola, ti avvisiamo al termine.`);
       }
       router.refresh();
     } catch {
@@ -655,11 +655,11 @@ export function ProcessingSection({
               ) : (
                 <div className="flex flex-col items-center gap-3 py-4">
                   <p className="text-sm text-muted-foreground text-center">
-                    Elaborazione completata: {pipelineMode === 'full' ? 'il report è pronto.' : 'i risultati sono pronti.'}
+                    Elaborazione completata: {pipelineMode === 'full' ? 'la bozza di perizia è pronta.' : 'i risultati sono pronti.'}
                   </p>
                   {onGoToResults && (
                     <Button variant="outline" size="sm" onClick={onGoToResults}>
-                      {pipelineMode === 'full' ? 'Vai al Report' : 'Vai ai risultati'}
+                      {pipelineMode === 'full' ? 'Vai alla Perizia' : 'Vai ai risultati'}
                     </Button>
                   )}
                 </div>

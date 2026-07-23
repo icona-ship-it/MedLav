@@ -40,7 +40,8 @@ import type { EventRow } from './types';
  * dell'AI, es. deduzione dell'imposta di bollo) passano com'erano: sono già
  * scritte per l'utente. */
 function translateReliabilityNote(segment: string): string {
-  const s = segment.trim();
+  // Il tag macchina [AUTO] non deve mai raggiungere l'utente.
+  const s = segment.trim().replace(/^\[AUTO\]\s*/i, '');
   if (/struttura[^.;|]*(?:non riscontrat|rimoss)/i.test(s)) {
     return 'Il nome della struttura non risultava nel documento e per prudenza è stato tolto: se lo leggi nel testo qui sotto, inseriscilo.';
   }
@@ -58,6 +59,19 @@ function translateReliabilityNote(segment: string): string {
   }
   if (/inferit/i.test(s)) {
     return 'La data non è scritta nel documento: l\'AI l\'ha dedotta dal contesto. Confermala o correggila.';
+  }
+  // Flag di sanity dell'estrazione (event-sanity.ts, 2026-07-24) in italiano piano.
+  if (/data futura/i.test(s)) {
+    return 'La data è successiva a oggi: probabilmente è un appuntamento programmato, oppure una data letta male dal documento. Controlla sull\'originale.';
+  }
+  if (/prima del sinistro/i.test(s)) {
+    return 'Il documento parla di guarigione o esiti ma la data è precedente al sinistro: può essere una patologia preesistente (stato anteriore) oppure una data letta male. Controlla a quale vicenda si riferisce.';
+  }
+  if (/programmato/i.test(s) && /accadimento/i.test(s)) {
+    return 'Potrebbe essere un appuntamento fissato, non una prestazione davvero eseguita: controlla sul documento se è stata svolta.';
+  }
+  if (/manoscritt/i.test(s)) {
+    return 'La pagina di origine è scritta a mano: la lettura automatica può sbagliare. Confronta i dati col documento originale.';
   }
   return s;
 }

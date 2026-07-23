@@ -480,15 +480,15 @@ export function ReportStep({
                   <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/docx`, 'cronistoria.docx')}>
                     <Download className="mr-2 h-3.5 w-3.5" />
                     <div>
-                      <div>Esporta DOCX</div>
+                      <div>Scarica Word (.docx)</div>
                       <p className="text-xs text-muted-foreground font-normal">Documento Word — per stampare o inviare</p>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/html`, 'cronistoria.html')}>
                     <Download className="mr-2 h-3.5 w-3.5" />
                     <div>
-                      <div>Esporta HTML</div>
-                      <p className="text-xs text-muted-foreground font-normal">Anteprima nel browser</p>
+                      <div>Scarica pagina web (.html)</div>
+                      <p className="text-xs text-muted-foreground font-normal">File da aprire col browser</p>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => handleTimelineDownload(`/api/cases/${caseId}/export/csv`, 'cronistoria.csv')}>

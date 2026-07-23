@@ -59,7 +59,7 @@ export default async function DashboardPage() {
                     evita il salto di gerarchia h1→h3 (a11y heading-order). */}
                 <h2 className="text-lg font-bold">{RC_MODULE.label}</h2>
                 <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                  {RC_MODULE.description}: documentazione sanitaria fedele, spese mediche e struttura pronta per la visita.
+                  {RC_MODULE.description}.
                 </p>
               </div>
               <div className="mt-auto flex items-center justify-end pt-2">

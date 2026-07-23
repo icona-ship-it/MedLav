@@ -4,6 +4,12 @@
  */
 
 const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  {
+    // Annullamento volontario (cancel route): senza questo ramo ogni documento
+    // mostrava "errore imprevisto" dopo un annullo scelto dall'utente.
+    pattern: /annullat[oa] dall.utente/i,
+    message: 'Analisi annullata su tua richiesta: questo documento non è stato elaborato. Riavvia l\'elaborazione quando vuoi — il file caricato è ancora qui.',
+  },
   // NB: messaggi GIÀ user-facing (scritti in italiano per l'utente dalla
   // pipeline) stanno PRIMA di tutto: senza questi pattern finirebbero nel
   // fallback "errore imprevisto" — successo durante il test reale 2026-06-11:
@@ -95,8 +101,23 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
  * Convert a technical error message to a user-friendly Italian message.
  * Returns the friendly message if a pattern matches, otherwise returns a generic message.
  */
+/**
+ * Messaggi API GIÀ user-friendly (con numeri/dettagli utili tipo il saldo
+ * crediti): vanno mostrati così come sono, non appiattiti sul generico
+ * (sweep chiarezza 2026-07-24).
+ */
+const PASS_THROUGH: RegExp[] = [
+  /crediti insufficienti/i,
+  /elaborazione (già )?in corso/i,
+  /troppi tentativi/i,
+  /ricarica la pagina e riprova/i,
+  /nessun credito è stato addebitato/i,
+];
+
 export function toUserMessage(error: string | Error | unknown): string {
   const msg = error instanceof Error ? error.message : String(error ?? '');
+
+  if (PASS_THROUGH.some((p) => p.test(msg))) return msg;
 
   for (const { pattern, message } of ERROR_MAP) {
     if (pattern.test(msg)) return message;

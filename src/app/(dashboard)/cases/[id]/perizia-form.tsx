@@ -376,7 +376,7 @@ export function PeriziaMetadataForm({
                 Dati per l&apos;intestazione della perizia
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                <strong>Facoltativi per proseguire</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati compilano l&apos;intestazione formale della perizia e orientano la stesura automatica del testo. Per <strong>esportare o visualizzare l&apos;anteprima della perizia</strong> serve almeno il nome del perito (per le perizie giudiziarie CTU/CTP anche Tribunale e numero di RG).
+                <strong>Facoltativi per proseguire</strong>: puoi premere Prosegui subito e tornare qui quando vuoi. Questi dati compilano l&apos;intestazione formale della perizia e orientano la stesura automatica del testo. Per <strong>esportare o visualizzare l&apos;anteprima della perizia</strong> serve almeno il nome del perito.
               </p>
             </div>
           </div>
@@ -405,7 +405,7 @@ export function PeriziaMetadataForm({
                     {section.title}
                   </span>
                   {isFilled && (
-                    <span className="text-xs text-green-600 dark:text-green-400">Iniziata</span>
+                    <span className="text-xs text-green-600 dark:text-green-400">Dati inseriti</span>
                   )}
                 </div>
                 {isOpen ? (

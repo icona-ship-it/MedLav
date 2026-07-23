@@ -186,10 +186,10 @@ export function ReportA4Viewer({
                       <Badge variant="info" title="Contiene una tabella calcolata automaticamente dai dati. Per correggerla, modifica gli eventi nella Cronistoria.">Tabella automatica</Badge>
                     )}
                     {isDocSanitaria && docSanitariaHasSentinel && (
-                      <Badge variant="info" title="Documentazione riprodotta verbatim dall'OCR (nessuna modifica AI). Puoi modificarla a mano in fase finale: l'edit la rende testo tuo.">Trascrizione automatica</Badge>
+                      <Badge variant="info" title="Testo dei documenti riportato parola per parola, senza interventi dell'AI. Puoi correggerlo a mano: da quel momento diventa testo tuo.">Trascrizione automatica</Badge>
                     )}
                     {isDocSanitaria && !docSanitariaHasSentinel && (
-                      <Badge variant="warning" title="Variante AI (sintetica o integrale): NON è la riproduzione verbatim. Le citazioni «...» sono verificate contro l'OCR; rigenerala dopo modifiche agli eventi.">Versione AI</Badge>
+                      <Badge variant="warning" title="Sezione riscritta dall'AI (versione sintetica o integrale): non riporta i documenti parola per parola. Le frasi tra «…» sono confrontate automaticamente col testo originale. Se modifichi gli eventi, rigenera la sezione.">Versione AI</Badge>
                     )}
                     {rawSectionContent.trim().startsWith('*[') && (
                       <Badge variant="warning" title="Sezione riservata alle tue valutazioni: l'AI non la compila. Sostituisci lo scheletro-guida con il tuo testo prima di esportare.">Da compilare (a tua cura)</Badge>

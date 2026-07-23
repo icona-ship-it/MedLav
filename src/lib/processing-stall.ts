@@ -23,7 +23,7 @@ export function stallNotice(minutesSinceLastProgress: number): StallNotice {
   if (minutesSinceLastProgress >= STALL_WARN_MINUTES) {
     return {
       tone: 'warn',
-      text: `Nessun nuovo evento da ${minutesSinceLastProgress} minuti. Le pause lunghe possono capitare sui fascicoli voluminosi (il servizio AI lavora a intervalli) e l'analisi riparte da sola. Se resta ferma ancora a lungo puoi annullare in fondo alla pagina e riavviare: i documenti restano e i crediti non utilizzati vengono rimborsati.`,
+      text: `Nessun nuovo evento da ${minutesSinceLastProgress} minuti. Le pause lunghe possono capitare sui fascicoli voluminosi (il servizio AI lavora a intervalli) e l'analisi riparte da sola. Se resta ferma ancora a lungo puoi annullare in fondo alla pagina e riavviare: i documenti restano e i crediti dell'elaborazione ti vengono rimborsati.`,
     };
   }
   if (minutesSinceLastProgress >= STALL_INFO_MINUTES) {

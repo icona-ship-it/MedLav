@@ -323,7 +323,7 @@ export const regenerateSectionJob = inngest.createFunction(
       const note = unchanged.length === 0
         ? null
         : unchanged.length === sections.length
-          ? 'Nessuna modifica applicata: la sezione era già aggiornata. Se è la documentazione sanitaria in variante AI, aprila e usa le opzioni "Variante AI" per rigenerarla. Nessun credito è stato addebitato.'
+          ? 'Nessuna modifica applicata: la sezione era già aggiornata. Se è la Documentazione Medica, aprila e usa i pulsanti "Versione sintetica" o "Versione integrale AI" per rigenerarla. Nessun credito è stato addebitato.'
           : `${unchanged.length} ${unchanged.length === 1 ? 'sezione era già aggiornata' : 'sezioni erano già aggiornate'}: i relativi crediti sono stati rimborsati.`;
       await restoreStageWithNote(caseId, note);
     });

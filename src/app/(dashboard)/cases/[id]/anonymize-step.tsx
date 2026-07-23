@@ -61,7 +61,7 @@ export function AnonymizeStep({ caseId, documents, processingStage }: AnonymizeS
       }
     } catch {
       setError('Errore di rete durante l\'avvio della lettura documenti');
-      toast.error('Errore di rete');
+      toast.error('Errore di rete. Verifica la connessione e riprova.');
     } finally {
       setIsStartingOcr(false);
     }

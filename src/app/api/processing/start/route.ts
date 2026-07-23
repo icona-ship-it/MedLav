@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     const roleForPipeline = (caseData.case_role as string | null) ?? 'stragiudiziale';
     if (roleForPipeline !== 'stragiudiziale') {
       return NextResponse.json(
-        { success: false, error: 'Questo caso è di tipo CTU/CTP (legacy) e non è elaborabile nell\'MVP RC. Usa la versione completa dell\'app.' },
+        { success: false, error: 'Questo caso è stato creato con una versione precedente (perizia giudiziale CTU/CTP) e non può essere rielaborato qui. Puoi comunque consultarlo ed esportarlo; per una nuova perizia crea un nuovo caso.' },
         { status: 400 },
       );
     }
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     const currentStage = caseData.processing_stage as string;
     if (currentStage === 'elaborazione' || currentStage === 'generazione_report') {
       return NextResponse.json(
-        { success: false, error: 'Elaborazione già in corso. Attendi il completamento o cancella prima di rielaborare.' },
+        { success: false, error: 'Elaborazione già in corso. Attendi il completamento oppure usa "Annulla elaborazione" in fondo alla pagina prima di riavviare.' },
         { status: 409 },
       );
     }
