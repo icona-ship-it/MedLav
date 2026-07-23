@@ -116,6 +116,11 @@ async function handleFailure(event: { data: unknown }): Promise<void> {
     await refundUndeliveredOnFailure(data, errMsg);
   } catch (err) {
     logger.error('regenerate-section', `onFailure handler error: ${err instanceof Error ? err.message : 'unknown'}`);
+    try {
+      const { recordDiagnostic } = await import('@/lib/pipeline-diagnostics');
+      const failureData = event.data as { event: { data: SectionRegenEventData } };
+      await recordDiagnostic({ caseId: failureData.event.data.caseId, step: 'refund', code: 'refund_failed', detail: { reason: 'section_regen_failed' } });
+    } catch { /* best-effort */ }
   }
 }
 

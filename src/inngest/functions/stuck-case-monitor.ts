@@ -2,6 +2,9 @@ import { inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import * as Sentry from '@sentry/nextjs';
+import { recordDiagnostic } from '@/lib/pipeline-diagnostics';
+import { refundLatestCaseConsumption } from '@/services/credits/credit-service';
+import { sendPipelineFailureEmail } from '@/services/email/email-service';
 
 /**
  * Scheduled Inngest function: rileva i casi POSSIBILMENTE BLOCCATI e li segnala
@@ -33,6 +36,7 @@ interface StuckCaseRow {
   processing_stage: string;
   updated_at: string;
   perizia_metadata: Record<string, unknown> | null;
+  user_id: string;
 }
 
 export const stuckCaseMonitor = inngest.createFunction(
@@ -45,7 +49,7 @@ export const stuckCaseMonitor = inngest.createFunction(
 
       const { data, error } = await supabase
         .from('cases')
-        .select('id, code, processing_stage, updated_at, perizia_metadata')
+        .select('id, code, processing_stage, updated_at, perizia_metadata, user_id')
         .in('processing_stage', ACTIVE_STAGES)
         .lt('updated_at', cutoff);
 
@@ -77,6 +81,22 @@ export const stuckCaseMonitor = inngest.createFunction(
 
         // Oltre 60 min: auto-errore → il perito ha una via d'uscita in UI.
         if (stuckMs > AUTO_FAIL_AFTER_MS) {
+          const stuckMinutes = Math.round(stuckMs / 60000);
+          // (1) Il PERCHÉ resta consultabile per-caso anche dopo la rielaborazione
+          // (audit diagnosticabilità 2026-07-24 — prima la causa moriva coi log).
+          await recordDiagnostic({
+            caseId: row.id,
+            step: 'monitor',
+            code: 'stuck_auto_fail',
+            detail: { stage: row.processing_stage, stuckMinutes },
+          });
+          // (2) Uccidi l'eventuale run zombie PRIMA di marcare errore: un run che
+          // si risveglia dopo l'auto-fail riporterebbe il caso in uno stato misto.
+          try {
+            await inngest.send({ name: 'case/pipeline.cancelled', data: { caseId: row.id } });
+          } catch (cancelErr) {
+            logger.warn('stuck-monitor', `Invio cancel al run bloccato fallito: ${cancelErr instanceof Error ? cancelErr.message : 'unknown'}`);
+          }
           await supabase
             .from('cases')
             .update({
@@ -84,7 +104,7 @@ export const stuckCaseMonitor = inngest.createFunction(
               perizia_metadata: {
                 ...meta,
                 stuckAlertedAt: new Date().toISOString(),
-                lastError: 'L\'elaborazione si è interrotta per un problema tecnico. Puoi riavviarla dalla pagina del caso.',
+                lastError: `L'elaborazione si è interrotta durante la fase "${row.processing_stage}" dopo ${stuckMinutes} minuti senza avanzamento. I crediti ti sono stati rimborsati: puoi riavviarla dalla pagina del caso.`,
               },
             })
             .eq('id', row.id)
@@ -95,7 +115,23 @@ export const stuckCaseMonitor = inngest.createFunction(
             .update({ processing_status: 'errore', processing_error: 'Elaborazione interrotta (timeout)' })
             .eq('case_id', row.id)
             .in('processing_status', ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso']);
-          logger.warn('stuck-monitor', `Caso ${row.code ?? row.id} auto-marcato 'errore' dopo ${Math.round(stuckMs / 60000)} min`);
+          // (3) RIMBORSO idempotente (audit: prima l'auto-fail lasciava l'addebito
+          // senza consegna) + (4) email di cortesia come fa onFailure.
+          let refunded = 0;
+          try {
+            refunded = await refundLatestCaseConsumption(row.user_id, row.id, ['elaborazione'], 'stuck_auto_failed');
+          } catch (refundErr) {
+            const refundMsg = refundErr instanceof Error ? refundErr.message : 'unknown';
+            logger.error('stuck-monitor', `Rimborso auto-fail fallito per ${row.code ?? row.id}: ${refundMsg}`);
+            Sentry.captureMessage(`Rimborso auto-fail FALLITO per caso ${row.code ?? row.id}`, 'error');
+            await recordDiagnostic({ caseId: row.id, step: 'refund', code: 'refund_failed', detail: { reason: 'stuck_auto_failed' } });
+          }
+          try {
+            await sendPipelineFailureEmail(row.user_id, row.code ?? row.id, row.id, row.processing_stage);
+          } catch (mailErr) {
+            logger.warn('stuck-monitor', `Email auto-fail non inviata: ${mailErr instanceof Error ? mailErr.message : 'unknown'}`);
+          }
+          logger.warn('stuck-monitor', `Caso ${row.code ?? row.id} auto-marcato 'errore' dopo ${stuckMinutes} min (rimborsati ${refunded} crediti)`);
           count += 1;
           continue;
         }

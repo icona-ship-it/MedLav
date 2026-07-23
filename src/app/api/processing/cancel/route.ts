@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { validateCsrfToken } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
+import * as Sentry from '@sentry/nextjs';
 
 const requestSchema = z.object({
   caseId: z.string().uuid(),
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Verify case ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('id, user_id')
+      .select('id, user_id, processing_stage, perizia_metadata')
       .eq('id', caseId)
       .eq('user_id', user.id)
       .single();
@@ -112,7 +113,42 @@ export async function POST(request: NextRequest) {
       );
     } catch (refundErr) {
       logger.error('processing/cancel', 'Refund after cancel failed', { caseId, error: refundErr instanceof Error ? refundErr.message : 'unknown' });
+      Sentry.captureMessage('Rimborso post-annullo FALLITO', 'error');
+      const { recordDiagnostic: recordRefundDiag } = await import('@/lib/pipeline-diagnostics');
+      await recordRefundDiag({ caseId, step: 'refund', code: 'refund_failed', detail: { reason: 'user_cancelled' } });
     }
+
+    // Fotografia dello stato AL MOMENTO dell'annullo (audit diagnosticabilità
+    // 2026-07-24, caso 235: "a che punto era quando ha annullato?" deve avere
+    // risposta senza indagini). Solo codici e contatori, niente dati clinici.
+    const metaAtCancel = (caseData.perizia_metadata ?? {}) as Record<string, unknown>;
+    const progressAtCancel = metaAtCancel.processingProgress as Record<string, unknown> | undefined;
+    const genAtCancel = metaAtCancel.generationProgress as Record<string, unknown> | undefined;
+    const startedAtRaw = metaAtCancel.processingStartedAt;
+    const elapsedMinutes = typeof startedAtRaw === 'string'
+      ? Math.max(0, Math.round((Date.now() - new Date(startedAtRaw).getTime()) / 60000))
+      : null;
+    const { count: eventsAtCancel } = await supabase
+      .from('events')
+      .select('*', { count: 'exact', head: true })
+      .eq('case_id', caseId)
+      .eq('is_deleted', false);
+    const cancelContext = {
+      stageAtCancel: caseData.processing_stage as string | null,
+      phase: (progressAtCancel?.phase as string) ?? null,
+      totalChunks: (progressAtCancel?.totalChunks as number) ?? null,
+      currentSection: (genAtCancel?.currentSection as number) ?? null,
+      totalSections: (genAtCancel?.totalSections as number) ?? null,
+      eventsAtCancel: eventsAtCancel ?? null,
+      elapsedMinutes,
+    };
+    const { recordDiagnostic } = await import('@/lib/pipeline-diagnostics');
+    await recordDiagnostic({ caseId, step: 'cancel', code: 'cancelled_by_user', detail: cancelContext });
+    // Pattern-watch per il founder: livello info, mai dati clinici.
+    Sentry.captureMessage(
+      `Annullo utente: caso in '${cancelContext.stageAtCancel}' dopo ${elapsedMinutes ?? '?'} min (fase ${cancelContext.phase ?? '-'}, ${cancelContext.eventsAtCancel ?? 0} eventi)`,
+      'info',
+    );
 
     // Audit log
     await supabase.from('audit_log').insert({
@@ -120,7 +156,7 @@ export async function POST(request: NextRequest) {
       action: 'case.processing.cancelled',
       entity_type: 'case',
       entity_id: caseId,
-      metadata: { documentsCancelled: count ?? 0, creditsRefunded: refunded },
+      metadata: { documentsCancelled: count ?? 0, creditsRefunded: refunded, ...cancelContext },
     });
 
     return NextResponse.json({
