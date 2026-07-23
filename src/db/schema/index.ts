@@ -11,3 +11,4 @@ export * from './perizie-benchmark';
 export * from './report-ratings';
 export * from './case-shares';
 export * from './credits';
+export * from './pipeline-diagnostics';

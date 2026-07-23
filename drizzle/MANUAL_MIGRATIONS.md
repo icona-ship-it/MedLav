@@ -94,7 +94,8 @@ blocchi `DO $$`) — innocuo per prod, la dedup usa solo `created_at`.
 | `0028_stripe_event_idempotency.sql` | APPLICATA 2026-06-01 (+ ENABLE RLS) | si | tabella esiste, RLS=true |
 | `0029_add_event_chronology_relevance.sql` | APPLICATA 2026-06-01 | si | usare `verify_0029_event_chronology_relevance.sql` |
 | `0030_storage_bucket_size_limit.sql` | APPLICATA 2026-07-20 (limite già 104857600 dal 07/07 — UPDATE no-op) | si (`UPDATE` puntuale) | usare `verify_0030.sql` (atteso `104857600`) |
-| `0031_*` (future) | — | vedi procedura sotto | — |
+| `0032_boring_roughhouse.sql` (pipeline_diagnostics) | DA APPLICARE (`pnpm db:migrate` col pooler) | si (CREATE TABLE + RLS manuale) | usare `verify_0032.sql` — il codice è già difensivo: senza tabella la diagnostica degrada in silenzio, nulla si rompe |
+| `0033_*` (future) | — | vedi procedura sotto | — |
 
 ## Procedura per future migration (DOPO il re-sync)
 

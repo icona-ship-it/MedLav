@@ -29,6 +29,7 @@ import { extractExpensesFromOcr } from '@/services/expenses/expense-extractor';
 import type { ExpenseExtractionResult } from '@/services/expenses/expense-extractor';
 import { shouldUseMapReduce, summarizeDocumentBatchByIds } from '@/services/synthesis/document-summarizer';
 import { heartbeatCase } from '@/inngest/steps/heartbeat';
+import { recordDiagnostic, classifyPipelineError, sanitizeErrorForDetail } from '@/lib/pipeline-diagnostics';
 import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document-summarizer';
 import type { CostStep } from '@/services/cost-tracking/cost-calculator';
 import { calculateTokenCost, buildPipelineSummary, mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calculator';
@@ -166,6 +167,8 @@ async function handlePipelineFailure(event: { data: unknown }) {
         }
       }
     } catch (refundErr) {
+      Sentry.captureMessage('Rimborso post-fallimento pipeline FALLITO', 'error');
+      await recordDiagnostic({ caseId, step: 'refund', code: 'refund_failed', detail: { reason: 'pipeline_failed' } });
       logger.error('pipeline', 'Failed to refund credits after pipeline failure', {
         caseId,
         error: refundErr instanceof Error ? refundErr.message : 'unknown',
@@ -1300,8 +1303,13 @@ export const processCase = inngest.createFunction(
           completedSections.set(result.spec.id, result.section);
         } else {
           failedSections.set(result.spec.id, { id: result.spec.id, title: result.spec.title });
-          logger.error('pipeline', `Section "${result.spec.id}" failed after retries — continuing with the remaining sections`, {
-            error: result.error instanceof Error ? result.error.message : 'unknown',
+          const secErrMsg = result.error instanceof Error ? result.error.message : 'unknown';
+          logger.error('pipeline', `Section "${result.spec.id}" failed after retries — continuing with the remaining sections`, { error: secErrMsg });
+          await recordDiagnostic({
+            caseId,
+            step: 'section',
+            code: classifyPipelineError(secErrMsg),
+            detail: { sectionId: result.spec.id, error: sanitizeErrorForDetail(secErrMsg) },
           });
         }
       }
@@ -1323,8 +1331,13 @@ export const processCase = inngest.createFunction(
         }
       } catch (sectionError) {
         failedSections.set(spec.id, { id: spec.id, title: spec.title });
-        logger.error('pipeline', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, {
-          error: sectionError instanceof Error ? sectionError.message : 'unknown',
+        const tailErrMsg = sectionError instanceof Error ? sectionError.message : 'unknown';
+        logger.error('pipeline', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, { error: tailErrMsg });
+        await recordDiagnostic({
+          caseId,
+          step: 'section',
+          code: classifyPipelineError(tailErrMsg),
+          detail: { sectionId: spec.id, error: sanitizeErrorForDetail(tailErrMsg) },
         });
       }
     }

@@ -5,6 +5,7 @@ import { isTextIngestType, buildTextIngestResult } from '@/services/ocr/text-ing
 import type { OcrImageResult } from '@/services/ocr/ocr-types';
 import type { DocumentInfo, OcrResult } from './types';
 import { logger } from '@/lib/logger';
+import { recordDiagnostic, classifyPipelineError, sanitizeErrorForDetail } from '@/lib/pipeline-diagnostics';
 
 /**
  * Upload OCR-extracted images to Supabase Storage and update pages.image_path.
@@ -193,6 +194,17 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
       .eq('id', doc.id);
 
     logger.error('pipeline', ` OCR failed for doc ${doc.id}: ${message}`);
+    // DocumentInfo non porta il caseId: lo si risolve qui (best-effort, solo
+    // per la riga di diagnostica — mai bloccante).
+    const { data: docRow } = await supabase.from('documents').select('case_id').eq('id', doc.id).single();
+    if (docRow?.case_id) {
+      await recordDiagnostic({
+        caseId: docRow.case_id as string,
+        step: 'ocr',
+        code: classifyPipelineError(message),
+        detail: { docId: doc.id, error: sanitizeErrorForDetail(message) },
+      });
+    }
     return null;
   }
 }

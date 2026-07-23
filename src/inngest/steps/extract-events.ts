@@ -4,6 +4,7 @@ import { verifySourceTexts } from '@/services/validation/source-text-verifier';
 import { buildLowQualityPageSet, capEventsFromLowQualityPages } from '@/services/extraction/low-quality-page-guard';
 import { buildHandwrittenPageSet, capEventsFromHandwrittenPages, applyTemporalSanityFlags } from '@/services/extraction/event-sanity';
 import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
+import { recordDiagnostic, classifyPipelineError, sanitizeErrorForDetail } from '@/lib/pipeline-diagnostics';
 import { createEmptyUsage, mergeUsage, type TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
@@ -263,6 +264,18 @@ export async function extractChunkBatch(
       failedCount++;
       const message = error instanceof Error ? error.message : 'unknown';
       logger.error('pipeline', `Chunk batch job failed (doc ${job.ocrResult.documentId} p${job.range.start}-${job.range.end}): ${message}`);
+      // Registro diagnostica (post-235): la CAUSA resta consultabile per caso,
+      // non muore nei log. Best-effort, mai bloccante.
+      await recordDiagnostic({
+        caseId: job.caseId,
+        step: 'extraction',
+        code: classifyPipelineError(message),
+        detail: {
+          docId: job.ocrResult.documentId,
+          pageRange: `${job.range.start}-${job.range.end}`,
+          error: sanitizeErrorForDetail(message),
+        },
+      });
     }
   }
 
