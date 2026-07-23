@@ -22,6 +22,7 @@ import { toUserMessage } from '@/lib/user-error-messages';
 import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
 import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder } from '../../actions';
 import { estimateAnalysisTime } from '@/lib/analysis-time-estimate';
+import { stallNotice } from '@/lib/processing-stall';
 import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
 
@@ -102,6 +103,24 @@ export function ProcessingSection({
   // decisions and ALL report versions server-side — never on a single click.
   const [showReprocessDialog, setShowReprocessDialog] = useState(false);
   const processingStartRef = useRef<number | null>(null);
+  // Consapevolezza delle PAUSE di estrazione (CASO-2026-235: silenzi da
+  // rate-limit di 15-20 min → sembrava bloccato → annullato a 2/3): traccia
+  // l'ultimo cambio del contatore eventi e un tick da 30s tiene aggiornato il
+  // "minuti fa" anche senza nuovi poll.
+  const lastEventChangeRef = useRef<{ count: number; at: number }>({ count: extractedEventsCount, at: Date.now() });
+  const [, setStallTick] = useState(0);
+  useEffect(() => {
+    if (extractedEventsCount !== lastEventChangeRef.current.count) {
+      lastEventChangeRef.current = { count: extractedEventsCount, at: Date.now() };
+    }
+  }, [extractedEventsCount]);
+  useEffect(() => {
+    if (!hasProcessingDocs) return;
+    const id = setInterval(() => setStallTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [hasProcessingDocs]);
+  const stallMinutes = Math.floor((Date.now() - lastEventChangeRef.current.at) / 60_000);
+  const stall = stallNotice(stallMinutes);
 
   // Il caso è morto su un blocco del VALIDATORE (non un errore tecnico): il
   // messaggio salvato da assemble-and-save-report inizia con "Report non valido".
@@ -346,7 +365,19 @@ export function ProcessingSection({
                       <p className="text-center text-sm text-muted-foreground">
                         <span className="font-medium tabular-nums">{extractedEventsCount}</span>{' '}
                         eventi clinici individuati finora — il numero cresce man mano che l&apos;analisi procede
+                        {stallMinutes >= 2 && stall.tone === 'none' && (
+                          <span className="text-xs"> (ultimo avanzamento: {stallMinutes} min fa)</span>
+                        )}
                       </p>
+                    )}
+                    {extractedEventsCount > 0 && stall.tone !== 'none' && (
+                      <div className={`mx-auto max-w-xl rounded-lg border p-3 text-sm ${
+                        stall.tone === 'warn'
+                          ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+                          : 'border-border bg-muted/40 text-muted-foreground'
+                      }`}>
+                        {stall.text}
+                      </div>
                     )}
                   </div>
                 );
