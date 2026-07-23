@@ -467,6 +467,39 @@ describe('Data sinistro — eventi preesistenti esclusi dai calcoli (feedback be
     expect(calculateMedicoLegalPeriods([makeEvent('2099-01-01', 'follow-up', 'Programmato')])).toEqual([]);
   });
 
+  // Decisione founder 2026-07-24: il certificato MEDICO di guarigione/prognosi
+  // CHIUDE il periodo di malattia (come ragiona il perito); restano esclusi i
+  // certificati amministrativi (la ratio Passaniti: notifiche/ticket tardivi).
+  it('il certificato di guarigione CHIUDE il periodo (18.04→30.06 = 74 gg, il confronto col caso beta)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-04-18', 'visita', 'Accesso PS per incidente stradale'),
+      makeEvent('2026-06-05', 'terapia', 'Ultima seduta fisioterapia'),
+      makeEvent('2026-06-30', 'certificato', 'Certificato medico definitivo', 'ha conseguito guarigione clinica con postumi da valutare'),
+    ], undefined, '2026-04-18');
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.endDate).toBe('2026-06-30');
+    expect(total!.days).toBe(74);
+  });
+
+  it('certificato con prognosi → incluso nei calcoli', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      makeEvent('2026-04-20', 'certificato', 'Certificato medico', 'Prognosi giorni s.c. 40 giorni dall\'incidente'),
+    ]);
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.endDate).toBe('2026-04-20');
+  });
+
+  it('certificato AMMINISTRATIVO tardivo → resta ESCLUSO (regressione Passaniti)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      makeEvent('2026-06-05', 'terapia', 'Ultima seduta'),
+      makeEvent('2026-08-20', 'certificato', 'Sollecito pagamento ticket', 'Richiesta pagamento prestazioni codice bianco, quota fissa 25 euro'),
+    ]);
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.endDate).toBe('2026-06-05');
+  });
+
   it('formatRicoveroITTFactsBlock: senza eventi esclusi nessuna nota preesistenze', () => {
     const events = [
       makeEvent('2026-04-18', 'visita', 'Accesso in PS'),

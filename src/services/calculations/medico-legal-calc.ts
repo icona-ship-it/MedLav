@@ -43,6 +43,21 @@ function todayRomeIso(): string {
 }
 
 /**
+ * Certificato MEDICO (prognosi, guarigione, postumi, inabilità): entra nei
+ * computi — è come il perito chiude il periodo di malattia (decisione founder
+ * 2026-07-24; nel confronto col caso beta: 74 giorni fino al certificato
+ * definitivo, non 49 fino all'ultima terapia). I certificati AMMINISTRATIVI
+ * (ticket, solleciti, attestazioni non cliniche) restano esclusi — la ratio
+ * originale del filtro (regressione Passaniti: notifiche tardive che
+ * distorcevano i periodi) vale ancora per loro.
+ */
+const CLINICAL_CERTIFICATE_RE = /prognosi|guarigion|postumi|inabilit|malattia|infortunio|lesion/i;
+
+function isClinicalCertificate(e: CalcEvent): boolean {
+  return e.event_type === 'certificato' && CLINICAL_CERTIFICATE_RE.test(`${e.title} ${e.description}`);
+}
+
+/**
  * Keep only clinical events with a real, well-formed date, in chronological
  * order. The whole module assumes chronological input (events[0] = first,
  * events[last] = last; the recovery endpoint is the last visita/follow-up after
@@ -62,7 +77,7 @@ function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null):
   return events
     .filter(
       (e) =>
-        !NON_CLINICAL_EVENT_TYPES.has(e.event_type) &&
+        (!NON_CLINICAL_EVENT_TYPES.has(e.event_type) || isClinicalCertificate(e)) &&
         e.event_date !== SENTINEL_EVENT_DATE &&
         ISO_DATE_RE.test(e.event_date) &&
         e.event_date <= today &&
