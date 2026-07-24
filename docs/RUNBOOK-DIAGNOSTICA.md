@@ -35,6 +35,7 @@ perché** — la risposta sta in una query, mai in un'indagine.
 | `validator_blocked` | Bozza fermata dai controlli qualità | Il perito decide: correggere o sbloccare |
 | `stuck_auto_fail` | Interrotta dal monitor dopo 60 min di silenzio | Crediti già rimborsati + email inviata; il caso è riavviabile |
 | `cancelled_by_user` | Annullo volontario (con fotografia del punto esatto) | Se ricorre durante fasi lente → problema di percezione UX, non tecnico |
+| `stale_run_aborted` | Run obsoleto auto-terminato al confine di step (caso annullato/in errore/completato/eliminato mentre il run era vivo) | È la guardia anti-zombie che funziona (post-mortem 235: run sopravvissuto 2,5 giorni all'annullo). Se ricorre spesso → qualche percorso annulla senza mandare il kill-event |
 | `refund_failed` | Rimborso non riuscito = debito verso l'utente | **Intervenire**: verificare ledger e rimborsare a mano |
 
 ## Il ciclo di miglioramento
