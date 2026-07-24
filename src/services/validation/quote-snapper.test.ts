@@ -71,6 +71,34 @@ describe('snapQuoteToSource — il testo lo copia il codice, non il modello', ()
     expect(res.outcome).toBe('snapped');
   });
 
+  it('GUARDIA DENSITÀ (collaudo live 029 v2): due certificati quasi-gemelli consecutivi → MAI citazione-ponte con dentro firma e intestazione del secondo', () => {
+    // Riproduce il difetto trovato dal vivo: certificato 20.04 e certificato
+    // definitivo 30.06 iniziano con le stesse parole; lo span faceva ponte
+    // inglobando "Dott." + intestazione del secondo documento e finendo a metà
+    // frase. Con la guardia di densità lo snap viene rifiutato.
+    const dueCertificati = [
+      'STUDIO MEDICO DR. DEMPROVA - CERTIFICATO MEDICO',
+      'Cittàdemo, 20/04/2026',
+      'Il Sig. DEMPROVA CARLO, nato a Cittàdemo il 10.03.1990, via degli Esempi 1, in relazione all\'incidente stradale occorsogli il 18/04/2026 ha riportato trauma distorsico tibio tarsica destra valutato presso PS.',
+      'Prognosi giorni s.c. 40 giorni (quaranta) dall\'incidente.',
+      'Dott. Nicolò Demprova',
+      'STUDIO MEDICO DR. DEMPROVA - CERTIFICATO MEDICO DEFINITIVO',
+      'Cittàdemo, 30/06/2026',
+      'Il Sig. DEMPROVA CARLO, nato a Cittàdemo il 10.03.1990, via degli Esempi 1, in riferimento all\'infortunio causato dall\'incidente stradale occorsogli il giorno 18/04/2026, ha conseguito guarigione clinica con postumi da valutare.',
+    ].join('\n');
+    const c = buildSnapCorpus(dueCertificati);
+    // Citazione "cucita" dal modello: pezzi del primo E del secondo certificato.
+    const cucita = 'Il Sig. DEMPROVA CARLO, nato a Cittàdemo il 10.03.1990, via degli Esempi 1, in relazione all\'incidente stradale occorsogli il 18/04/2026 ha riportato trauma distorsico tibio tarsica destra valutato presso PS. Prognosi giorni s.c. 40 giorni (quaranta) dall\'incidente. Il Sig. DEMPROVA CARLO, nato a Cittàdemo il 10.03.1990, via degli Esempi 1, in riferimento all\'infortunio causato dall\'incidente';
+    const res = snapQuoteToSource(cucita, c);
+    if (res.outcome === 'snapped') {
+      // Se aggancia, il testo NON deve contenere materiale estraneo alla citazione
+      expect(res.sourceText).not.toContain('Dott. Nicolò Demprova');
+      expect(res.sourceText).not.toContain('CERTIFICATO MEDICO DEFINITIVO');
+    } else {
+      expect(res.outcome).toBe('unmatched'); // rifiuto esplicito → la flagga il verificatore
+    }
+  });
+
   it('GUARDIA HEADING: i "#" markdown dell\'OCR non entrano MAI nel testo agganciato (varco GDPR parser sezioni)', () => {
     const ocrConHeading = [
       'Testo introduttivo del referto radiologico eseguito in urgenza.',

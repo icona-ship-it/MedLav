@@ -23,6 +23,15 @@ export const SNAP_THRESHOLD = 0.85;
 const MIN_SNAP_CHARS = 15;
 /** Lo span agganciato non può superare la citazione di questo fattore (in parole). */
 const MAX_SPAN_FACTOR = 1.8;
+/** Densità minima dello span: parole agganciate / parole totali dello span. */
+const MIN_SPAN_DENSITY = 0.8;
+/** Massimo run CONSECUTIVO di parole estranee dentro lo span. Collaudo live
+ * CASO-2026-029 v2: due certificati quasi-gemelli consecutivi → lo span faceva
+ * PONTE tra i due inglobando firma e intestazione del secondo (citazione-
+ * Frankenstein non flaggata perché contigua nell'OCR). Un refuso sparso è un
+ * run di 1-2 parole; un ponte firma+intestazione è un run lungo → rifiuto
+ * (→ la citazione resta e la flagga il verificatore). */
+const MAX_UNMATCHED_RUN = 4;
 /** Pre-filtro bag-of-words: una finestra entra nel DP (costoso) solo se contiene
  * almeno questa frazione delle parole della citazione. Più lasco della soglia di
  * snap (0.85) per lasciare margine ai match fuzzy (refusi a livello carattere). */
@@ -100,8 +109,9 @@ function wordsMatch(a: string, b: string): boolean {
   return false;
 }
 
-/** LCS con backtracking: lunghezza + indici (nel window) di primo/ultimo match. */
-function lcsWithBounds(a: string[], b: string[]): { length: number; bFirst: number; bLast: number } {
+/** LCS con backtracking: lunghezza, indici (nel window) di primo/ultimo match
+ * e massimo run di token del window NON agganciati tra due match consecutivi. */
+function lcsWithBounds(a: string[], b: string[]): { length: number; bFirst: number; bLast: number; maxGap: number } {
   const n = a.length;
   const mLen = b.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(mLen + 1).fill(0));
@@ -112,13 +122,20 @@ function lcsWithBounds(a: string[], b: string[]): { length: number; bFirst: numb
         : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
   }
-  // Backtrack per trovare gli estremi dei match nel corpus-window.
+  // Backtrack per trovare gli estremi dei match nel corpus-window e il massimo
+  // buco interno (token del window saltati tra due match consecutivi).
   let i = n; let j = mLen;
   let bFirst = -1; let bLast = -1;
+  let prevMatchedB = -1; let maxGap = 0;
   while (i > 0 && j > 0) {
     if (wordsMatch(a[i - 1], b[j - 1])) {
       bFirst = j - 1;
       if (bLast === -1) bLast = j - 1;
+      if (prevMatchedB !== -1) {
+        const gap = prevMatchedB - (j - 1) - 1;
+        if (gap > maxGap) maxGap = gap;
+      }
+      prevMatchedB = j - 1;
       i--; j--;
     } else if (dp[i - 1][j] >= dp[i][j - 1]) {
       i--;
@@ -126,7 +143,7 @@ function lcsWithBounds(a: string[], b: string[]): { length: number; bFirst: numb
       j--;
     }
   }
-  return { length: dp[n][mLen], bFirst, bLast };
+  return { length: dp[n][mLen], bFirst, bLast, maxGap };
 }
 
 /**
@@ -168,16 +185,20 @@ export function snapQuoteToSource(
   }
   candidates.sort((a, b) => b.hits - a.hits || a.start - b.start);
 
-  // Passo 2 — DP con backtracking sulle sole candidate migliori.
-  let best: { ratio: number; first: number; last: number } | null = null;
+  // Passo 2 — DP con backtracking sulle sole candidate migliori. La densità
+  // (parole agganciate / parole dello span) entra nella SELEZIONE: a parità di
+  // somiglianza vince lo span compatto, e uno span-ponte pieno di materiale
+  // estraneo non può vincere su un match pulito.
+  let best: { ratio: number; density: number; maxGap: number; first: number; last: number } | null = null;
   for (const { start } of candidates.slice(0, MAX_DP_WINDOWS)) {
     const windowWords = corpusWords.slice(start, start + windowSize);
-    const { length, bFirst, bLast } = lcsWithBounds(qWords, windowWords);
+    const { length, bFirst, bLast, maxGap } = lcsWithBounds(qWords, windowWords);
     const ratio = length / qWords.length;
-    if (bFirst >= 0 && (!best || ratio > best.ratio)) {
-      best = { ratio, first: start + bFirst, last: start + bLast };
+    const density = bFirst >= 0 ? length / (bLast - bFirst + 1) : 0;
+    if (bFirst >= 0 && (!best || ratio > best.ratio || (ratio === best.ratio && density > best.density))) {
+      best = { ratio, density, maxGap, first: start + bFirst, last: start + bLast };
     }
-    if (best && best.ratio === 1) break;
+    if (best && best.ratio === 1 && best.density >= MIN_SPAN_DENSITY) break;
   }
 
   if (!best || best.ratio < SNAP_THRESHOLD) {
@@ -185,6 +206,9 @@ export function snapQuoteToSource(
   }
   const spanTokens = best.last - best.first + 1;
   if (spanTokens > qWords.length * MAX_SPAN_FACTOR) {
+    return { outcome: 'unmatched', similarity: best.ratio };
+  }
+  if (best.density < MIN_SPAN_DENSITY || best.maxGap > MAX_UNMATCHED_RUN) {
     return { outcome: 'unmatched', similarity: best.ratio };
   }
   // GUARDIA NUMERI/DATE: mai riscrivere una citazione se un suo token con cifre
