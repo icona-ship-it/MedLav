@@ -1097,6 +1097,7 @@ export const processCase = inngest.createFunction(
       // Citazioni «...» non riscontrate esattamente nell'OCR (dal verificatore
       // per-finestra): diventano UN warning drillabile nel pannello del perito.
       const ungroundedQuotesAll: string[] = [];
+      let quotesSnappedAll = 0;
 
       for (let b = 0; b < batches.length; b++) {
         const batch = batches[b];
@@ -1143,6 +1144,7 @@ export const processCase = inngest.createFunction(
               usage: generated.usage,
               // Output piccolo e bounded (cap 12 citazioni ≤160 char per finestra).
               ungroundedQuotes: generated.ungroundedQuotes,
+              quotesSnapped: generated.quotesSnapped,
             };
           });
 
@@ -1167,6 +1169,8 @@ export const processCase = inngest.createFunction(
           }
           const bq = (batchResult as { ungroundedQuotes?: string[] }).ungroundedQuotes;
           if (bq && bq.length > 0) ungroundedQuotesAll.push(...bq);
+          const bs = (batchResult as { quotesSnapped?: number }).quotesSnapped;
+          if (bs) quotesSnappedAll += bs;
         } catch (batchError) {
           // Resilienza (mirror di generateDocSanitariaChunked): una finestra
           // fallita lascia un marker localizzato e si prosegue; si rilancia solo
@@ -1258,6 +1262,7 @@ export const processCase = inngest.createFunction(
         // Fedeltà citazioni: le «...» senza riscontro raccolte per finestra
         // risalgono sulla sezione combinata (aggregazione unica a valle).
         ...(ungroundedQuotesAll.length > 0 ? { ungroundedQuotes: ungroundedQuotesAll.slice(0, 24) } : {}),
+        ...(quotesSnappedAll > 0 ? { quotesSnapped: quotesSnappedAll } : {}),
       };
     };
 
@@ -1348,6 +1353,13 @@ export const processCase = inngest.createFunction(
     // esisteva solo nei log: le divergenze arrivavano al DOCX in silenzio.
     const ungroundedQuotesReport = Array.from(completedSections.values())
       .flatMap((s) => s.ungroundedQuotes ?? []);
+    // Aggancio alla fonte: quante «...» sono state riscritte col testo esatto
+    // dell'OCR (correzione automatica, non richiede azione del perito — solo log).
+    const quotesSnappedReport = Array.from(completedSections.values())
+      .reduce((sum, s) => sum + (s.quotesSnapped ?? 0), 0);
+    if (quotesSnappedReport > 0) {
+      logger.info('pipeline', `Quote snapping: ${quotesSnappedReport} citazioni agganciate al testo esatto dei documenti`, { caseId });
+    }
     if (ungroundedQuotesReport.length > 0) {
       pipelineWarnings.push({
         step: 'quote-verification',

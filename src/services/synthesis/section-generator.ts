@@ -32,7 +32,8 @@ import {
 } from './peritale-formulations';
 import { buildGuidelineContext } from '../rag/retrieval-service';
 import { formatEventDateByPrecision } from '@/lib/format';
-import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
+import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated, concatOcrText } from '../validation/doc-sanitaria-quote-check';
+import { snapDocSanitariaQuotes } from '../validation/quote-snapper';
 import { distillRcDocSanitariaEvents } from '@/inngest/steps/doc-sanitaria-batch';
 import { isExcludableByPolicy } from './selettivita-policy';
 import { EPICRISI_COMPLETAMENTO_GUIDE } from './section-placeholders';
@@ -577,8 +578,20 @@ export async function generateSingleSection(params: {
   // viene annotata visibilmente, mai consegnata come fedele. Gira in TUTTI i
   // path (pipeline batched, pipeline singola, rigenerazione).
   let quoteFidelityMeta: { ungroundedQuotes: string[]; quoteTotal: number } | undefined;
+  let quotesSnappedMeta: { quotesSnapped: number } | undefined;
   if (spec.id === 'documentazione_sanitaria' && !spec.isPlaceholder
     && documentsOcrText && documentsOcrText.length > 0) {
+    // AGGANCIO ALLA FONTE (prima del verificatore): il modello sceglie cosa
+    // citare, il testo lo copia il codice — ogni «...» quasi-identica all'OCR
+    // viene sostituita col testo esatto del documento (ricomposizioni
+    // rimescolate e refusi introdotti diventano copie conformi). Le citazioni
+    // sotto soglia restano intatte e le flagga il verificatore qui sotto.
+    const snapped = snapDocSanitariaQuotes(finalContent, concatOcrText(documentsOcrText));
+    finalContent = snapped.markdown;
+    if (snapped.snappedCount > 0) {
+      quotesSnappedMeta = { quotesSnapped: snapped.snappedCount };
+      logger.info('section-generator', `Doc-sanitaria: ${snapped.snappedCount}/${snapped.total} citazioni agganciate al testo esatto dell'OCR`);
+    }
     // RC (excludeLabTests): NIENTE marker ⚠️ inline nella perizia firmata (Lavini
     // 2026-06-28) — il contenuto resta pulito; le citazioni non riscontrate
     // arrivano però al perito via pipelineWarnings (pannello "Da controllare"),
@@ -644,6 +657,7 @@ export async function generateSingleSection(params: {
     usage,
     ...coveMeta,
     ...(quoteFidelityMeta ?? {}),
+    ...(quotesSnappedMeta ?? {}),
     ...(truncatedByCap ? { truncatedByCap, originalCharLength } : {}),
     ...(fidelity.mode ? { fidelityMode: fidelity.mode } : {}),
     ...(fidelity.mode === 'summaries' ? { fidelitySummaryCount: summaryCount } : {}),
@@ -906,6 +920,7 @@ async function generateDocSanitariaChunked(params: {
   let okChunks = 0;
   const ungroundedQuotes: string[] = [];
   let quoteTotal = 0;
+  let quotesSnapped = 0;
 
   for (let i = 0; i < chunks.length; i++) {
     try {
@@ -927,6 +942,7 @@ async function generateDocSanitariaChunked(params: {
         // riscontrate — risalgono aggregate nella sezione combinata.
         if (sub.ungroundedQuotes?.length) ungroundedQuotes.push(...sub.ungroundedQuotes);
         if (sub.quoteTotal) quoteTotal += sub.quoteTotal;
+        if (sub.quotesSnapped) quotesSnapped += sub.quotesSnapped;
       }
     } catch (err) {
       const chunk = chunks[i];
@@ -957,6 +973,7 @@ async function generateDocSanitariaChunked(params: {
     wordCount,
     usage: totalUsage,
     ...(ungroundedQuotes.length > 0 ? { ungroundedQuotes: ungroundedQuotes.slice(0, 24), quoteTotal } : {}),
+    ...(quotesSnapped > 0 ? { quotesSnapped } : {}),
   };
 }
 

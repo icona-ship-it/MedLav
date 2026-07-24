@@ -379,6 +379,7 @@ export const regenerateReport = inngest.createFunction(
       let okBatches = 0;
       // Fedeltà citazioni: raccolte per finestra, risalgono sulla sezione combinata.
       const ungroundedQuotesAll: string[] = [];
+      let quotesSnappedAll = 0;
 
       for (let b = 0; b < batches.length; b++) {
         const batch = batches[b];
@@ -418,6 +419,7 @@ export const regenerateReport = inngest.createFunction(
               usage: generated.usage,
               // Output piccolo e bounded (cap 12 citazioni ≤160 char per finestra).
               ungroundedQuotes: generated.ungroundedQuotes,
+              quotesSnapped: generated.quotesSnapped,
             };
           });
           const legacyInline = (batchResult as { content?: string }).content?.trim() ?? '';
@@ -440,6 +442,8 @@ export const regenerateReport = inngest.createFunction(
           }
           const bq = (batchResult as { ungroundedQuotes?: string[] }).ungroundedQuotes;
           if (bq && bq.length > 0) ungroundedQuotesAll.push(...bq);
+          const bs = (batchResult as { quotesSnapped?: number }).quotesSnapped;
+          if (bs) quotesSnappedAll += bs;
         } catch (batchError) {
           logger.error('regenerate-report', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
           batchMetas.push({ partPath: null, fallbackText: `*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*` });
@@ -448,6 +452,9 @@ export const regenerateReport = inngest.createFunction(
 
       if (okBatches === 0) {
         throw new Error(`Doc-sanitaria: tutte le ${batches.length} finestre cronologiche sono fallite`);
+      }
+      if (quotesSnappedAll > 0) {
+        logger.info('regenerate-report', `Quote snapping: ${quotesSnappedAll} citazioni agganciate al testo esatto dei documenti`, { caseId });
       }
 
       // COMBINE dentro uno step (testo su Storage, coverage inclusa — il

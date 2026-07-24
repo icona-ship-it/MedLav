@@ -216,7 +216,7 @@ function verifyOneSourceText(
 /**
  * Strip [PAGE_START:N] and [PAGE_END:N] markers from text.
  */
-function stripPageMarkers(text: string): string {
+export function stripPageMarkers(text: string): string {
   return text.replace(/\[PAGE_(?:START|END):\d+\]/g, '');
 }
 
@@ -229,7 +229,7 @@ function stripPageMarkers(text: string): string {
  * una lettera dopo "<" o "</": un confronto clinico "PCR < 5" NON è un tag
  * e non viene toccato. Spazio (mai ''), per non fondere celle adiacenti.
  */
-function stripHtmlTags(text: string): string {
+export function stripHtmlTags(text: string): string {
   // ALLOWLIST dei tag che Mistral OCR emette davvero nelle tabelle (audit
   // 2026-07-17): il pattern generico <lettera[^>]*> era ingordo — un "<LOD "
   // clinico senza ">" divorava tutto fino al primo ">" successivo, anche a

@@ -114,6 +114,12 @@ export interface GeneratedSection {
   ungroundedQuotes?: string[];
   /** Totale citazioni «...» esaminate dal verificatore (per il rapporto N/tot). */
   quoteTotal?: number;
+  /**
+   * Doc-sanitaria: citazioni AGGANCIATE alla fonte (quote snapping) — riscritte
+   * deterministicamente col testo esatto dell'OCR perché il modello le aveva
+   * ricomposte con piccole divergenze (parole rimescolate, refusi introdotti).
+   */
+  quotesSnapped?: number;
   /** True when Chain-of-Verification post-processing was applied to this section. */
   coveApplied?: boolean;
   /** Number of verification questions generated, if CoVe was applied. */

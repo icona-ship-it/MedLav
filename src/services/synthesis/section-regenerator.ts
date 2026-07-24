@@ -16,7 +16,8 @@ import { generateSingleSection, summarizeForContext } from './section-generator'
 import { buildPlaceholderContent, stripHallucinatedImageRefs } from '@/inngest/steps/generate-report';
 import { parseSynthesisSections, replaceSectionContent } from './section-parser';
 import { DETERMINISTIC_MARKERS } from '../calculations/deterministic-tables';
-import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated } from '../validation/doc-sanitaria-quote-check';
+import { annotateDocSanitariaQuotes, annotateDocSanitariaQuotesGated, concatOcrText } from '../validation/doc-sanitaria-quote-check';
+import { snapDocSanitariaQuotes } from '../validation/quote-snapper';
 import { checkSelectiveCoverage, buildOmissionBanner } from '../validation/selective-coverage';
 import { logger } from '@/lib/logger';
 
@@ -192,6 +193,14 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     finalContent = finalContent.replace(/^##(\s+)/gm, '####$1');
   }
   if (params.selective && sectionId === 'documentazione_sanitaria') {
+    // AGGANCIO ALLA FONTE (parità col path principale): le «...» quasi-identiche
+    // all'OCR vengono riscritte col testo esatto del documento PRIMA del
+    // verificatore; sotto soglia restano intatte e vengono flaggate.
+    const snapped = snapDocSanitariaQuotes(finalContent, concatOcrText(documentsOcrText));
+    finalContent = snapped.markdown;
+    if (snapped.snappedCount > 0) {
+      logger.info('section-regenerator', `Doc-sanitaria (regen): ${snapped.snappedCount}/${snapped.total} citazioni agganciate al testo esatto dell'OCR`);
+    }
     // RC (excludeLabTests): niente marker ⚠️ inline nella perizia firmata (Lavini
     // 2026-06-28); resta solo l'audit log. La rete di OMISSIONE qui sotto ("mai
     // perdere un fatto") NON è toccata — è un segnale diverso e load-bearing.
