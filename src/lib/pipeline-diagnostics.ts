@@ -26,6 +26,7 @@ export type DiagnosticCode =
   | 'validator_blocked'
   | 'stuck_auto_fail'
   | 'cancelled_by_user'
+  | 'stale_run_aborted'
   | 'refund_failed'
   | 'unknown';
 
@@ -57,6 +58,7 @@ export const DIAGNOSTIC_CODE_LABELS: Readonly<Record<DiagnosticCode, string>> = 
   validator_blocked: 'Bozza bloccata dai controlli di qualità',
   stuck_auto_fail: 'Elaborazione interrotta automaticamente per inattività prolungata',
   cancelled_by_user: 'Analisi annullata dall\'utente',
+  stale_run_aborted: 'Elaborazione obsoleta terminata automaticamente (il caso non era più in lavorazione)',
   refund_failed: 'Rimborso crediti non riuscito (da verificare)',
   unknown: 'Errore tecnico non classificato',
 };

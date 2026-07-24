@@ -10,6 +10,7 @@ import { chunkArray } from '@/lib/array-utils';
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
 import type { ChunkJob, ExtractionLanguageWarning } from '../steps/extract-events';
 import { consolidateEventsStep, fetchAllEventsForCase } from '../steps/consolidate-events';
+import { abortIfStaleRun, isStaleRunAbort } from '../steps/stale-run-guard';
 import { linkImagesToEventsStep, analyzeDiagnosticImagesStep } from '../steps/link-images';
 import { detectAnomaliesStep, detectMissingDocumentsStep } from '../steps/detect-issues';
 import { resolveAnomaliesStep } from '../steps/resolve-anomalies';
@@ -381,15 +382,9 @@ export const processCase = inngest.createFunction(
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
 
-      // Check if cancelled while waiting
-      const { data: caseCheck } = await supabase
-        .from('cases')
-        .select('processing_stage')
-        .eq('id', caseId)
-        .single();
-      if (caseCheck?.processing_stage === 'idle') {
-        throw new Error('Case was cancelled by user');
-      }
+      // Anti-zombie (CASO-2026-235): annullato/eliminato mentre aspettava →
+      // il run si uccide da solo, senza retry (prima: Error retriabile).
+      await abortIfStaleRun(caseId, 'extraction');
 
       // Refresh document types
       const docIds = ocrResults.map((r) => r.documentId);
@@ -531,6 +526,9 @@ export const processCase = inngest.createFunction(
     const batchSettled = await Promise.allSettled(
       extractionBatches.map((batch, idx) =>
         step.run(`extract-batch-${idx}`, async () => {
+          // Anti-zombie: ogni batch ricontrolla che il caso sia ancora in
+          // lavorazione — un run annullato muore qui invece di macinare per ore.
+          await abortIfStaleRun(caseId, 'extraction');
           const result = await extractChunkBatch(batch);
           await heartbeatCase(caseId); // fase lunga: vedi commento sull'OCR
           return result;
@@ -604,6 +602,9 @@ export const processCase = inngest.createFunction(
           }
         }
       } else {
+        // Anti-zombie: l'abort del guard NON è un fallimento di batch da
+        // degradare — il run intero deve morire qui.
+        if (isStaleRunAbort(result.reason)) throw result.reason;
         logger.error('pipeline', `Extraction batch failed: ${result.reason instanceof Error ? result.reason.message : 'unknown'}`);
       }
     }
@@ -685,7 +686,12 @@ export const processCase = inngest.createFunction(
     // ── Step 4: Consolidate events ───────────────────────────────
     const consolidationResult = await step.run(
       'consolidate-events',
-      () => consolidateEventsStep(caseId, extractionResults),
+      async () => {
+        // Anti-zombie: qui l'abort NON è dentro un catch di degradazione →
+        // uccide il run per davvero anche se i batch l'hanno inghiottito.
+        await abortIfStaleRun(caseId, 'extraction');
+        return consolidateEventsStep(caseId, extractionResults);
+      },
     );
 
     // Re-read all events from DB for downstream steps.
@@ -1104,6 +1110,7 @@ export const processCase = inngest.createFunction(
         const contextForBatch = rollingContext;
         try {
           const batchResult = await step.run(`gen-section-documentazione_sanitaria-batch-${b}`, async () => {
+            await abortIfStaleRun(caseId, 'section');
             await updateProgress(planIndex, `${spec.title} (${b + 1}/${batches.length})`);
 
             // Fetch OCR INSIDE each batch step to avoid Inngest 4MB payload limit.
@@ -1172,6 +1179,7 @@ export const processCase = inngest.createFunction(
           const bs = (batchResult as { quotesSnapped?: number }).quotesSnapped;
           if (bs) quotesSnappedAll += bs;
         } catch (batchError) {
+          if (isStaleRunAbort(batchError)) throw batchError;
           // Resilienza (mirror di generateDocSanitariaChunked): una finestra
           // fallita lascia un marker localizzato e si prosegue; si rilancia solo
           // se TUTTE falliscono (→ fallback esterno di sezione).
@@ -1296,6 +1304,7 @@ export const processCase = inngest.createFunction(
     for (const wave of chunkArray(parallelSections, PARALLEL_SECTIONS_PER_WAVE)) {
       const waveResults = await Promise.all(wave.map(({ spec, planIndex }) =>
         step.run(`gen-section-${spec.id}`, async () => {
+          await abortIfStaleRun(caseId, 'section');
           await updateProgress(planIndex, spec.title);
           return generateSectionStep(caseId, spec, synthesisParams, [], attempt);
         }).then(
@@ -1307,6 +1316,7 @@ export const processCase = inngest.createFunction(
         if (result.section) {
           completedSections.set(result.spec.id, result.section);
         } else {
+          if (isStaleRunAbort(result.error)) throw result.error;
           failedSections.set(result.spec.id, { id: result.spec.id, title: result.spec.title });
           const secErrMsg = result.error instanceof Error ? result.error.message : 'unknown';
           logger.error('pipeline', `Section "${result.spec.id}" failed after retries — continuing with the remaining sections`, { error: secErrMsg });
@@ -1329,12 +1339,14 @@ export const processCase = inngest.createFunction(
           completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
         } else {
           const section = await step.run(`gen-section-${spec.id}`, async () => {
+            await abortIfStaleRun(caseId, 'section');
             await updateProgress(planIndex, spec.title);
             return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
           completedSections.set(spec.id, section);
         }
       } catch (sectionError) {
+        if (isStaleRunAbort(sectionError)) throw sectionError;
         failedSections.set(spec.id, { id: spec.id, title: spec.title });
         const tailErrMsg = sectionError instanceof Error ? sectionError.message : 'unknown';
         logger.error('pipeline', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, { error: tailErrMsg });
@@ -1380,6 +1392,7 @@ export const processCase = inngest.createFunction(
       if (!spec || completedSections.has(failed.id)) continue;
       try {
         const retried = await step.run(`gen-section-final-retry-${failed.id}`, async () => {
+          await abortIfStaleRun(caseId, 'section');
           await updateProgress(sectionPlan.indexOf(spec), `${spec.title} (nuovo tentativo)`);
           return generateSectionStep(caseId, spec, synthesisParams, buildPreviousContext(sectionPlan.indexOf(spec)), attempt + 1);
         });
@@ -1387,6 +1400,7 @@ export const processCase = inngest.createFunction(
         failedSections.delete(failed.id);
         logger.info('pipeline', `Sezione "${failed.id}" recuperata al tentativo finale`, { caseId });
       } catch (retryError) {
+        if (isStaleRunAbort(retryError)) throw retryError;
         logger.error('pipeline', `Sezione "${failed.id}" fallita anche al tentativo finale`, {
           error: retryError instanceof Error ? retryError.message : 'unknown',
         });
