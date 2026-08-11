@@ -59,6 +59,103 @@ function normalizeWord(raw: string): string {
     .replace(/[.,;:!?()[\]{}"'«»\-–—/\\*_`#~<>|=+]/g, '');
 }
 
+/** Parole che NEGANO: se presenti nella citazione ma non nello span (o viceversa)
+ * lo snap invertirebbe il significato clinico → mai in silenzio. */
+// N.B. normalizeWord NON rimuove gli accenti: la negazione "né" resta accentata
+// (inclusa qui), mentre il pronome "ne" NON va incluso (sovra-bloccherebbe frasi
+// come "ne consegue" senza alcun rischio di polarità).
+const NEGATION_WORDS = new Set([
+  'non', 'senza', 'né', 'nè', 'no', 'negativo', 'negativa', 'negativi', 'negative',
+  'assente', 'assenti', 'assenza', 'esclusa', 'escluso', 'esclusi', 'escluse',
+  'nega', 'negato', 'negata', 'negano', 'nessun', 'nessuna', 'nessuno',
+]);
+/** Lateralità: invertire dx/sx in una perizia è un errore grave. */
+const LATERALITY_WORDS = new Set([
+  'dx', 'sx', 'ds', 'sn',
+  'destro', 'destra', 'destri', 'destre',
+  'sinistro', 'sinistra', 'sinistri', 'sinistre',
+  'bilaterale', 'bilaterali', 'bilateralmente',
+  'controlaterale', 'controlaterali', 'omolaterale', 'omolaterali',
+]);
+/** Prefissi privativi/negativi: un fuzzy-match char-level non deve MAI equiparare
+ * una parola alla sua variante con questo prefisso (composta/scomposta,
+ * tipico/atipico) — è un cambio di polarità clinica, non un refuso. */
+const PRIVATIVE_PREFIXES = ['s', 'a', 'in', 'im', 'ir', 'dis', 'anti', 'de', 'non'];
+
+/** true se `a` e `b` differiscono SOLO per un prefisso privativo/negativo. */
+function isPrivativePair(a: string, b: string): boolean {
+  if (a === b) return false;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return PRIVATIVE_PREFIXES.some((p) => long === p + short);
+}
+
+/** Firma di un token numerico che CONSERVA i separatori TRA cifre: "2,5" ≠ "25",
+ * "1.000" ≠ "10,00". Virgola e punto tra due cifre sono canonicalizzati a '.',
+ * così "2,5" ≡ "2.5" (stesso numero, refuso OCR del separatore) ma ≠ "25". I
+ * separatori NON tra cifre (date con '/', punteggiatura) spezzano il gruppo, così
+ * "18/04/2026" → "18|04|2026". Ritorna null se il token non contiene cifre. */
+function numericSignature(raw: string): string | null {
+  const groups = raw.toLowerCase().match(/\d+(?:[.,]\d+)*/g);
+  if (!groups) return null;
+  return groups.map((g) => g.replace(/[.,]/g, '.')).join('|');
+}
+
+/** Firme dei token PORTANTI (numeri con separatori, negazioni, lateralità) di una
+ * lista di parole grezze, più l'insieme delle forme normalizzate (per il controllo
+ * dei prefissi privativi). La categoria nel prefisso evita collisioni tra classi. */
+function loadBearingSignatures(rawWords: string[]): { sigs: string[]; norms: Set<string> } {
+  const sigs: string[] = [];
+  const norms = new Set<string>();
+  for (const raw of rawWords) {
+    const numSig = numericSignature(raw);
+    if (numSig) sigs.push('#' + numSig);
+    const norm = normalizeWord(raw);
+    if (norm.length === 0) continue;
+    norms.add(norm);
+    if (NEGATION_WORDS.has(norm)) sigs.push('!' + norm);
+    else if (LATERALITY_WORDS.has(norm)) sigs.push('@' + norm);
+  }
+  return { sigs, norms };
+}
+
+function multisetEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const count = new Map<string, number>();
+  for (const x of a) count.set(x, (count.get(x) ?? 0) + 1);
+  for (const y of b) {
+    const c = count.get(y);
+    if (c === undefined || c === 0) return false;
+    count.set(y, c - 1);
+  }
+  return true;
+}
+
+/**
+ * Fedeltà dei token PORTANTI: lo snap non può cambiare in silenzio numeri/date,
+ * negazioni o lateralità, né sostituire una parola con la sua variante privativa
+ * (composta→scomposta). Confronta il multiset dei token portanti della citazione
+ * con quello dello span scelto; se differiscono → la citazione NON si aggancia.
+ */
+function preservesLoadBearingTokens(quoteRawWords: string[], spanRawWords: string[]): boolean {
+  const q = loadBearingSignatures(quoteRawWords);
+  const s = loadBearingSignatures(spanRawWords);
+  if (!multisetEqual(q.sigs, s.sigs)) return false;
+  // Inversione di polarità per prefisso privativo: una parola della citazione
+  // assente dallo span ma presente come sua variante privativa = sostituzione muta.
+  for (const qw of q.norms) {
+    if (s.norms.has(qw)) continue;
+    for (const sw of s.norms) {
+      if (isPrivativePair(qw, sw)) return false;
+    }
+  }
+  return true;
+}
+
+/** Esposto per i test d'invariante: firme (ordinate) dei token portanti di un testo. */
+export function loadBearingSignature(text: string): string[] {
+  return loadBearingSignatures(text.split(/\s+/)).sigs.sort();
+}
+
 /** Corpus pulito (marker pagina/tag HTML via) con offset validi per l'estrazione. */
 export function buildSnapCorpus(fullOcrText: string): { text: string; tokens: CorpusToken[] } {
   const text = stripHtmlTags(stripPageMarkers(fullOcrText));
@@ -99,10 +196,13 @@ function boundedEditDistance(a: string, b: string, maxDist: number): number {
 /**
  * Parole "uguali" ai fini dell'aggancio: identiche, oppure refuso a livello di
  * carattere (il caso reale «piacca»/«placca»: LLM o OCR sbagliano UNA lettera).
- * Solo per parole lunghe — le corte (di, il, non...) devono restare esatte.
+ * Solo per parole lunghe — le corte (di, il, non...) devono restare esatte. Mai
+ * equiparare una parola alla sua variante con prefisso privativo (composta ≠
+ * scomposta): sarebbe un'inversione di polarità clinica, non un refuso.
  */
 function wordsMatch(a: string, b: string): boolean {
   if (a === b) return true;
+  if (isPrivativePair(a, b)) return false;
   const minLen = Math.min(a.length, b.length);
   if (minLen >= 9) return boundedEditDistance(a, b, 2) <= 2;
   if (minLen >= 5) return boundedEditDistance(a, b, 1) <= 1;
@@ -211,16 +311,18 @@ export function snapQuoteToSource(
   if (best.density < MIN_SPAN_DENSITY || best.maxGap > MAX_UNMATCHED_RUN) {
     return { outcome: 'unmatched', similarity: best.ratio };
   }
-  // GUARDIA NUMERI/DATE: mai riscrivere una citazione se un suo token con cifre
-  // (date, dosaggi, percentuali, n. nosologici) non è presente ESATTO nello span
-  // scelto — il rischio di "correggere" silenziosamente una data verso un
-  // passaggio simile ma diverso è inaccettabile in un atto medico-legale.
-  // In quel caso la citazione resta intatta e la flagga il verificatore.
-  const spanWordSet = new Set(corpusWords.slice(best.first, best.last + 1));
-  for (const w of qWords) {
-    if (/\d/.test(w) && !spanWordSet.has(w)) {
-      return { outcome: 'unmatched', similarity: best.ratio };
-    }
+  // GUARDIA FEDELTÀ token PORTANTI (numeri/date con separatori, negazioni,
+  // lateralità, prefissi privativi): mai riscrivere una citazione se lo span
+  // scelto non conserva ESATTI questi token. Correggere in silenzio una data, un
+  // dosaggio ("2,5"→"25"), un "non" o un "dx" verso un passaggio simile ma
+  // diverso è inaccettabile in un atto medico-legale → la citazione resta intatta
+  // e la flagga il verificatore.
+  const spanRawWords = corpus.tokens
+    .slice(best.first, best.last + 1)
+    .map((t) => corpus.text.slice(t.start, t.end));
+  const quoteRawWords = trimmed.split(/\s+/);
+  if (!preservesLoadBearingTokens(quoteRawWords, spanRawWords)) {
+    return { outcome: 'unmatched', similarity: best.ratio };
   }
   const sourceText = corpus.text
     .slice(corpus.tokens[best.first].start, corpus.tokens[best.last].end)
