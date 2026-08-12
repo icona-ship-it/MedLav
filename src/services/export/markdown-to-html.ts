@@ -18,15 +18,18 @@ export function escapeHtml(text: string): string {
  * (`\|` is a literal pipe inside a cell, not a column separator) and
  * un-escaping them in the output. */
 function splitTableRow(row: string): string[] {
-  return row
-    .split(/(?<!\\)\|/)
-    .slice(1, -1)
-    .map((c) => c.trim().replace(/\\\|/g, '|'));
+  // Via il vuoto iniziale (pipe di apertura). Il vuoto FINALE si toglie SOLO se
+  // c'è la pipe di chiusura: una riga GFM valida può ometterla e slice(1,-1)
+  // perdeva l'ultima cella — es. la durata di una riga ITT (audit 2026-08-11, H-1).
+  const parts = row.split(/(?<!\\)\|/).slice(1);
+  if (parts.length > 0 && parts[parts.length - 1].trim() === '') parts.pop();
+  return parts.map((c) => c.trim().replace(/\\\|/g, '|'));
 }
 
 function convertMarkdownTable(lines: string[]): string {
-  // Filter out separator rows (|---|---|)
-  const dataRows = lines.filter((l) => !/^\|[\s\-:|]+\|$/.test(l));
+  // Filter out separator rows (|---|---|) — pipe di chiusura opzionale, richiede
+  // almeno un trattino così una riga-dati non viene mai scambiata per separatore.
+  const dataRows = lines.filter((l) => !/^\|[\s\-:|]*-[\s\-:|]*\|?$/.test(l));
   if (dataRows.length === 0) return '';
 
   const headerCells = splitTableRow(dataRows[0]);

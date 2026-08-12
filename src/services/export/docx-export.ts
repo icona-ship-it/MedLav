@@ -823,15 +823,19 @@ interface ProfessionalDocxExportParams {
 export function parseMarkdownTable(text: string): string[][] | null {
   const lines = text.split('\n').filter((l) => l.trim().startsWith('|'));
   if (lines.length < 2) return null;
-  // Filter separator rows
-  const dataLines = lines.filter((l) => !/^\|[\s\-:|]+\|$/.test(l));
+  // Filter separator rows — pipe di chiusura opzionale, richiede almeno un trattino.
+  const dataLines = lines.filter((l) => !/^\|[\s\-:|]*-[\s\-:|]*\|?$/.test(l));
   if (dataLines.length === 0) return null;
   // Split on UNESCAPED pipes (a `\|` is a literal pipe inside a cell), then
   // un-escape it — matching the HTML export. A naive split('|') broke cells
-  // containing an escaped pipe (e.g. from formatITTITPTable).
-  return dataLines.map((line) =>
-    line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, '|')),
-  );
+  // containing an escaped pipe (e.g. from formatITTITPTable). Il vuoto finale si
+  // toglie SOLO se c'è la pipe di chiusura: una riga senza pipe finale è GFM
+  // valida e slice(1,-1) perdeva l'ultima cella (audit 2026-08-11, H-1).
+  return dataLines.map((line) => {
+    const parts = line.split(/(?<!\\)\|/).slice(1);
+    if (parts.length > 0 && parts[parts.length - 1].trim() === '') parts.pop();
+    return parts.map((c) => c.trim().replace(/\\\|/g, '|'));
+  });
 }
 
 /**
