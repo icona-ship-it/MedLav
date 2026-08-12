@@ -27,6 +27,7 @@ import type { DocumentSummary, DocumentRef } from '@/services/synthesis/document
 import { partitionSectionPlan, isDocSanitariaBatchPath, PARALLEL_SECTIONS_PER_WAVE } from '../steps/section-partition';
 import { planDocSanitariaEventBatches, planRcDocSanitariaBatches, stripWindowArtifacts, filterImagesForBatch } from '../steps/doc-sanitaria-batch';
 import { buildFailedSectionFallback } from '../steps/section-fallback';
+import { abortIfStaleRun, isStaleRunAbort } from '../steps/stale-run-guard';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
 
@@ -66,6 +67,10 @@ async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<voi
     );
     // The old report is still in the DB and valid → go back to 'completato',
     // NOT 'errore'. Surface the actual failure cause as a soft note for the UI/toast.
+    // CAS sullo stage attivo (audit 2026-08-11, A-2): se il caso è stato annullato
+    // (stage 'idle') o eliminato, NON lo si resuscita a 'completato' — la
+    // condizione fallisce e la riga resta com'è. Solo un fallimento di una regen
+    // ANCORA attiva ('generazione_report') torna al report precedente.
     await supabase
       .from('cases')
       .update({
@@ -73,7 +78,8 @@ async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<voi
         perizia_metadata: { ...cleaned, lastRegenerateError: `Rigenerazione fallita: ${errMsg}. Il report precedente è invariato.` },
         updated_at: new Date().toISOString(),
       })
-      .eq('id', caseId);
+      .eq('id', caseId)
+      .in('processing_stage', ['generazione_report']);
     logger.error('regenerate-report', `Regeneration failed for case ${caseId}: ${errMsg} — report precedente preservato`);
 
     // Refund the regeneration cost — the user paid for a full report and got none.
@@ -386,6 +392,7 @@ export const regenerateReport = inngest.createFunction(
         const contextForBatch = rollingContext;
         try {
           const batchResult = await step.run(`regen-section-documentazione_sanitaria-batch-${b}`, async () => {
+            await abortIfStaleRun(caseId, 'section'); // anti-zombie (A-2): un run annullato non macina finestre
             await updateProgress(planIndex, `${spec.title} (${b + 1}/${batches.length})`);
             const { fetchDocumentsOcrContext } = await import('../steps/generate-report');
             // OCR scoped ai soli doc della finestra: evita di caricare l'OCR
@@ -445,6 +452,7 @@ export const regenerateReport = inngest.createFunction(
           const bs = (batchResult as { quotesSnapped?: number }).quotesSnapped;
           if (bs) quotesSnappedAll += bs;
         } catch (batchError) {
+          if (isStaleRunAbort(batchError)) throw batchError; // il run zombie muore, non degrada
           logger.error('regenerate-report', `Doc-sanitaria finestra ${b + 1}/${batches.length} (${batch.dateRange}) fallita: ${batchError instanceof Error ? batchError.message : 'unknown'}`, { caseId });
           batchMetas.push({ partPath: null, fallbackText: `*[⚠ Blocco ${b + 1}/${batches.length} (${batch.dateRange}) non generato per un errore tecnico — usare "Rigenera sezione" per completarlo.]*` });
         }
@@ -547,11 +555,15 @@ export const regenerateReport = inngest.createFunction(
     for (const wave of chunkArray(parallelSections, PARALLEL_SECTIONS_PER_WAVE)) {
       const waveResults = await Promise.all(wave.map(({ spec, planIndex }) =>
         step.run(`regen-section-${spec.id}`, async () => {
+          await abortIfStaleRun(caseId, 'section'); // anti-zombie (A-2)
           await updateProgress(planIndex, spec.title);
           return generateSectionStep(caseId, spec, synthesisParams, [], attempt);
         }).then(
           (section) => ({ spec, section, error: undefined as unknown }),
-          (error: unknown) => ({ spec, section: undefined, error }),
+          (error: unknown) => {
+            if (isStaleRunAbort(error)) throw error; // il run zombie muore, non degrada
+            return { spec, section: undefined, error };
+          },
         ),
       ));
       for (const result of waveResults) {
@@ -573,12 +585,14 @@ export const regenerateReport = inngest.createFunction(
           completedSections.set(spec.id, await runDocSanitariaBatched(spec, planIndex, previousContext));
         } else {
           const section = await step.run(`regen-section-${spec.id}`, async () => {
+            await abortIfStaleRun(caseId, 'section'); // anti-zombie (A-2)
             await updateProgress(planIndex, spec.title);
             return generateSectionStep(caseId, spec, synthesisParams, previousContext, attempt);
           });
           completedSections.set(spec.id, section);
         }
       } catch (sectionError) {
+        if (isStaleRunAbort(sectionError)) throw sectionError; // il run zombie muore, non degrada
         failedSections.set(spec.id, { id: spec.id, title: spec.title });
         logger.error('regenerate-report', `Section "${spec.id}" failed after retries — continuing with the remaining sections`, {
           error: sectionError instanceof Error ? sectionError.message : 'unknown',
@@ -758,11 +772,13 @@ export const regenerateReport = inngest.createFunction(
           }]
         : keptWarnings;
       const restMeta = Object.fromEntries(Object.entries(cleaned).filter(([k]) => k !== 'pipelineWarnings'));
+      // CAS (A-2): scrive 'completato' solo se il run è ANCORA quello attivo. Se
+      // il caso è stato annullato mentre il finalize era in volo, non lo resuscita.
       await supabase.from('cases').update({
         processing_stage: 'completato',
         perizia_metadata: nextWarnings.length > 0 ? { ...restMeta, pipelineWarnings: nextWarnings } : restMeta,
         updated_at: new Date().toISOString(),
-      }).eq('id', caseId);
+      }).eq('id', caseId).in('processing_stage', ['generazione_report']);
       // Cleanup best-effort delle parti di sezione transitorie (il report è
       // già salvato in reports; residui comunque cancellati col caso).
       const { deleteCaseSectionParts } = await import('../steps/section-part-store');

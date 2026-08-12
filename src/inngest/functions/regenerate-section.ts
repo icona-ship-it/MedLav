@@ -8,6 +8,7 @@ import { detectAnomalies } from '@/services/validation/anomaly-detector';
 import { detectMissingDocuments } from '@/services/validation/missing-doc-detector';
 import { calculateMedicoLegalPeriods } from '@/services/calculations/medico-legal-calc';
 import { CREDIT_COSTS } from '@/services/credits/credit-costs';
+import { abortIfStaleRun } from '../steps/stale-run-guard';
 import type { ReportGenerationMetadata } from '@/db/schema/reports';
 
 /**
@@ -48,11 +49,13 @@ async function restoreStageWithNote(caseId: string, note: string | null): Promis
   const cleaned = Object.fromEntries(
     Object.entries(existingMeta).filter(([k]) => k !== 'generationProgress' && k !== 'lastRegenerateError'),
   );
+  // CAS sullo stage attivo (audit 2026-08-11, A-2): non resuscitare a 'completato'
+  // un caso annullato/eliminato mentre la regen di sezione era in volo.
   await supabase.from('cases').update({
     processing_stage: 'completato',
     perizia_metadata: note ? { ...cleaned, lastRegenerateError: note } : cleaned,
     updated_at: new Date().toISOString(),
-  }).eq('id', caseId);
+  }).eq('id', caseId).in('processing_stage', ['generazione_report']);
 }
 
 /**
@@ -206,6 +209,7 @@ export const regenerateSectionJob = inngest.createFunction(
     for (let i = 0; i < sections.length; i++) {
       const target = sections[i];
       const result = await step.run(`section-regen-${target.sectionId}`, async () => {
+        await abortIfStaleRun(caseId, 'section'); // anti-zombie (A-2): regen annullata non macina sezioni
         await updateProgress(i, target.title ?? target.sectionId);
         const admin = createAdminClient();
 
