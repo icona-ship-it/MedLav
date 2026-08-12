@@ -201,7 +201,9 @@ export async function POST(request: NextRequest) {
         // Le `instruction` del perito (testo libero clinico) vanno sotto
         // `encrypted`: il middleware cifra SOLO questo campo prima che l'evento
         // lasci il processo verso Inngest Cloud (infra US) — audit 2026-08-11, E-2.
-        data: { caseId, userId: user.id, batchId, encrypted: { sections: targets } },
+        // sectionCount resta in CHIARO (solo un intero): serve al rimborso in
+        // onFailure, dove il campo `encrypted` nidificato non viene decifrato.
+        data: { caseId, userId: user.id, batchId, sectionCount: targets.length, encrypted: { sections: targets } },
       });
     } catch (sendError) {
       await revertStage();

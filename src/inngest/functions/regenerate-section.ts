@@ -43,6 +43,12 @@ interface SectionRegenEventData {
   encrypted?: { sections: SectionRegenTarget[] };
   /** @deprecated in chiaro: solo per compat con eventi in volo inviati prima di E-2. */
   sections?: SectionRegenTarget[];
+  /** Numero di sezioni, in CHIARO al top level (non sensibile — solo un intero).
+   * Serve al rimborso in onFailure: lì l'evento arriva come inngest/function.failed
+   * e il middleware NON decifra il campo `encrypted` nidificato, quindi
+   * sectionsOf() sarebbe vuoto e il rimborso salterebbe (regressione E-2 trovata
+   * dal 2° giro avversariale 2026-08-11). Il conteggio basta per calcolare l'owed. */
+  sectionCount?: number;
 }
 
 /** Estrae le sezioni dal payload cifrato (o dal campo legacy in chiaro per gli
@@ -106,7 +112,11 @@ async function refundUndeliveredOnFailure(data: SectionRegenEventData, errMsg: s
     .eq('entity_id', data.caseId)
     .eq('metadata->>batchId', data.batchId);
   const delivered = deliveredRows?.length ?? 0;
-  const owed = (sectionsOf(data).length - delivered) * COST_PER_SECTION;
+  // Conteggio dal campo top-level in chiaro (in onFailure `encrypted` non è
+  // decifrato → sectionsOf() sarebbe vuoto). Fallback a sectionsOf per eventi
+  // in volo pre-E-2 e per il percorso non-cifrato (dev).
+  const sectionTotal = data.sectionCount ?? sectionsOf(data).length;
+  const owed = (sectionTotal - delivered) * COST_PER_SECTION;
   if (owed <= 0) return;
 
   const { refundCredits } = await import('@/services/credits/credit-service');
@@ -115,7 +125,7 @@ async function refundUndeliveredOnFailure(data: SectionRegenEventData, errMsg: s
     batchId: data.batchId,
     error: errMsg.slice(0, 200),
   });
-  logger.info('regenerate-section', `Refunded ${owed} credits (${sectionsOf(data).length - delivered} sezioni non consegnate) for case ${data.caseId}`);
+  logger.info('regenerate-section', `Refunded ${owed} credits (${sectionTotal - delivered} sezioni non consegnate) for case ${data.caseId}`);
 }
 
 async function handleFailure(event: { data: unknown }): Promise<void> {
