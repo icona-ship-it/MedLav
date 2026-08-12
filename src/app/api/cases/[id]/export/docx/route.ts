@@ -169,6 +169,7 @@ export async function GET(
         reportStatus,
         signatureImageBase64,
         exportMode,
+        anonymized: shouldAnonymize,
       })
       : await generateDocxReport({
         caseCode: data.caseData.code as string,

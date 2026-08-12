@@ -10,6 +10,9 @@ import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
+import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { anonymizeEventsForExport, anonymizeDocsForExport, anonymizePmForExport } from './anonymize-export';
+import type { PeriziaMetadata } from '@/types';
 import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
 import { groupEventsByDocument } from './event-grouping';
 
@@ -300,7 +303,22 @@ export function validateAnonymizedExport(
 }
 
 export async function generateDocxReport(params: DocxExportParams): Promise<Buffer> {
-  const { caseCode, caseType, caseRole, patientInitials, synthesis, events, anomalies, missingDocs, calculations, periziaMetadata, reportStatus } = params;
+  const { caseCode, caseType, caseRole, patientInitials, anomalies, missingDocs, calculations, reportStatus } = params;
+
+  // GDPR (audit 2026-08-11, E-1/H-2): anonymized=true → anonimizza pm (cover),
+  // testo eventi e synthesis prima del rendering; i campi strutturati (date)
+  // restano intatti.
+  const anonCtx = params.anonymized ? (params.periziaMetadata as unknown as PeriziaMetadata) : undefined;
+  const periziaMetadata = params.anonymized
+    ? (anonymizePmForExport(params.periziaMetadata as unknown as Record<string, unknown>, anonCtx) as unknown as typeof params.periziaMetadata)
+    : params.periziaMetadata;
+  const synthesis = params.anonymized && params.synthesis
+    ? anonymizeText({ text: params.synthesis, periziaMetadata: anonCtx }).anonymizedText
+    : params.synthesis;
+  const events = params.anonymized
+    ? anonymizeEventsForExport(params.events, anonCtx)
+    : params.events;
+
   // QA 2026-06-11: nel depositabile niente carte di lavoro (riepilogo qualità,
   // periodi calcolati, anomalie, doc mancante) — restano nel fascicolo di lavoro.
   const isDepositabile = (params.exportMode ?? 'lavoro') === 'depositabile';
@@ -794,6 +812,9 @@ interface ProfessionalDocxExportParams {
   signatureImageBase64?: string;
   /** 'depositabile' (default dalle route) = solo perizia, niente carte di lavoro. */
   exportMode?: ExportMode;
+  /** Anonimizza ogni input testuale (audit E-1/H-2): esame obiettivo, parti,
+   * eventi, OCR, filename, synthesis. NON tocca i campi strutturati (date). */
+  anonymized?: boolean;
 }
 
 /**
@@ -1269,7 +1290,27 @@ function buildDocxHeaderContent(
  * full OCR documentation, and assembled sections.
  */
 export async function generateProfessionalDocxReport(params: ProfessionalDocxExportParams): Promise<Buffer> {
-  const { caseRole, patientInitials, periziaMetadata, documentsWithPages, synthesis, anomalies, missingDocs, calculations, reportStatus, signatureImageBase64 } = params;
+  const { caseRole, patientInitials, anomalies, missingDocs, calculations, reportStatus, signatureImageBase64 } = params;
+
+  // GDPR (audit 2026-08-11, E-1/H-2): con anonymized=true anonimizziamo QUI ogni
+  // input testuale (pm inclusi esameObiettivo e nomi parti, testo eventi, OCR,
+  // filename, synthesis) PRIMA dell'assemblaggio — il DOCX è binario e non
+  // ripassabile a valle come l'HTML. Difesa in profondità: qualunque chiamante del
+  // generatore ottiene un file davvero anonimo. I campi strutturati (event_date,
+  // date dei calcoli) NON si toccano: li parsa il generatore.
+  const anonCtx = params.anonymized ? (params.periziaMetadata as unknown as PeriziaMetadata) : undefined;
+  const periziaMetadata = params.anonymized
+    ? (anonymizePmForExport(params.periziaMetadata as unknown as Record<string, unknown>, anonCtx) as unknown as typeof params.periziaMetadata)
+    : params.periziaMetadata;
+  const documentsWithPages = params.anonymized
+    ? anonymizeDocsForExport(params.documentsWithPages, anonCtx)
+    : params.documentsWithPages;
+  const synthesis = params.anonymized && params.synthesis
+    ? anonymizeText({ text: params.synthesis, periziaMetadata: anonCtx }).anonymizedText
+    : params.synthesis;
+  const eventsForAssembly = params.anonymized
+    ? anonymizeEventsForExport(params.events ?? [], anonCtx)
+    : (params.events ?? []);
 
   const pm = periziaMetadata as AssemblerPeriziaMetadata;
   const assembled = assembleFullReport({
@@ -1281,7 +1322,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
     missingDocs,
     calculations,
     exportMode: params.exportMode,
-    events: (params.events ?? []).map((e) => ({
+    events: eventsForAssembly.map((e) => ({
       event_date: e.event_date,
       event_type: e.event_type,
       title: e.title,

@@ -203,6 +203,17 @@ describe('anonymizer', () => {
       expect(result.anonymizedText).toContain('della costa VII'); // la PAROLA clinica preservata
       expect(result.anonymizedText).not.toMatch(/\bCosta\b/); // il NOME (Capitalizzato) redatto
     });
+
+    it('redige un indirizzo con "via" minuscolo e connettore (audit 2026-08-11, E-1)', () => {
+      const result = anonymizeText({ text: 'Residente in via degli Esempi 12, Cittàdemo.' });
+      expect(result.anonymizedText).not.toContain('via degli Esempi 12');
+      expect(result.anonymizedText).not.toContain('degli Esempi');
+    });
+
+    it('NON scambia per indirizzo una frase con un tipo-via seguito da minuscola ("strada facendo")', () => {
+      const result = anonymizeText({ text: 'Percorrendo la strada facendo attenzione al traffico.' });
+      expect(result.anonymizedText).toContain('strada facendo');
+    });
   });
 
   describe('nomi solo-OCR (fix beta 2026-07-20)', () => {

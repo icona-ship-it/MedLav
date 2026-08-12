@@ -89,8 +89,12 @@ const DATE_TEXT_REGEX = new RegExp(
 
 /**
  * Italian addresses: Via/Piazza/Corso/Viale/Largo + name + optional number.
+ * Il tipo di via \u00E8 case-insensitive (nei referti "via" \u00E8 spesso minuscolo) e sono
+ * ammessi i connettori minuscoli tra il tipo e il nome ("via degli Esempi 12",
+ * "corso della Libert\u00E0"): fix audit 2026-08-11 (E-1, l'indirizzo del periziando
+ * trapelava perch\u00E9 "via" minuscolo + "degli" non erano coperti).
  */
-const ADDRESS_REGEX = /(?:Via|Piazza|Corso|Viale|Largo|Vicolo|Piazzale|Piazzetta|Strada|Lungotevere|Lungomare)\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
+const ADDRESS_REGEX = /(?:[Vv]ia|[Vv]iale|[Pp]iazza|[Cc]orso|[Ll]argo|[Vv]icolo|[Pp]iazzale|[Pp]iazzetta|[Ss]trada|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
 
 /**
  * Names preceded by context words (without professional titles).
