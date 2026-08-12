@@ -60,7 +60,6 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 | `services/export/` | Generazione HTML/DOCX/CSV + risoluzione immagini OCR | `html-export.ts`, `docx-export.ts`, `image-resolver.ts`, `markdown-to-html.ts` |
 | `services/anonymization/` | Pseudonimizzazione GDPR dati nel report | `anonymizer.ts` |
 | `services/email/` | Notifiche email (Resend) | `email-service.ts` |
-| `services/demo/` | Generazione dati demo per testing | `demo-generator.ts` |
 | `lib/mistral/` | Client Mistral (retry, circuit breaker, streaming, semaforo) | `client.ts` |
 | `lib/domain-knowledge/` | Knowledge base statica (nesso causale, framework, case-type) | `index.ts`, `case-type/*.ts` |
 | `lib/supabase/` | Client Supabase (server, admin, middleware, storage) | |
@@ -83,7 +82,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 8. **detect-anomalies** → 7 tipi anomalie (algoritmico, no LLM)
 9. **detect-missing-documents** → documenti mancanti attesi per tipo caso
 10. **calculate-periods** → calcoli medico-legali (ITT, ITP, giorni ricovero)
-11. **generate-report** → report sezionale per ruolo (CTU 11 sez, CTP 10, Stragiudiziale 7) allineato ai benchmark perizie reali. Placeholder per sezioni che il perito compila. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).
+11. **generate-report** → report sezionale per ruolo (CTU 11 sez, CTP 10, Stragiudiziale 7) allineato ai benchmark perizie reali. **Su `rc-mvp` è attivo SOLO il ruolo `stragiudiziale`** (enforcement lato server: `caseRoleSchema = z.enum(['stragiudiziale'])`); CTU/CTP vivono su `main`. Placeholder per sezioni che il perito compila. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).
 12. **finalize** → marca completato, audit log
 13. **send-notification** → email notifica completamento (Resend)
 
