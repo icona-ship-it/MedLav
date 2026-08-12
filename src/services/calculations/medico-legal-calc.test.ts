@@ -292,8 +292,8 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
   it('F-P2: una menzione anamnestica ANNO-only (fabbricata YYYY-01-01) non ancora ITT/ITP', () => {
     const events = [
       { event_date: '2020-01-01', event_type: 'visita', title: 'Cervicalgia nel 2020', description: 'in anamnesi', date_precision: 'anno' },
-      { event_date: '2026-03-01', event_type: 'ricovero', title: 'Ricovero' },
-      { event_date: '2026-03-10', event_type: 'ricovero', title: 'Dimissione', description: 'dimissione' },
+      { event_date: '2026-03-01', event_type: 'ricovero', title: 'Ricovero', description: '', date_precision: 'giorno' },
+      { event_date: '2026-03-10', event_type: 'ricovero', title: 'Dimissione', description: 'dimissione', date_precision: 'giorno' },
     ];
     const calcs = calculateMedicoLegalPeriods(events);
     // Nessuna riga deve partire dal 2020 (span gonfiato a ~2260 giorni).
