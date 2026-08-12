@@ -18,7 +18,6 @@ import {
   savePeriziaDraft,
   getPeriziaDraft,
   clearPeriziaDraft,
-  isPeriziaDraftNewer,
   serializePeriziaSnapshot,
   type PeriziaDraft,
   type PeriziaDraftPayload,
@@ -30,8 +29,6 @@ interface UsePeriziaDraftParams {
   caseId: string;
   /** Current form snapshot — caller must memoize on [form, quesiti, excludedSections]. */
   payload: PeriziaDraftPayload;
-  /** `updated_at` of the case row, to discard drafts older than the saved data. */
-  savedUpdatedAt: string | null;
   /** Reported upward so the wizard never auto-advances while dirty. */
   onDirtyChange?: (dirty: boolean) => void;
   /** Apply a recovered draft to the form state (setForm/setQuesiti/...). */
@@ -50,7 +47,7 @@ interface UsePeriziaDraftResult {
 }
 
 export function usePeriziaDraft({
-  caseId, payload, savedUpdatedAt, onDirtyChange, onRestore,
+  caseId, payload, onDirtyChange, onRestore,
 }: UsePeriziaDraftParams): UsePeriziaDraftResult {
   // Baseline = last known SAVED state. Dirty = current differs from baseline.
   const [baseline, setBaseline] = useState<PeriziaDraftPayload>(payload);
@@ -92,15 +89,16 @@ export function usePeriziaDraft({
         clearPeriziaDraft(caseId);
         return;
       }
-      // Draft older than the last server save → stale, the DB version wins.
-      if (!isPeriziaDraftNewer(draft, savedUpdatedAt)) {
-        clearPeriziaDraft(caseId);
-        return;
-      }
+      // La bozza differisce dai dati caricati → MOSTRA sempre il banner
+      // Ripristina/Scarta, mai auto-cancellare (audit 2026-08-11, I-2). Prima si
+      // confrontava con cases.updated_at, che la pipeline (heartbeat, progress,
+      // start) bumpa di continuo: una bozza dettata e mai "Proseguita" veniva
+      // giudicata "più vecchia dell'ultimo salvataggio" e distrutta in silenzio,
+      // proprio nel caso d'uso fondante del modulo. Decide il perito.
       setDraftBanner(draft);
     }, 0);
     return () => clearTimeout(timer);
-  }, [caseId, savedUpdatedAt]);
+  }, [caseId]);
 
   // Debounced autosave while dirty.
   useEffect(() => {

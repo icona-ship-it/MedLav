@@ -192,7 +192,6 @@ export function PeriziaMetadataForm({
   } = usePeriziaDraft({
     caseId,
     payload: draftPayload,
-    savedUpdatedAt: caseData.updated_at ?? null,
     onDirtyChange,
     onRestore: handleRestoreDraft,
   });
