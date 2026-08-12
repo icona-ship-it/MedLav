@@ -27,6 +27,24 @@ describe('scrub — lacune del 2° giro avversariale (breadcrumb.data + transact
     expect(url).not.toContain('a@b.it');
   });
 
+  it('scrubba anche i valori dentro un ARRAY in breadcrumb.data (3° giro)', () => {
+    const event = {
+      breadcrumbs: [{ data: { urls: ['/api/search?q=a@b.it', '/x?tel=3331234567'] } }],
+    };
+    scrubSentryEvent(event);
+    const urls = (event.breadcrumbs[0].data as { urls: string[] }).urls;
+    expect(urls[0]).toContain('[EMAIL_REDACTED]');
+    expect(urls[1]).toContain('[PHONE_REDACTED]');
+  });
+
+  it('non crasha su un riferimento circolare in breadcrumb.data', () => {
+    const cyclic: Record<string, unknown> = { a: 'a@b.it' };
+    cyclic.self = cyclic;
+    const event = { breadcrumbs: [{ data: cyclic }] };
+    expect(() => scrubSentryEvent(event)).not.toThrow();
+    expect((event.breadcrumbs[0].data as { a: string }).a).toContain('[EMAIL_REDACTED]');
+  });
+
   it('scrubSentryTransaction ripulisce request.query_string e span.data', () => {
     const tx = {
       request: { query_string: 'q=CF RSSMRA80A01H501U', data: { body: 'x' }, cookies: { s: 'y' } },

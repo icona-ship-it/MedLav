@@ -20,16 +20,25 @@ interface ScrubbableEvent {
   breadcrumbs?: Array<{ message?: string; data?: Record<string, unknown> }>;
 }
 
-/** Scrub ricorsivo dei valori STRINGA di un oggetto. Usato per breadcrumb.data e
- * span.data: es. l'url di un breadcrumb fetch (`GET /api/search?q=<nome paziente>`)
- * o gli argomenti di un breadcrumb console — 2° giro avversariale 2026-08-11. */
-function scrubStringValues(obj: Record<string, unknown> | undefined): void {
-  if (!obj) return;
+/** Scrub ricorsivo dei valori STRINGA di un oggetto O array. Usato per
+ * breadcrumb.data e span.data: es. l'url di un breadcrumb fetch
+ * (`GET /api/search?q=<nome paziente>`) o gli argomenti di un breadcrumb console.
+ * Ricorre anche negli ARRAY (3° giro avversariale: prima venivano saltati) e ha un
+ * limite di profondità che evita lo stack-overflow su riferimenti circolari
+ * (un ciclo verrebbe troncato invece di far crashare beforeSend). */
+function scrubStringValues(value: unknown, depth = 0): void {
+  if (depth > 6 || value == null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (typeof value[i] === 'string') value[i] = scrubClinicalData(value[i]);
+      else scrubStringValues(value[i], depth + 1);
+    }
+    return;
+  }
+  const obj = value as Record<string, unknown>;
   for (const [k, v] of Object.entries(obj)) {
     if (typeof v === 'string') obj[k] = scrubClinicalData(v);
-    else if (v && typeof v === 'object' && !Array.isArray(v)) {
-      scrubStringValues(v as Record<string, unknown>);
-    }
+    else scrubStringValues(v, depth + 1);
   }
 }
 
