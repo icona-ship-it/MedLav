@@ -112,6 +112,7 @@ export function redactEventsForPublic<T>(events: readonly T[]): T[] {
       order_number: r.order_number,
       event_date: r.event_date,
       event_type: r.event_type,
+      date_precision: r.date_precision, // F-P2: anche sul link pubblico le date anno-only non ancorano ITT/ITP
       title: '',
       description: '',
       diagnosis: null,
