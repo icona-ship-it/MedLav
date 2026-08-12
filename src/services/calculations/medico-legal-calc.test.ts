@@ -289,6 +289,25 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
     expect(hospitalRows(calcs)[0].days).toBe(1);
   });
 
+  it('F-P2: una menzione anamnestica ANNO-only (fabbricata YYYY-01-01) non ancora ITT/ITP', () => {
+    const events = [
+      { event_date: '2020-01-01', event_type: 'visita', title: 'Cervicalgia nel 2020', description: 'in anamnesi', date_precision: 'anno' },
+      { event_date: '2026-03-01', event_type: 'ricovero', title: 'Ricovero' },
+      { event_date: '2026-03-10', event_type: 'ricovero', title: 'Dimissione', description: 'dimissione' },
+    ];
+    const calcs = calculateMedicoLegalPeriods(events);
+    // Nessuna riga deve partire dal 2020 (span gonfiato a ~2260 giorni).
+    for (const c of calcs) {
+      if (c.startDate) expect(c.startDate >= '2026-01-01').toBe(true);
+      if (c.days != null) expect(c.days).toBeLessThan(365);
+    }
+    // Anche il percorso UI/marker (calculateITTITP) ignora l'anno-only.
+    const segments = calculateITTITP(events);
+    for (const s of segments) {
+      if (s.startDate) expect(s.startDate >= '2026-01-01').toBe(true);
+    }
+  });
+
   it('F-P2: stessa degenza da DUE documenti → giorni di ricovero e ITT 100% NON raddoppiati (10, non 20)', () => {
     const dup = [
       makeEvent('2026-02-01', 'ricovero', 'Ricovero (doc A)'),

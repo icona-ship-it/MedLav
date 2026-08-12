@@ -101,6 +101,7 @@ export function calculatePeriodsStep(
     event_type: e.eventType,
     title: e.title,
     description: e.description,
+    date_precision: e.datePrecision, // F-P2: le date anno-only non ancorano ITT/ITP
   }));
   return calculateMedicoLegalPeriods(calcEvents, caseType, incidentDate);
 }

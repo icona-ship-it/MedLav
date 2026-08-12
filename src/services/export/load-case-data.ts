@@ -115,6 +115,7 @@ export async function loadCaseDataForExport(caseId: string) {
       event_type: e.event_type as string,
       title: e.title as string,
       description: e.description as string,
+      date_precision: e.date_precision as string | null | undefined, // F-P2
     })),
     undefined,
     pmForCalc?.dataSinistro,

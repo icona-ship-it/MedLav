@@ -80,6 +80,10 @@ function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null):
         (!NON_CLINICAL_EVENT_TYPES.has(e.event_type) || isClinicalCertificate(e)) &&
         e.event_date !== SENTINEL_EVENT_DATE &&
         ISO_DATE_RE.test(e.event_date) &&
+        // Solo date PRECISE (giorno): una menzione anamnestica anno-only, fabbricata
+        // come YYYY-01-01, non deve ancorare ITT/ITP (produceva "ITP 75%: 2270 gg")
+        // — audit 2026-08-11, F-P2. Stesso filtro del blocco FATTI (e7ec54d).
+        (e.date_precision == null || e.date_precision === 'giorno') &&
         e.event_date <= today &&
         (!incidentIso || e.event_date >= incidentIso),
     )
