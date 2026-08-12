@@ -935,68 +935,57 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
       continue;
     }
 
-    // Image: ![alt](data:mime;base64,...) — can be anywhere on the line
-    const imgMatch = line.match(/!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)/);
-    if (imgMatch) {
-      const alt = imgMatch[1];
-      const mimeType = imgMatch[2];
-      const base64Data = imgMatch[3];
-      // Testo attorno all'immagine INLINE: prima si perdeva tutto (date incluse),
-      // l'HTML invece lo conservava (audit 2026-08-11, H-3). Renderizza i segmenti.
-      const beforeImg = line.slice(0, imgMatch.index ?? 0).trim();
-      const afterImg = line.slice((imgMatch.index ?? 0) + imgMatch[0].length).trim();
-      if (beforeImg) result.push(new Paragraph({ children: parseInlineFormatting(beforeImg) }));
-      try {
-        const imageBuffer = Buffer.from(base64Data, 'base64');
-        const docxImageType = mimeType === 'image/jpeg' || mimeType === 'image/jpg' ? 'jpg' : 'png';
-        // Aspect-ratio reale: niente più 450×350 fisso che stira le RX (#audit DOCX 2026-06-27).
-        const dims = getImageDimensions(imageBuffer, docxImageType);
-        const transformation = dims ? scaleToFit(dims.width, dims.height, 450, 600) : { width: 450, height: 350 };
-        result.push(new Paragraph({
-          children: [
-            new ImageRun({
-              data: imageBuffer,
-              transformation,
-              type: docxImageType,
-            }),
-          ],
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 200, after: 100 },
-        }));
-        if (alt) {
+    // Immagini INLINE (data: base64 o ocr-image: non risolto). Possono essere
+    // PIÙ D'UNA sulla stessa riga: si processano TUTTE in ordine conservando il
+    // testo tra loro (audit 2026-08-11, H-3 + 2° giro avversariale: con 2 immagini
+    // la seconda finiva come base64 letterale, e il testo circostante andava perso).
+    const hasInlineImage = /!\[[^\]]*\]\((?:data:[^;]+;base64,[^)]+|ocr-image:[^)]+)\)/.test(line);
+    if (hasInlineImage) {
+      const imgRe = /!\[([^\]]*)\]\((data:([^;]+);base64,([^)]+)|ocr-image:[^)]+)\)/g;
+      const pushText = (t: string) => {
+        const s = t.trim();
+        if (s) result.push(new Paragraph({ children: parseInlineFormatting(s) }));
+      };
+      let lastEnd = 0;
+      let mImg: RegExpExecArray | null;
+      while ((mImg = imgRe.exec(line)) !== null) {
+        pushText(line.slice(lastEnd, mImg.index));
+        lastEnd = mImg.index + mImg[0].length;
+        const alt = mImg[1];
+        if (mImg[2].startsWith('data:')) {
+          const mimeType = mImg[3];
+          const base64Data = mImg[4];
+          try {
+            const imageBuffer = Buffer.from(base64Data, 'base64');
+            const docxImageType = mimeType === 'image/jpeg' || mimeType === 'image/jpg' ? 'jpg' : 'png';
+            // Aspect-ratio reale: niente più 450×350 fisso che stira le RX (#audit DOCX 2026-06-27).
+            const dims = getImageDimensions(imageBuffer, docxImageType);
+            const transformation = dims ? scaleToFit(dims.width, dims.height, 450, 600) : { width: 450, height: 350 };
+            result.push(new Paragraph({
+              children: [new ImageRun({ data: imageBuffer, transformation, type: docxImageType })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 200, after: 100 },
+            }));
+            if (alt) {
+              result.push(new Paragraph({
+                children: [new TextRun({ text: alt, italics: true, size: 20, color: '555555' })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+              }));
+            }
+          } catch {
+            result.push(new Paragraph({ children: [new TextRun({ text: `[Immagine: ${alt}]`, italics: true, color: '999999' })] }));
+          }
+        } else if (alt) {
+          // ocr-image non risolto → placeholder testuale (mai il percorso interno).
           result.push(new Paragraph({
-            children: [new TextRun({ text: alt, italics: true, size: 20, color: '555555' })],
+            children: [new TextRun({ text: `[${alt}]`, italics: true, size: 20, color: '555555' })],
             alignment: AlignmentType.CENTER,
-            spacing: { after: 200 },
+            spacing: { before: 100, after: 100 },
           }));
         }
-      } catch {
-        // If image parsing fails, add text placeholder
-        result.push(new Paragraph({
-          children: [new TextRun({ text: `[Immagine: ${alt}]`, italics: true, color: '999999' })],
-        }));
       }
-      if (afterImg) result.push(new Paragraph({ children: parseInlineFormatting(afterImg) }));
-      i++;
-      continue;
-    }
-
-    // Unresolved ocr-image: placeholder — show as text note
-    const ocrImgMatch = line.match(/!\[([^\]]*)\]\(ocr-image:[^)]+\)/);
-    if (ocrImgMatch) {
-      const alt = ocrImgMatch[1];
-      // Conserva il testo attorno al riferimento immagine non risolto (H-3).
-      const beforeOcr = line.slice(0, ocrImgMatch.index ?? 0).trim();
-      const afterOcr = line.slice((ocrImgMatch.index ?? 0) + ocrImgMatch[0].length).trim();
-      if (beforeOcr) result.push(new Paragraph({ children: parseInlineFormatting(beforeOcr) }));
-      if (alt) {
-        result.push(new Paragraph({
-          children: [new TextRun({ text: `[${alt}]`, italics: true, size: 20, color: '555555' })],
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 100, after: 100 },
-        }));
-      }
-      if (afterOcr) result.push(new Paragraph({ children: parseInlineFormatting(afterOcr) }));
+      pushText(line.slice(lastEnd));
       i++;
       continue;
     }
