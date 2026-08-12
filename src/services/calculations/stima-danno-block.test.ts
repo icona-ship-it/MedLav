@@ -76,6 +76,18 @@ describe('formatStimaDannoBlock', () => {
     expect(out).toContain('Balthazard');
   });
 
+  it('un intervento PROGRAMMATO con data futura non gonfia la stima né innesca Balthazard (F-P2)', () => {
+    const events: DeterministicTableEvent[] = [
+      ev({ event_date: '2025-03-10', event_type: 'ricovero', title: 'Ricovero' }),
+      ev({ event_date: '2025-03-11', event_type: 'intervento', title: 'Osteosintesi' }),
+      ev({ event_date: '2027-03-01', event_type: 'intervento', title: 'Rimozione mezzi di sintesi (programmata)' }),
+    ];
+    // today = 2026-01-01: il 2° intervento è FUTURO → un solo intervento conta.
+    const out = formatStimaDannoBlock(events, 'ortopedica', '2026-01-01', '2025-03-01');
+    expect(out).not.toContain('Balthazard'); // serve >1 intervento REALE
+    expect(out).not.toContain('2027');
+  });
+
   it('includes the table-routing note derived from the earliest dated event (Cass. 8630/2026)', () => {
     const out = formatStimaDannoBlock(ORTOPEDICA_EVENTS, 'ortopedica');
     // 2025-03-10 ≥ TUN effective date 2025-03-05 → direct application

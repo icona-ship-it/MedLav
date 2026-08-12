@@ -21,6 +21,12 @@ import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { estimateBiologicalDamage } from './damage-estimator';
 import type { DeterministicTableEvent } from './deterministic-tables';
 
+/** Data odierna nel fuso Roma (YYYY-MM-DD). Locale per evitare un import
+ * circolare con medico-legal-calc; stessa formula. */
+function todayRomeIso(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+}
+
 /** Stable prefix of the parameterized marker (cheap `includes` detection). */
 export const STIMA_DANNO_MARKER_PREFIX = '<!--MEDLAV:STIMA_DANNO';
 
@@ -86,9 +92,18 @@ export function formatStimaDannoBlock(
   // alza il range o innesca la nota Balthazard). Stesso filtro dei calcoli
   // deterministici (calculateMedicoLegalPeriods): un solo numero per fatto.
   const incidentIso = incidentDate ? normalizeItalianDateToIso(incidentDate) : null;
+  // 'today' risolto internamente: il caller di produzione passa todayIso=undefined
+  // (expandStimaDannoMarkers), quindi affidarsi al param renderebbe il filtro
+  // futuro INERTE in prod — trovato dal giro avversariale 2026-08-11.
+  const today = todayIso ?? todayRomeIso();
   const clinical = events
     .filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))
-    .filter((e) => !incidentIso || !ISO_DATE_RE.test(e.event_date) || e.event_date >= incidentIso);
+    .filter((e) => !incidentIso || !ISO_DATE_RE.test(e.event_date) || e.event_date >= incidentIso)
+    // Eventi FUTURI (es. intervento PROGRAMMATO) non entrano nella stima danno:
+    // gonfiavano il range e innescavano la nota Balthazard, in disaccordo col
+    // percorso calcoli che li filtra (audit 2026-08-11, F-P2 — fix d23db68 non
+    // propagato qui).
+    .filter((e) => !ISO_DATE_RE.test(e.event_date) || e.event_date <= today);
   const calcEvents = clinical.map((e) => ({
     event_date: e.event_date,
     event_type: e.event_type,
@@ -100,7 +115,7 @@ export function formatStimaDannoBlock(
     calcEvents,
     caseType as CaseType,
     incidentIso ?? earliestValidDate(calcEvents),
-    todayIso,
+    today,
   );
   if (!estimate.estimatedRange || estimate.midpointPercentage === null || !estimate.lookupResult) {
     return '';
