@@ -39,9 +39,14 @@ export function ReportDialog({
 
   // Sync content when dialog opens + check for draft recovery
   const [prevOpen, setPrevOpen] = useState(false);
+  // Versione FOTOGRAFATA all'apertura (I-1): il salvataggio la confronta con la
+  // versione max lato server. Non si usa report.version LIVE, che il polling può
+  // aver già portato a N+1 dopo una regen — la snapshot resta quella di partenza.
+  const [openedVersion, setOpenedVersion] = useState<number | null>(null);
   if (open && !prevOpen) {
     const dbContent = report?.synthesis ?? '';
     setEditedSynthesis(dbContent);
+    setOpenedVersion(report?.version ?? null);
 
     // Check for draft newer than DB
     const draft = getDraft(caseId);
@@ -117,6 +122,12 @@ export function ReportDialog({
         caseId,
         reportId: report.id,
         synthesis: editedSynthesis,
+        // Lock cross-versione (I-1): la versione FOTOGRAFATA all'apertura, non
+        // quella live (che il polling può aver già bumpato). Se una regen ha
+        // creato una versione più nuova mentre l'editor era aperto, il salvataggio
+        // viene rifiutato invece di revertire in silenzio la correzione AA. La
+        // bozza NON viene cancellata.
+        expectedVersion: openedVersion ?? undefined,
       });
       if (result.error) {
         toast.error(result.error);
@@ -130,7 +141,7 @@ export function ReportDialog({
       onSaved();
       router.refresh();
     });
-  }, [caseId, report, editedSynthesis, router, onOpenChange, onSaved]);
+  }, [caseId, report, editedSynthesis, openedVersion, router, onOpenChange, onSaved]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

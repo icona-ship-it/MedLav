@@ -95,6 +95,11 @@ export async function updateReportSynthesis(params: {
   caseId: string;
   reportId: string;
   synthesis: string;
+  /** Versione del report su cui l'editor è stato aperto. Se nel frattempo una
+   * rigenerazione asincrona ha creato una versione più nuova, il salvataggio
+   * viene RIFIUTATO invece di atterrare su una versione superata / revertire la
+   * correzione AA appena pagata (audit 2026-08-11, I-1). */
+  expectedVersion?: number;
 }) {
   const supabase = await createClient();
 
@@ -109,6 +114,22 @@ export async function updateReportSynthesis(params: {
     .single();
 
   if (!caseData) return { error: 'Caso non trovato' };
+
+  // Lock ottimistico cross-versione: confronta con la versione MASSIMA del caso,
+  // non con la riga per id (una regen inserisce una riga NUOVA che il lock
+  // intra-riga non vedrebbe mai).
+  if (params.expectedVersion !== undefined) {
+    const { data: latest } = await supabase
+      .from('reports')
+      .select('version')
+      .eq('case_id', params.caseId)
+      .order('version', { ascending: false })
+      .limit(1);
+    const maxVersion = latest?.[0]?.version as number | undefined;
+    if (maxVersion !== undefined && maxVersion > params.expectedVersion) {
+      return { error: 'Il report è cambiato (una rigenerazione è stata completata nel frattempo). Ricarica la pagina prima di salvare le modifiche.', stale: true };
+    }
+  }
 
   // Diff bozza→firmato sull'intero report (baseline: originalSynthesis, se presente).
   const { data: currentReport } = await supabase

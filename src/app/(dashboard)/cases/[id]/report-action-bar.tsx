@@ -273,8 +273,10 @@ export function ReportActionBar({
               <span className="hidden sm:inline-block w-px h-5 bg-border mx-0.5" aria-hidden />
             )}
 
-            {/* Modifica — azione secondaria, ghost */}
-            <Button variant="ghost" size="sm" onClick={onEdit}>
+            {/* Modifica — azione secondaria, ghost. Disabilitata durante la
+                rigenerazione: aprire l'editor mentre una regen crea una nuova
+                versione porta a salvare su una versione superata (I-1). */}
+            <Button variant="ghost" size="sm" onClick={onEdit} disabled={isRegenerating} title={isRegenerating ? 'Attendi il termine della rigenerazione' : undefined}>
               <Pencil className="mr-1 h-3.5 w-3.5" />
               <span className="hidden md:inline">Modifica</span>
             </Button>
