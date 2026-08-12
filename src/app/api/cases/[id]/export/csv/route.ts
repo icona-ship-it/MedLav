@@ -4,6 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateCsvExport } from '@/services/export/csv-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
+import { validateAnonymizedExport } from '@/services/export/docx-export';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -44,6 +45,18 @@ export async function GET(
 
     const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
     const exportType = request.nextUrl.searchParams.get('type') ?? 'events';
+
+    // Guardia anonimizzazione (audit 2026-08-11, E-P2): senza il nome paziente su
+    // cui ancorare la redazione, un "-anonimizzato.csv" è una promessa inaffidabile
+    // (i cognomi solo-OCR sfuggirebbero). Stessa guardia di DOCX/HTML, prima del
+    // log così un export bloccato non risulta "esportato".
+    const anonymizeError = validateAnonymizedExport(
+      data.periziaMetadata as { patientFullName?: string | null } | null,
+      shouldAnonymize,
+    );
+    if (anonymizeError) {
+      return NextResponse.json({ success: false, error: anonymizeError }, { status: 400 });
+    }
 
     logAccess({
       userId: user.id,

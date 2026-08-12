@@ -91,6 +91,17 @@ export async function GET(
       const shouldAnonymizeTimeline = request.nextUrl.searchParams.get('anonymize') === 'true';
       const isInlineTimeline = request.nextUrl.searchParams.get('inline') === 'true';
 
+      // Guardia (audit 2026-08-11, E-P2): prima la cronistoria "anonimizzata"
+      // sostituiva solo le iniziali e registrava anonymized=true senza redigere
+      // davvero il testo degli eventi. Stessa guardia degli altri export.
+      const timelineAnonError = validateAnonymizedExport(
+        data.periziaMetadata as { patientFullName?: string | null } | null,
+        shouldAnonymizeTimeline,
+      );
+      if (timelineAnonError) {
+        return NextResponse.json({ success: false, error: timelineAnonError }, { status: 400 });
+      }
+
       logAccess({
         userId: user.id,
         action: 'report.exported',
@@ -125,14 +136,23 @@ export async function GET(
         documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
       });
 
+      // Passaggio di anonimizzazione REALE su tutto il documento (come l'export
+      // HTML principale): redige nomi/date/indirizzi anche nel testo degli eventi.
+      let finalTimeline = timelineHtml;
+      if (shouldAnonymizeTimeline) {
+        const pmTimeline = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+        finalTimeline = anonymizeText({ text: timelineHtml, periziaMetadata: pmTimeline }).anonymizedText;
+      }
+
       const timelineHeaders: Record<string, string> = {
         'Content-Type': 'text/html; charset=utf-8',
       };
       if (!isInlineTimeline) {
-        timelineHeaders['Content-Disposition'] = `attachment; filename="cronistoria-${data.caseData.code}.html"`;
+        const timelineSuffix = shouldAnonymizeTimeline ? '-anonimizzato' : '';
+        timelineHeaders['Content-Disposition'] = `attachment; filename="cronistoria-${data.caseData.code}${timelineSuffix}.html"`;
       }
 
-      return new NextResponse(timelineHtml, { headers: timelineHeaders });
+      return new NextResponse(finalTimeline, { headers: timelineHeaders });
     }
 
     const shouldAnonymize = request.nextUrl.searchParams.get('anonymize') === 'true';
