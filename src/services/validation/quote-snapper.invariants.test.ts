@@ -60,6 +60,31 @@ describe('INVARIANTE B-1 — negazioni, lateralità e severità non cambiano in 
     expect(res.outcome).toBe('unmatched');
   });
 
+  it('polarità iper/ipo con stem eliso: "ipossia" non si aggancia a "iperossia"', () => {
+    const corpus = buildSnapCorpus(
+      'All emogasanalisi eseguita in reparto si documenta iperossia relativa transitoria.',
+    );
+    const res = snapQuoteToSource(
+      'All emogasanalisi eseguita in reparto si documenta ipossia relativa transitoria.',
+      corpus,
+    );
+    expect(res.outcome).toBe('unmatched');
+  });
+
+  it('antonimi clinici: "abduzione" non si aggancia a "adduzione", "inversione" non a "eversione"', () => {
+    const c1 = buildSnapCorpus('Si rileva marcata limitazione della adduzione della spalla destra.');
+    expect(snapQuoteToSource('Si rileva marcata limitazione della abduzione della spalla destra.', c1).outcome).toBe('unmatched');
+    const c2 = buildSnapCorpus('Al test clinico si osserva dolore in eversione della caviglia sinistra.');
+    expect(snapQuoteToSource('Al test clinico si osserva dolore in inversione della caviglia sinistra.', c2).outcome).toBe('unmatched');
+  });
+
+  it('non over-blocca un refuso legittimo su parola iper/ipo (trasposizione)', () => {
+    const corpus = buildSnapCorpus('Il paziente presenta ipertensione arteriosa in trattamento farmacologico.');
+    const res = snapQuoteToSource('Il paziente presenta ipretensione arteriosa in trattamento farmacologico.', corpus);
+    expect(res.outcome).toBe('snapped');
+    expect(res.sourceText).toContain('ipertensione');
+  });
+
   it('severità per prefisso privativo: "composta" non si aggancia a "scomposta"', () => {
     const corpus = buildSnapCorpus(
       'Si apprezza frattura scomposta del terzo medio della clavicola con indicazione chirurgica.',

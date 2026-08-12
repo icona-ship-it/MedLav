@@ -102,7 +102,28 @@ function polarityStem(word: string): { high: boolean; stem: string } | null {
 function isClinicalPolarityFlip(a: string, b: string): boolean {
   const pa = polarityStem(a);
   const pb = polarityStem(b);
-  return pa != null && pb != null && pa.high !== pb.high && pa.stem === pb.stem;
+  if (pa == null || pb == null || pa.high === pb.high) return false;
+  // Stem TOLLERANTE (2° giro avversariale): "ipo+ssia" vs "iper+ossia" hanno stem
+  // diverso per elisione al confine del prefisso, ma sono opposti clinici
+  // (ipossia/iperossia). Con prefissi opposti + stem a distanza ≤1 → inversione.
+  return boundedEditDistance(pa.stem, pb.stem, 1) <= 1;
+}
+
+/** Antonimi clinici NON iper/ipo che il fuzzy-match a bassa edit-distance
+ * confonderebbe invertendo il significato (movimenti/direzioni opposte). Le coppie
+ * ad alta edit-distance (prossimale/distale) non fuzzy-matchano e non servono qui.
+ * Trovate dal 2° giro avversariale 2026-08-11. Forma normalizzata (normalizeWord). */
+const CLINICAL_ANTONYMS: ReadonlyArray<readonly [string, string]> = [
+  ['abduzione', 'adduzione'], ['abdotto', 'addotto'], ['abdotta', 'addotta'], ['abduce', 'adduce'],
+  ['inversione', 'eversione'], ['inverso', 'everso'], ['intrarotazione', 'extrarotazione'],
+];
+function isClinicalAntonym(a: string, b: string): boolean {
+  return CLINICAL_ANTONYMS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
+}
+
+/** true se `a` e `b` sono opposti clinici che NON vanno mai fuzzy-matchati. */
+function isClinicalOpposite(a: string, b: string): boolean {
+  return isPrivativePair(a, b) || isClinicalPolarityFlip(a, b) || isClinicalAntonym(a, b);
 }
 
 /** Firma di un token numerico che CONSERVA i separatori TRA cifre: "2,5" ≠ "25",
@@ -161,7 +182,7 @@ function preservesLoadBearingTokens(quoteRawWords: string[], spanRawWords: strin
   for (const qw of q.norms) {
     if (s.norms.has(qw)) continue;
     for (const sw of s.norms) {
-      if (isPrivativePair(qw, sw) || isClinicalPolarityFlip(qw, sw)) return false;
+      if (isClinicalOpposite(qw, sw)) return false;
     }
   }
   return true;
@@ -218,7 +239,7 @@ function boundedEditDistance(a: string, b: string, maxDist: number): number {
  */
 function wordsMatch(a: string, b: string): boolean {
   if (a === b) return true;
-  if (isPrivativePair(a, b) || isClinicalPolarityFlip(a, b)) return false;
+  if (isClinicalOpposite(a, b)) return false;
   const minLen = Math.min(a.length, b.length);
   if (minLen >= 9) return boundedEditDistance(a, b, 2) <= 2;
   if (minLen >= 5) return boundedEditDistance(a, b, 1) <= 1;
