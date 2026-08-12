@@ -47,6 +47,15 @@ describe('anonymizeEventsForExport — redige il testo, preserva i campi struttu
     expect(out.facility).toBe('[STRUTTURA]');
   });
 
+  it('redige anche expert_notes (nota libera del perito) — leak trovato dal 2° giro', () => {
+    const [out] = anonymizeEventsForExport(
+      [{ event_date: '2026-03-15', expert_notes: 'Il sig. Demprova Testina riferisce dolore al risveglio.' }],
+      PM,
+    );
+    expect(String(out.expert_notes)).not.toContain('Demprova');
+    expect(String(out.expert_notes)).not.toContain('Testina');
+  });
+
   it('redige anche un nome medico NUDO (senza titolo, che l\'anonimizzatore-prosa non cattura)', () => {
     const [out] = anonymizeEventsForExport(
       [{ event_date: '2026-03-15', doctor: 'Carlo Demprovetti', facility: 'Ospedale di Cittàdemo' }],

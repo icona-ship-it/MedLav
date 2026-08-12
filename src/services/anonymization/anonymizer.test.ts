@@ -214,6 +214,20 @@ describe('anonymizer', () => {
       const result = anonymizeText({ text: 'Percorrendo la strada facendo attenzione al traffico.' });
       expect(result.anonymizedText).toContain('strada facendo');
     });
+
+    it('NON redige parole cliniche che CONTENGONO "corso" (soccorso/percorso/decorso) — regressione 2° giro', () => {
+      const text = 'Accesso al Pronto Soccorso Ospedaliero; percorso Diagnostico Terapeutico; decorso Post-operatorio regolare; intervento in corso di Valutazione.';
+      const result = anonymizeText({ text });
+      expect(result.anonymizedText).toContain('Pronto Soccorso Ospedaliero');
+      expect(result.anonymizedText).toContain('percorso Diagnostico');
+      expect(result.anonymizedText).toContain('decorso Post-operatorio');
+      expect(result.anonymizedText).toContain('in corso di Valutazione');
+    });
+
+    it('redige comunque un vero indirizzo con "Corso" maiuscolo', () => {
+      const result = anonymizeText({ text: 'Residente in Corso Italia 5, Cittàdemo.' });
+      expect(result.anonymizedText).not.toContain('Corso Italia 5');
+    });
   });
 
   describe('nomi solo-OCR (fix beta 2026-07-20)', () => {

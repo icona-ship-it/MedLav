@@ -94,7 +94,11 @@ const DATE_TEXT_REGEX = new RegExp(
  * "corso della Libert\u00E0"): fix audit 2026-08-11 (E-1, l'indirizzo del periziando
  * trapelava perch\u00E9 "via" minuscolo + "degli" non erano coperti).
  */
-const ADDRESS_REGEX = /(?:[Vv]ia|[Vv]iale|[Pp]iazza|[Cc]orso|[Ll]argo|[Vv]icolo|[Pp]iazzale|[Pp]iazzetta|[Ss]trada|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
+// `\b` iniziale (2\u00B0 giro avversariale 2026-08-11): senza, il tipo-via minuscolo
+// combaciava come SOTTOSTRINGA dentro parole cliniche (soc-CORSO, per-CORSO,
+// de-CORSO) redigendo prosa clinica come indirizzo. "Corso" resta SOLO-maiuscolo:
+// il "corso" minuscolo in clinica \u00E8 quasi sempre "durante/decorso", non una via.
+const ADDRESS_REGEX = /\b(?:[Vv]ia|[Vv]iale|[Pp]iazza|Corso|[Ll]argo|[Vv]icolo|[Pp]iazzale|[Pp]iazzetta|[Ss]trada|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
 
 /**
  * Names preceded by context words (without professional titles).
