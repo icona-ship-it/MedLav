@@ -102,7 +102,12 @@ const DATE_TEXT_REGEX = new RegExp(
 // (leak Art.9 riaperto dalla versione solo-maiuscolo). La disambiguazione con
 // "in corso di valutazione" la fa il nome MAIUSCOLO richiesto subito dopo: una
 // via reale \u00E8 capitalizzata, "corso di valutazione" (minuscolo) non matcha.
-const ADDRESS_REGEX = /\b(?:[Vv]ia|[Vv]iale|[Pp]iazza|[Cc]orso|[Ll]argo|[Vv]icolo|[Pp]iazzale|[Pp]iazzetta|[Ss]trada|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
+const ADDRESS_REGEX = /\b(?:[Vv]ia|[Vv]iale|V\.le|[Pp]iazz(?:a|ale|etta)|P\.?zza|[Cc]orso|C\.so|[Ll]argo|[Vv]icolo|[Vv]ico|[Bb]orgo|[Ss]alita|[Tt]raversa|[Ss]trada|[Ll]ocalit\u00E0|[Ff]razione|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
+
+/** Indirizzi in MAIUSCOLO (anagrafiche di intestazione): richiede il numero
+ * civico per NON scambiare termini clinici tutti-maiuscoli (es. "VIA AEREA")
+ * per un indirizzo. Copre "VIA ROMA 12", "CORSO ITALIA 5" (3\u00B0 giro avversariale). */
+const ADDRESS_CAPS_REGEX = /\b(?:VIA|VIALE|V\.LE|PIAZZ(?:A|ALE|ETTA)|P\.?ZZA|CORSO|C\.SO|LARGO|VICOLO|VICO|BORGO|SALITA|TRAVERSA|STRADA|LOCALIT\u00C0|FRAZIONE|LUNGOTEVERE|LUNGOMARE)\s+(?:(?:DEGLI|DELLA|DELLO|DEI|DELLE|DEL|DI|DA|LO|LA|LE)\s+)*[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+)*\s*,?\s*(?:N\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?/g;
 
 /**
  * Names preceded by context words (without professional titles).
@@ -299,6 +304,7 @@ export function detectPii(params: {
 
   // 8. Addresses
   collectRegexMatches(text, ADDRESS_REGEX, 'indirizzo', tracker, matches);
+  collectRegexMatches(text, ADDRESS_CAPS_REGEX, 'indirizzo', tracker, matches);
 
   // 9. Hospital / facility names
   collectRegexMatches(text, HOSPITAL_REGEX, 'struttura', tracker, matches);

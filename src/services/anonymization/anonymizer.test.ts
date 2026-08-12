@@ -231,6 +231,25 @@ describe('anonymizer', () => {
       const upper = anonymizeText({ text: 'Residente in Corso Italia 5, Cittàdemo.' });
       expect(upper.anonymizedText).not.toContain('Corso Italia 5');
     });
+
+    it('redige un indirizzo tutto MAIUSCOLO con numero civico (anagrafica di intestazione) — 3° giro', () => {
+      for (const addr of ['VIA ROMA 12', 'CORSO ITALIA 5', 'PIAZZA GARIBALDI 3']) {
+        const r = anonymizeText({ text: `Residenza: ${addr}, Cittàdemo.` });
+        expect(r.anonymizedText).not.toContain(addr);
+      }
+    });
+
+    it('NON scambia un termine clinico tutto-maiuscolo per indirizzo (VIA AEREA senza numero)', () => {
+      const r = anonymizeText({ text: 'Gestione della VIA AEREA difficile in sala operatoria.' });
+      expect(r.anonymizedText).toContain('VIA AEREA');
+    });
+
+    it('copre abbreviazioni e nuovi tipi di via (C.so, P.zza, Vico, Borgo, Salita)', () => {
+      for (const addr of ['C.so Italia 5', 'P.zza Garibaldi 3', 'Vico Storto 4', 'Borgo Pinti 20', 'Salita San Rocco 2']) {
+        const r = anonymizeText({ text: `Domicilio in ${addr}.` });
+        expect(r.anonymizedText).not.toContain(addr);
+      }
+    });
   });
 
   describe('nomi solo-OCR (fix beta 2026-07-20)', () => {
