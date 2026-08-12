@@ -941,6 +941,11 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
       const alt = imgMatch[1];
       const mimeType = imgMatch[2];
       const base64Data = imgMatch[3];
+      // Testo attorno all'immagine INLINE: prima si perdeva tutto (date incluse),
+      // l'HTML invece lo conservava (audit 2026-08-11, H-3). Renderizza i segmenti.
+      const beforeImg = line.slice(0, imgMatch.index ?? 0).trim();
+      const afterImg = line.slice((imgMatch.index ?? 0) + imgMatch[0].length).trim();
+      if (beforeImg) result.push(new Paragraph({ children: parseInlineFormatting(beforeImg) }));
       try {
         const imageBuffer = Buffer.from(base64Data, 'base64');
         const docxImageType = mimeType === 'image/jpeg' || mimeType === 'image/jpg' ? 'jpg' : 'png';
@@ -971,6 +976,7 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
           children: [new TextRun({ text: `[Immagine: ${alt}]`, italics: true, color: '999999' })],
         }));
       }
+      if (afterImg) result.push(new Paragraph({ children: parseInlineFormatting(afterImg) }));
       i++;
       continue;
     }
@@ -979,6 +985,10 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
     const ocrImgMatch = line.match(/!\[([^\]]*)\]\(ocr-image:[^)]+\)/);
     if (ocrImgMatch) {
       const alt = ocrImgMatch[1];
+      // Conserva il testo attorno al riferimento immagine non risolto (H-3).
+      const beforeOcr = line.slice(0, ocrImgMatch.index ?? 0).trim();
+      const afterOcr = line.slice((ocrImgMatch.index ?? 0) + ocrImgMatch[0].length).trim();
+      if (beforeOcr) result.push(new Paragraph({ children: parseInlineFormatting(beforeOcr) }));
       if (alt) {
         result.push(new Paragraph({
           children: [new TextRun({ text: `[${alt}]`, italics: true, size: 20, color: '555555' })],
@@ -986,6 +996,7 @@ export function markdownToDocxParagraphs(content: string): (Paragraph | Table)[]
           spacing: { before: 100, after: 100 },
         }));
       }
+      if (afterOcr) result.push(new Paragraph({ children: parseInlineFormatting(afterOcr) }));
       i++;
       continue;
     }
