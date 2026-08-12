@@ -96,6 +96,10 @@ const MIN_STRAIGHT_QUOTE_LEN = 12;
 
 // Guillemet quote, non-greedy, no nested guillemets, bounded length.
 const GUILLEMET_QUOTE = /«([^«»]{1,2000})»/g;
+// Ellissi interne = omissioni volute (stessa convenzione dello snapper): una
+// citazione «A … B» va valutata per frammento, non come inner unico (il '…' non
+// matcha mai l'OCR). Audit 2026-08-11, B-P2 (alert-fatigue sulle citazioni fedeli).
+const ELLIPSIS_SPLIT = /\s*(?:\.\.\.|…)\s*/;
 // Straight / curly double-quoted spans (single line, bounded length).
 const STRAIGHT_DOUBLE_QUOTE_INLINE = /"([^"\n]{4,2000})"/g;
 const CURLY_DOUBLE_QUOTE_INLINE = /“([^”\n]{4,2000})”/g;
@@ -125,8 +129,18 @@ function annotateUngroundedQuotes(
   return text.replace(re, (match: string, inner: string, offset: number, full: string) => {
     const quote = inner.trim();
     if (quote.length < minLen) return match;
-    const level = groundCitation(quote, fullOcrText);
-    const grounded = level === 'exact' || level === 'normalized';
+    // Con ellissi interne si valuta OGNI frammento: la citazione è fondata se
+    // TUTTI i frammenti lo sono. Un frammento sotto minLen è troppo corto per un
+    // giudizio (stessa policy delle citazioni corte) → non blocca.
+    const fragments = quote.split(ELLIPSIS_SPLIT).map((f) => f.trim()).filter((f) => f.length > 0);
+    const isFragmentGrounded = (f: string): boolean => {
+      if (f.length < minLen) return true;
+      const l = groundCitation(f, fullOcrText);
+      return l === 'exact' || l === 'normalized';
+    };
+    const grounded = fragments.length > 1
+      ? fragments.every(isFragmentGrounded)
+      : (() => { const l = groundCitation(quote, fullOcrText); return l === 'exact' || l === 'normalized'; })();
     verifications.push({ quote, grounded });
     if (grounded) return match;
     // Idempotency: do not append a second marker if one already follows.

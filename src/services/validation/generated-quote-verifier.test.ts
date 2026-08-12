@@ -28,6 +28,21 @@ describe('verifyGeneratedQuotes', () => {
     expect(res.annotatedMarkdown).toBe(md); // no spurious "da verificare"
   });
 
+  it('ellissi «A … B»: fondata se OGNI frammento è esatto (niente alert-fatigue) — B-P2', () => {
+    const md = 'Il referto: «frattura composta del radio distale destro … immobilizzazione in gesso per 30 giorni».';
+    const res = verifyGeneratedQuotes(md, OCR);
+    expect(res.groundedCount).toBe(1);
+    expect(res.ungroundedCount).toBe(0);
+    expect(res.annotatedMarkdown).not.toContain('da verificare');
+  });
+
+  it('ellissi «A … B»: FLAGGATA se un frammento è fabbricato', () => {
+    const md = 'Il referto: «frattura composta del radio distale destro … lesione meniscale del ginocchio sinistro».';
+    const res = verifyGeneratedQuotes(md, OCR);
+    expect(res.ungroundedCount).toBe(1);
+    expect(res.annotatedMarkdown).toContain('da verificare');
+  });
+
   it('should FLAG a single-token clinical flip that LCS≥0.80 would falsely ground', () => {
     // composta → scomposta: opposite clinical meaning, but only 1 of 6 words
     // differs → LCS ratio ~0.83 would pass the lenient grounding. The strict
