@@ -514,6 +514,15 @@ export const regenerateReport = inngest.createFunction(
         contextSummary: combineResult.contextSummary,
         wordCount: combineResult.wordCount,
         usage: promptTokens > 0 ? { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } : undefined,
+        // Fedeltà citazioni (audit 2026-08-11, J-1): le «...» senza riscontro
+        // raccolte per finestra DEVONO risalire sulla sezione combinata, come in
+        // process-case.ts. Senza, il warning "quote-verification" della
+        // rigenerazione perdeva TUTTE le citazioni della doc-sanitaria batched (la
+        // sezione più ricca di virgolettate) e il finalize, ricalcolandolo a vuoto,
+        // CANCELLAVA anche il warning legittimo del primo run → pannello pulito su
+        // un report che non lo è. Era il bug del RE-RUN di un caso voluminoso.
+        ...(ungroundedQuotesAll.length > 0 ? { ungroundedQuotes: ungroundedQuotesAll.slice(0, 24) } : {}),
+        ...(quotesSnappedAll > 0 ? { quotesSnapped: quotesSnappedAll } : {}),
       };
     };
 
