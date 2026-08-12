@@ -91,6 +91,12 @@ describe('isRetriableExtractionError — mai perdere un fatto', () => {
     expect(isRetriableExtractionError('some unexpected non-integrity validation message')).toBe(false);
   });
 
+  it('rilancia 500/504 e il circuit-breaker OPEN (audit 2026-08-11, G-1)', () => {
+    expect(isRetriableExtractionError('Mistral API error: HTTP 500 Internal Server Error')).toBe(true);
+    expect(isRetriableExtractionError('HTTP 504 Gateway Timeout')).toBe(true);
+    expect(isRetriableExtractionError('[circuit-breaker] Circuit OPEN — too many failures')).toBe(true);
+  });
+
   it('rilancia i codici di rete che NON contengono la parola "timeout"', () => {
     // 'etimedout' ≠ 'timeout' ('timedout' manca la "e"): prima venivano ingoiati.
     expect(isRetriableExtractionError('connect ETIMEDOUT 1.2.3.4:443')).toBe(true);

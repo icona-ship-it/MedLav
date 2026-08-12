@@ -28,8 +28,12 @@ export function isRetriableExtractionError(message: string): boolean {
   // Transitori di rete. NB: 'etimedout'/'econnrefused'/'epipe' NON contengono
   // 'timeout' ('timedout' ≠ 'timeout') → vanno elencati a parte, altrimenti un
   // timeout di connessione verrebbe ingoiato come {count:0}.
-  const isTransient = ['timeout', 'fetch failed', 'econnreset', 'econnrefused', 'etimedout', 'epipe', 'socket hang up', 'enotfound'].some((t) => lower.includes(t))
-    || /\b(502|503|429)\b/.test(message);
+  // 500/504 e circuit-breaker OPEN sono transitori (outage Mistral): vanno
+  // RITENTATI, non ingoiati come {count:0} (audit 2026-08-11, G-1: un 500/504 o il
+  // circuito aperto facevano sparire il chunk — e i suoi eventi clinici — senza
+  // alcun segnale, con il documento marcato "completato").
+  const isTransient = ['timeout', 'fetch failed', 'econnreset', 'econnrefused', 'etimedout', 'epipe', 'socket hang up', 'enotfound', 'circuit'].some((t) => lower.includes(t))
+    || /\b(500|502|503|504|429)\b/.test(message);
   // Errori di INTEGRITÀ (perdita reale di eventi). Confini di parola su 'stalled' e
   // 'insert failed' per non matchare per sbaglio 'installed' / 'reinsert' (innocuo
   // oggi, ma il substring-match nudo è fragile).
@@ -631,6 +635,18 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     if (isRetriableExtractionError(message)) {
       throw error;
     }
+
+    // Errore NON-retriable e non d'integrità: il chunk non produce eventi. Prima
+    // spariva in silenzio ({count:0}, nessuna traccia) e il documento risultava
+    // "completato" — gli eventi clinici di quel chunk mancavano dalla perizia
+    // senza alcun segnale (audit 2026-08-11, G-1). Ora resta almeno nel registro
+    // diagnostica, così il residuo è VISIBILE al founder.
+    await recordDiagnostic({
+      caseId,
+      step: 'extraction',
+      code: classifyPipelineError(message),
+      detail: { chunkIndex, pageRange: `${range.start}-${range.end}`, dropped: true, error: sanitizeErrorForDetail(message) },
+    });
 
     return { count: 0, truncationWarning: undefined, usage: llmUsage };
   }
