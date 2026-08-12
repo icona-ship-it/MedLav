@@ -67,7 +67,7 @@ describe('assembleSectionBlock — heading assembly', () => {
   });
 
   it('intestazione stragiudiziale: PRESERVA il titolo benchmark, non lo riscrive', () => {
-    const content = '## VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE\n\n**Lavini dott. Franco**';
+    const content = '## VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE\n\n**Demprova dott. Mario**';
     const out = assembleSectionBlock('intestazione_stragiudiziale', 'Intestazione', content);
     expect(out).toContain('## VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE');
     expect(out).not.toContain('## Intestazione'); // NON sostituito con il titolo generico
