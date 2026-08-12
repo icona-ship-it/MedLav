@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // rc-mvp: codice parcheggiato dal prune RC-only (vedi legacy/README.md)
     "legacy/**",
+    // Dir di lavoro temporanea (gitignored): script usa-e-getta, non codice di
+    // produzione — coerente con l'esclusione in tsconfig.json.
+    "scratchpad/**",
   ]),
 ]);
 
