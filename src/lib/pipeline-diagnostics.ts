@@ -38,7 +38,7 @@ export type DiagnosticCode =
 export function classifyPipelineError(message: string): DiagnosticCode {
   const lower = message.toLowerCase();
   if (/\b(429|rate.?limit|too many requests)\b/.test(lower)) return 'rate_limited';
-  if (['timeout', 'etimedout', 'econnreset', 'econnrefused', 'epipe', 'socket hang up', 'enotfound', 'fetch failed'].some((t) => lower.includes(t)) || /\b(502|503)\b/.test(lower)) return 'timeout';
+  if (['timeout', 'etimedout', 'econnreset', 'econnrefused', 'epipe', 'socket hang up', 'enotfound', 'fetch failed', 'circuit'].some((t) => lower.includes(t)) || /\b(500|502|503|504)\b/.test(lower)) return 'timeout';
   if (lower.includes('truncation detected') || lower.includes('finishreason=length')) return 'truncated';
   if (/\binsert failed\b/.test(lower)) return 'insert_failed';
   if (lower.includes('pages not found')) return 'pages_missing';

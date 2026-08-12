@@ -97,7 +97,7 @@ export const stuckCaseMonitor = inngest.createFunction(
           } catch (cancelErr) {
             logger.warn('stuck-monitor', `Invio cancel al run bloccato fallito: ${cancelErr instanceof Error ? cancelErr.message : 'unknown'}`);
           }
-          await supabase
+          const { data: flippedRows } = await supabase
             .from('cases')
             .update({
               processing_stage: 'errore',
@@ -108,7 +108,13 @@ export const stuckCaseMonitor = inngest.createFunction(
               },
             })
             .eq('id', row.id)
-            .in('processing_stage', ACTIVE_STAGES);
+            .in('processing_stage', ACTIVE_STAGES)
+            .select('id');
+          // CAS: se il flip non ha colpito righe, un ALTRO attore (annullo utente,
+          // finalize, o un tick precedente) ha già gestito il caso → NON rimborsare
+          // di nuovo (chiude il doppio rimborso concorrente cancel↔monitor: solo un
+          // CAS vince il flip da uno stage attivo). 2° giro avversariale 2026-08-11.
+          const autoFailTookEffect = (flippedRows?.length ?? 0) > 0;
           // Marca i documenti ancora "in lavorazione" come errore così l'UI è coerente.
           await supabase
             .from('documents')
@@ -118,7 +124,9 @@ export const stuckCaseMonitor = inngest.createFunction(
           // (3) RIMBORSO idempotente (audit: prima l'auto-fail lasciava l'addebito
           // senza consegna) + (4) email di cortesia come fa onFailure.
           let refunded = 0;
-          try {
+          // Solo se QUESTO tick ha vinto il flip di stage (CAS sopra): altrimenti
+          // un altro attore ha già rimborsato → niente doppio rimborso.
+          if (autoFailTookEffect) try {
             // Include le rigenerazioni (audit 2026-08-11, A-1): un caso bloccato
             // in 'generazione_report' è spesso una regen — con la sola
             // 'elaborazione' i suoi crediti non venivano mai rimborsati.
