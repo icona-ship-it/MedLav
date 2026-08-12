@@ -104,27 +104,67 @@ function isDischargeEvent(e: CalcEvent): boolean {
 
 /**
  * Pair each admission with at most ONE discharge (the earliest unused discharge
- * after it). Prevents the double-count bug: with 2 admissions and 1 discharge,
- * the old `discharges.find()` returned the SAME discharge for both admissions,
- * summing overlapping periods and inflating ITT.
+ * on or after it). Prevents the double-count bug: with 2 admissions and 1
+ * discharge, the old `discharges.find()` returned the SAME discharge for both
+ * admissions, summing overlapping periods and inflating ITT.
+ *
+ * Invariante (audit 2026-08-11, F-1): la dimissione SAME-DAY conta (`>=`, non
+ * `>`). Un day-hospital/day-surgery (ricovero e dimissione lo stesso giorno) è un
+ * ricovero di 1 giorno: non sparisce e — soprattutto — non fa "ponte" grabbing
+ * la dimissione del ricovero SUCCESSIVO (era il bug "37 giorni" per un 1+10).
+ * Con `>=` la dimissione same-day è agganciabile, quindi il ponte non si forma.
+ * Ricoveri annidati o con dimissione mancante restano gestiti dalla fusione degli
+ * intervalli a valle (mergedHospitalIntervals).
  */
 function pairAdmissionsToDischarges(
   admissions: CalcEvent[],
   discharges: CalcEvent[],
 ): Array<{ admission: CalcEvent; discharge: CalcEvent }> {
+  const sortedAdm = [...admissions].sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const sortedDis = discharges
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => x.d.event_date.localeCompare(y.d.event_date));
   const pairs: Array<{ admission: CalcEvent; discharge: CalcEvent }> = [];
   const used = new Set<number>();
-  for (const admission of admissions) {
-    for (let i = 0; i < discharges.length; i++) {
+  for (const admission of sortedAdm) {
+    for (const { d, i } of sortedDis) {
       if (used.has(i)) continue;
-      if (discharges[i].event_date > admission.event_date) {
-        used.add(i);
-        pairs.push({ admission, discharge: discharges[i] });
-        break;
-      }
+      if (d.event_date < admission.event_date) continue; // dimissione prima del ricovero: non è sua
+      used.add(i);
+      pairs.push({ admission, discharge: d });
+      break;
     }
   }
   return pairs;
+}
+
+/**
+ * Intervalli di degenza FUSI. Accoppia ricoveri e dimissioni, poi fonde gli
+ * intervalli identici o SOVRAPPOSTI (QA 2026-06-11 Tedesco: un PDF caricato due
+ * volte contava lo stesso letto fino a 6 volte). Estratto in helper condiviso
+ * (audit 2026-08-11, F-P2): prima solo `calculateHospitalDays` fondeva, mentre
+ * `calculateGraduatedITTITP` sommava le coppie grezze → la stessa degenza da due
+ * documenti raddoppiava l'ITT (20 gg invece di 10) senza flag.
+ */
+function mergedHospitalIntervals(
+  admissions: CalcEvent[],
+  discharges: CalcEvent[],
+): Array<{ start: string; end: string }> {
+  const rawIntervals = pairAdmissionsToDischarges(admissions, discharges)
+    .map(({ admission, discharge }) => ({ start: admission.event_date, end: discharge.event_date }))
+    .filter((iv) => iv.start <= iv.end)
+    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+
+  const merged: Array<{ start: string; end: string }> = [];
+  for (const iv of rawIntervals) {
+    const last = merged[merged.length - 1];
+    if (last && iv.start <= last.end) {
+      if (iv.end > last.end) last.end = iv.end;
+    } else {
+      merged.push({ ...iv });
+    }
+  }
+  return merged;
 }
 
 /** Add N days to an ISO date, UTC-safe (avoids local-timezone off-by-one from
@@ -356,25 +396,7 @@ function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
   const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
   const discharges = events.filter(isDischargeEvent);
 
-  // QA 2026-06-11 (Tedesco): un PDF caricato due volte duplicava gli eventi di
-  // ricovero → lo stesso intervallo contato fino a 6 volte. Gli intervalli
-  // identici o SOVRAPPOSTI vengono fusi: lo stesso letto non si occupa due volte.
-  const rawIntervals = pairAdmissionsToDischarges(admissions, discharges)
-    .map(({ admission, discharge }) => ({ start: admission.event_date, end: discharge.event_date }))
-    .filter((iv) => iv.start <= iv.end)
-    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
-
-  const merged: Array<{ start: string; end: string }> = [];
-  for (const iv of rawIntervals) {
-    const last = merged[merged.length - 1];
-    if (last && iv.start <= last.end) {
-      if (iv.end > last.end) last.end = iv.end;
-    } else {
-      merged.push({ ...iv });
-    }
-  }
-
-  return merged.map(({ start, end }) => {
+  return mergedHospitalIntervals(admissions, discharges).map(({ start, end }) => {
     const days = inclusiveDays(start, end);
     return {
       label: 'Giorni di ricovero',
@@ -535,11 +557,12 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
   let ittStart: string | null = null;
   let ittEnd: string | null = null;
 
-  // Hospital days (INCLUSIVI: ogni degenza conta entrambi i giorni — convenzione gold).
-  for (const { admission, discharge } of pairAdmissionsToDischarges(admissions, discharges)) {
-    ittDays += inclusiveDays(admission.event_date, discharge.event_date);
-    if (!ittStart) ittStart = admission.event_date;
-    ittEnd = discharge.event_date;
+  // Hospital days (INCLUSIVI: ogni degenza conta entrambi i giorni — convenzione
+  // gold). Intervalli FUSI (F-P2): la stessa degenza da due documenti non raddoppia.
+  for (const { start, end } of mergedHospitalIntervals(admissions, discharges)) {
+    ittDays += inclusiveDays(start, end);
+    if (!ittStart) ittStart = start;
+    ittEnd = end;
   }
 
   // Add immobilization period if after hospital. NOTE: this is classified as

@@ -265,6 +265,45 @@ describe('Audit Ondata 1 — ITT/ITP correctness', () => {
     expect(ittDays(calcs)).toBe(11); // Jan10→Jan20 inclusivo (= 11), non 15 (niente double-count)
   });
 
+  // Audit 2026-08-11 — invarianti F-1 (pairing same-day) e F-P2 (degenza duplicata).
+  it('F-1: day-surgery same-day + ricovero successivo → 1 gg e 10 gg, MAI un ponte da 37 gg', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-01-05', 'ricovero', 'Day surgery'),
+      makeEvent('2026-01-05', 'ricovero', 'Dimissione in giornata', 'dimesso in giornata'),
+      makeEvent('2026-02-01', 'ricovero', 'Secondo ricovero'),
+      makeEvent('2026-02-10', 'ricovero', 'Dimissione', 'dimissione'),
+      makeEvent('2026-04-20', 'follow-up', 'Controllo'),
+    ]);
+    const days = hospitalRows(calcs).map((r) => r.days).sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(days).toEqual([1, 10]);
+    expect(hospitalRows(calcs).some((r) => r.days === 37)).toBe(false); // niente ponte
+  });
+
+  it('F-1: day-hospital singolo (ricovero + dimissione stesso giorno) → 1 riga da 1 giorno, non 0', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-01-05', 'ricovero', 'Day hospital'),
+      makeEvent('2026-01-05', 'ricovero', 'Dimissione in giornata', 'dimesso in giornata'),
+      makeEvent('2026-02-15', 'follow-up', 'Controllo'),
+    ]);
+    expect(hospitalRows(calcs)).toHaveLength(1);
+    expect(hospitalRows(calcs)[0].days).toBe(1);
+  });
+
+  it('F-P2: stessa degenza da DUE documenti → giorni di ricovero e ITT 100% NON raddoppiati (10, non 20)', () => {
+    const dup = [
+      makeEvent('2026-02-01', 'ricovero', 'Ricovero (doc A)'),
+      makeEvent('2026-02-10', 'ricovero', 'Dimissione (doc A)', 'dimissione'),
+      makeEvent('2026-02-01', 'ricovero', 'Ricovero (doc B)'),
+      makeEvent('2026-02-10', 'ricovero', 'Dimissione (doc B)', 'dimissione'),
+    ];
+    const calcs = calculateMedicoLegalPeriods(dup);
+    expect(hospitalRows(calcs)).toHaveLength(1);
+    expect(hospitalRows(calcs)[0].days).toBe(10);
+    // Percorso ITT graduata (UI/marker): la degenza duplicata è fusa → 10, non 20.
+    const itt = calculateITTITP(dup).find((c) => c.label.startsWith('Invalidità Temporanea Totale'));
+    expect(itt?.days).toBe(10);
+  });
+
   it('detects a discharge NOT labeled "dimissione" ("Relazione di fine ricovero")', () => {
     const calcs = calculateMedicoLegalPeriods([
       makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
