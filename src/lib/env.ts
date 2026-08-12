@@ -57,4 +57,13 @@ export function validateEnv(): void {
   if (!process.env.RESEND_API_KEY) {
     logger.info('env', 'RESEND_API_KEY not set — email notifications disabled');
   }
+  // GDPR Art. 9 (audit 2026-08-11, E-2): senza questa chiave il middleware di
+  // cifratura NON si attiva e i dati evento/step (OCR, report, istruzioni del
+  // perito) transitano IN CHIARO su Inngest Cloud (infra US). Errore forte e
+  // VISIBILE in produzione — prima era un fail-open silenzioso. (Hardening
+  // possibile una volta confermata la chiave in tutti gli ambienti: trasformare
+  // in throw così l'app non elabora casi reali senza cifratura.)
+  if (!process.env.INNGEST_ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
+    logger.error('env', 'INNGEST_ENCRYPTION_KEY mancante in PRODUZIONE — i dati evento/step (OCR, report, istruzioni del perito) transiterebbero IN CHIARO su Inngest Cloud (infra US). GDPR Art. 9: configurare la chiave PRIMA di elaborare casi reali.');
+  }
 }

@@ -36,7 +36,19 @@ interface SectionRegenEventData {
   userId: string;
   /** Correlazione addebito↔consegna: le righe audit portano questo id. */
   batchId: string;
-  sections: SectionRegenTarget[];
+  /** Payload SENSIBILE (le `instruction` del perito, testo libero clinico):
+   * nidificato sotto `encrypted` perché il middleware di cifratura cifra SOLO il
+   * campo `data.encrypted` prima che l'evento lasci il processo (audit 2026-08-11,
+   * E-2). Prima le sezioni viaggiavano in chiaro verso Inngest Cloud (infra US). */
+  encrypted?: { sections: SectionRegenTarget[] };
+  /** @deprecated in chiaro: solo per compat con eventi in volo inviati prima di E-2. */
+  sections?: SectionRegenTarget[];
+}
+
+/** Estrae le sezioni dal payload cifrato (o dal campo legacy in chiaro per gli
+ * eventi in volo). Robusto anche in dev senza chiave (data.encrypted resta in chiaro). */
+function sectionsOf(data: SectionRegenEventData): SectionRegenTarget[] {
+  return data.encrypted?.sections ?? data.sections ?? [];
 }
 
 const COST_PER_SECTION = CREDIT_COSTS.rigenerazione_sezione;
@@ -94,7 +106,7 @@ async function refundUndeliveredOnFailure(data: SectionRegenEventData, errMsg: s
     .eq('entity_id', data.caseId)
     .eq('metadata->>batchId', data.batchId);
   const delivered = deliveredRows?.length ?? 0;
-  const owed = (data.sections.length - delivered) * COST_PER_SECTION;
+  const owed = (sectionsOf(data).length - delivered) * COST_PER_SECTION;
   if (owed <= 0) return;
 
   const { refundCredits } = await import('@/services/credits/credit-service');
@@ -103,7 +115,7 @@ async function refundUndeliveredOnFailure(data: SectionRegenEventData, errMsg: s
     batchId: data.batchId,
     error: errMsg.slice(0, 200),
   });
-  logger.info('regenerate-section', `Refunded ${owed} credits (${data.sections.length - delivered} sezioni non consegnate) for case ${data.caseId}`);
+  logger.info('regenerate-section', `Refunded ${owed} credits (${sectionsOf(data).length - delivered} sezioni non consegnate) for case ${data.caseId}`);
 }
 
 async function handleFailure(event: { data: unknown }): Promise<void> {
@@ -144,7 +156,8 @@ export const regenerateSectionJob = inngest.createFunction(
   { event: 'case/section.regenerate' },
   async ({ event, step }) => {
     const data = event.data as SectionRegenEventData;
-    const { caseId, userId, batchId, sections } = data;
+    const { caseId, userId, batchId } = data;
+    const sections = sectionsOf(data);
 
     const prep = await step.run('section-regen-prepare', async () => {
       const supabase = createAdminClient();
