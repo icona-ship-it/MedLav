@@ -1,10 +1,26 @@
 # Definition of Done — la verifica avversariale è PARTE del lavoro
 
 Lezione ricorrente (2026-07: audit \b Unicode, guardia numeri/date dello snapper,
-varco heading GDPR): ogni volta che il founder chiede "sei sicuro?", un secondo
+varco heading GDPR; 2026-08: batch di 14 fix con 3 difetti veri emersi solo al
+"sei sicuro?"): ogni volta che il founder chiede "sei sicuro?", un secondo
 passaggio avversariale trova difetti veri. La conclusione non è "riverificare
 all'infinito" — è che il secondo passaggio va fatto PRIMA di dichiarare "fatto",
 sempre, senza che venga chiesto.
+
+## PER FIX, non in blocco (regola d'oro — 2026-08)
+
+Il passaggio avversariale va fatto **dopo OGNI fix, prima del suo commit** — MAI
+accumulato come cancello finale su un lotto di fix. Battere una lista di reperti
+in fretta e verificare tutto alla fine significa: (a) portare avanti difetti che
+si annidano nei fix successivi, (b) far chiedere al founder "sei sicuro?", (c)
+fare il doppio del lavoro per stanarli dopo. Se un fix non ha superato il suo
+giro avversariale, non è committato e non si passa al successivo. Un lotto di N
+fix = N giri avversariali, non uno.
+
+Segnale d'allarme (fermarsi e tornare al passo 2): "lo committo e verifico dopo",
+"prima finisco la lista", "i test sono verdi quindi è fatto" (i test vedono solo
+le classi che hai enumerato — l'avversariale trova quelle che NON hai pensato:
+iper/ipo, `\b` mancante, decrypt in onFailure sono tutti passati coi test verdi).
 
 ## Nessun lavoro è "fatto" senza, nell'ordine:
 
