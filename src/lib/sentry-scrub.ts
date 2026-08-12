@@ -17,7 +17,20 @@ export function scrubClinicalData(text: string): string {
 interface ScrubbableEvent {
   message?: string;
   exception?: { values?: Array<{ value?: string }> };
-  breadcrumbs?: Array<{ message?: string }>;
+  breadcrumbs?: Array<{ message?: string; data?: Record<string, unknown> }>;
+}
+
+/** Scrub ricorsivo dei valori STRINGA di un oggetto. Usato per breadcrumb.data e
+ * span.data: es. l'url di un breadcrumb fetch (`GET /api/search?q=<nome paziente>`)
+ * o gli argomenti di un breadcrumb console — 2° giro avversariale 2026-08-11. */
+function scrubStringValues(obj: Record<string, unknown> | undefined): void {
+  if (!obj) return;
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string') obj[k] = scrubClinicalData(v);
+    else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      scrubStringValues(v as Record<string, unknown>);
+    }
+  }
 }
 
 /**
@@ -43,10 +56,30 @@ export function scrubSentryEvent<T extends ScrubbableEvent>(event: T): T {
   if (event.breadcrumbs) {
     for (const bc of event.breadcrumbs) {
       if (bc.message) bc.message = scrubClinicalData(bc.message);
+      scrubStringValues(bc.data); // url/argomenti del breadcrumb (query di ricerca)
     }
   }
   scrubEventEnvelope(event as unknown as Record<string, unknown>);
   return event;
+}
+
+/**
+ * beforeSendTransaction condiviso (2° giro avversariale 2026-08-11): le transazioni
+ * campionate (tracesSampleRate) NON passano da beforeSend, quindi la query string di
+ * una GET /api/search?q=<nome> uscirebbe senza scrub. Ripulisce request/user/extra
+ * (via scrubEventEnvelope) e i dati/descrizione degli span.
+ */
+export function scrubSentryTransaction<T>(tx: T): T {
+  const rec = tx as unknown as Record<string, unknown>;
+  scrubEventEnvelope(rec);
+  const spans = rec.spans as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(spans)) {
+    for (const span of spans) {
+      if (typeof span.description === 'string') span.description = scrubClinicalData(span.description);
+      scrubStringValues(span.data as Record<string, unknown> | undefined);
+    }
+  }
+  return tx;
 }
 
 /** Minimizza request/user/extra dell'evento Sentry (mutazione in place). */
