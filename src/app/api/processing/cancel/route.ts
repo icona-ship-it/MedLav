@@ -11,6 +11,15 @@ const requestSchema = z.object({
   caseId: z.string().uuid(),
 });
 
+// Stage in cui esiste davvero un'elaborazione da annullare (allineato allo
+// stuck-case-monitor). Fuori da questi (idle/completato/errore) non c'è nulla da
+// annullare: annullare comunque rimborsava un'elaborazione già CONSEGNATA →
+// analisi gratis illimitate + perdita di ricavo silenziosa (audit 2026-08-11, A-3).
+const CANCELLABLE_STAGES = ['elaborazione', 'generazione_report', 'revisione_classificazione'];
+// Operazioni a crediti rimborsabili su annullo (elaborazione + rigenerazioni):
+// senza 'rigenerazione_sezione' i 5 cr di una regen di sezione non tornavano mai.
+const REFUNDABLE_OPERATIONS = ['elaborazione', 'rigenerazione_report', 'rigenerazione_sezione'];
+
 /**
  * POST /api/processing/cancel
  * Cancel document processing for a case.
@@ -70,6 +79,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // GUARDIA DI STATO (audit 2026-08-11, A-3): niente da annullare se il caso
+    // non è in una fase attiva → 409. Chiude l'exploit "annulla un caso completato
+    // e riprenditi i crediti tenendo il report".
+    const currentStage = caseData.processing_stage as string | null;
+    if (!currentStage || !CANCELLABLE_STAGES.includes(currentStage)) {
+      return NextResponse.json(
+        { success: false, error: 'Nessuna elaborazione in corso da annullare.' },
+        { status: 409 },
+      );
+    }
+
     // Update all processing documents to error status
     const processingStatuses = ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'];
     const { count } = await supabase
@@ -82,15 +102,21 @@ export async function POST(request: NextRequest) {
       .eq('case_id', caseId)
       .in('processing_status', processingStatuses);
 
-    // Reset processing stage to idle
-    const { error: stageError } = await supabase
+    // Reset processing stage to idle — CAS sullo stage attivo: se nel frattempo
+    // il run è FINITO (finalize tra la guardia e qui), l'update non colpisce
+    // alcuna riga → non resettiamo e NON rimborsiamo un'elaborazione ormai
+    // consegnata. Chiude la finestra di race residua della guardia 409.
+    const { data: flipped, error: stageError } = await supabase
       .from('cases')
       .update({ processing_stage: 'idle', updated_at: new Date().toISOString() })
       .eq('id', caseId)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .in('processing_stage', CANCELLABLE_STAGES)
+      .select('id');
     if (stageError) {
       return NextResponse.json({ success: false, error: 'Errore durante l\'annullamento. Riprova.' }, { status: 500 });
     }
+    const cancelTookEffect = (flipped?.length ?? 0) > 0;
 
     // Send Inngest cancel event
     await inngest.send({
@@ -107,10 +133,14 @@ export async function POST(request: NextRequest) {
     // fallimento del rimborso non blocca l'annullamento.
     let refunded = 0;
     try {
-      const { refundLatestCaseConsumption } = await import('@/services/credits/credit-service');
-      refunded = await refundLatestCaseConsumption(
-        user.id, caseId, ['elaborazione', 'rigenerazione_report'], 'user_cancelled',
-      );
+      // Solo se l'annullo ha effettivamente interrotto un run attivo (CAS sopra):
+      // un run già finalizzato non dà diritto a rimborso.
+      if (cancelTookEffect) {
+        const { refundLatestCaseConsumption } = await import('@/services/credits/credit-service');
+        refunded = await refundLatestCaseConsumption(
+          user.id, caseId, REFUNDABLE_OPERATIONS, 'user_cancelled',
+        );
+      }
     } catch (refundErr) {
       logger.error('processing/cancel', 'Refund after cancel failed', { caseId, error: refundErr instanceof Error ? refundErr.message : 'unknown' });
       Sentry.captureMessage('Rimborso post-annullo FALLITO', 'error');

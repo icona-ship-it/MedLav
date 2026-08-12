@@ -272,11 +272,17 @@ export async function refundCredits(
 }
 
 /**
- * Rimborsa la consumption più recente NON ancora rimborsata per un caso e una
- * delle operazioni indicate (idempotente: conta consumi vs rimborsi, come
- * onFailure della pipeline). Usato dall'annullamento manuale — prima annullare
- * un'elaborazione bruciava i crediti senza rimborso (audit 2026-07-16).
- * Ritorna l'importo rimborsato (0 se niente da rimborsare).
+ * Rimborsa la consumption più recente NON ancora rimborsata per un caso, cercata
+ * ATTRAVERSO tutte le operazioni indicate e ordinata per created_at (idempotente:
+ * conta consumi vs rimborsi per operazione). Ritorna l'importo rimborsato (0 se
+ * niente da rimborsare).
+ *
+ * Audit 2026-08-11 (A-1/C-1 P0): prima iterava le `operations` in ORDINE di lista
+ * e rimborsava la prima con residuo → annullando una rigenerazione restituiva i
+ * crediti dell'ELABORAZIONE già consegnata (soldi sbagliati in entrambe le
+ * direzioni) e lo stuck-monitor, con lista ['elaborazione'], non rimborsava mai
+ * la regen. Ora si sceglie la consumption realmente più recente non rimborsata:
+ * per una regen in corso è la regen, non l'elaborazione consegnata.
  */
 export async function refundLatestCaseConsumption(
   userId: string,
@@ -285,29 +291,44 @@ export async function refundLatestCaseConsumption(
   reason: string,
 ): Promise<number> {
   const supabase = createAdminClient();
-  for (const operation of operations) {
-    const { data: consumptions } = await supabase
-      .from('credit_transactions')
-      .select('amount')
-      .eq('user_id', userId)
-      .eq('entity_id', caseId)
-      .eq('type', 'consumption')
-      .eq('operation', operation)
-      .order('created_at', { ascending: false });
-    const { data: refunds } = await supabase
-      .from('credit_transactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('entity_id', caseId)
-      .eq('type', 'refund')
-      .eq('operation', operation);
-    const consumptionCount = consumptions?.length ?? 0;
-    const refundCount = refunds?.length ?? 0;
-    if (consumptionCount > 0 && refundCount < consumptionCount) {
-      const amount = Math.abs(consumptions![0].amount as number);
-      await refundCredits(userId, amount, operation, caseId, { reason });
+  const { data: consumptions } = await supabase
+    .from('credit_transactions')
+    .select('amount, operation, created_at')
+    .eq('user_id', userId)
+    .eq('entity_id', caseId)
+    .eq('type', 'consumption')
+    .in('operation', operations)
+    .order('created_at', { ascending: false });
+  const { data: refunds } = await supabase
+    .from('credit_transactions')
+    .select('operation')
+    .eq('user_id', userId)
+    .eq('entity_id', caseId)
+    .eq('type', 'refund')
+    .in('operation', operations);
+
+  // Slot non rimborsati per operazione = #consumi − #rimborsi (convenzione: i più
+  // recenti sono i non rimborsati). Scorrendo i consumi dal più recente, il PRIMO
+  // che cade in uno slot libero della sua operazione è la consumption da rimborsare.
+  const refundByOp = new Map<string, number>();
+  for (const r of refunds ?? []) {
+    refundByOp.set(r.operation as string, (refundByOp.get(r.operation as string) ?? 0) + 1);
+  }
+  const consCountByOp = new Map<string, number>();
+  for (const c of consumptions ?? []) {
+    consCountByOp.set(c.operation as string, (consCountByOp.get(c.operation as string) ?? 0) + 1);
+  }
+  const seenByOp = new Map<string, number>();
+  for (const c of consumptions ?? []) {
+    const op = c.operation as string;
+    const unrefundedSlots = (consCountByOp.get(op) ?? 0) - (refundByOp.get(op) ?? 0);
+    const seen = seenByOp.get(op) ?? 0;
+    if (seen < unrefundedSlots) {
+      const amount = Math.abs(c.amount as number);
+      await refundCredits(userId, amount, op, caseId, { reason });
       return amount;
     }
+    seenByOp.set(op, seen + 1);
   }
   return 0;
 }

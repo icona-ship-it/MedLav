@@ -119,7 +119,12 @@ export const stuckCaseMonitor = inngest.createFunction(
           // senza consegna) + (4) email di cortesia come fa onFailure.
           let refunded = 0;
           try {
-            refunded = await refundLatestCaseConsumption(row.user_id, row.id, ['elaborazione'], 'stuck_auto_failed');
+            // Include le rigenerazioni (audit 2026-08-11, A-1): un caso bloccato
+            // in 'generazione_report' è spesso una regen — con la sola
+            // 'elaborazione' i suoi crediti non venivano mai rimborsati.
+            refunded = await refundLatestCaseConsumption(
+              row.user_id, row.id, ['elaborazione', 'rigenerazione_report', 'rigenerazione_sezione'], 'stuck_auto_failed',
+            );
           } catch (refundErr) {
             const refundMsg = refundErr instanceof Error ? refundErr.message : 'unknown';
             logger.error('stuck-monitor', `Rimborso auto-fail fallito per ${row.code ?? row.id}: ${refundMsg}`);
