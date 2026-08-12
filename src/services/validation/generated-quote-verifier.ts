@@ -129,18 +129,19 @@ function annotateUngroundedQuotes(
   return text.replace(re, (match: string, inner: string, offset: number, full: string) => {
     const quote = inner.trim();
     if (quote.length < minLen) return match;
-    // Con ellissi interne si valuta OGNI frammento: la citazione è fondata se
-    // TUTTI i frammenti lo sono. Un frammento sotto minLen è troppo corto per un
-    // giudizio (stessa policy delle citazioni corte) → non blocca.
+    // Si valuta OGNI frammento (le ellissi = omissioni volute): la citazione è
+    // fondata se TUTTI i frammenti lo sono. Vale anche per l'ellissi in TESTA/CODA
+    // («… B») — lì il frammento di contenuto è uno solo, ma va grounded il
+    // FRAMMENTO, non l'inner col carattere '…' che non matcha mai l'OCR. Nessun
+    // free-pass ai frammenti corti: un frammento fabbricato non deve passare per
+    // brevità (3° giro avversariale 2026-08-11). Frammenti vuoti → citazione non
+    // fondata.
     const fragments = quote.split(ELLIPSIS_SPLIT).map((f) => f.trim()).filter((f) => f.length > 0);
     const isFragmentGrounded = (f: string): boolean => {
-      if (f.length < minLen) return true;
       const l = groundCitation(f, fullOcrText);
       return l === 'exact' || l === 'normalized';
     };
-    const grounded = fragments.length > 1
-      ? fragments.every(isFragmentGrounded)
-      : (() => { const l = groundCitation(quote, fullOcrText); return l === 'exact' || l === 'normalized'; })();
+    const grounded = fragments.length > 0 && fragments.every(isFragmentGrounded);
     verifications.push({ quote, grounded });
     if (grounded) return match;
     // Idempotency: do not append a second marker if one already follows.

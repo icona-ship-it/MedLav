@@ -36,6 +36,20 @@ describe('verifyGeneratedQuotes', () => {
     expect(res.annotatedMarkdown).not.toContain('da verificare');
   });
 
+  it('ellissi in TESTA «… B»: fonda il frammento, non l\'inner col carattere ellissi (3° giro)', () => {
+    const md = 'Il referto: «… immobilizzazione in gesso per 30 giorni».';
+    const res = verifyGeneratedQuotes(md, OCR);
+    expect(res.groundedCount).toBe(1);
+    expect(res.annotatedMarkdown).not.toContain('da verificare');
+  });
+
+  it('ellissi con frammento corto FABBRICATO: nessun free-pass per brevità (3° giro)', () => {
+    const md = 'Il referto: «frattura composta del radio distale destro … tibia rotta».';
+    const res = verifyGeneratedQuotes(md, OCR);
+    expect(res.ungroundedCount).toBe(1);
+    expect(res.annotatedMarkdown).toContain('da verificare');
+  });
+
   it('ellissi «A … B»: FLAGGATA se un frammento è fabbricato', () => {
     const md = 'Il referto: «frattura composta del radio distale destro … lesione meniscale del ginocchio sinistro».';
     const res = verifyGeneratedQuotes(md, OCR);
