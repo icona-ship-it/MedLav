@@ -48,6 +48,11 @@ export function generateCsvExport(events: CsvEvent[]): string {
   const csv = Papa.unparse(rows, {
     delimiter: ';',
     header: true,
+    // CSV formula injection (audit 2026-08-11): una cella che inizia con = + - @
+    // viene eseguita come formula aprendo il file in Excel (esfiltrazione via
+    // HYPERLINK/WEBSERVICE). I contenuti vengono dall'estrazione LLM su OCR di
+    // documenti anche di controparte → non fidati. escapeFormulae le neutralizza.
+    escapeFormulae: true,
   });
 
   // UTF-8 BOM for Excel

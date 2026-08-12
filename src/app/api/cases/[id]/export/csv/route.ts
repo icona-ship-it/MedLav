@@ -129,10 +129,14 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 function escapeCsvField(value: string): string {
-  if (value.includes(';') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+  // Anti formula-injection (audit 2026-08-11): una cella che inizia con = + - @
+  // (anche dopo eventuali virgolette/apici) è eseguita come formula da Excel.
+  // Si antepone un apice per neutralizzarla, poi si applica il quoting normale.
+  const neutralized = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  if (neutralized.includes(';') || neutralized.includes('"') || neutralized.includes('\n')) {
+    return `"${neutralized.replace(/"/g, '""')}"`;
   }
-  return value;
+  return neutralized;
 }
 
 function formatDateIT(dateStr: string): string {
