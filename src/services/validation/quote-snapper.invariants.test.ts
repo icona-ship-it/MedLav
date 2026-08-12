@@ -78,6 +78,25 @@ describe('INVARIANTE B-1 — negazioni, lateralità e severità non cambiano in 
     expect(snapQuoteToSource('Al test clinico si osserva dolore in inversione della caviglia sinistra.', c2).outcome).toBe('unmatched');
   });
 
+  it('famiglie di prefissi antonimi: abduttore≠adduttore, intracapsulare≠extracapsulare, endocervicale≠esocervicale', () => {
+    const pairs: Array<[string, string]> = [
+      ['muscolo abduttore lungo della coscia sinistra in sofferenza', 'muscolo adduttore lungo della coscia sinistra in sofferenza'],
+      ['lesione intracapsulare del comparto femorale destro documentata', 'lesione extracapsulare del comparto femorale destro documentata'],
+      ['flogosi endocervicale persistente al controllo odierno eseguito', 'flogosi esocervicale persistente al controllo odierno eseguito'],
+    ];
+    for (const [src, quote] of pairs) {
+      const corpus = buildSnapCorpus(src);
+      expect(snapQuoteToSource(quote, corpus).outcome).toBe('unmatched');
+    }
+  });
+
+  it('opposti clinici ad ALTA edit-distance (mediale/laterale, prossimale/distale) non si agganciano', () => {
+    const c1 = buildSnapCorpus('Si documenta lesione del comparto laterale con edema osseo reattivo diffuso.');
+    expect(snapQuoteToSource('Si documenta lesione del comparto mediale con edema osseo reattivo diffuso.', c1).outcome).toBe('unmatched');
+    const c2 = buildSnapCorpus('Frattura pluriframmentaria del terzo distale della diafisi omerale destra.');
+    expect(snapQuoteToSource('Frattura pluriframmentaria del terzo prossimale della diafisi omerale destra.', c2).outcome).toBe('unmatched');
+  });
+
   it('non over-blocca un refuso legittimo su parola iper/ipo (trasposizione)', () => {
     const corpus = buildSnapCorpus('Il paziente presenta ipertensione arteriosa in trattamento farmacologico.');
     const res = snapQuoteToSource('Il paziente presenta ipretensione arteriosa in trattamento farmacologico.', corpus);

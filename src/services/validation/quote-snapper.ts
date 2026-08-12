@@ -89,33 +89,40 @@ function isPrivativePair(a: string, b: string): boolean {
   return PRIVATIVE_PREFIXES.some((p) => long === p + short);
 }
 
-/** Inversione di polarità clinica per prefisso morfologico iper-/ipo- (hyper-/hypo-):
- * "ipertensione"/"ipotensione", "iperglicemia"/"ipoglicemia"... sono a edit-distance
- * 2 e wordsMatch le tratterebbe come lo stesso refuso, invertendo il significato
- * (pressione alta ↔ bassa) in silenzio (bypass trovato dal 2° giro avversariale
- * 2026-08-11, stessa classe di B-1). Rilevate confrontando lo stem dopo il prefisso. */
-function polarityStem(word: string): { high: boolean; stem: string } | null {
-  const m = word.match(/^(iper|ipo|hyper|hypo)(.{3,})$/);
-  if (!m) return null;
-  return { high: m[1] === 'iper' || m[1] === 'hyper', stem: m[2] };
+/** Famiglie di prefissi ANTONIMI: due parole con lo STESSO stem ma prefisso di
+ * lato opposto sono opposti clinici (pressione alta↔bassa, muscolo abduttore↔
+ * adduttore, intra↔extra articolare, endo↔eso). wordsMatch le tratterebbe come lo
+ * stesso refuso e lo snapper invertirebbe il senso in silenzio. Generalizzazione
+ * STRUTTURALE (3° giro avversariale 2026-08-11): non un elenco di PAROLE — sempre
+ * bucato — ma di PREFISSI, così l'intera famiglia è coperta. */
+const ANTONYM_PREFIX_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['iper', 'ipo'], ['hyper', 'hypo'],
+  ['intra', 'extra'], ['intra', 'estra'],
+  ['endo', 'eso'], ['endo', 'eco'],
+  ['ab', 'ad'],
+];
+function antonymPrefixSplit(word: string): { pairIdx: number; side: 0 | 1; stem: string } | null {
+  for (let i = 0; i < ANTONYM_PREFIX_PAIRS.length; i++) {
+    const [a, b] = ANTONYM_PREFIX_PAIRS[i];
+    if (word.startsWith(a) && word.length - a.length >= 3) return { pairIdx: i, side: 0, stem: word.slice(a.length) };
+    if (word.startsWith(b) && word.length - b.length >= 3) return { pairIdx: i, side: 1, stem: word.slice(b.length) };
+  }
+  return null;
 }
-function isClinicalPolarityFlip(a: string, b: string): boolean {
-  const pa = polarityStem(a);
-  const pb = polarityStem(b);
-  if (pa == null || pb == null || pa.high === pb.high) return false;
-  // Stem TOLLERANTE (2° giro avversariale): "ipo+ssia" vs "iper+ossia" hanno stem
-  // diverso per elisione al confine del prefisso, ma sono opposti clinici
-  // (ipossia/iperossia). Con prefissi opposti + stem a distanza ≤1 → inversione.
-  return boundedEditDistance(pa.stem, pb.stem, 1) <= 1;
+function isAntonymPrefixFlip(a: string, b: string): boolean {
+  const pa = antonymPrefixSplit(a);
+  const pb = antonymPrefixSplit(b);
+  // Stesso pair, lato opposto, stem quasi uguale (elisione al confine ≤1):
+  // ipertensione/ipotensione, abduttore/adduttore, intracapsulare/extracapsulare,
+  // endocervicale/esocervicale, ipossia/iperossia.
+  return pa != null && pb != null && pa.pairIdx === pb.pairIdx && pa.side !== pb.side
+    && boundedEditDistance(pa.stem, pb.stem, 1) <= 1;
 }
 
-/** Antonimi clinici NON iper/ipo che il fuzzy-match a bassa edit-distance
- * confonderebbe invertendo il significato (movimenti/direzioni opposte). Le coppie
- * ad alta edit-distance (prossimale/distale) non fuzzy-matchano e non servono qui.
- * Trovate dal 2° giro avversariale 2026-08-11. Forma normalizzata (normalizeWord). */
+/** Antonimi clinici a bassa edit-distance NON catturati dalle famiglie di prefissi
+ * (in-/e-: inversione/eversione). Forma normalizzata (normalizeWord). */
 const CLINICAL_ANTONYMS: ReadonlyArray<readonly [string, string]> = [
-  ['abduzione', 'adduzione'], ['abdotto', 'addotto'], ['abdotta', 'addotta'], ['abduce', 'adduce'],
-  ['inversione', 'eversione'], ['inverso', 'everso'], ['intrarotazione', 'extrarotazione'],
+  ['inversione', 'eversione'], ['inverso', 'everso'],
 ];
 function isClinicalAntonym(a: string, b: string): boolean {
   return CLINICAL_ANTONYMS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
@@ -123,7 +130,7 @@ function isClinicalAntonym(a: string, b: string): boolean {
 
 /** true se `a` e `b` sono opposti clinici che NON vanno mai fuzzy-matchati. */
 function isClinicalOpposite(a: string, b: string): boolean {
-  return isPrivativePair(a, b) || isClinicalPolarityFlip(a, b) || isClinicalAntonym(a, b);
+  return isPrivativePair(a, b) || isAntonymPrefixFlip(a, b) || isClinicalAntonym(a, b);
 }
 
 /** Firma di un token numerico che CONSERVA i separatori TRA cifre: "2,5" ≠ "25",
@@ -184,6 +191,24 @@ function preservesLoadBearingTokens(quoteRawWords: string[], spanRawWords: strin
     for (const sw of s.norms) {
       if (isClinicalOpposite(qw, sw)) return false;
     }
+  }
+  // Copertura delle parole di CONTENUTO (≥5 char): ogni parola di contenuto della
+  // citazione deve comparire nello span come match esatto o refuso char-level
+  // (wordsMatch). Se una è ASSENTE — sostituita nello span da una parola DIVERSA —
+  // lo snap starebbe cambiando il significato → blocca. Rete STRUTTURALE (3° giro
+  // avversariale 2026-08-11) che chiude gli opposti clinici ad ALTA edit-distance
+  // (mediale/laterale, prossimale/distale, prono/supino, flessore/estensore),
+  // impossibili da enumerare, che sfuggivano via il percorso LCS-gap.
+  const spanNorms = [...s.norms];
+  for (const qw of q.norms) {
+    if (qw.length < 5 || s.norms.has(qw)) continue;
+    // Coperta se: refuso char-level (wordsMatch) OPPURE fusione/split di parole
+    // dell'OCR (una contiene l'altra, es. "di caviglia"↔"dicaviglia"). Gli opposti
+    // clinici NON si contengono a vicenda (mediale/laterale, abduttore/adduttore,
+    // intra/extra), quindi la sottostringa non li riapre.
+    const covered = spanNorms.some((sw) =>
+      wordsMatch(qw, sw) || (sw.length >= 5 && sw.includes(qw)) || (qw.length >= 5 && qw.includes(sw) && sw.length >= 4));
+    if (!covered) return false;
   }
   return true;
 }
