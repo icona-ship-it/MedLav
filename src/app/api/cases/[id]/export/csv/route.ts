@@ -186,12 +186,15 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
 
     const row = [
       String(i + 1),
-      formatDateIT(String(item.date ?? '')),
+      // Data e Categoria passano per escapeCsvField (2° giro avversariale): una
+      // data malformata dall'estrazione o una categoria libera possono iniziare
+      // con = + - @ e diventare una formula (l'importo è un numero fidato).
+      escapeCsvField(formatDateIT(String(item.date ?? ''))),
       escapeCsvField(String(item.description ?? '')),
       amount !== null ? amount.toFixed(2).replace('.', ',') : '',
       escapeCsvField(String(item.receiptNumber ?? '')),
       escapeCsvField(String(item.drugType ?? '')),
-      EXPENSE_CATEGORY_LABELS[String(item.category ?? 'altro')] ?? String(item.category ?? ''),
+      escapeCsvField(EXPENSE_CATEGORY_LABELS[String(item.category ?? 'altro')] ?? String(item.category ?? '')),
       escapeCsvField(String(item.facility ?? '')),
       escapeCsvField(String(item.linkedDiagnosis ?? '')),
       escapeCsvField(String(item.notes ?? '')),
