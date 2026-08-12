@@ -89,6 +89,22 @@ function isPrivativePair(a: string, b: string): boolean {
   return PRIVATIVE_PREFIXES.some((p) => long === p + short);
 }
 
+/** Inversione di polarità clinica per prefisso morfologico iper-/ipo- (hyper-/hypo-):
+ * "ipertensione"/"ipotensione", "iperglicemia"/"ipoglicemia"... sono a edit-distance
+ * 2 e wordsMatch le tratterebbe come lo stesso refuso, invertendo il significato
+ * (pressione alta ↔ bassa) in silenzio (bypass trovato dal 2° giro avversariale
+ * 2026-08-11, stessa classe di B-1). Rilevate confrontando lo stem dopo il prefisso. */
+function polarityStem(word: string): { high: boolean; stem: string } | null {
+  const m = word.match(/^(iper|ipo|hyper|hypo)(.{3,})$/);
+  if (!m) return null;
+  return { high: m[1] === 'iper' || m[1] === 'hyper', stem: m[2] };
+}
+function isClinicalPolarityFlip(a: string, b: string): boolean {
+  const pa = polarityStem(a);
+  const pb = polarityStem(b);
+  return pa != null && pb != null && pa.high !== pb.high && pa.stem === pb.stem;
+}
+
 /** Firma di un token numerico che CONSERVA i separatori TRA cifre: "2,5" ≠ "25",
  * "1.000" ≠ "10,00". Virgola e punto tra due cifre sono canonicalizzati a '.',
  * così "2,5" ≡ "2.5" (stesso numero, refuso OCR del separatore) ma ≠ "25". I
@@ -145,7 +161,7 @@ function preservesLoadBearingTokens(quoteRawWords: string[], spanRawWords: strin
   for (const qw of q.norms) {
     if (s.norms.has(qw)) continue;
     for (const sw of s.norms) {
-      if (isPrivativePair(qw, sw)) return false;
+      if (isPrivativePair(qw, sw) || isClinicalPolarityFlip(qw, sw)) return false;
     }
   }
   return true;
@@ -202,7 +218,7 @@ function boundedEditDistance(a: string, b: string, maxDist: number): number {
  */
 function wordsMatch(a: string, b: string): boolean {
   if (a === b) return true;
-  if (isPrivativePair(a, b)) return false;
+  if (isPrivativePair(a, b) || isClinicalPolarityFlip(a, b)) return false;
   const minLen = Math.min(a.length, b.length);
   if (minLen >= 9) return boundedEditDistance(a, b, 2) <= 2;
   if (minLen >= 5) return boundedEditDistance(a, b, 1) <= 1;

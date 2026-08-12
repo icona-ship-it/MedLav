@@ -38,6 +38,28 @@ describe('INVARIANTE B-1 — negazioni, lateralità e severità non cambiano in 
     expect(res.outcome).toBe('unmatched');
   });
 
+  it('polarità clinica iper/ipo: "ipertensione" non si aggancia a "ipotensione"', () => {
+    const corpus = buildSnapCorpus(
+      'Durante il ricovero si osserva marcata ipotensione arteriosa persistente in reparto.',
+    );
+    const res = snapQuoteToSource(
+      'Durante il ricovero si osserva marcata ipertensione arteriosa persistente in reparto.',
+      corpus,
+    );
+    expect(res.outcome).toBe('unmatched');
+  });
+
+  it('polarità clinica iper/ipo: "iperglicemia" non si aggancia a "ipoglicemia"', () => {
+    const corpus = buildSnapCorpus(
+      'Agli esami ematochimici del giorno si riscontra severa ipoglicemia a digiuno da monitorare.',
+    );
+    const res = snapQuoteToSource(
+      'Agli esami ematochimici del giorno si riscontra severa iperglicemia a digiuno da monitorare.',
+      corpus,
+    );
+    expect(res.outcome).toBe('unmatched');
+  });
+
   it('severità per prefisso privativo: "composta" non si aggancia a "scomposta"', () => {
     const corpus = buildSnapCorpus(
       'Si apprezza frattura scomposta del terzo medio della clavicola con indicazione chirurgica.',
