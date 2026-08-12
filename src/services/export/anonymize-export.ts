@@ -62,7 +62,7 @@ function redactFileName(fileName: unknown, ctx: PeriziaMetadata | undefined): un
 
 /** Campi PROSA di un evento (possono contenere PII inline). I campi strutturati
  * (event_date, *_type, order_number, confidence...) NON si toccano. */
-const EVENT_PROSE_FIELDS = ['title', 'description', 'diagnosis', 'source_text', 'expert_notes'];
+const EVENT_PROSE_FIELDS = ['title', 'description', 'diagnosis', 'source_text', 'expert_notes', 'reliability_notes'];
 
 /** Campi che sono PURAMENTE un identificativo di persona/struttura: si redigono
  * per intero (un nome di medico "nudo", senza titolo, l'anonimizzatore-prosa non

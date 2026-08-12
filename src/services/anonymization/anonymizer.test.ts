@@ -216,17 +216,20 @@ describe('anonymizer', () => {
     });
 
     it('NON redige parole cliniche che CONTENGONO "corso" (soccorso/percorso/decorso) — regressione 2° giro', () => {
-      const text = 'Accesso al Pronto Soccorso Ospedaliero; percorso Diagnostico Terapeutico; decorso Post-operatorio regolare; intervento in corso di Valutazione.';
+      const text = 'Accesso al Pronto Soccorso Ospedaliero; percorso Diagnostico Terapeutico; decorso Post-operatorio regolare; intervento tuttora in corso di valutazione clinica.';
       const result = anonymizeText({ text });
       expect(result.anonymizedText).toContain('Pronto Soccorso Ospedaliero');
       expect(result.anonymizedText).toContain('percorso Diagnostico');
       expect(result.anonymizedText).toContain('decorso Post-operatorio');
-      expect(result.anonymizedText).toContain('in corso di Valutazione');
+      // "in corso di valutazione" (minuscolo) preservato: il nome-via richiede la maiuscola.
+      expect(result.anonymizedText).toContain('in corso di valutazione');
     });
 
-    it('redige comunque un vero indirizzo con "Corso" maiuscolo', () => {
-      const result = anonymizeText({ text: 'Residente in Corso Italia 5, Cittàdemo.' });
-      expect(result.anonymizedText).not.toContain('Corso Italia 5');
+    it('redige un vero indirizzo con "corso" anche MINUSCOLO (leak Art.9 riaperto dal solo-maiuscolo)', () => {
+      const lower = anonymizeText({ text: 'Residente in corso Italia 5, Cittàdemo.' });
+      expect(lower.anonymizedText).not.toContain('corso Italia 5');
+      const upper = anonymizeText({ text: 'Residente in Corso Italia 5, Cittàdemo.' });
+      expect(upper.anonymizedText).not.toContain('Corso Italia 5');
     });
   });
 
