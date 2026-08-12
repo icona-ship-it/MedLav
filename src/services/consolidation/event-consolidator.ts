@@ -1,5 +1,6 @@
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
 import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance';
+import { logger } from '@/lib/logger';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -130,8 +131,9 @@ export function consolidateEvents(
   }
 
   if (droppedSentinel > 0 || droppedBroken > 0) {
-    console.info(
-      `[consolidator] dropped ${droppedSentinel} sentinel-date events + ${droppedBroken} broken-OCR events`,
+    logger.info(
+      'consolidation',
+      `dropped ${droppedSentinel} sentinel-date events + ${droppedBroken} broken-OCR events`,
     );
   }
 
