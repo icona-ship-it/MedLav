@@ -693,11 +693,24 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
     const dateStr = rawDate != null ? String(rawDate).trim() : '';
     const isDateMissing = !dateStr || dateStr === '1900-01-01' || dateStr === 'null' || dateStr === 'undefined';
     const normalizedDate = isDateMissing ? '1900-01-01' : normalizeDateFormat(dateStr);
-    const eventDate = normalizedDate ?? '1900-01-01';
     const isDateInvalid = !isDateMissing && normalizedDate === null;
-    const datePrecision = (isDateMissing || isDateInvalid)
+
+    // Precisione ridotta all'enum DB. "sconosciuta" con una data valida è
+    // RISERVATA alle date donate da inferMissingDates (che flagga e annota):
+    // se il LLM la emette direttamente sta inventando la data (feedback medici
+    // 2026-08-19, CASO-033: "1990-01-01" stampata in perizia come data vera) →
+    // la data si scarta (sentinella), l'evento va in coda e il donor può poi
+    // assegnarne una desunta dal contesto per la via legittima. Un valore fuori
+    // enum ('day', 'unknown'…) NON scarta una data valida: degrada a 'giorno'.
+    const VALID_DATE_PRECISIONS = new Set(['giorno', 'mese', 'anno', 'sconosciuta']);
+    const rawPrecision = String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');
+    const llmPrecision = VALID_DATE_PRECISIONS.has(rawPrecision) ? rawPrecision : 'giorno';
+    const isDateUnanchored = !isDateMissing && !isDateInvalid && llmPrecision === 'sconosciuta';
+
+    const eventDate = isDateUnanchored ? '1900-01-01' : (normalizedDate ?? '1900-01-01');
+    const datePrecision = (isDateMissing || isDateInvalid || isDateUnanchored)
       ? 'sconosciuta'
-      : String(e.datePrecision ?? e.date_precision ?? 'sconosciuta');
+      : llmPrecision;
 
     // Sentinel detection: nullify fields where LLM copied placeholder values from example
     const rawDiagnosis = e.diagnosis != null ? String(e.diagnosis) : null;
@@ -721,12 +734,14 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
       doctor,
       facility,
       confidence: typeof e.confidence === 'number' ? Math.min(100, Math.max(0, e.confidence)) : 70,
-      requiresVerification: (isDateMissing || isDateInvalid) ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
+      requiresVerification: (isDateMissing || isDateInvalid || isDateUnanchored) ? true : Boolean(e.requiresVerification ?? e.requires_verification ?? false),
       reliabilityNotes: isDateMissing
         ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Data non presente nel documento originale` : 'Data non presente nel documento originale')
         : isDateInvalid
           ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Formato data non valido nel documento: "${dateStr}"` : `Formato data non valido nel documento: "${dateStr}"`)
-          : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
+          : isDateUnanchored
+            ? (e.reliabilityNotes != null ? `${String(e.reliabilityNotes)} | Data indicata senza riscontro documentale — scartata, verificare sul documento originale` : 'Data indicata senza riscontro documentale — scartata, verificare sul documento originale')
+            : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
       sourceText: String(e.sourceText ?? e.source_text ?? ''),
       sourcePages: Array.isArray(e.sourcePages ?? e.source_pages) ? ((e.sourcePages ?? e.source_pages) as number[]) : [1],
     });

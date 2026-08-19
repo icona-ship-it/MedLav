@@ -232,6 +232,90 @@ describe('extraction-service', () => {
     });
   });
 
+  describe('data con precisione "sconosciuta" dal LLM — scartata, mai stampata (feedback medici 2026-08-19, CASO-033 "01.01.1990")', () => {
+    /** Risposta LLM minimale con data/precisione parametrizzate. */
+    function llmEventWith(eventDate: string, datePrecision: string): string {
+      return JSON.stringify({
+        events: [{
+          eventDate,
+          datePrecision,
+          eventType: 'visita',
+          title: 'Consulenza medico-legale',
+          description: 'Consulenza menzionata in anamnesi.',
+          sourceType: 'altro',
+          confidence: 40,
+          sourceText: 'consulenza medico-legale',
+          sourcePages: [1],
+        }],
+      });
+    }
+
+    it('should replace LLM-invented date with sentinel when datePrecision is "sconosciuta"', async () => {
+      // Il contratto interno: precisione "sconosciuta" + data valida è riservata
+      // alle date DONATE da inferMissingDates. Il LLM che la emette direttamente
+      // sta inventando (CASO-033: quattro eventi "1990-01-01" stampati in perizia).
+      mockStreamChat.mockResolvedValue({ content: llmEventWith('1990-01-01', 'sconosciuta'), usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        chunkText: 'consulenza medico-legale senza data',
+        chunkLabel: 'test.pdf',
+        documentType: 'altro',
+        caseType: 'generica',
+      });
+
+      expect(result.events[0].eventDate).toBe('1900-01-01');
+      expect(result.events[0].datePrecision).toBe('sconosciuta');
+      expect(result.events[0].requiresVerification).toBe(true);
+      expect(result.events[0].reliabilityNotes).toContain('scartata');
+    });
+
+    it('should NOT touch a valid date with precision "giorno" (non-regression)', async () => {
+      mockStreamChat.mockResolvedValue({ content: llmEventWith('2025-04-30', 'giorno'), usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        chunkText: 'Ricovero del 30/04/2025',
+        chunkLabel: 'test.pdf',
+        documentType: 'altro',
+        caseType: 'generica',
+      });
+
+      expect(result.events[0].eventDate).toBe('2025-04-30');
+      expect(result.events[0].datePrecision).toBe('giorno');
+      expect(result.events[0].requiresVerification).toBe(false);
+    });
+
+    it('should keep valid date but fall back to "giorno" when precision is outside the enum', async () => {
+      // Enum DB: giorno|mese|anno|sconosciuta. Un valore alieno ('day') non deve
+      // né far fallire l'insert né scartare una data vera.
+      mockStreamChat.mockResolvedValue({ content: llmEventWith('2025-04-30', 'day'), usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        chunkText: 'Ricovero del 30/04/2025',
+        chunkLabel: 'test.pdf',
+        documentType: 'altro',
+        caseType: 'generica',
+      });
+
+      expect(result.events[0].eventDate).toBe('2025-04-30');
+      expect(result.events[0].datePrecision).toBe('giorno');
+    });
+
+    it('should keep sentinel + "sconosciuta" when precision is outside the enum and date is missing', async () => {
+      mockStreamChat.mockResolvedValue({ content: llmEventWith('', 'unknown'), usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+
+      const result = await extractEventsFromChunk({
+        chunkText: 'evento senza data',
+        chunkLabel: 'test.pdf',
+        documentType: 'altro',
+        caseType: 'generica',
+      });
+
+      expect(result.events[0].eventDate).toBe('1900-01-01');
+      expect(result.events[0].datePrecision).toBe('sconosciuta');
+      expect(result.events[0].requiresVerification).toBe(true);
+    });
+  });
+
   describe('name validation against OCR (C2 fix)', () => {
     it('should preserve doctor name found in OCR text', async () => {
       const llmResponse = JSON.stringify({
