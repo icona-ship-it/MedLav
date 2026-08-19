@@ -233,6 +233,108 @@ describe('reconcileExpenseItems — fusione per documento fiscale', () => {
     expect(result.totalAmount).toBeNull();
   });
 
+  describe('dedup acconto/saldo (F1 — esclusione trasparente, mai silenziosa)', () => {
+    // Il caso reale sintetizzato: avviso di deposito cauzionale pagato prima
+    // dell'intervento + fattura a saldo che dichiara "ACCONTO" già versato.
+    const depositItem = makeItem({
+      description: 'Deposito cauzionale intervento chirurgico',
+      amount: 11512.73,
+      receiptNumber: 'CNR2I 3010',
+      sourceDocument: 'avviso-deposito.pdf',
+      date: '2026-04-28',
+      category: 'interventi',
+    });
+    const saldoItem = makeItem({
+      description: 'Ricovero in libera professione',
+      amount: 12318.47,
+      receiptNumber: '020/62',
+      sourceDocument: 'fattura-saldo.pdf',
+      date: '2026-05-28',
+      category: 'interventi',
+    });
+    const saldoOcr = '### DOCUMENTO: fattura-saldo.pdf ###\nRICOVERO LP\nTOTALE FATTURA 12.318,47\nACCONTO 11.510,73\nTOTALE DA PAGARE 807,74\n### FINE DOCUMENTO ###\n\n### DOCUMENTO: avviso-deposito.pdf ###\nDEPOSITO CAUZIONALE INTERVENTO LP\n11.512,73 Euro\n### FINE DOCUMENTO ###';
+
+    it('should exclude the deposit from the total with a transparent reason when a saldo invoice declares the acconto', () => {
+      const result = reconcileExpenseItems([depositItem, saldoItem], saldoOcr);
+
+      expect(result.items).toHaveLength(2); // la riga NON sparisce mai
+      const deposit = result.items.find((i) => i.description.includes('Deposito'));
+      expect(deposit?.excludedFromTotal).toBe(true);
+      expect(deposit?.exclusionReason).toContain('020/62');
+      expect(deposit?.exclusionReason).toContain('acconto');
+      // Totale: SOLO la fattura a saldo (il +11.512,73 fantasma del CASO-033)
+      expect(result.totalAmount).toBe(12318.47);
+    });
+
+    it('should KEEP the deposit in the total when no saldo invoice declares a matching acconto', () => {
+      // Deposito senza fattura a saldo documentata: è l'unica traccia della
+      // spesa, resta contato.
+      const result = reconcileExpenseItems([depositItem], '### DOCUMENTO: avviso-deposito.pdf ###\nDEPOSITO CAUZIONALE\n11.512,73 Euro\n### FINE DOCUMENTO ###');
+
+      expect(result.items[0].excludedFromTotal).toBeFalsy();
+      expect(result.totalAmount).toBe(11512.73);
+    });
+
+    it('should KEEP the deposit when the declared acconto differs by more than the tolerance', () => {
+      const farOcr = saldoOcr.replace('ACCONTO 11.510,73', 'ACCONTO 9.000,00');
+      const result = reconcileExpenseItems([depositItem, saldoItem], farOcr);
+
+      const deposit = result.items.find((i) => i.description.includes('Deposito'));
+      expect(deposit?.excludedFromTotal).toBeFalsy();
+      expect(result.totalAmount).toBeCloseTo(11512.73 + 12318.47);
+    });
+
+    it('should KEEP the deposit when the declaring invoice has no extracted line item (conservativo)', () => {
+      // L'OCR dichiara l'acconto ma il LLM non ha estratto la voce della
+      // fattura a saldo: escludere il deposito lascerebbe il totale a zero.
+      const result = reconcileExpenseItems([depositItem], saldoOcr);
+
+      expect(result.items[0].excludedFromTotal).toBeFalsy();
+      expect(result.totalAmount).toBe(11512.73);
+    });
+
+    it('should not flag ordinary items that merely mention acconto-like words in other documents', () => {
+      const visitItem = makeItem({ description: 'Visita specialistica', amount: 150, sourceDocument: 'fattura-visita.pdf' });
+      const result = reconcileExpenseItems([visitItem, saldoItem], saldoOcr);
+
+      expect(result.items.every((i) => !i.excludedFromTotal)).toBe(true);
+      expect(result.totalAmount).toBeCloseTo(150 + 12318.47);
+    });
+
+    it('should exclude at most ONE deposit per declared acconto (two identical deposits ≠ one declaration)', () => {
+      const secondDeposit = makeItem({
+        description: 'Acconto intervento (secondo versamento)',
+        amount: 11512.73,
+        sourceDocument: 'avviso-deposito-2.pdf',
+        date: '2026-04-29',
+      });
+      const result = reconcileExpenseItems([depositItem, secondDeposit, saldoItem], saldoOcr);
+
+      const excluded = result.items.filter((i) => i.excludedFromTotal);
+      expect(excluded).toHaveLength(1);
+      // Il secondo deposito resta contato: nessuna dichiarazione lo copre più.
+      expect(result.totalAmount).toBeCloseTo(12318.47 + 11512.73);
+    });
+
+    it('should work after merging: saldo invoice split into chapters still hosts the exclusion', () => {
+      // La fattura a saldo scorporata in capitoli (LLM vecchio stile) viene
+      // prima FUSA (F2) e poi ospita comunque l'esclusione del deposito (F1).
+      const chapters = [
+        makeItem({ description: 'Quota equipe chirurgica', amount: 7580, receiptNumber: '020/62', sourceDocument: 'fattura-saldo.pdf', date: '2026-05-28' }),
+        makeItem({ description: 'Oneri amministrativi', amount: 1288.37, receiptNumber: '020/62', sourceDocument: 'fattura-saldo.pdf', date: '2026-05-28' }),
+        makeItem({ description: 'Quota DRG', amount: 3052.6, receiptNumber: '020/62', sourceDocument: 'fattura-saldo.pdf', date: '2026-05-28' }),
+        makeItem({ description: 'Personale di supporto', amount: 395.5, receiptNumber: '020/62', sourceDocument: 'fattura-saldo.pdf', date: '2026-05-28' }),
+        makeItem({ description: 'Imposta di bollo su fattura ricovero', amount: 2, receiptNumber: '020/62', sourceDocument: 'fattura-saldo.pdf', date: '2026-05-28' }),
+      ];
+      const result = reconcileExpenseItems([depositItem, ...chapters], saldoOcr);
+
+      expect(result.items).toHaveLength(2);
+      const deposit = result.items.find((i) => i.description.includes('Deposito'));
+      expect(deposit?.excludedFromTotal).toBe(true);
+      expect(result.totalAmount).toBe(12318.47);
+    });
+  });
+
   it('INVARIANTE SOLDI: senza ancoraggio, la fusione non altera mai il totale complessivo', () => {
     // Mix di gruppi fondibili, fiscali orfane e voci singole: la fusione sposta
     // importi DENTRO le righe, mai dentro/fuori dal totale.

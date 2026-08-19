@@ -178,11 +178,21 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const amount = typeof item.amount === 'number' ? item.amount : null;
+    // Voci escluse dal totale (es. acconto già assorbito nella fattura a
+    // saldo): restano in tabella con la motivazione, non si sommano.
+    const isExcludedFromTotal = item.excludedFromTotal === true;
 
-    if (amount !== null) {
+    if (amount !== null && !isExcludedFromTotal) {
       totalAmount += amount;
       hasAnyAmount = true;
     }
+
+    const exclusionNote = isExcludedFromTotal
+      ? `NON SOMMATA AL TOTALE${typeof item.exclusionReason === 'string' ? ` — ${item.exclusionReason}` : ''}`
+      : null;
+    const notesWithExclusion = [exclusionNote, typeof item.notes === 'string' ? item.notes : null]
+      .filter(Boolean)
+      .join(' | ');
 
     const row = [
       String(i + 1),
@@ -197,7 +207,7 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
       escapeCsvField(EXPENSE_CATEGORY_LABELS[String(item.category ?? 'altro')] ?? String(item.category ?? '')),
       escapeCsvField(String(item.facility ?? '')),
       escapeCsvField(String(item.linkedDiagnosis ?? '')),
-      escapeCsvField(String(item.notes ?? '')),
+      escapeCsvField(notesWithExclusion),
       escapeCsvField(String(item.interpretation ?? '')),
     ];
     rows.push(row.join(SEP));

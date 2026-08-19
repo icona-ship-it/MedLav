@@ -67,12 +67,36 @@ export interface ReconcileResult {
   items: ExtractedExpenseItem[];
   totalAmount: number | null;
   /** Solo conteggi (GDPR: mai contenuti nei log). */
-  stats: { mergedGroups: number; anchoredAmounts: number };
+  stats: { mergedGroups: number; anchoredAmounts: number; excludedDeposits: number };
 }
 
 /** Tolleranza per l'ancoraggio al totale documentato: copre IVA ricalcolata
  * male e bolli dedotti (±3 €), senza mai "correggere" verso totali estranei. */
 const ANCHOR_TOLERANCE_EUR = 3;
+
+/** Tolleranza deposito↔acconto dichiarato: copre commissioni bancarie e bolli
+ * (caso reale: deposito 11.512,73 vs acconto in fattura 11.510,73 = 2 €). */
+const DEPOSIT_MATCH_TOLERANCE_EUR = 5;
+
+/** Voce che rappresenta un acconto/deposito versato prima del saldo. */
+const DEPOSIT_ITEM_RE = /\b(deposito\s+cauzionale|acconto|caparra)\b/i;
+
+/** Dichiarazione "ACCONTO <importo>" dentro una fattura a saldo. */
+const ACCONTO_DECLARATION_RE = /\bacconto\b[^\d\n]{0,20}([\d.]+,\d{2})/gi;
+
+/** Acconti dichiarati per documento (nome file → importi). */
+function findDeclaredAcconti(blocks: Map<string, string>): Map<string, number[]> {
+  const byDoc = new Map<string, number[]>();
+  for (const [doc, text] of blocks) {
+    const amounts: number[] = [];
+    for (const m of text.matchAll(ACCONTO_DECLARATION_RE)) {
+      const n = parseItalianAmount(m[1]);
+      if (n !== null) amounts.push(n);
+    }
+    if (amounts.length > 0) byDoc.set(doc, amounts);
+  }
+  return byDoc;
+}
 
 const MAX_NOTES_LENGTH = 800;
 
@@ -161,7 +185,7 @@ export function reconcileExpenseItems(
   ocrText: string,
 ): ReconcileResult {
   if (!Array.isArray(items) || items.length === 0) {
-    return { items: [], totalAmount: null, stats: { mergedGroups: 0, anchoredAmounts: 0 } };
+    return { items: [], totalAmount: null, stats: { mergedGroups: 0, anchoredAmounts: 0, excludedDeposits: 0 } };
   }
 
   const blocks = parseDocumentBlocks(ocrText);
@@ -228,12 +252,51 @@ export function reconcileExpenseItems(
     return res.item;
   });
 
-  anchored.sort((a, b) => a.date.localeCompare(b.date));
+  // Passo 4 — dedup acconto/saldo (feedback medici 2026-08-19: deposito
+  // cauzionale 11.512,73 sommato ALLA fattura a saldo che lo dichiarava già
+  // assorbito → +11.512,73 fantasma). Esclusione SEMPRE trasparente: la riga
+  // resta in tabella con la motivazione, esce solo dal totale. Conservativa:
+  // serve la dichiarazione "acconto ≈ importo" in un ALTRO documento E la voce
+  // estratta di quel documento (la fattura che lo assorbe).
+  const accontiByDoc = findDeclaredAcconti(blocks);
+  let excludedDeposits = 0;
+  const withDeposits = anchored.map((item) => {
+    if (item.excludedFromTotal || item.amount === null) return item;
+    if (!DEPOSIT_ITEM_RE.test(item.description)) return item;
+    for (const [doc, acconti] of accontiByDoc) {
+      if (doc === item.sourceDocument) continue; // dichiarazione in un ALTRO documento
+      const declaredIdx = acconti.findIndex((a) => Math.abs(a - (item.amount as number)) <= DEPOSIT_MATCH_TOLERANCE_EUR);
+      if (declaredIdx === -1) continue;
+      const declared = acconti[declaredIdx];
+      const host = anchored.find((i) =>
+        i !== item &&
+        i.sourceDocument === doc &&
+        i.amount !== null &&
+        i.amount >= declared - DEPOSIT_MATCH_TOLERANCE_EUR &&
+        !DEPOSIT_ITEM_RE.test(i.description));
+      if (!host) continue;
+      // Una dichiarazione giustifica UNA sola esclusione (due depositi identici
+      // non possono appoggiarsi allo stesso acconto dichiarato).
+      acconti.splice(declaredIdx, 1);
+      excludedDeposits++;
+      return {
+        ...item,
+        excludedFromTotal: true,
+        exclusionReason: `Già compreso nella fattura a saldo${host.receiptNumber ? ` n. ${host.receiptNumber}` : ''} — acconto dichiarato in fattura: ${formatAmountForNote(declared)}`,
+      };
+    }
+    return item;
+  });
 
-  const validAmounts = anchored.map((i) => i.amount).filter((a): a is number => a !== null);
+  withDeposits.sort((a, b) => a.date.localeCompare(b.date));
+
+  const validAmounts = withDeposits
+    .filter((i) => !i.excludedFromTotal)
+    .map((i) => i.amount)
+    .filter((a): a is number => a !== null);
   const totalAmount = validAmounts.length > 0
     ? Math.round(validAmounts.reduce((s, a) => s + Math.round(a * 100), 0)) / 100
     : null;
 
-  return { items: anchored, totalAmount, stats: { mergedGroups, anchoredAmounts } };
+  return { items: withDeposits, totalAmount, stats: { mergedGroups, anchoredAmounts, excludedDeposits } };
 }

@@ -48,6 +48,12 @@ export interface ExtractedExpenseItem {
    * la riconciliazione deterministica (riga unica lorda, dedup acconto/saldo).
    * Assente negli item legacy salvati prima del 2026-08-19. */
   sourceDocument?: string | null;
+  /** true = la voce resta VISIBILE in tabella ma NON entra nel totale (es.
+   * deposito cauzionale già assorbito nella fattura a saldo). Solo la rete
+   * deterministica lo setta, mai il LLM. */
+  excludedFromTotal?: boolean;
+  /** Motivazione mostrata al perito quando excludedFromTotal è true. */
+  exclusionReason?: string | null;
 }
 
 export interface ExpenseExtractionResult {
@@ -87,6 +93,10 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 - Scontrino farmacia con piu' prodotti → UNA voce con il totale dello scontrino; i singoli farmaci/prodotti nelle notes (e nel campo drugType se uno solo).
 - Se il documento espone un TOTALE ("totale", "totale fattura", "da pagare"), usa QUEL numero come amount: NON ricalcolare mai la somma da solo.
 - NON dedurre importi non scritti (es. bollo "implicito"): se non e' nel testo, non esiste.
+
+## ACCONTO / DEPOSITO CAUZIONALE E FATTURA A SALDO
+- Caso tipico: un deposito cauzionale (avviso pagoPA/bonifico) versato PRIMA dell'intervento + una fattura a saldo che dichiara "ACCONTO gia' versato". Sono DUE documenti ma l'acconto e' gia' compreso nel totale della fattura a saldo.
+- Emetti COMUNQUE entrambe le voci (una per documento, con i rispettivi importi documentati): la deduplicazione la fa il sistema in modo trasparente. NON escludere o fondere tu le voci, NON segnalare nulla: estrai e basta.
 
 ## STRUTTURA DEL TESTO IN INGRESSO
 Il testo OCR e' organizzato in blocchi documento separati da:
@@ -233,8 +243,8 @@ export async function extractExpensesFromOcr(
   // l'importo al totale dichiarato. Idempotente su output già puliti.
   const parsed = parseExpenseResponse(result.content);
   const reconciled = reconcileExpenseItems(parsed.items, trimmedOcr);
-  if (reconciled.stats.mergedGroups > 0 || reconciled.stats.anchoredAmounts > 0) {
-    logger.info('expense-extractor', `Reconciled expense items: ${parsed.items.length} → ${reconciled.items.length} (${reconciled.stats.mergedGroups} merged groups, ${reconciled.stats.anchoredAmounts} anchored amounts)`);
+  if (reconciled.stats.mergedGroups > 0 || reconciled.stats.anchoredAmounts > 0 || reconciled.stats.excludedDeposits > 0) {
+    logger.info('expense-extractor', `Reconciled expense items: ${parsed.items.length} → ${reconciled.items.length} (${reconciled.stats.mergedGroups} merged groups, ${reconciled.stats.anchoredAmounts} anchored amounts, ${reconciled.stats.excludedDeposits} deposits excluded from total)`);
   }
 
   return { items: reconciled.items, totalAmount: reconciled.totalAmount, currency: parsed.currency, usage: result.usage };

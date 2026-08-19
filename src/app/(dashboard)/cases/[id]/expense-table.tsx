@@ -40,10 +40,12 @@ export function ExpenseTable({ items, totalAmount, caseId }: ExpenseTableProps) 
   const categories = [...new Set(items.map((i) => i.category))].sort();
   const filteredItems = filter === 'all' ? items : items.filter((i) => i.category === filter);
 
+  // Le voci escluse dal totale (es. acconto già assorbito nella fattura a
+  // saldo) restano visibili con la motivazione ma non si sommano.
   const filteredTotal = filteredItems.reduce((sum, item) => {
-    return item.amount !== null ? sum + item.amount : sum;
+    return item.amount !== null && !item.excludedFromTotal ? sum + item.amount : sum;
   }, 0);
-  const hasAnyAmount = filteredItems.some((i) => i.amount !== null);
+  const hasAnyAmount = filteredItems.some((i) => i.amount !== null && !i.excludedFromTotal);
 
   return (
     <div className="space-y-4">
@@ -116,11 +118,18 @@ export function ExpenseTable({ items, totalAmount, caseId }: ExpenseTableProps) 
           </thead>
           <tbody>
             {filteredItems.map((item, idx) => (
-              <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/30">
+              <tr key={idx} className={`border-b last:border-b-0 hover:bg-muted/30 ${item.excludedFromTotal ? 'opacity-70' : ''}`}>
                 <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{formatDate(item.date)}</td>
-                <td className="px-3 py-2 max-w-[250px]">{item.description}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap font-mono">
+                <td className="px-3 py-2 max-w-[250px]">
+                  {item.description}
+                  {item.excludedFromTotal && (
+                    <span className="block text-xs text-amber-700 dark:text-amber-400 italic mt-0.5">
+                      Non sommata al totale{item.exclusionReason ? ` — ${item.exclusionReason}` : ''}
+                    </span>
+                  )}
+                </td>
+                <td className={`px-3 py-2 text-right whitespace-nowrap font-mono ${item.excludedFromTotal ? 'line-through text-muted-foreground' : ''}`}>
                   {item.amount !== null ? formatCurrency(item.amount) : '—'}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground font-mono text-xs">

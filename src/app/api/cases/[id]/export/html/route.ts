@@ -350,18 +350,29 @@ function generateExpenseTableHtml(params: {
 
   const rowsHtml = items.map((item, idx) => {
     const amount = typeof item.amount === 'number' ? item.amount : null;
-    if (amount !== null) { totalCalc += amount; hasAny = true; }
+    // Voci escluse dal totale (es. acconto già assorbito nella fattura a
+    // saldo): visibili con la motivazione, mai sommate.
+    const isExcluded = item.excludedFromTotal === true;
+    if (amount !== null && !isExcluded) { totalCalc += amount; hasAny = true; }
 
-    return `<tr>
+    const exclusionNote = isExcluded
+      ? `<div class="exclusion">Non sommata al totale${typeof item.exclusionReason === 'string' ? ` — ${escapeHtml(item.exclusionReason)}` : ''}</div>`
+      : '';
+    const notesCell = [
+      exclusionNote,
+      item.notes ? escapeHtml(String(item.notes)) : (isExcluded ? '' : '—'),
+    ].filter(Boolean).join('') || '—';
+
+    return `<tr${isExcluded ? ' class="excluded-row"' : ''}>
       <td>${idx + 1}</td>
       <td>${escapeHtml(formatDateForHtml(String(item.date ?? '')))}</td>
       <td>${escapeHtml(String(item.description ?? ''))}</td>
-      <td class="amount">${amount !== null ? `€ ${amount.toFixed(2).replace('.', ',')}` : '—'}</td>
+      <td class="amount${isExcluded ? ' excluded-amount' : ''}">${amount !== null ? `€ ${amount.toFixed(2).replace('.', ',')}` : '—'}</td>
       <td>${escapeHtml(String(item.receiptNumber ?? '—'))}</td>
       <td>${escapeHtml(String(item.drugType ?? '—'))}</td>
       <td><span class="badge">${EXPENSE_CAT_LABELS[String(item.category ?? 'altro')] ?? String(item.category ?? '')}</span></td>
       <td>${escapeHtml(String(item.linkedDiagnosis ?? '—'))}</td>
-      <td>${escapeHtml(String(item.notes ?? '—'))}</td>
+      <td>${notesCell}</td>
     </tr>`;
   }).join('\n');
 
@@ -385,6 +396,9 @@ function generateExpenseTableHtml(params: {
     .amount { text-align: right; font-family: monospace; white-space: nowrap; }
     .badge { background: #eee; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
     .total-row { background: #f0f0f0; border-top: 2px solid #333; }
+    .excluded-row { color: #777; background: #fafafa; }
+    .excluded-amount { text-decoration: line-through; }
+    .exclusion { color: #9a3412; font-size: 0.75rem; font-style: italic; margin-bottom: 2px; }
     .disclaimer { margin-top: 1.5rem; padding: 12px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; font-size: 0.8rem; color: #795548; }
     @media print { body { margin: 1cm; } }
   </style>
