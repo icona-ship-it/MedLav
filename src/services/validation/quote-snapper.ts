@@ -53,7 +53,7 @@ interface CorpusToken {
   end: number;
 }
 
-function normalizeWord(raw: string): string {
+export function normalizeWord(raw: string): string {
   return raw
     .toLowerCase()
     .replace(/[.,;:!?()[\]{}"'«»\-–—/\\*_`#~<>|=+]/g, '');
@@ -109,7 +109,7 @@ function antonymPrefixSplit(word: string): { pairIdx: number; side: 0 | 1; stem:
   }
   return null;
 }
-function isAntonymPrefixFlip(a: string, b: string): boolean {
+export function isAntonymPrefixFlip(a: string, b: string): boolean {
   const pa = antonymPrefixSplit(a);
   const pb = antonymPrefixSplit(b);
   // Stesso pair, lato opposto, stem quasi uguale (elisione al confine ≤1):
@@ -124,12 +124,14 @@ function isAntonymPrefixFlip(a: string, b: string): boolean {
 const CLINICAL_ANTONYMS: ReadonlyArray<readonly [string, string]> = [
   ['inversione', 'eversione'], ['inverso', 'everso'],
 ];
-function isClinicalAntonym(a: string, b: string): boolean {
+export function isClinicalAntonym(a: string, b: string): boolean {
   return CLINICAL_ANTONYMS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
 }
 
-/** true se `a` e `b` sono opposti clinici che NON vanno mai fuzzy-matchati. */
-function isClinicalOpposite(a: string, b: string): boolean {
+/** true se `a` e `b` sono opposti clinici che NON vanno mai fuzzy-matchati.
+ * Esportata anche per la Rete A (event-source-consistency): stessa nozione di
+ * "opposto clinico" (privativi, prefissi-antonimo, antonimi) usata per lo snap. */
+export function isClinicalOpposite(a: string, b: string): boolean {
   return isPrivativePair(a, b) || isAntonymPrefixFlip(a, b) || isClinicalAntonym(a, b);
 }
 

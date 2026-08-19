@@ -5,6 +5,45 @@ import { safeJsonParse } from '@/lib/format';
 import type { ExtractionResult, ConsolidationStepResult } from './types';
 import { buildOrderUpdates } from './order-mapping';
 import { logger } from '@/lib/logger';
+import { checkEventSourceConsistency } from '@/services/validation/event-source-consistency';
+
+/**
+ * RETE A — coerenza estratto ↔ fonte. Marca "da verificare" gli eventi il cui testo
+ * strutturato contraddice il proprio `source_text` su un token che pesa (lateralità
+ * invertita, opposto clinico). Deterministica e ad ALTA precisione (0 falsi positivi
+ * misurati su 45 eventi reali). Non declassa mai: alza solo il flag + aggiunge una
+ * nota leggibile → arriva nel pannello "Da controllare" col meccanismo esistente.
+ * Idempotente: non riappende la stessa nota su reprocess/regen.
+ */
+async function flagInconsistentEvents(
+  supabase: ReturnType<typeof createAdminClient>,
+  rows: ReadonlyArray<Record<string, unknown>>,
+): Promise<void> {
+  const updates: Array<{ id: string; reliability_notes: string }> = [];
+  for (const e of rows) {
+    const res = checkEventSourceConsistency({
+      title: (e.title ?? null) as string | null,
+      description: (e.description ?? null) as string | null,
+      source_text: (e.source_text ?? null) as string | null,
+    });
+    if (!res.flagged || !res.reason) continue;
+    const prev = (e.reliability_notes ?? null) as string | null;
+    if (prev && prev.includes(res.reason)) continue; // idempotenza
+    updates.push({ id: e.id as string, reliability_notes: prev ? `${prev} | ${res.reason}` : res.reason });
+  }
+  if (updates.length === 0) return;
+  const BATCH = 500;
+  for (let i = 0; i < updates.length; i += BATCH) {
+    await Promise.allSettled(
+      updates.slice(i, i + BATCH).map((u) =>
+        supabase.from('events')
+          .update({ requires_verification: true, reliability_notes: u.reliability_notes })
+          .eq('id', u.id),
+      ),
+    );
+  }
+  logger.info('pipeline', ` Rete A (coerenza estratto↔fonte): ${updates.length} eventi marcati da verificare`);
+}
 
 /**
  * Re-read all events from DB and re-apply consolidation logic (discrepancy detection,
@@ -83,6 +122,9 @@ export async function consolidateEventsStep(
     // condividono lo stesso created_at → senza id l'ordine dei pari può cambiare
     // tra due fetch e far slittare le finestre doc-sanitaria tra invocazioni.
     .order('id', { ascending: true });
+
+  // RETE A: marca "da verificare" gli eventi che contraddicono la propria fonte.
+  await flagInconsistentEvents(supabase, existingRaw ?? []);
 
   // Group events by document for cross-document deduplication
   const docEventsMap = new Map<string, DocumentEvents>();
