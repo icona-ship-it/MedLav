@@ -35,11 +35,30 @@ export async function fetchCaseMetadata(
     throw new Error('Unauthorized access to case');
   }
 
-  const { data: docs, error: docsError } = await supabase
+  // Colonne merge multi-file (migration 0033): se la migration non è ancora
+  // applicata la select fallirebbe e fermerebbe TUTTA la pipeline — fallback
+  // senza merge (comportamento pre-0033), mai bloccare un'elaborazione per
+  // una feature accessoria.
+  let docs = null;
+  let docsError = null;
+  const withMerge = await supabase
     .from('documents')
-    .select('id, file_name, file_type, storage_path, document_type, processing_status')
+    .select('id, file_name, file_type, storage_path, document_type, processing_status, merged_into_document_id, merge_order')
     .eq('case_id', caseId)
     .in('processing_status', ['caricato', 'in_coda']);
+  if (withMerge.error && /merged_into_document_id|merge_order/.test(withMerge.error.message)) {
+    logger.warn('pipeline', 'Step 1: merge columns missing (migration 0033 not applied) — documents loaded without merge info');
+    const withoutMerge = await supabase
+      .from('documents')
+      .select('id, file_name, file_type, storage_path, document_type, processing_status')
+      .eq('case_id', caseId)
+      .in('processing_status', ['caricato', 'in_coda']);
+    docs = withoutMerge.data;
+    docsError = withoutMerge.error;
+  } else {
+    docs = withMerge.data;
+    docsError = withMerge.error;
+  }
 
   if (docsError) {
     throw new Error(`Failed to fetch documents: ${docsError.message}`);
@@ -83,6 +102,8 @@ export async function fetchCaseMetadata(
       fileType: d.file_type as string,
       storagePath: d.storage_path as string,
       documentType: (d.document_type ?? 'altro') as string,
+      mergedIntoDocumentId: ((d as Record<string, unknown>).merged_into_document_id ?? null) as string | null,
+      mergeOrder: ((d as Record<string, unknown>).merge_order ?? null) as number | null,
     })) satisfies DocumentInfo[],
   };
 }

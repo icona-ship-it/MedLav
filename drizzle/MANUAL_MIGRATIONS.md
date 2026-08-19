@@ -95,7 +95,8 @@ blocchi `DO $$`) — innocuo per prod, la dedup usa solo `created_at`.
 | `0029_add_event_chronology_relevance.sql` | APPLICATA 2026-06-01 | si | usare `verify_0029_event_chronology_relevance.sql` |
 | `0030_storage_bucket_size_limit.sql` | APPLICATA 2026-07-20 (limite già 104857600 dal 07/07 — UPDATE no-op) | si (`UPDATE` puntuale) | usare `verify_0030.sql` (atteso `104857600`) |
 | `0032_boring_roughhouse.sql` (pipeline_diagnostics) | APPLICATA 2026-07-24 (`pnpm db:migrate` via pooler; journal a 33 righe) | si (CREATE TABLE + RLS manuale) | `verify_0032.sql` eseguita: tabella ok, 3 indici, RLS attiva, 1 policy |
-| `0033_*` (future) | — | vedi procedura sotto | — |
+| `0033_tiny_senator_kelly.sql` (merge multi-file documenti: 2 colonne + FK + indice parziale) | DA APPLICARE (gate founder, PRIMA del deploy del codice 2026-08-19 — fetch-metadata ha comunque un fallback senza colonne) | si (indice parziale aggiunto a mano; niente RLS nuove: colonne su tabella già protetta) | `verify_0033.sql` |
+| `0034_*` (future) | — | vedi procedura sotto | — |
 
 ## Procedura per future migration (DOPO il re-sync)
 

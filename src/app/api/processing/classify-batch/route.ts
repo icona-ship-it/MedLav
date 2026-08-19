@@ -62,10 +62,13 @@ export async function POST(request: NextRequest) {
   // senza questo controllo si addebiterebbero crediti su id duplicati (stesso doc
   // contato piu' volte) o su documenti di un altro caso passati dal client.
   const uniqueDocIds = [...new Set(documentIds)];
+  // I secondari di un gruppo unito (merge multi-file 2026-08-19) non si
+  // classificano né si addebitano: il loro contenuto confluisce nel primario.
   const { data: ownedDocs } = await supabase
     .from('documents')
     .select('id')
     .eq('case_id', caseId)
+    .is('merged_into_document_id', null)
     .in('id', uniqueDocIds);
   const validDocIds = (ownedDocs ?? []).map((d) => d.id as string);
   if (validDocIds.length === 0) {

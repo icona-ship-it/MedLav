@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
   ImageIcon, TestTube, Stethoscope, MoreVertical, Sparkles, Info, FileQuestion,
+  Layers, Split,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { notifyCreditsChanged } from '@/lib/credits-events';
@@ -21,6 +22,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { FileUpload } from '@/components/file-upload';
+import { MergeDocumentsBanner } from './merge-documents-banner';
 import { deleteDocument, retryDocument, updateDocumentType } from '../../actions';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { formatFileSize, getFileIcon } from '@/lib/format';
@@ -93,6 +95,10 @@ function processingVariant(status: string): 'secondary' | 'warning' | 'success' 
 
 function isDocProcessing(status: string): boolean {
   return ['in_coda', 'ocr_in_corso', 'estrazione_in_corso', 'validazione_in_corso'].includes(status);
+}
+
+function nameOfDoc(documents: Document[], id: string): string {
+  return documents.find((d) => d.id === id)?.file_name ?? 'documento';
 }
 
 
@@ -329,6 +335,33 @@ export function DocumentsSection({
   const readyCount = documents.filter((d) => d.processing_status === 'caricato').length;
   const uploadedDocs = documents.filter((d) => d.processing_status === 'caricato');
 
+  // Merge multi-file: primari che hanno pagine unite (per badge e "Separa").
+  const mergedPrimaryIds = new Set(
+    documents.map((d) => d.merged_into_document_id).filter((id): id is string => !!id),
+  );
+  const [unmergingId, setUnmergingId] = useState<string | null>(null);
+  const handleUnmerge = useCallback(async (primaryDocumentId: string) => {
+    setUnmergingId(primaryDocumentId);
+    try {
+      const res = await fetch('/api/documents/unmerge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ caseId, primaryDocumentId }),
+      });
+      const data = await res.json() as { success: boolean; error?: string };
+      if (!data.success) {
+        toast.error(data.error ?? 'Errore durante la separazione');
+      } else {
+        toast.success('Documenti separati: torneranno a essere letti come file indipendenti.');
+        router.refresh();
+      }
+    } catch {
+      toast.error('Errore durante la separazione. Riprova.');
+    } finally {
+      setUnmergingId(null);
+    }
+  }, [caseId, router]);
+
   return (
     <div className="space-y-4">
       {/* Upload area */}
@@ -538,6 +571,13 @@ export function DocumentsSection({
               </div>
             )}
 
+            {/* Proposta unione multi-file (foto pagine dello stesso documento) */}
+            <MergeDocumentsBanner
+              caseId={caseId}
+              documents={documents}
+              hasBeenProcessed={completedCount > 0}
+            />
+
             {/* Document cards with inline type + actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {documents.map((doc) => {
@@ -547,6 +587,13 @@ export function DocumentsSection({
                 const isComplete = doc.processing_status === 'completato';
                 const isError = doc.processing_status === 'errore';
                 const isClassifying = classifyingDocId === doc.id;
+                // Merge multi-file: secondario = pagina di un altro documento;
+                // primario = capofila di un gruppo unito.
+                const mergedIntoId = doc.merged_into_document_id ?? null;
+                const isMergePrimary = mergedPrimaryIds.has(doc.id);
+                const mergedPageCount = isMergePrimary
+                  ? documents.filter((d) => d.merged_into_document_id === doc.id).length + 1
+                  : 0;
                 // Documento senza categoria (solo dove la categoria conta, e
                 // quando la tendina è visibile): flag esplicito sulla riga.
                 const isUncategorized = isUncategorizedDoc(doc);
@@ -572,7 +619,27 @@ export function DocumentsSection({
 
                       {/* Status badges */}
                       <div className="flex items-center gap-1 shrink-0">
-                        {isUncategorized && (
+                        {mergedIntoId && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-blue-300 bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                            title={`Pagina ${(doc.merge_order ?? 0) + 1} di un documento unito: verrà letta insieme a ${nameOfDoc(documents, mergedIntoId)}`}
+                          >
+                            <Layers className="h-3 w-3 mr-1" />
+                            Pag. {(doc.merge_order ?? 0) + 1} di doc. unito
+                          </Badge>
+                        )}
+                        {isMergePrimary && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-blue-300 bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                            title="Documento unito: alla prossima elaborazione le pagine dei file uniti verranno lette qui in sequenza"
+                          >
+                            <Layers className="h-3 w-3 mr-1" />
+                            Doc. unito ({mergedPageCount} file)
+                          </Badge>
+                        )}
+                        {isUncategorized && !mergedIntoId && (
                           <Badge
                             variant="outline"
                             className="text-xs border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700"
@@ -611,7 +678,7 @@ export function DocumentsSection({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {isUploaded && (
+                            {isUploaded && !mergedIntoId && (
                               <DropdownMenuItem
                                 onClick={() => handleClassifyDocument(doc.id)}
                                 disabled={isClassifying || classifyingAll}
@@ -629,7 +696,20 @@ export function DocumentsSection({
                                 </span>
                               </DropdownMenuItem>
                             )}
-                            {isUploaded && <DropdownMenuSeparator />}
+                            {(mergedIntoId || isMergePrimary) && (
+                              <DropdownMenuItem
+                                onClick={() => handleUnmerge(mergedIntoId ?? doc.id)}
+                                disabled={unmergingId !== null}
+                              >
+                                {unmergingId === (mergedIntoId ?? doc.id) ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                                ) : (
+                                  <Split className="h-3.5 w-3.5 mr-2" />
+                                )}
+                                Separa il documento unito
+                              </DropdownMenuItem>
+                            )}
+                            {(isUploaded || mergedIntoId || isMergePrimary) && <DropdownMenuSeparator />}
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => setDeleteTarget({ id: doc.id, name: doc.file_name })}
@@ -642,8 +722,16 @@ export function DocumentsSection({
                       )}
                     </div>
 
+                    {/* Pagina di un documento unito: la categoria la decide il
+                        capofila — la tendina qui confonderebbe. */}
+                    {mergedIntoId && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Verrà letto come pagina di «{nameOfDoc(documents, mergedIntoId)}» — la categoria si sceglie sul documento capofila.
+                      </p>
+                    )}
+
                     {/* Row 2: Inline type dropdown (only for uploaded/ready docs) */}
-                    {(isUploaded || isComplete) && (
+                    {(isUploaded || isComplete) && !mergedIntoId && (
                       <>
                       <p className={`text-xs font-medium mt-2 ${isUncategorized ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}>
                         {isUncategorized

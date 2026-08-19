@@ -89,6 +89,10 @@ export interface Document {
     reasoning: string;
   } | null;
   created_at: string;
+  /** Merge multi-file (2026-08-19): valorizzato = questo file è una pagina del
+   * documento primario indicato. Opzionali: assenti prima della migration 0033. */
+  merged_into_document_id?: string | null;
+  merge_order?: number | null;
 }
 
 export interface EventRow {

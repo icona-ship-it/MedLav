@@ -17,7 +17,7 @@ import { recordDiagnostic, classifyPipelineError, sanitizeErrorForDetail } from 
 // not silently truncate).
 const MAX_OCR_IMAGES_TO_SAVE = 80;
 
-async function saveOcrImagesToStorage(
+export async function saveOcrImagesToStorage(
   supabase: ReturnType<typeof createAdminClient>,
   documentId: string,
   images: OcrImageResult[],
@@ -87,6 +87,37 @@ async function saveOcrImagesToStorage(
 }
 
 /**
+ * OCR "grezzo" di un singolo file: text-ingestion per XML/TXT, Mistral OCR per
+ * il resto. Nessuna scrittura DB — riusato sia dal percorso singolo sia
+ * dall'OCR di gruppo (merge multi-file 2026-08-19).
+ */
+export async function fetchOcrRawResult(doc: DocumentInfo) {
+  if (isTextIngestType(doc.fileType, doc.fileName)) {
+    // Text-based document (XML/TXT): the file IS text — read it directly
+    // (no OCR call, ocrPages = 0). XML is sanitized: tags stripped,
+    // attribute values kept, embedded base64 payloads removed.
+    const { downloadFile } = await import('@/lib/supabase/storage');
+    const blob = await downloadFile(doc.storagePath);
+    const rawText = await blob.text();
+    const result = buildTextIngestResult({
+      documentId: doc.id,
+      fileName: doc.fileName,
+      fileType: doc.fileType,
+      rawText,
+    });
+    logger.info('pipeline', ` Step 2: Text ingestion for doc ${doc.id}: ${result.pageCount} pages from ${rawText.length} raw chars`);
+    return result;
+  }
+  const signedUrl = await getSignedUrl(doc.storagePath);
+  return ocrDocument({
+    documentId: doc.id,
+    fileName: doc.fileName,
+    fileType: doc.fileType,
+    signedUrl,
+  });
+}
+
+/**
  * Step 2: OCR a single document.
  * Always runs fresh OCR to ensure maximum analysis quality.
  * Saves OCR pages to database and updates document status.
@@ -104,30 +135,7 @@ export async function ocrSingleDocument(doc: DocumentInfo): Promise<OcrResult | 
     const ocrStartMs = Date.now();
     logger.info('pipeline', ` Step 2: Starting OCR for doc ${doc.id} (${doc.fileName})`);
 
-    let result;
-    if (isTextIngestType(doc.fileType, doc.fileName)) {
-      // Text-based document (XML/TXT): the file IS text — read it directly
-      // (no OCR call, ocrPages = 0). XML is sanitized: tags stripped,
-      // attribute values kept, embedded base64 payloads removed.
-      const { downloadFile } = await import('@/lib/supabase/storage');
-      const blob = await downloadFile(doc.storagePath);
-      const rawText = await blob.text();
-      result = buildTextIngestResult({
-        documentId: doc.id,
-        fileName: doc.fileName,
-        fileType: doc.fileType,
-        rawText,
-      });
-      logger.info('pipeline', ` Step 2: Text ingestion for doc ${doc.id}: ${result.pageCount} pages from ${rawText.length} raw chars`);
-    } else {
-      const signedUrl = await getSignedUrl(doc.storagePath);
-      result = await ocrDocument({
-        documentId: doc.id,
-        fileName: doc.fileName,
-        fileType: doc.fileType,
-        signedUrl,
-      });
-    }
+    const result = await fetchOcrRawResult(doc);
 
     // Save OCR pages to database
     let savedPageCount = 0;

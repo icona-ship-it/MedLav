@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, pgEnum, real, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, pgEnum, real, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { cases } from './cases';
 
 export const documentTypeEnum = pgEnum('document_type', [
@@ -44,6 +44,13 @@ export const documents = pgTable('documents', {
   } | null>(),
   pageCount: integer('page_count'),
   contentHash: text('content_hash'),
+  // Merge multi-file (feedback medici 2026-08-19): più file caricati che sono
+  // PAGINE dello stesso documento fisico (es. 3 foto smartphone di un referto
+  // "Pag. 1/2/3 di 3"). I secondari puntano al primario; in pipeline l'OCR
+  // scrive tutte le pagine sotto il primario (rinumerate per merge_order) e
+  // classificazione/estrazione/export vedono UN documento.
+  mergedIntoDocumentId: uuid('merged_into_document_id').references((): AnyPgColumn => documents.id, { onDelete: 'set null' }),
+  mergeOrder: integer('merge_order'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

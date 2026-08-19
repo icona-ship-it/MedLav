@@ -5,6 +5,8 @@ import { logger } from '@/lib/logger';
 import { fetchCaseMetadata } from '../steps/fetch-metadata';
 import { dedupCaseDocuments } from '../steps/dedup-documents';
 import { ocrSingleDocument } from '../steps/ocr-document';
+import { ocrMergedGroup } from '../steps/ocr-merged-group';
+import { partitionMergeGroups } from '@/services/documents/document-merge';
 import { chunkArray } from '@/lib/array-utils';
 // Classification removed from pipeline — handled by Document Organizer (Pro) or user manual selection
 import { planChunksSync, extractChunkBatch, markDocumentExtractionError, EXTRACTION_BATCH_SIZE } from '../steps/extract-events';
@@ -309,9 +311,14 @@ export const processCase = inngest.createFunction(
     // ── Step 2: OCR all documents (parallel, fault-tolerant) ──
     // Mistral allows 24 req/sec — full parallelism is safe.
     // Each step.run is a separate Inngest step (serverless invocation).
-    const ocrSettled = await Promise.allSettled(
-      documents.map((doc) =>
-        step.run(`ocr-doc-${doc.id}`, async () => {
+    // Merge multi-file (2026-08-19): i file uniti dall'utente formano UN unità
+    // OCR (`ocr-group-{primaryId}`) — pagine sotto il primario, in sequenza.
+    const { standalone: standaloneDocs, groups: ocrMergeGroups } = partitionMergeGroups(documents);
+    const ocrUnits: Array<{ id: string; fileName: string; run: () => Promise<OcrResult | null> }> = [
+      ...standaloneDocs.map((doc) => ({
+        id: doc.id,
+        fileName: doc.fileName,
+        run: () => step.run(`ocr-doc-${doc.id}`, async () => {
           const result = await ocrSingleDocument(doc);
           // Heartbeat anti stuck-monitor (2026-07-17): su un caso enorme l'OCR
           // può durare >60 min senza scritture sulla riga del caso → il monitor
@@ -319,8 +326,18 @@ export const processCase = inngest.createFunction(
           await heartbeatCase(caseId);
           return result;
         }),
-      ),
-    );
+      })),
+      ...ocrMergeGroups.map((g) => ({
+        id: g.primary.id,
+        fileName: g.primary.fileName,
+        run: () => step.run(`ocr-group-${g.primary.id}`, async () => {
+          const result = await ocrMergedGroup(g.primary, g.secondaries);
+          await heartbeatCase(caseId);
+          return result;
+        }),
+      })),
+    ];
+    const ocrSettled = await Promise.allSettled(ocrUnits.map((u) => u.run()));
     for (const r of ocrSettled) {
       if (r.status === 'rejected') {
         logger.error('pipeline', `OCR step failed: ${r.reason instanceof Error ? r.reason.message : 'unknown'}`);
@@ -335,17 +352,18 @@ export const processCase = inngest.createFunction(
       throw new Error('Tutti i documenti hanno fallito l\'OCR. Verifica che i file siano leggibili.');
     }
 
-    // OCR guard rail: if > 50% docs fail, likely a systemic issue
-    const ocrFailedCount = documents.length - ocrResults.length;
+    // OCR guard rail: if > 50% units fail, likely a systemic issue.
+    // Le unità sono documenti singoli O gruppi merge (un gruppo = un'unità).
+    const ocrFailedCount = ocrUnits.length - ocrResults.length;
     if (ocrFailedCount > 0) {
-      const failedDocNames = documents
-        .filter((d) => !ocrResults.some((r) => r.documentId === d.id))
-        .map((d) => d.fileName)
+      const failedDocNames = ocrUnits
+        .filter((u) => !ocrResults.some((r) => r.documentId === u.id))
+        .map((u) => u.fileName)
         .slice(0, 20);
 
-      if (ocrFailedCount > documents.length / 2) {
+      if (ocrFailedCount > ocrUnits.length / 2) {
         throw new Error(
-          `OCR fallito su ${ocrFailedCount}/${documents.length} documenti (>50%). ` +
+          `OCR fallito su ${ocrFailedCount}/${ocrUnits.length} documenti (>50%). ` +
           `Documenti falliti: ${failedDocNames.join(', ')}. Possibile errore sistemico.`,
         );
       }
@@ -353,12 +371,12 @@ export const processCase = inngest.createFunction(
       pipelineWarnings.push({
         step: 'ocr',
         severity: 'warning',
-        message: `${ocrFailedCount} di ${documents.length} documenti hanno fallito l'OCR`,
+        message: `${ocrFailedCount} di ${ocrUnits.length} documenti hanno fallito l'OCR`,
         failedCount: ocrFailedCount,
-        totalCount: documents.length,
+        totalCount: ocrUnits.length,
         failedItems: failedDocNames,
       });
-      logger.warn('pipeline', `OCR partial failure: ${ocrFailedCount}/${documents.length} docs failed`);
+      logger.warn('pipeline', `OCR partial failure: ${ocrFailedCount}/${ocrUnits.length} units failed`);
     }
 
     // ── Page cap (denial-of-wallet guard) ──
@@ -513,7 +531,8 @@ export const processCase = inngest.createFunction(
           processingProgress: {
             phase: 'extraction',
             ocrCompleted: ocrResults.length,
-            totalDocs: documents.length,
+            // Unità OCR (i gruppi merge contano 1): coerente con ocrCompleted.
+            totalDocs: ocrUnits.length,
             totalChunks: allChunkJobs.length,
           },
         },

@@ -18,6 +18,10 @@ export interface DocumentInfo {
   fileType: string;
   storagePath: string;
   documentType: string;
+  /** Merge multi-file (2026-08-19): se valorizzato, questo file è una PAGINA
+   * del documento primario indicato — l'OCR di gruppo scrive le sue pagine lì. */
+  mergedIntoDocumentId?: string | null;
+  mergeOrder?: number | null;
 }
 
 export interface OcrResult {
