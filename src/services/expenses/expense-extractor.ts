@@ -97,6 +97,7 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 ## ACCONTO / DEPOSITO CAUZIONALE E FATTURA A SALDO
 - Caso tipico: un deposito cauzionale (avviso pagoPA/bonifico) versato PRIMA dell'intervento + una fattura a saldo che dichiara "ACCONTO gia' versato". Sono DUE documenti ma l'acconto e' gia' compreso nel totale della fattura a saldo.
 - Emetti COMUNQUE entrambe le voci (una per documento, con i rispettivi importi documentati): la deduplicazione la fa il sistema in modo trasparente. NON escludere o fondere tu le voci, NON segnalare nulla: estrai e basta.
+- Se una fattura espone SIA "TOTALE FATTURA" SIA "TOTALE DA PAGARE" (saldo residuo al netto dell'acconto), l'amount della voce e' il TOTALE FATTURA (il valore pieno della prestazione), MAI il "da pagare" residuo.
 
 ## STRUTTURA DEL TESTO IN INGRESSO
 Il testo OCR e' organizzato in blocchi documento separati da:

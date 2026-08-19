@@ -27,7 +27,12 @@ function computeCoverage(documents: Document[], events: EventRow[]): DocCoverage
     }
   }
 
-  return documents.map((doc) => {
+  // I secondari di un documento unito non hanno eventi PROPRI per costruzione
+  // (le loro pagine confluiscono nel primario): includerli qui produrrebbe un
+  // falso allarme "documento senza eventi estratti" (giro avversariale 2026-08-19).
+  const coverable = documents.filter((d) => !d.merged_into_document_id);
+
+  return coverable.map((doc) => {
     const eventCount = eventsByDoc.get(doc.id) ?? 0;
     let status: DocCoverage['status'];
 
@@ -102,7 +107,7 @@ export function DocumentCoverageCard({ documents, events }: DocumentCoverageCard
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          {okCount}/{documents.length} documenti con eventi estratti
+          {okCount}/{coverage.length} documenti con eventi estratti
           {warningCount > 0 && `, ${warningCount} senza eventi`}
           {errorCount > 0 && `, ${errorCount} con errori`}
         </p>
