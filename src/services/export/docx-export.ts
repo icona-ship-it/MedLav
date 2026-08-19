@@ -14,6 +14,7 @@ import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { anonymizeEventsForExport, anonymizeDocsForExport, anonymizePmForExport } from './anonymize-export';
 import type { PeriziaMetadata } from '@/types';
 import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
+import { buildExpenseDocxSection, type ExpenseDocxItem } from './expense-docx';
 import { groupEventsByDocument } from './event-grouping';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -101,6 +102,9 @@ interface DocxExportParams {
   pipelineMode?: string;
   /** Tipi documento classificati per le intestazioni-blocco della cronologia. */
   documents?: Array<{ id: string; documentType?: string | null }>;
+  /** Tabella spese (modulo analisi_spese_mediche): senza, il DOCX di un caso
+   * SPESE usciva senza una spesa dentro (feedback medici 2026-08-19). */
+  expenseItems?: ExpenseDocxItem[] | null;
   /** Export anonimizzato: le intestazioni-blocco omettono la struttura
    * (l'anonimizzatore copre solo la synthesis, non la cronologia da eventi raw
    * — audit 2026-07-23: la facility nel titolo-gruppo sarebbe trapelata). */
@@ -417,7 +421,11 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
       : [new Paragraph({ children: [new TextRun({ text: `Tipo: ${caseType} | Ruolo: ${DOCX_ROLE_DESCRIPTIONS[caseRole] ?? caseRole.toUpperCase()}` })] })]),
     new Paragraph({ children: [new TextRun({ text: `Data report: ${now}` })] }),
     new Paragraph({
-      children: [new TextRun({ text: `Eventi: ${events.length} | Anomalie: ${anomalies.length} | Doc. Mancanti: ${missingDocs.length}` })],
+      // Per il modulo spese il conteggio voci di spesa viene PRIMA (l'header
+      // "Eventi: 23" con 7 eventi visibili confondeva — feedback 2026-08-19).
+      children: [new TextRun({
+        text: `${params.pipelineMode === 'expenses_only' ? `Voci di spesa: ${(params.expenseItems ?? []).length} | ` : ''}Eventi: ${events.length} | Anomalie: ${anomalies.length} | Doc. Mancanti: ${missingDocs.length}`,
+      })],
     }),
     new Paragraph({ text: '' }),
   );
@@ -477,10 +485,24 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   children.push(new Paragraph({ text: '' }));
 
-  // Section 2: Timeline
+  // Section 2 (solo modulo spese): TABELLA SPESE MEDICHE — il deliverable del
+  // modulo (feedback medici 2026-08-19: il DOCX usciva senza una spesa dentro).
+  // Le sezioni successive slittano di 1.
+  const isExpensesTool = params.pipelineMode === 'expenses_only';
+  const secOffset = isExpensesTool ? 1 : 0;
+  if (isExpensesTool) {
+    children.push(...buildExpenseDocxSection({
+      items: params.expenseItems ?? [],
+      sectionNumber: '2',
+      anonymized: params.anonymized,
+    }));
+    children.push(new Paragraph({ text: '' }));
+  }
+
+  // Section 2 (3 per il modulo spese): Timeline
   children.push(
     new Paragraph({
-      text: '2. CRONOLOGIA EVENTI CLINICI',
+      text: `${2 + secOffset}. CRONOLOGIA EVENTI CLINICI`,
       heading: HeadingLevel.HEADING_1,
     }),
     new Paragraph({ text: '' }),
@@ -570,7 +592,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   if (!isDepositabile && calculations && calculations.length > 0) {
     children.push(
       new Paragraph({
-        text: '3. PERIODI MEDICO-LEGALI CALCOLATI',
+        text: `${3 + secOffset}. PERIODI MEDICO-LEGALI CALCOLATI`,
         heading: HeadingLevel.HEADING_2,
       }),
       new Paragraph({ text: '' }),
@@ -600,7 +622,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
 
   // Section: Anomalies (carta di lavoro)
   if (!isDepositabile) {
-    const anomalySectionNum = calculations && calculations.length > 0 ? '4' : '3';
+    const anomalySectionNum = String((calculations && calculations.length > 0 ? 4 : 3) + secOffset);
     children.push(
       new Paragraph({
         text: `${anomalySectionNum}. ANOMALIE RILEVATE`,
@@ -647,7 +669,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
     // Section 4: Missing Docs (carta di lavoro)
     children.push(
       new Paragraph({
-        text: `${calculations && calculations.length > 0 ? '5' : '4'}. DOCUMENTAZIONE MANCANTE`,
+        text: `${(calculations && calculations.length > 0 ? 5 : 4) + secOffset}. DOCUMENTAZIONE MANCANTE`,
         heading: HeadingLevel.HEADING_1,
       }),
       new Paragraph({ text: '' }),

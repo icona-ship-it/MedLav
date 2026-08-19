@@ -136,6 +136,36 @@ export async function GET(
 
     const reportStatus = (data.report?.report_status as string | undefined) ?? undefined;
 
+    // Tabella spese per il modulo analisi_spese_mediche (feedback medici
+    // 2026-08-19: il DOCX usciva senza le spese). In modalità anonimizzata le
+    // stringhe passano per l'anonimizzatore (la tabella è testo nuovo che
+    // prima non entrava nell'export).
+    let expenseItemsForDocx: Array<{
+      date: string; description: string; amount: number | null;
+      receiptNumber: string | null; facility: string | null; notes: string | null;
+      excludedFromTotal?: boolean; exclusionReason?: string | null;
+    }> | null = null;
+    if (pipelineModeDocx === 'expenses_only') {
+      const expenseExtraction = (data.periziaMetadata as Record<string, unknown> | null)?.expenseExtraction as {
+        items?: Array<Record<string, unknown>>;
+      } | undefined;
+      const periziaMetadataForAnon = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const anonStr = (v: unknown): string | null => {
+        if (typeof v !== 'string' || v === '') return null;
+        return shouldAnonymize ? anonymizeText({ text: v, periziaMetadata: periziaMetadataForAnon }).anonymizedText : v;
+      };
+      expenseItemsForDocx = (expenseExtraction?.items ?? []).map((item) => ({
+        date: typeof item.date === 'string' ? item.date : '',
+        description: anonStr(item.description) ?? 'Voce non identificata',
+        amount: typeof item.amount === 'number' ? item.amount : null,
+        receiptNumber: typeof item.receiptNumber === 'string' ? item.receiptNumber : null,
+        facility: anonStr(item.facility),
+        notes: anonStr(item.notes),
+        excludedFromTotal: item.excludedFromTotal === true,
+        exclusionReason: typeof item.exclusionReason === 'string' ? item.exclusionReason : null,
+      }));
+    }
+
     // Resolve signature image to base64
     let signatureImageBase64: string | undefined;
     if (data.signatureImagePath) {
@@ -187,6 +217,7 @@ export async function GET(
         pipelineMode: pipelineModeDocx,
         documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
         anonymized: shouldAnonymize,
+        expenseItems: expenseItemsForDocx,
       });
 
     const suffix = shouldAnonymize ? '-anonimizzato' : '';
