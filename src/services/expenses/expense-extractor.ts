@@ -15,6 +15,7 @@ import {
   assertNotTruncated,
 } from '@/lib/mistral/client';
 import type { ExpenseCategory } from './expense-analyzer';
+import { reconcileExpenseItems } from './expense-reconciler';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 
@@ -43,6 +44,10 @@ export interface ExtractedExpenseItem {
   notes: string | null;
   /** Brief interpretation linking expense to diagnosis (e.g., "Coerente con trattamento frattura radiale") */
   interpretation: string | null;
+  /** Nome file del blocco "### DOCUMENTO ###" da cui viene la voce — chiave per
+   * la riconciliazione deterministica (riga unica lorda, dedup acconto/saldo).
+   * Assente negli item legacy salvati prima del 2026-08-19. */
+  sourceDocument?: string | null;
 }
 
 export interface ExpenseExtractionResult {
@@ -74,12 +79,14 @@ Il tuo compito è estrarre OGNI singola voce di spesa presente nei documenti for
 - Cascade per popolare il campo data: data pagamento → data fattura → data prestazione clinica correlata → stringa vuota.
 - Le voci con date vuota devono comparire COMUNQUE in tabella. Esempi tipici: imposta di bollo, riepiloghi totali, righe di sintesi, contanti senza ricevuta, scontrini con stampa termica sbiadita.
 
-## REGOLA CRITICA SU IMPOSTA DI BOLLO E ONERI ACCESSORI (segnalata dal perito 2026-05-11)
-- L'imposta di bollo (2 EUR sulle fatture > 77,47 EUR, ai sensi DPR 642/1972) NON va sommata all'importo della prestazione.
-- Crea SEMPRE una voce SEPARATA per il bollo. Esempio: description "Imposta di bollo", amount 2.00, category "altro", notes "Bollo ex DPR 642/1972 su fattura n.X del...".
-- Stesso trattamento per: marca da bollo, oneri amministrativi, spese postali, contributi ENPAM/cassa previdenziale, IVA esposta separatamente.
-- Cosi il perito vede la composizione completa: prestazione + bollo + altri oneri = totale fatturato.
-- Se un documento espone un TOTALE comprensivo di bollo (es. "Visita € 102 di cui bollo € 2", oppure "importo € 102 incluso bollo"), SCORPORA in due voci: prestazione (€ 100) + imposta di bollo (€ 2). Non lasciare mai l'importo aggregato in un'unica voce.
+## REGOLA CRITICA: UNA VOCE PER DOCUMENTO FISCALE, IMPORTO LORDO (direttiva perito 2026-08-19 — SOSTITUISCE la precedente regola di scorporo)
+- Produci UNA SOLA voce per ogni documento fiscale (fattura, ricevuta, scontrino, avviso di pagamento). L'amount della voce e' il TOTALE PAGATO documentato, COMPRENSIVO di IVA, imposta di bollo, oneri amministrativi e accessori.
+- MAI creare voci separate per IVA, bollo, oneri o singoli capitoli della stessa fattura.
+- La composizione va nel campo notes. Esempio: ricevuta "prestazione 300,00 + IVA 22% 66,00, da pagare 366,00" → UNA voce con amount 366.00 e notes "di cui prestazione 300,00 e IVA 66,00".
+- Fattura con piu' capitoli (es. quota equipe + supporto + oneri + DRG) → UNA voce con il TOTALE FATTURA; i capitoli nelle notes.
+- Scontrino farmacia con piu' prodotti → UNA voce con il totale dello scontrino; i singoli farmaci/prodotti nelle notes (e nel campo drugType se uno solo).
+- Se il documento espone un TOTALE ("totale", "totale fattura", "da pagare"), usa QUEL numero come amount: NON ricalcolare mai la somma da solo.
+- NON dedurre importi non scritti (es. bollo "implicito"): se non e' nel testo, non esiste.
 
 ## STRUTTURA DEL TESTO IN INGRESSO
 Il testo OCR e' organizzato in blocchi documento separati da:
@@ -160,7 +167,8 @@ Rispondi con un oggetto JSON con questa struttura esatta:
       "linkedDiagnosis": "diagnosi correlata o null",
       "isJustified": null,
       "notes": "note aggiuntive o null",
-      "interpretation": "breve correlazione con la diagnosi o null"
+      "interpretation": "breve correlazione con la diagnosi o null",
+      "sourceDocument": "nome-file del blocco ### DOCUMENTO ### da cui viene la voce"
     }
   ]
 }`;
@@ -220,7 +228,16 @@ export async function extractExpensesFromOcr(
   });
   assertNotTruncated(result, 'expense-extraction');
 
-  return { ...parseExpenseResponse(result.content), usage: result.usage };
+  // Rete deterministica (feedback medici 2026-08-19): fonde gli scorpori
+  // IVA/bollo/capitoli nella voce lorda del documento fiscale e ancora
+  // l'importo al totale dichiarato. Idempotente su output già puliti.
+  const parsed = parseExpenseResponse(result.content);
+  const reconciled = reconcileExpenseItems(parsed.items, trimmedOcr);
+  if (reconciled.stats.mergedGroups > 0 || reconciled.stats.anchoredAmounts > 0) {
+    logger.info('expense-extractor', `Reconciled expense items: ${parsed.items.length} → ${reconciled.items.length} (${reconciled.stats.mergedGroups} merged groups, ${reconciled.stats.anchoredAmounts} anchored amounts)`);
+  }
+
+  return { items: reconciled.items, totalAmount: reconciled.totalAmount, currency: parsed.currency, usage: result.usage };
 }
 
 // ── Response parsing ──────────────────────────────────────────────────
@@ -267,6 +284,7 @@ function parseExpenseResponse(raw: string): ExpenseExtractionResult {
       isJustified: null, // Always null — medical expert decides
       notes: typeof item.notes === 'string' ? item.notes : null,
       interpretation: typeof item.interpretation === 'string' ? item.interpretation : null,
+      sourceDocument: typeof item.sourceDocument === 'string' ? item.sourceDocument : null,
     });
 
     if (amount !== null) {
