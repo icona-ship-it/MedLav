@@ -82,8 +82,8 @@ describe('computeExpenseGrandTotal', () => {
 
 describe('buildExpenseDocxSection', () => {
   const items = [
-    makeItem({ facility: 'Ospedale Civile di Cittàdemo', amount: 12318.47, receiptNumber: '020/62', date: '2026-05-28', description: 'Ricovero LP' }),
-    makeItem({ facility: null, amount: 11512.73, date: '2026-04-28', description: 'Deposito cauzionale intervento', excludedFromTotal: true, exclusionReason: 'Già compreso nella fattura a saldo n. 020/62' }),
+    makeItem({ facility: 'Ospedale Civile di Cittàdemo', amount: 10208.47, receiptNumber: '077/26', date: '2026-05-28', description: 'Ricovero LP' }),
+    makeItem({ facility: null, amount: 9410.47, date: '2026-04-28', description: 'Deposito cauzionale intervento', excludedFromTotal: true, exclusionReason: 'Già compreso nella fattura a saldo n. 077/26' }),
   ];
 
   it('returns a heading plus at least one Table', () => {
