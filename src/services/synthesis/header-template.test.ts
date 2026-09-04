@@ -63,12 +63,12 @@ describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniaz
     expect(md).not.toContain('con il suo consenso');
   });
 
-  it('accompagnatore documentato: ", in presenza di ..." (senza consenso)', () => {
+  it('accompagnatore: MAI dalla riga visita (la visita del perito non è nei documenti — gate gold 2026-09-04)', () => {
     const d = stragHeader();
     d.paziente.accompagnatore = 'sua madre';
     const md = renderHeaderMarkdown(d);
-    expect(md).toContain('valutazione medico legale, in presenza di sua madre:');
-    expect(md).not.toContain('con il suo consenso');
+    expect(md).toContain('valutazione medico legale:');
+    expect(md).not.toContain('in presenza');
   });
 
   it('blocco dati periziando riga per riga (nato/residente, C.F., MAIL, TEL, Avvocato)', () => {

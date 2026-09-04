@@ -91,10 +91,13 @@ function renderStragiudizialeHeader(data: HeaderData): string {
 
   // Riga visita. Niente "con il suo consenso": MOTTA/Antoniazzi non lo scrivono
   // (decisione Lavini 2026-06-23, #2 — allineare ai benchmark di riferimento).
-  // "in presenza del padre" (l'articolo assorbe il "di") vs "in presenza di sua madre"/"di Mario Rossi".
-  const acc = p.accompagnatore ? normalizeAccompagnatore(p.accompagnatore) : null;
-  const accompagnatore = acc ? `, in presenza ${/^(del|dello|della|dei|delle|degli|di )/i.test(acc) ? '' : 'di '}${acc}` : '';
-  lines.push(`In data ${data.dataVisitaMedicoLegale ?? TBD} ho sottoposto ad accertamenti clinici e valutazione medico legale${accompagnatore}:`);
+  // Accompagnatore alla VISITA MEDICO-LEGALE: la visita del perito avviene DOPO
+  // i documenti in atti, quindi non può risultare da essi — il modello lo
+  // deduceva dall'accompagnatore in Pronto Soccorso (gate gold 2026-09-04, caso
+  // A, P1 fedeltà). Lo scrive il perito, come la data della visita: la riga
+  // resta senza clausola. `normalizeAccompagnatore` resta per usi futuri (campo
+  // del perito nei metadati).
+  lines.push(`In data ${data.dataVisitaMedicoLegale ?? TBD} ho sottoposto ad accertamenti clinici e valutazione medico legale:`);
   lines.push('');
 
   // Dati del periziando, riga per riga (gold Antoniazzi).

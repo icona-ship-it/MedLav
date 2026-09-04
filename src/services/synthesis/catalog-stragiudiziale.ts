@@ -90,7 +90,7 @@ ${ANTI_DISTORSIONE_RULE}`,
 "Paziente [destrimane/mancino/ambidestro]" (solo se documentato)
 "In passato: [patologie pregresse e interventi rilevanti, separati da virgola]"
 "Peso: Kg [N]" / "Altezza: [N]" (solo se documentati)
-"Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate)
+"Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate come terapia IN CORSO abituale — lettera del curante, elenco farmaci domiciliari, anamnesi farmacologica; una prescrizione acuta del Pronto Soccorso o della dimissione, es. antidolorifico "al bisogno" o antibiotico per pochi giorni, NON è terapia attuale e va omessa qui)
 "Anamnesi familiare: [solo se pertinente e documentata]"
 Una voce per riga; ometti le righe senza dato documentato. Riporta SOLO fatti documentati.
 ${NO_EVN_RULE}

@@ -173,7 +173,7 @@ REGOLE:
 6. NESSUN campo deve essere "[da compilare dal perito]" — usa \`null\`. Il marker testuale viene aggiunto dal template di rendering.
 7. "dataDecesso"/"luogoDecesso": SOLO se il periziando è deceduto e il dato risulta dai documenti (scheda di morte, verbale di constatazione, lettera di dimissione con exitus). Periziando vivente → \`null\`.
 8. "email"/"avvocato": SOLO se documentati nei metadati o negli atti (es. "Avvocato di parte: ..."). MAI inventarli.
-9. "accompagnatore": SOLO se la visita risulta documentata in presenza di un accompagnatore (es. "in presenza della madre" per periziando minore). MAI inventarlo o dedurlo dall'età.
+9. "accompagnatore": SEMPRE \`null\`. La visita medico-legale avviene dopo i documenti in atti: chi accompagna il periziando alla visita NON può risultare dai documenti (l'accompagnatore in Pronto Soccorso NON è l'accompagnatore alla visita). Lo indica il perito.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON, senza testo prima o dopo.`;
 
