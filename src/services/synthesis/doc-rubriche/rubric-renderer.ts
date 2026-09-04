@@ -59,8 +59,16 @@ function isAdminNoiseLine(line: string): boolean {
   return ADMIN_NOISE_RE.test(t) && !/(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i.test(t);
 }
 
+/** Su una riga clinica tenuta, via il codice lungo e l'eventuale nome del richiedente che lo segue. */
+function scrubInlineCodes(line: string): string {
+  return line
+    .replace(/\s*\b\d{8,}\b(?:\s+[A-ZÀ-Ü][\wà-ù'’-]+){0,3}(?:\s+richiedente)?/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function stripAdminNoise(text: string): string {
-  return text.split('\n').filter((l) => !isAdminNoiseLine(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text.split('\n').filter((l) => !isAdminNoiseLine(l)).map(scrubInlineCodes).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Tetto di blocco per RIGHE intere (mai a metà di una «...»): oltre, resta "[...]" fuori dalle virgolette. */
