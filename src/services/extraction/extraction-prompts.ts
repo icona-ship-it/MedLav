@@ -120,19 +120,26 @@ Non scartare MAI nessun dato del paziente. Ogni esame, visita, valore di laborat
 - Solo l'ANNO noto (es. "nel 2002", "cesareo del 2013") → "2002-01-01" / "2013-01-01" con datePrecision="anno". È SOLO l'anno: NON spacciarlo per una data precisa (il giorno/mese 01.01 è un riempitivo, non un dato reale).
 - Data relativa → calcola se possibile ("3 giorni dopo l'intervento del 10/05" → 2024-05-13)
 - NESSUN indizio → NULL, datePrecision="sconosciuta"
-- **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese", MA solo se è l'unica menzione di quell'evento (vedi regola RIFERIMENTI sotto).
+- **VIETATO date generiche tipo "metà ottobre 2025"**: NON creare eventi nuovi a partire da espressioni vaghe tipo "metà ottobre", "fine novembre", "inizi 2026" se non hanno un giorno preciso. Se vuoi rappresentare comunque l'evento, usa il primo del mese con datePrecision="mese" ed etichettalo con temporalScope secondo la sezione AMBITO TEMPORALE (di norma "retrospettivo"): la deduplicazione con altri documenti la fa il sistema, non tu.
 
-### EVENTI vs RIFERIMENTI RETROSPETTIVI (regola anti-duplicazione)
-Un documento clinico spesso menziona eventi PASSATI come contesto (anamnesi, "esiti di intervento del...", "frattura avvenuta a metà ottobre 2025", "trauma di 6 mesi fa"). Questi sono RIFERIMENTI RETROSPETTIVI, NON nuovi eventi.
+### AMBITO TEMPORALE (temporalScope) — accade, è riferito, o è previsto?
+Un documento clinico mescola tre cose: ciò che ACCADE nell'episodio di cura che il documento descrive, ciò che vi è RIFERITO come già avvenuto in precedenza (anamnesi, storia clinica, "esiti di…", "pregressa…") e ciò che vi è PREVISTO per il futuro (controllo programmato, esame prenotato). Etichetta OGNI evento con temporalScope:
+- "corrente": tutto ciò che avviene nell'EPISODIO DI CURA descritto dal documento — visita, esame obiettivo, diagnosi formulata, esami, terapia prescritta, intervento, ricovero, dimissione. Vale anche per i fatti dell'episodio che il documento racconta al passato: una lettera di dimissione che dice "in data 16.03 la paziente è stata sottoposta a osteosintesi" descrive l'intervento del SUO ricovero → "corrente" con la sua data reale (il documento ne è la fonte primaria).
+- "retrospettivo": avvenuto PRIMA dell'episodio di cura del documento e solo riferito — sezioni Anamnesi / Anamnesi patologica remota (APR) / Storia clinica / Storia oncologica, frasi "esiti di", "pregressa", "trauma di 6 mesi fa". Data = quella RIFERITA nel testo, anche solo mese o anno (datePrecision ridotta). MAI la data del documento.
+- "programmato": previsto/prenotato/da eseguire nel futuro rispetto al documento ("in programma per", "controllo a 30 giorni", "si invia a valutazione", "scintigrafia il 18/06"), NON ancora avvenuto nel documento.
 
-REGOLA: crea un evento nuovo SOLO per cosa accade NEL documento corrente (visita, esame, terapia, intervento del giorno del documento). NON creare eventi nuovi per cosa è già successo PRIMA.
+REGOLE:
+- La storia clinica riportata dentro un referto produce eventi "retrospettivo" (uno per fatto DATATO), MAI eventi "corrente".
+- Un fatto anamnestico SENZA ALCUNA data (nemmeno l'anno) NON diventa un evento a sé: resta nella description dell'evento corrente che lo cita. In ogni caso l'anamnesi va SEMPRE riassunta anche nella description dell'evento corrente (visita/accettazione), così nulla si perde.
+- Un evento "programmato" senza data nel testo → eventDate null (non usare la data della visita).
 
-Esempio anti-pattern:
-- Documento: visita controllo del 10/02/2026 che dice "Paziente con esiti di osteosintesi del polso destro per frattura avvenuta a metà ottobre 2025."
-- ❌ ERRATO: creare evento "Osteosintesi" eventDate=2025-10-15 + evento "Visita controllo" eventDate=2026-02-10. (Crea fake date e duplica l'osteosintesi se è già documentata altrove.)
-- ✓ CORRETTO: creare SOLO l'evento "Visita controllo" eventDate=2026-02-10. La menzione dell'osteosintesi e della frattura va nella descrizione della visita, NON come evento separato.
-
-Eccezione: se il documento è la FONTE PRIMARIA di un evento (es. lettera dimissione che riporta l'intervento del giorno precedente, e nessun altro documento attesta quell'intervento), crea l'evento con la sua data reale.
+Esempio: visita di controllo del 10/02/2026 che dice "Paziente con esiti di osteosintesi del polso destro per frattura avvenuta a metà ottobre 2025. Controllo RX programmato per il 12/03/2026."
+- ✓ "Visita di controllo" eventDate=2026-02-10, temporalScope="corrente" (la description cita gli esiti di osteosintesi per frattura dell'ottobre 2025)
+- ✓ "Frattura polso destro" eventDate=2025-10-01, datePrecision="mese", temporalScope="retrospettivo"
+- ✓ "Controllo RX" eventDate=2026-03-12, temporalScope="programmato"
+- ✗ NON creare "Osteosintesi polso destro" come evento datato: la data dell'osteosintesi non è nel testo (c'è solo quella della frattura) — resta nella description della visita.
+- ❌ ERRATO: "Frattura polso destro" con temporalScope="corrente" — farebbe apparire la frattura come avvenuta nella visita e la duplicherebbe rispetto al verbale di PS.
+Se lo stesso fatto è attestato anche da un altro documento (es. verbale PS della frattura), va bene: il sistema mostra la fonte primaria e tratta la menzione anamnestica come riferimento — la deduplicazione la fa il sistema, non tu.
 
 ### ANTI-HALLUCINATION (4 regole)
 1. NON inventare MAI dati assenti dal testo: nomi, date, diagnosi, valori, farmaci. Se manca, usa NULL.
@@ -163,14 +170,15 @@ ${types.map(t => CASE_TYPE_GUIDANCE[t]).join('\n\n')}
 
 ## FORMATO
 JSON con chiave "events" (minuscolo). Campi per ogni evento:
-extraction_reasoning, eventDate, datePrecision, eventType, title (max 100 char), description, sourceType, diagnosis, doctor, facility, confidence, requiresVerification, reliabilityNotes, sourceText (max 200 char), sourcePages
+extraction_reasoning, eventDate, datePrecision, eventType, title (max 100 char), description, sourceType, diagnosis, doctor, facility, confidence, requiresVerification, reliabilityNotes, sourceText (max 200 char), sourcePages, temporalScope
 
 **15 tipi evento**: visita | esame | diagnosi | intervento | terapia | ricovero | follow-up | referto | prescrizione | consenso | complicanza | spesa_medica | documento_amministrativo | certificato | altro
 **sourceType**: cartella_clinica | referto_controllo | esame_strumentale | esame_ematochimico | altro
+**temporalScope**: corrente (accade nel documento) | retrospettivo (riferito come già avvenuto: anamnesi/storia) | programmato (previsto per il futuro)
 
 ## ESEMPIO 1 — Accesso Pronto Soccorso (referto semplice)
 
-Input: "[PAGE_START:1] Pronto Soccorso Ospedale San Marco 15.03.2024. Pz maschio 52aa giunge per trauma ginocchio dx post caduta accidentale durante attivita sportiva. PA 140/85, FC 88, SpO2 98%. EO: tumefazione ginocchio dx, dolore, limitazione funzionale. RX ginocchio dx: frattura composta piatto tibiale destro. Diagnosi: frattura piatto tibiale dx. Ricoverato per osservazione. [PAGE_END:1]"
+Input: "[PAGE_START:1] Pronto Soccorso Ospedale San Marco 15.03.2024. Pz maschio 52aa giunge per trauma ginocchio dx post caduta accidentale durante attivita sportiva. APR: riferisce pregressa meniscectomia dx nel 2019. PA 140/85, FC 88, SpO2 98%. EO: tumefazione ginocchio dx, dolore, limitazione funzionale. RX ginocchio dx: frattura composta piatto tibiale destro. Diagnosi: frattura piatto tibiale dx. Ricoverato per osservazione. [PAGE_END:1]"
 
 Output:
 \`\`\`json
@@ -182,7 +190,7 @@ Output:
       "datePrecision": "giorno",
       "eventType": "ricovero",
       "title": "Ricovero PS per trauma ginocchio destro post caduta",
-      "description": "Paziente maschio 52 anni giunge per trauma al ginocchio destro a seguito di caduta accidentale durante attivita' sportiva. All'ingresso: PA (pressione arteriosa) 140/85 mmHg, FC (frequenza cardiaca) 88 bpm, SpO2 (saturazione periferica) 98%. Esame obiettivo: tumefazione al ginocchio destro con dolore e limitazione funzionale. RX ginocchio destro: frattura composta del piatto tibiale destro. Ricoverato per osservazione clinica.",
+      "description": "Paziente maschio 52 anni giunge per trauma al ginocchio destro a seguito di caduta accidentale durante attivita' sportiva. In anamnesi patologica remota: pregressa meniscectomia del ginocchio destro (2019). All'ingresso: PA (pressione arteriosa) 140/85 mmHg, FC (frequenza cardiaca) 88 bpm, SpO2 (saturazione periferica) 98%. Esame obiettivo: tumefazione al ginocchio destro con dolore e limitazione funzionale. RX ginocchio destro: frattura composta del piatto tibiale destro. Ricoverato per osservazione clinica.",
       "sourceType": "cartella_clinica",
       "diagnosis": "Frattura composta piatto tibiale destro",
       "doctor": null,
@@ -190,8 +198,27 @@ Output:
       "confidence": 95,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Pz maschio 52aa giunge per trauma ginocchio dx post caduta. RX: frattura composta piatto tibiale dx.",
-      "sourcePages": [1]
+      "sourceText": "Pz maschio 52aa giunge per trauma ginocchio dx post caduta accidentale durante attivita sportiva",
+      "sourcePages": [1],
+      "temporalScope": "corrente"
+    },
+    {
+      "extraction_reasoning": "Pagina 1: anamnesi patologica remota (APR) — meniscectomia pregressa riferita dal paziente, noto solo l'anno",
+      "eventDate": "2019-01-01",
+      "datePrecision": "anno",
+      "eventType": "intervento",
+      "title": "Pregressa meniscectomia ginocchio destro (riferita in anamnesi)",
+      "description": "In anamnesi patologica remota il paziente riferisce pregressa meniscectomia del ginocchio destro nel 2019. Fatto riferito, nessuna documentazione allegata.",
+      "sourceType": "cartella_clinica",
+      "diagnosis": null,
+      "doctor": null,
+      "facility": null,
+      "confidence": 70,
+      "requiresVerification": false,
+      "reliabilityNotes": "Fatto riferito in anamnesi (solo anno), non documentato direttamente",
+      "sourceText": "APR: riferisce pregressa meniscectomia dx nel 2019.",
+      "sourcePages": [1],
+      "temporalScope": "retrospettivo"
     }
   ],
   "abbreviations": [
@@ -226,8 +253,9 @@ Output:
       "confidence": 95,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Riduzione e osteosintesi piatto tibiale dx con placca e viti. Chirurgo: Dott. Bianchi. Approccio antero-laterale.",
-      "sourcePages": [3]
+      "sourceText": "Intervento: riduzione e osteosintesi piatto tibiale dx con placca e viti. Chirurgo: Dott. Bianchi, Assistente: Dott. Neri.",
+      "sourcePages": [3],
+      "temporalScope": "corrente"
     },
     {
       "extraction_reasoning": "Pagina 4: tabella esami ematochimici datata 17.03.2024 con valori fuori range",
@@ -244,7 +272,8 @@ Output:
       "requiresVerification": false,
       "reliabilityNotes": "Hb bassa, WBC e PCR elevati — valori attesi in fase post-operatoria",
       "sourceText": "Hb 10.8 g/dL (rif 13.0-17.0) | WBC 12.500/uL (rif 4.000-10.000) | PCR 5.2 mg/dL",
-      "sourcePages": [4]
+      "sourcePages": [4],
+      "temporalScope": "corrente"
     },
     {
       "extraction_reasoning": "Pagina 4: lettera di dimissione datata 20.03.2024 con diagnosi, prescrizioni e follow-up",
@@ -260,8 +289,27 @@ Output:
       "confidence": 95,
       "requiresVerification": false,
       "reliabilityNotes": null,
-      "sourceText": "Dimissione 20.03.2024. Frattura composta piatto tibiale dx trattata con osteosintesi. Tutore 45gg.",
-      "sourcePages": [4]
+      "sourceText": "Lettera di dimissione 20.03.2024. Diagnosi: frattura composta piatto tibiale dx trattata con osteosintesi.",
+      "sourcePages": [4],
+      "temporalScope": "corrente"
+    },
+    {
+      "extraction_reasoning": "Pagina 4: la lettera di dimissione PREVEDE un controllo a 30 giorni con RX — non ancora avvenuto",
+      "eventDate": "2024-04-19",
+      "datePrecision": "giorno",
+      "eventType": "follow-up",
+      "title": "Controllo programmato a 30 giorni con RX",
+      "description": "Alla dimissione del 20.03.2024 viene programmato un controllo clinico con radiografia (RX) a 30 giorni (data calcolata: 19.04.2024). Appuntamento previsto, non un accadimento.",
+      "sourceType": "cartella_clinica",
+      "diagnosis": null,
+      "doctor": null,
+      "facility": null,
+      "confidence": 85,
+      "requiresVerification": false,
+      "reliabilityNotes": "Data calcolata dal testo (30 giorni dalla dimissione)",
+      "sourceText": "Controllo a 30 giorni con RX.",
+      "sourcePages": [4],
+      "temporalScope": "programmato"
     }
   ],
   "abbreviations": [
@@ -281,6 +329,7 @@ IMPORTANTE: Gli esempi sopra mostrano formato e livello di dettaglio. I dati son
 const DOCUMENT_TYPE_HINTS: Record<string, string> = {
   cartella_clinica: `ISTRUZIONI SPECIFICHE PER CARTELLA CLINICA:
 STRUTTURA ATTESA: Foglio di accettazione → Anamnesi → Esame obiettivo → Diario medico/infermieristico → Descrizione operatoria → Cartella anestesiologica → Esami → Lettera di dimissione.
+AMBITO TEMPORALE: accettazione, diario, intervento, esami e dimissione sono eventi "corrente"; i fatti della sezione Anamnesi (patologie/interventi pregressi) sono "retrospettivo"; i controlli previsti alla dimissione sono "programmato".
 CAMPI CRITICI DA ESTRARRE:
 - Dati di ingresso: diagnosi COMPLETA, parametri vitali (PA, FC, SpO2, T°), peso, altezza, allergie
 - Descrizione operatoria: testo INTEGRALE (tipo intervento, operatori, tecnica, durata, materiali/protesi, complicanze intraop)
@@ -294,6 +343,7 @@ COSA NON ESTRARRE: Annotazioni puramente logistiche del diario (pasti, igiene pe
   referto_specialistico: `ISTRUZIONI SPECIFICHE PER REFERTO SPECIALISTICO:
 STRUTTURA ATTESA: Intestazione (specialista, data, struttura) → Motivo della visita → Anamnesi → Esame obiettivo → Esami richiesti/visionati → Diagnosi/Conclusioni → Terapia/Follow-up.
 CAMPI CRITICI: Data visita, nome specialista e qualifica, struttura, motivo della visita, esame obiettivo COMPLETO (misurazioni, test funzionali, scale di valutazione), diagnosi, terapia prescritta, follow-up programmato.
+AMBITO TEMPORALE: TUTTO ciò che avviene nella visita (visita, esame obiettivo, diagnosi formulata, esami visionati, terapia prescritta) è "corrente" e va datato con la DATA DELLA VISITA (anche se il referto è lungo 3 pagine) — mai con date della storia clinica; la sezione Anamnesi / Storia clinica / Storia oncologica produce eventi "retrospettivo" (uno per fatto DATATO, con la data riferita, MAI quella della visita; i fatti senza data restano nella description della visita); esami/visite previsti nel Follow-up producono eventi "programmato".
 ERRORI COMUNI: Sintetizzare l'esame obiettivo perdendo misurazioni specifiche, ignorare le scale di valutazione (VAS, Barthel, WOMAC), perdere la terapia prescritta.`,
 
   esame_strumentale: `ISTRUZIONI SPECIFICHE PER ESAME STRUMENTALE:
@@ -311,6 +361,7 @@ Raggruppa per DATA DI PRELIEVO — un evento per data, con tutti i valori di que
 
   lettera_dimissione: `ISTRUZIONI SPECIFICHE PER LETTERA DI DIMISSIONE:
 STRUTTURA ATTESA: Dati ricovero (date ingresso/dimissione) → Diagnosi ingresso → Interventi eseguiti → Decorso → Diagnosi dimissione → Terapia domiciliare → Follow-up.
+AMBITO TEMPORALE: ricovero, intervento, decorso, esami e dimissione dell'episodio descritto sono "corrente" con le loro date reali (la lettera ne è la fonte primaria, anche se li racconta al passato); i fatti dell'Anamnesi precedenti al ricovero sono "retrospettivo"; i controlli previsti dopo la dimissione sono "programmato".
 CAMPI CRITICI:
 - Date ricovero e dimissione (ENTRAMBE obbligatorie, crea eventi "ricovero" e "referto" separati)
 - Diagnosi di ingresso e di dimissione INTEGRALI (non abbreviate)
@@ -345,6 +396,7 @@ REGOLA CRITICA SU IMPOSTA DI BOLLO E ONERI ACCESSORI (segnalata dal perito 2026-
 ERRORI COMUNI: Aggregare piu voci perdendo dettaglio importi, inventare importi non leggibili, scartare voci senza data, sommare il bollo all'importo della prestazione.`,
 
   memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA:
+AMBITO TEMPORALE: i fatti clinici che l'atto CITA (visite, interventi, ricoveri già avvenuti) sono "retrospettivo" (il documento li riporta, non li attesta: la fonte primaria è la cartella/il referto); l'atto stesso e ciò che avviene in esso (deposito, visita peritale, udienza) è "corrente".
 Questo è un ATTO LEGALE. Contiene sia argomentazioni giuridiche sia fatti clinici citati.
 DOPPIA ESTRAZIONE OBBLIGATORIA:
 1. Ogni FATTO CLINICO citato (intervento, ricovero, diagnosi, esame, data) → evento clinico normale (visita, intervento, diagnosi, etc.)
@@ -353,14 +405,17 @@ Le date citate nella memoria sono fatti clinici da estrarre nella timeline.
 NON ignorare nulla: ogni affermazione fattuale è rilevante per la perizia.`,
 
   perizia_ctp: `ISTRUZIONI SPECIFICHE PER PERIZIA CTP (Consulenza Tecnica di Parte):
+AMBITO TEMPORALE: i fatti clinici che l'atto CITA (visite, interventi, ricoveri già avvenuti) sono "retrospettivo" (il documento li riporta, non li attesta: la fonte primaria è la cartella/il referto); l'atto stesso e ciò che avviene in esso (deposito, visita peritale, udienza) è "corrente".
 CAMPI CRITICI: Fatti accertati dal CTP, valutazioni di danno biologico (% permanente), periodi ITT/ITP con date, nesso causale, conclusioni, ogni documentazione clinica citata.
 Estrai i fatti accertati come eventi clinici normali. Estrai valutazioni e conclusioni come eventi separati.`,
 
   perizia_ctu: `ISTRUZIONI SPECIFICHE PER PERIZIA CTU (Consulenza Tecnica d'Ufficio):
+AMBITO TEMPORALE: i fatti clinici che l'atto CITA (visite, interventi, ricoveri già avvenuti) sono "retrospettivo" (il documento li riporta, non li attesta: la fonte primaria è la cartella/il referto); l'atto stesso e ciò che avviene in esso (deposito, visita peritale, udienza) è "corrente".
 CAMPI CRITICI: Quesiti del giudice, fatti accertati dal CTU, valutazioni di danno, risposte ai quesiti, conclusioni, documentazione esaminata.
 Estrai quesiti e risposte come "documento_amministrativo". Estrai fatti clinici come eventi normali. Estrai conclusioni e quantificazioni come eventi separati.`,
 
   perizia_precedente: `ISTRUZIONI SPECIFICHE PER PERIZIA PRECEDENTE:
+AMBITO TEMPORALE: i fatti clinici che l'atto CITA (visite, interventi, ricoveri già avvenuti) sono "retrospettivo" (il documento li riporta, non li attesta: la fonte primaria è la cartella/il referto); l'atto stesso e ciò che avviene in esso (deposito, visita peritale, udienza) è "corrente".
 Estrai i fatti clinici accertati dal perito come eventi clinici normali. Estrai valutazioni di danno biologico (%, ITT/ITP) come eventi separati. Estrai ogni riferimento a documentazione esaminata. Estrai conclusioni come "documento_amministrativo".`,
 };
 

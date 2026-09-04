@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
       discrepancyNote: null,
       sourceText: (e.source_text ?? '') as string,
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
+      temporalScope: normalizeTemporalScope(e.temporal_scope),
     }));
 
     // No events → nothing to regenerate. Reject up-front (immediate feedback)

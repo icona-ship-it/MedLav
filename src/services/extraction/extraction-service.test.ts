@@ -22,6 +22,7 @@ import {
   prepareExtractionChunks,
   inferMissingDates,
   normalizeDateFormat,
+  EXTRACTION_JSON_SCHEMA,
 } from './extraction-service';
 import type { ExtractedEvent } from './extraction-schemas';
 import { streamMistralChat } from '@/lib/mistral/client';
@@ -525,6 +526,7 @@ describe('extraction-service', () => {
         reliabilityNotes: null,
         sourceText: 'Test',
         sourcePages: [1],
+        temporalScope: 'corrente' as const,
         ...overrides,
       };
     }
@@ -617,6 +619,84 @@ describe('extraction-service', () => {
       const result = inferMissingDates(events);
       const undated = result.find((e) => e.title.includes('senza data'))!;
       expect(undated.eventDate).toBe('2024-03-15'); // pagina mono-data → eredita
+    });
+  });
+
+  describe('temporalScope (feedback medici 2026-08-19 Mail 2 — referto esploso in eventi cronologici)', () => {
+    function llmResponse(events: Array<Record<string, unknown>>): string {
+      return JSON.stringify({ events, abbreviations: [] });
+    }
+    const baseRaw = {
+      extraction_reasoning: 'test',
+      eventDate: '2026-05-22', datePrecision: 'giorno', eventType: 'visita',
+      title: 'Visita oncologica', description: 'Visita eseguita.', sourceType: 'referto_controllo',
+      diagnosis: null, doctor: null, facility: null, confidence: 95, requiresVerification: false,
+      reliabilityNotes: null, sourceText: 'Visita oncologica', sourcePages: [1],
+    };
+
+    it('should carry the LLM temporalScope through the parser', async () => {
+      mockStreamChat.mockResolvedValue({ content: llmResponse([
+        { ...baseRaw, temporalScope: 'corrente' },
+        { ...baseRaw, eventDate: '2026-02-27', title: 'Riscontro nodulo', sourceText: 'Riscontro nodulo', temporalScope: 'retrospettivo' },
+        { ...baseRaw, eventDate: '2026-06-18', title: 'Scintigrafia', sourceText: 'Scintigrafia', temporalScope: 'programmato' },
+      ]), usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+      const result = await extractEventsFromChunk({ chunkText: 'Visita oncologica Riscontro nodulo Scintigrafia', chunkLabel: 't', documentType: 'referto_specialistico', caseType: 'generica' });
+      expect(result.events.map((e) => e.temporalScope)).toEqual(['corrente', 'retrospettivo', 'programmato']);
+    });
+
+    it('should default to "corrente" when the field is missing or out of enum (LLM legacy/creativo)', async () => {
+      mockStreamChat.mockResolvedValue({ content: llmResponse([
+        { ...baseRaw },
+        { ...baseRaw, title: 'Altro', sourceText: 'Altro', temporalScope: 'past' },
+      ]), usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+      const result = await extractEventsFromChunk({ chunkText: 'Visita oncologica Altro', chunkLabel: 't', documentType: 'referto_specialistico', caseType: 'generica' });
+      expect(result.events.map((e) => e.temporalScope)).toEqual(['corrente', 'corrente']);
+    });
+
+    it('should accept the snake_case key temporal_scope and case/space variants from the LLM', async () => {
+      mockStreamChat.mockResolvedValue({ content: llmResponse([
+        { ...baseRaw, temporal_scope: 'retrospettivo' },
+        { ...baseRaw, title: 'Altro', sourceText: 'Altro', temporalScope: ' Programmato ' },
+      ]), usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+      const result = await extractEventsFromChunk({ chunkText: 'Visita oncologica Altro', chunkLabel: 't', documentType: 'referto_specialistico', caseType: 'generica' });
+      expect(result.events.map((e) => e.temporalScope)).toEqual(['retrospettivo', 'programmato']);
+    });
+
+    it('should require temporalScope in the strict LLM JSON schema (constrained decoding)', () => {
+      const items = ((EXTRACTION_JSON_SCHEMA as { jsonSchema: { schemaDefinition: unknown } }).jsonSchema.schemaDefinition as { properties: { events: { items: { properties: Record<string, unknown>; required: string[] } } } }).properties.events.items;
+      expect(items.properties.temporalScope).toMatchObject({ enum: ['corrente', 'retrospettivo', 'programmato'] });
+      expect(items.required).toContain('temporalScope');
+    });
+
+    it('inferMissingDates: a retrospective mention never donates its date nor receives the referto date', () => {
+      const base = {
+        eventDate: '2024-01-15', datePrecision: 'giorno', eventType: 'visita', title: 'x', description: 'x',
+        sourceType: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 90,
+        requiresVerification: false, reliabilityNotes: null, sourceText: 'x', sourcePages: [2], temporalScope: 'corrente' as const,
+      };
+      // Donatore retrospettivo (data del passato in anamnesi) + evento corrente senza data
+      const r1 = inferMissingDates([
+        { ...base, eventDate: '2019-03-01', title: 'Pregressa meniscectomia', temporalScope: 'retrospettivo' },
+        { ...base, eventDate: '1900-01-01', title: 'Visita senza data' },
+      ]);
+      expect(r1[1].eventDate).toBe('1900-01-01');
+      // Ricevente retrospettivo senza data + referto datato: NON eredita la data della visita
+      const r2 = inferMissingDates([
+        { ...base, eventDate: '2024-01-15', title: 'Visita' },
+        { ...base, eventDate: '1900-01-01', title: 'Pregressa appendicectomia', temporalScope: 'retrospettivo' },
+      ]);
+      expect(r2[1].eventDate).toBe('1900-01-01');
+      // Programmato: né dona (data futura) né riceve (la visita non è la sua data)
+      const r3 = inferMissingDates([
+        { ...base, eventDate: '2026-03-12', title: 'Controllo RX previsto', temporalScope: 'programmato' },
+        { ...base, eventDate: '1900-01-01', title: 'Terapia prescritta' },
+      ]);
+      expect(r3[1].eventDate).toBe('1900-01-01');
+      const r4 = inferMissingDates([
+        { ...base, eventDate: '2024-01-15', title: 'Visita' },
+        { ...base, eventDate: '1900-01-01', title: 'Si invia a valutazione fisiatrica', temporalScope: 'programmato' },
+      ]);
+      expect(r4[1].eventDate).toBe('1900-01-01');
     });
   });
 

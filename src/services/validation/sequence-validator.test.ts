@@ -21,6 +21,7 @@ function makeEvent(overrides: Partial<ConsolidatedEvent> = {}): ConsolidatedEven
     discrepancyNote: null,
     sourceText: '',
     sourcePages: [],
+    temporalScope: 'corrente' as const,
     ...overrides,
   };
 }

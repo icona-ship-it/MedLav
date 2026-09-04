@@ -81,6 +81,7 @@ function makeEvent(overrides: Partial<ExtractedEvent> = {}): ExtractedEvent {
     reliabilityNotes: null,
     sourceText: 'Paziente si presenta con dolore al ginocchio sinistro',
     sourcePages: [1],
+    temporalScope: 'corrente' as const,
     ...overrides,
   };
 }

@@ -5,6 +5,7 @@ import { safeJsonParse } from '@/lib/format';
 import type { ExtractionResult, ConsolidationStepResult } from './types';
 import { buildOrderUpdates } from './order-mapping';
 import { logger } from '@/lib/logger';
+import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { checkEventSourceConsistency } from '@/services/validation/event-source-consistency';
 
 /**
@@ -92,6 +93,7 @@ export async function fetchAllEventsForCase(caseId: string): Promise<Consolidate
       reliabilityNotes: (e.reliability_notes ?? null) as string | null,
       sourceText: (e.source_text ?? '') as string,
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
+      temporalScope: normalizeTemporalScope(e.temporal_scope),
     });
   }
 
@@ -148,6 +150,7 @@ export async function consolidateEventsStep(
       reliabilityNotes: (e.reliability_notes ?? null) as string | null,
       sourceText: (e.source_text ?? '') as string,
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
+      temporalScope: normalizeTemporalScope(e.temporal_scope),
     });
   }
 

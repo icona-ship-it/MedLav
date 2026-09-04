@@ -1,4 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ExtractedEvent } from '@/services/extraction/extraction-schemas';
 import { extractEventsFromChunk } from '@/services/extraction/extraction-service';
 import { verifySourceTexts } from '@/services/validation/source-text-verifier';
 import { buildLowQualityPageSet, capEventsFromLowQualityPages } from '@/services/extraction/low-quality-page-guard';
@@ -9,6 +11,7 @@ import { createEmptyUsage, mergeUsage, type TokenUsage } from '@/services/cost-t
 import type { CaseType } from '@/types';
 import type { OcrResult } from './types';
 import { logger } from '@/lib/logger';
+import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { detectLanguage } from '@/lib/language-detect';
 
 export const PAGES_PER_CHUNK = 10;
@@ -135,6 +138,82 @@ function normalizeSourceType(raw: string): string {
   if (VALID_SOURCE_TYPES.has(raw)) return raw;
   const lower = raw.toLowerCase().replace(/[\s_-]+/g, '_');
   return SOURCE_TYPE_ALIASES[lower] ?? 'altro';
+}
+
+export type EventExtractionPass = 'pass1_only' | 'retry';
+
+/**
+ * UNICO costruttore della riga `events` (giro avversariale 2026-09-04): i rami
+ * main e retry erano due copie manuali — "due copie divergono al primo campo
+ * nuovo, e il retry è il ramo meno esercitato". Puro, esportato per i test.
+ */
+export function buildEventInsertRow(params: {
+  caseId: string;
+  documentId: string;
+  rangeStart: number;
+  index: number;
+  event: ExtractedEvent;
+  pass: EventExtractionPass;
+}) {
+  const { caseId, documentId, rangeStart, index, event: e, pass } = params;
+  return {
+    case_id: caseId,
+    document_id: documentId,
+    order_number: (rangeStart - 1) * 100 + index + 1,
+    event_date: e.eventDate,
+    date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
+    event_type: normalizeEventType(e.eventType),
+    title: e.title,
+    description: e.description,
+    source_type: normalizeSourceType(e.sourceType),
+    diagnosis: e.diagnosis ?? null,
+    doctor: e.doctor ?? null,
+    facility: e.facility ?? null,
+    confidence: e.confidence,
+    requires_verification: e.requiresVerification,
+    reliability_notes: e.reliabilityNotes ?? null,
+    source_text: e.sourceText ?? null,
+    source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
+    temporal_scope: normalizeTemporalScope(e.temporalScope),
+    extraction_pass: pass,
+  };
+}
+export type EventInsertRow = ReturnType<typeof buildEventInsertRow>;
+
+const MISSING_TEMPORAL_SCOPE_COLUMN_RE = /temporal_scope/i;
+
+/**
+ * Insert delle righe evento con FALLBACK se la migration 0034 non è ancora
+ * applicata (PostgREST: "Could not find the 'temporal_scope' column"): senza,
+ * OGNI chunk fallirebbe l'insert e il caso andrebbe in errore. Si reinserisce
+ * senza la colonna (il campo degrada a 'corrente' quando la migration arriva)
+ * e si registra il residuo nel registro diagnostica — mai bloccare un caso per
+ * un campo di resa. Qualsiasi altro errore torna al chiamante com'è.
+ */
+export async function insertEventRowsWithFallback(
+  supabase: SupabaseClient,
+  rows: EventInsertRow[],
+  caseId: string,
+  label: string,
+): Promise<{ error: { message: string } | null; degraded: boolean }> {
+  const first = await supabase.from('events').insert(rows);
+  if (!first.error || !MISSING_TEMPORAL_SCOPE_COLUMN_RE.test(first.error.message)) {
+    return { error: first.error, degraded: false };
+  }
+  logger.warn('pipeline', `${label}: colonna temporal_scope assente (migration 0034 non applicata) — insert senza ambito temporale`);
+  await recordDiagnostic({
+    caseId,
+    step: 'extraction',
+    code: 'schema_fallback',
+    detail: { column: 'temporal_scope', migration: '0034', rows: rows.length },
+  });
+  const stripped = rows.map((r) => {
+    const copy: Record<string, unknown> = { ...r };
+    delete copy.temporal_scope;
+    return copy;
+  });
+  const second = await supabase.from('events').insert(stripped);
+  return { error: second.error, degraded: true };
 }
 
 /**
@@ -528,25 +607,8 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
         // chunk OCR (deterministic cross-check, non-blocking → requiresVerification).
         // Saltato se il chunk è stato troncato (la coda mancante darebbe falsi flag).
         const retryVerified = gateChunkEvents(retryResult.events, ' [retry]');
-        const retryRows = retryVerified.map((e, idx) => ({
-          case_id: caseId,
-          document_id: ocrResult.documentId,
-          order_number: (range.start - 1) * 100 + idx + 1,
-          event_date: e.eventDate,
-          date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
-          event_type: normalizeEventType(e.eventType),
-          title: e.title,
-          description: e.description,
-          source_type: normalizeSourceType(e.sourceType),
-          diagnosis: e.diagnosis ?? null,
-          doctor: e.doctor ?? null,
-          facility: e.facility ?? null,
-          confidence: e.confidence,
-          requires_verification: e.requiresVerification,
-          reliability_notes: e.reliabilityNotes ?? null,
-          source_text: e.sourceText ?? null,
-          source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
-          extraction_pass: 'retry',
+        const retryRows = retryVerified.map((e, idx) => buildEventInsertRow({
+          caseId, documentId: ocrResult.documentId, rangeStart: range.start, index: idx, event: e, pass: 'retry',
         }));
         // Idempotency: delete existing events for this chunk range before retry insert
         const retryOrderStart = (range.start - 1) * 100 + 1;
@@ -558,7 +620,7 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
           .gte('order_number', retryOrderStart)
           .lte('order_number', retryOrderEnd);
 
-        const { error: retryInsertError } = await supabase.from('events').insert(retryRows);
+        const { error: retryInsertError } = await insertEventRowsWithFallback(supabase, retryRows, caseId, `Chunk ${chunkIndex + 1} [retry]`);
         if (retryInsertError) {
           logger.error('pipeline', ` Retry INSERT FAILED: ${retryInsertError.message}`);
           // "Mai perdere un fatto": gli eventi RECUPERATI dal retry sono stati
@@ -596,28 +658,11 @@ export async function extractChunkEvents(params: ExtractChunkParams): Promise<{
     const verifiedEvents = gateChunkEvents(result.events, '');
 
     // Save events directly to DB with enum normalization
-    const eventRows = verifiedEvents.map((e, idx) => ({
-      case_id: caseId,
-      document_id: ocrResult.documentId,
-      order_number: (range.start - 1) * 100 + idx + 1,
-      event_date: e.eventDate,
-      date_precision: VALID_DATE_PRECISIONS.has(e.datePrecision) ? e.datePrecision : 'sconosciuta',
-      event_type: normalizeEventType(e.eventType),
-      title: e.title,
-      description: e.description,
-      source_type: normalizeSourceType(e.sourceType),
-      diagnosis: e.diagnosis ?? null,
-      doctor: e.doctor ?? null,
-      facility: e.facility ?? null,
-      confidence: e.confidence,
-      requires_verification: e.requiresVerification,
-      reliability_notes: e.reliabilityNotes ?? null,
-      source_text: e.sourceText ?? null,
-      source_pages: e.sourcePages ? JSON.stringify(e.sourcePages) : null,
-      extraction_pass: 'pass1_only',
+    const eventRows = verifiedEvents.map((e, idx) => buildEventInsertRow({
+      caseId, documentId: ocrResult.documentId, rangeStart: range.start, index: idx, event: e, pass: 'pass1_only',
     }));
 
-    const { error: insertError } = await supabase.from('events').insert(eventRows);
+    const { error: insertError } = await insertEventRowsWithFallback(supabase, eventRows, caseId, `Chunk ${chunkIndex + 1}`);
     if (insertError) {
       logger.error('pipeline', ` Chunk ${chunkIndex + 1} INSERT FAILED: ${insertError.message}`);
       throw new Error(`Event insert failed: ${insertError.message}`);

@@ -28,6 +28,8 @@ export type DiagnosticCode =
   | 'cancelled_by_user'
   | 'stale_run_aborted'
   | 'refund_failed'
+  /** Colonna attesa assente (migration non applicata): il dato degrada, il caso prosegue. */
+  | 'schema_fallback'
   | 'unknown';
 
 /**
@@ -60,6 +62,7 @@ export const DIAGNOSTIC_CODE_LABELS: Readonly<Record<DiagnosticCode, string>> = 
   cancelled_by_user: 'Analisi annullata dall\'utente',
   stale_run_aborted: 'Elaborazione obsoleta terminata automaticamente (il caso non era più in lavorazione)',
   refund_failed: 'Rimborso crediti non riuscito (da verificare)',
+  schema_fallback: 'Aggiornamento del database non ancora applicato: un campo di resa è stato salvato col valore predefinito',
   unknown: 'Errore tecnico non classificato',
 };
 

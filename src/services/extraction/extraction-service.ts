@@ -7,12 +7,13 @@ import { annotateTablesInText } from './table-detector';
 import type { CaseType } from '@/types';
 import { jsonrepair } from 'jsonrepair';
 import { logger } from '@/lib/logger';
+import { normalizeTemporalScope } from '@/lib/temporal-scope';
 
 // Smaller chunks = faster per-chunk extraction + less risk of truncation
 const MAX_CHUNK_CHARS = 8_000;
 
 // ── JSON Schema for structured extraction (enforced at token level by Mistral) ──
-const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
+export const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
   type: 'json_schema',
   jsonSchema: {
     name: 'extraction_response',
@@ -66,12 +67,17 @@ const EXTRACTION_JSON_SCHEMA: MistralResponseFormat = {
               reliabilityNotes: { type: ['string', 'null'], description: 'Reliability notes if applicable' },
               sourceText: { type: 'string', description: 'Exact quote from OCR text, max 200 chars' },
               sourcePages: { type: 'array', items: { type: 'number' }, description: 'Page numbers' },
+              temporalScope: {
+                type: 'string',
+                enum: ['corrente', 'retrospettivo', 'programmato'],
+                description: 'corrente = happens in this document; retrospettivo = reported as already happened (anamnesis/history); programmato = planned for the future',
+              },
             },
             required: [
               'extraction_reasoning', 'eventDate', 'datePrecision', 'eventType',
               'title', 'description', 'sourceType', 'diagnosis', 'doctor',
               'facility', 'confidence', 'requiresVerification',
-              'reliabilityNotes', 'sourceText', 'sourcePages',
+              'reliabilityNotes', 'sourceText', 'sourcePages', 'temporalScope',
             ],
             additionalProperties: false,
           },
@@ -434,10 +440,14 @@ const SENTINEL_DATE = '1900-01-01';
 export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
   if (events.length === 0) return events;
 
-  // Index events with valid dates by page number
+  // Index events with valid dates by page number. Donano SOLO gli eventi
+  // 'corrente': la data di una menzione anamnestica (passato riferito) o di un
+  // appuntamento previsto (futuro) non è la data della pagina — la donerebbero
+  // a un atto corrente senza data (giro avversariale 2026-09-04).
   const datedEventsByPage = new Map<number, ExtractedEvent[]>();
   for (const event of events) {
     if (event.eventDate === SENTINEL_DATE) continue;
+    if (event.temporalScope !== 'corrente') continue;
     for (const page of event.sourcePages) {
       const existing = datedEventsByPage.get(page) ?? [];
       existing.push(event);
@@ -452,6 +462,10 @@ export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
 
   const result = events.map((event) => {
     if (event.eventDate !== SENTINEL_DATE) return event;
+    // Un fatto anamnestico o un appuntamento previsto senza data NON eredita
+    // la data del referto: sarebbe indistinguibile da un atto avvenuto nella
+    // visita (collaudo 2026-09-04).
+    if (event.temporalScope !== 'corrente') return event;
 
     // Try to find a donor: same page first, then ±1
     const donor = findDateDonor(event.sourcePages, datedEventsByPage);
@@ -744,6 +758,9 @@ function parseExtractionResponse(content: string, chunkLabel?: string): Extracti
             : (e.reliabilityNotes != null ? String(e.reliabilityNotes) : null),
       sourceText: String(e.sourceText ?? e.source_text ?? ''),
       sourcePages: Array.isArray(e.sourcePages ?? e.source_pages) ? ((e.sourcePages ?? e.source_pages) as number[]) : [1],
+      // Fuori enum o assente → 'corrente' (comportamento storico: mai far
+      // sparire un evento in un sotto-elenco per un valore inventato dal LLM).
+      temporalScope: normalizeTemporalScope(e.temporalScope ?? e.temporal_scope),
     });
   }
 

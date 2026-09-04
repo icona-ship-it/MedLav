@@ -19,6 +19,9 @@ export const extractedEventSchema = z.object({
   reliabilityNotes: z.string().nullable(),
   sourceText: z.string(),
   sourcePages: z.array(z.number()),
+  /** Ambito temporale: accade nel documento / riferito in anamnesi / previsto
+   * (feedback medici 2026-08-19 Mail 2). Vedi src/lib/temporal-scope.ts. */
+  temporalScope: z.enum(['corrente', 'retrospettivo', 'programmato']),
 });
 
 export type ExtractedEvent = z.infer<typeof extractedEventSchema>;

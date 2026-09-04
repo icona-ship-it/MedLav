@@ -27,6 +27,7 @@ function makeEvent(overrides: Partial<ExtractedEvent>): ExtractedEvent {
     reliabilityNotes: null,
     sourceText: 'Test source text for verification',
     sourcePages: [1],
+    temporalScope: 'corrente' as const,
     ...overrides,
   };
 }
@@ -295,6 +296,7 @@ describe('consolidateNewWithExisting', () => {
       orderNumber: 1,
       documentId: 'doc-existing',
       discrepancyNote: null,
+      temporalScope: 'corrente' as const,
       ...overrides,
     };
   }
@@ -572,6 +574,7 @@ describe('isDuplicateOfExisting', () => {
       orderNumber: 1,
       documentId: 'doc-existing',
       discrepancyNote: null,
+      temporalScope: 'corrente' as const,
       ...overrides,
     };
   }

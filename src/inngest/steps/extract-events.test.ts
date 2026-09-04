@@ -12,7 +12,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { planChunksSync, PAGES_PER_CHUNK, OVERLAP_PAGES, isRetriableExtractionError } from './extract-events';
+import { planChunksSync, PAGES_PER_CHUNK, OVERLAP_PAGES, isRetriableExtractionError, buildEventInsertRow, insertEventRowsWithFallback } from './extract-events';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 describe('planChunksSync — A4 overlap', () => {
   it('should use a stride smaller than the chunk size (overlap is active)', () => {
@@ -111,5 +112,76 @@ describe('isRetriableExtractionError — mai perdere un fatto', () => {
   it('NON scatta su falsi positivi da substring (word boundary su stalled/insert failed)', () => {
     expect(isRetriableExtractionError('package reinstalled successfully')).toBe(false); // contiene 'stalled' ma non è '\\bstalled\\b'
     expect(isRetriableExtractionError('the module was reinserted into the registry')).toBe(false);
+  });
+});
+
+describe('buildEventInsertRow — un solo costruttore per main e retry (giro avversariale 2026-09-04)', () => {
+  const event = {
+    eventDate: '2026-05-22', datePrecision: 'giorno', eventType: 'visita', title: 'Visita', description: 'd',
+    sourceType: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 90,
+    requiresVerification: false, reliabilityNotes: null, sourceText: 'Visita', sourcePages: [1],
+    temporalScope: 'retrospettivo' as const,
+  };
+
+  it('main e retry producono le STESSE colonne (solo extraction_pass cambia)', () => {
+    const main = buildEventInsertRow({ caseId: 'c', documentId: 'd', rangeStart: 1, index: 0, event, pass: 'pass1_only' });
+    const retry = buildEventInsertRow({ caseId: 'c', documentId: 'd', rangeStart: 1, index: 0, event, pass: 'retry' });
+    expect(Object.keys(main).sort()).toEqual(Object.keys(retry).sort());
+    expect(main.extraction_pass).toBe('pass1_only');
+    expect(retry.extraction_pass).toBe('retry');
+    expect(main.temporal_scope).toBe('retrospettivo');
+    expect(main.order_number).toBe(1);
+  });
+
+  it('temporal_scope fuori enum → corrente (mai un valore che violi il CHECK della 0034)', () => {
+    const row = buildEventInsertRow({ caseId: 'c', documentId: 'd', rangeStart: 3, index: 2, event: { ...event, temporalScope: 'past' as unknown as 'corrente' }, pass: 'pass1_only' });
+    expect(row.temporal_scope).toBe('corrente');
+    expect(row.order_number).toBe(203);
+  });
+});
+
+describe('insertEventRowsWithFallback — migration 0034 non applicata', () => {
+  function fakeClient(responses: Array<{ error: { message: string } | null }>) {
+    const inserted: Array<Array<Record<string, unknown>>> = [];
+    let call = 0;
+    const client = {
+      from: () => ({
+        insert: (rows: Array<Record<string, unknown>>) => {
+          inserted.push(rows);
+          return Promise.resolve(responses[call++] ?? { error: null });
+        },
+      }),
+    } as unknown as SupabaseClient;
+    return { client, inserted };
+  }
+  const row = buildEventInsertRow({ caseId: 'c', documentId: 'd', rangeStart: 1, index: 0, pass: 'pass1_only', event: {
+    eventDate: '2026-05-22', datePrecision: 'giorno', eventType: 'visita', title: 'V', description: 'd', sourceType: 'altro',
+    diagnosis: null, doctor: null, facility: null, confidence: 90, requiresVerification: false, reliabilityNotes: null,
+    sourceText: 'V', sourcePages: [1], temporalScope: 'corrente',
+  } });
+
+  it('colonna temporal_scope assente → reinserisce SENZA la colonna, degraded=true, nessun errore (il caso prosegue)', async () => {
+    const { client, inserted } = fakeClient([{ error: { message: "Could not find the 'temporal_scope' column of 'events' in the schema cache" } }, { error: null }]);
+    const res = await insertEventRowsWithFallback(client, [row], 'c', 'test');
+    expect(res).toEqual({ error: null, degraded: true });
+    expect(inserted).toHaveLength(2);
+    expect('temporal_scope' in inserted[1][0]).toBe(false);
+    expect(inserted[1][0].title).toBe('V');
+  });
+
+  it('altro errore → torna com\'è, nessun secondo insert (mai mascherare un errore vero)', async () => {
+    const { client, inserted } = fakeClient([{ error: { message: 'duplicate key value violates unique constraint' } }]);
+    const res = await insertEventRowsWithFallback(client, [row], 'c', 'test');
+    expect(res.error?.message).toContain('duplicate key');
+    expect(res.degraded).toBe(false);
+    expect(inserted).toHaveLength(1);
+  });
+
+  it('insert riuscito → un solo insert con la colonna', async () => {
+    const { client, inserted } = fakeClient([{ error: null }]);
+    const res = await insertEventRowsWithFallback(client, [row], 'c', 'test');
+    expect(res).toEqual({ error: null, degraded: false });
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0][0].temporal_scope).toBe('corrente');
   });
 });

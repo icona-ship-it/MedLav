@@ -69,6 +69,13 @@ export const events = pgTable('events', {
   // Inclusione nella cronologia esportata. Default true (mai nascondere in
   // automatico). Il perito esclude esplicitamente; l'evento resta nella lista.
   isRelevantForChronology: boolean('is_relevant_for_chronology').notNull().default(true),
+  // Ambito temporale (migration 0034, feedback medici 2026-08-19 Mail 2): un
+  // referto = UNA voce; ciò che RIFERISCE del passato è 'retrospettivo', ciò
+  // che PREVEDE è 'programmato'. Default 'corrente' = comportamento storico.
+  // text + CHECK (non pgEnum) per restare idempotenti e senza ALTER TYPE.
+  temporalScope: text('temporal_scope', { enum: ['corrente', 'retrospettivo', 'programmato'] })
+    .notNull()
+    .default('corrente'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

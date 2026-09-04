@@ -31,6 +31,7 @@ function makeEvent(overrides?: Partial<ConsolidatedEvent>): ConsolidatedEvent {
     sourceText: 'Visita del 15/03/2024',
     sourcePages: [1],
     discrepancyNote: null,
+    temporalScope: 'corrente' as const,
     ...overrides,
   };
 }

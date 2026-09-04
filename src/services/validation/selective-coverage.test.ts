@@ -22,6 +22,7 @@ function ev(partial: Partial<ConsolidatedEvent>): ConsolidatedEvent {
     orderNumber: 1,
     documentId: 'd1',
     discrepancyNote: null,
+    temporalScope: 'corrente',
     ...partial,
   };
 }

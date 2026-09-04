@@ -18,6 +18,7 @@ function makeEvent(overrides: Partial<ConsolidatedEvent> & { orderNumber: number
     sourceText: 'Test source text for verification',
     sourcePages: [1],
     discrepancyNote: null,
+    temporalScope: 'corrente' as const,
     ...overrides,
   };
 }

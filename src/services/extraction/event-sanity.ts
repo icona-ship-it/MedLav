@@ -45,6 +45,10 @@ interface SanityEvent {
   requiresVerification: boolean;
   reliabilityNotes?: string | null;
   sourcePages?: number[];
+  /** Ambito temporale dichiarato dal LLM; la sanity lo FORZA a 'programmato'
+   * quando data futura o testo di appuntamento non eseguito (cross-check
+   * deterministico, collaudo 2026-09-04). */
+  temporalScope?: string;
 }
 
 function appendNote(existing: string | null | undefined, note: string): string {
@@ -98,7 +102,11 @@ export function applyTemporalSanityFlags<T extends SanityEvent>(
 
     if (validDate && d > todayIso) {
       flaggedCount++;
-      return flag(event, FUTURE_DATE_NOTE, FUTURE_DATE_CONFIDENCE_CAP);
+      // Data futura = non ancora avvenuto → 'programmato', MA mai su un fatto
+      // dichiarato 'retrospettivo' (anno anamnestico mal letto: resta riferito,
+      // con nota e cap — giro avversariale 2026-09-04).
+      const flagged = flag(event, FUTURE_DATE_NOTE, FUTURE_DATE_CONFIDENCE_CAP);
+      return event.temporalScope === 'retrospettivo' ? flagged : { ...flagged, temporalScope: 'programmato' };
     }
     if (validDate && incidentIso && d < incidentIso && HEALING_RE.test(text)) {
       flaggedCount++;
@@ -121,6 +129,10 @@ export function applyTemporalSanityFlags<T extends SanityEvent>(
       flaggedCount++;
       // Nessun cap: la data dell'appuntamento può essere corretta — è il suo
       // essere "accadimento" a dover essere verificato dal perito.
+      // Solo NOTA, mai override dello scope: "ricovero programmato per
+      // artroprotesi" è un ricovero AVVENUTO (elettivo). Un match lessicale non
+      // può declassare un atto a previsione — lo decide il LLM (che ha la
+      // regola esplicita) e, in coda, il perito (giro avversariale 2026-09-04).
       return {
         ...event,
         requiresVerification: true,

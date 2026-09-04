@@ -115,6 +115,55 @@ describe('event-sanity — date impossibili e appuntamenti (CASO-2026-028, beta 
   });
 });
 
+describe('event-sanity — temporalScope derivato (collaudo 2026-09-04: referto esploso in 12 eventi)', () => {
+  it('data FUTURA rispetto all\'elaborazione → temporalScope forzato a "programmato" anche se il LLM dice corrente', () => {
+    const { events } = applyTemporalSanityFlags(
+      [makeEvent({ eventDate: '2026-10-07', title: 'Controllo clinico', temporalScope: 'corrente' })],
+      OPTS,
+    );
+    expect(events[0].temporalScope).toBe('programmato');
+  });
+
+  it('testo "programmato" senza marcatori di esecuzione → SOLO nota, lo scope del LLM resta (un "ricovero programmato" elettivo è avvenuto)', () => {
+    const { events } = applyTemporalSanityFlags(
+      [makeEvent({ eventDate: '2024-05-10', title: 'Ricovero programmato per artroprotesi anca sinistra', description: 'Ingresso in reparto in regime di ricovero programmato per intervento.', temporalScope: 'corrente' })],
+      OPTS,
+    );
+    expect(events[0].temporalScope).toBe('corrente');
+    expect(events[0].reliabilityNotes).toContain('PROGRAMMATO');
+  });
+
+  it('un "retrospettivo" con data futura (anno anamnestico mal letto) resta retrospettivo: cap + nota, niente "programmato"', () => {
+    const { events } = applyTemporalSanityFlags(
+      [makeEvent({ eventDate: '2029-01-01', title: 'Pregressa meniscectomia', description: 'Riferita in anamnesi.', temporalScope: 'retrospettivo' })],
+      OPTS,
+    );
+    expect(events[0].temporalScope).toBe('retrospettivo');
+    expect(events[0].confidence).toBeLessThanOrEqual(FUTURE_DATE_CONFIDENCE_CAP);
+  });
+
+  it('visita "programmata" MA eseguita → resta "corrente" (mai declassare un atto avvenuto)', () => {
+    const { events } = applyTemporalSanityFlags(
+      [makeEvent({ eventDate: '2026-06-10', title: 'Visita programmata eseguita', description: 'Visita di controllo programmata, eseguita regolarmente.', temporalScope: 'corrente' })],
+      OPTS,
+    );
+    expect(events[0].temporalScope).toBe('corrente');
+  });
+
+  it('un "retrospettivo" dichiarato dal LLM resta tale (la sanity non lo tocca)', () => {
+    const { events } = applyTemporalSanityFlags(
+      [makeEvent({ eventDate: '2019-03-01', title: 'Pregressa meniscectomia', description: 'Riferita in anamnesi.', temporalScope: 'retrospettivo' })],
+      OPTS,
+    );
+    expect(events[0].temporalScope).toBe('retrospettivo');
+  });
+
+  it('evento senza campo (righe/percorsi legacy) → non inventa lo scope se non ci sono segnali', () => {
+    const { events } = applyTemporalSanityFlags([makeEvent({ eventDate: '2026-06-10' })], OPTS);
+    expect(events[0].temporalScope).toBeUndefined();
+  });
+});
+
 describe('event-sanity — pagine manoscritte', () => {
   it('buildHandwrittenPageSet: yes/partial dentro, null fuori', () => {
     const set = buildHandwrittenPageSet([
