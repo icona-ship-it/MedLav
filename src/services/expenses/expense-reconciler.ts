@@ -35,11 +35,24 @@ export function parseDocumentBlocks(ocrText: string): Map<string, string> {
 
 // ── Declared totals ────────────────────────────────────────────────────
 
+/**
+ * Fra l'etichetta ("TOTALE", "ACCONTO") e l'importo possono stare parole, tag
+ * HTML (Mistral OCR rende le fatture come tabelle: `<td>ACCONTO versato in data
+ * 10/02/2026</td><td>4.000,00</td>`) e UNA data/ora. Mai altri numeri
+ * (contatori, quantità, numeri fattura): agguanterebbero l'importo sbagliato.
+ * Collaudo 2026-09-04: la data dentro la cella spegneva la dedup acconto/saldo.
+ */
+const LABEL_TO_AMOUNT_GAP = String.raw`(?:[^\d\n]|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}){0,60}?`;
+
+/** Importo in formato fiscale italiano: 2 decimali con virgola. */
+const AMOUNT_CAPTURE = String.raw`([\d.]+,\d{2})`;
+
 const TOTAL_RES: RegExp[] = [
-  // "TOTALE FATTURA 12.318,47" / "totale: € 120,00" — richiede 2 decimali con
-  // virgola (formato documenti fiscali italiani). "ACCONTO x" NON matcha.
-  /\btotal[ei]\b[^\d\n]{0,20}([\d.]+,\d{2})/gi,
-  /\bda\s+pagare\b[^\d\n]{0,10}([\d.]+,\d{2})/gi,
+  // "TOTALE FATTURA 12.318,47" / "totale: € 120,00". Esclusi i totali che NON
+  // sono il lordo pagato (imponibile, IVA, sconto, netto): ancorarci sopra
+  // porterebbe l'importo verso il netto. "ACCONTO x" NON matcha.
+  new RegExp(String.raw`\btotal[ei]\b(?!\s*(?:imponibile|iva|sconto|netto)\b)` + LABEL_TO_AMOUNT_GAP + AMOUNT_CAPTURE, 'gi'),
+  new RegExp(String.raw`\bda\s+pagare\b` + LABEL_TO_AMOUNT_GAP + AMOUNT_CAPTURE, 'gi'),
 ];
 
 function parseItalianAmount(raw: string): number | null {
@@ -81,8 +94,9 @@ const DEPOSIT_MATCH_TOLERANCE_EUR = 5;
 /** Voce che rappresenta un acconto/deposito versato prima del saldo. */
 const DEPOSIT_ITEM_RE = /\b(deposito\s+cauzionale|acconto|caparra)\b/i;
 
-/** Dichiarazione "ACCONTO <importo>" dentro una fattura a saldo. */
-const ACCONTO_DECLARATION_RE = /\bacconto\b[^\d\n]{0,20}([\d.]+,\d{2})/gi;
+/** Dichiarazione "ACCONTO <importo>" dentro una fattura a saldo (anche
+ * "ACCONTO versato in data 10/02/2026 … 4.000,00" in cella di tabella OCR). */
+const ACCONTO_DECLARATION_RE = new RegExp(String.raw`\bacconto\b` + LABEL_TO_AMOUNT_GAP + AMOUNT_CAPTURE, 'gi');
 
 /** Acconti dichiarati per documento (nome file → importi). */
 function findDeclaredAcconti(blocks: Map<string, string>): Map<string, number[]> {

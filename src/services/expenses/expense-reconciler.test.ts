@@ -54,6 +54,11 @@ describe('findDeclaredTotals', () => {
     expect(totals).not.toContain(9408.47);
   });
 
+  it('should find a declared total even when a date sits between the label and the amount (OCR table cell)', () => {
+    const totals = findDeclaredTotals('<tr><td>TOTALE FATTURA del 28/03/2026</td><td>5.752,00</td></tr>');
+    expect(totals).toContain(5752);
+  });
+
   it('should find "da Pagare €" totals from handwritten-style receipts', () => {
     const totals = findDeclaredTotals('Bollo o IVA 22% 66,00\nda Pagare € 366,00');
     expect(totals).toContain(366.00);
@@ -264,6 +269,30 @@ describe('reconcileExpenseItems — fusione per documento fiscale', () => {
       expect(deposit?.exclusionReason).toContain('acconto');
       // Totale: SOLO la fattura a saldo (il +9.410,47 fantasma del CASO-033)
       expect(result.totalAmount).toBe(10208.47);
+    });
+
+    it('should exclude the deposit when the acconto is declared in an OCR table cell together with a date (collaudo 2026-09-04)', () => {
+      // Mistral OCR rende le fatture come tabelle HTML: la dichiarazione arriva
+      // come "<td>ACCONTO versato in data 10/02/2026</td><td>4.000,00</td>".
+      // La data fra la parola e l'importo NON deve spegnere la rete.
+      const tableOcr = '### DOCUMENTO: fattura-saldo.pdf ###\n# FATTURA N. 077/26\n<table><tr><td>Quota equipe</td><td>9.000,00</td></tr><tr><td>TOTALE FATTURA</td><td>10.208,47</td></tr><tr><td>ACCONTO versato in data 10/02/2026</td><td>9.408,47</td></tr><tr><td>TOTALE DA PAGARE</td><td>800,00</td></tr></table>\n### FINE DOCUMENTO ###\n\n### DOCUMENTO: avviso-deposito.pdf ###\nDEPOSITO CAUZIONALE INTERVENTO LP\n9.410,47 Euro\n### FINE DOCUMENTO ###';
+      const result = reconcileExpenseItems([depositItem, saldoItem], tableOcr);
+
+      const deposit = result.items.find((i) => i.description.includes('Deposito'));
+      expect(deposit?.excludedFromTotal).toBe(true);
+      expect(deposit?.exclusionReason).toContain('9408,47');
+      expect(result.totalAmount).toBe(10208.47);
+    });
+
+    it('should NOT read a date or a counter as the declared acconto amount', () => {
+      // "ACCONTO del 10/02/2026" senza importo con decimali: nessuna
+      // dichiarazione → il deposito resta contato (conservativo).
+      const noAmountOcr = saldoOcr.replace('ACCONTO 9.408,47', 'ACCONTO del 10/02/2026 n. 12');
+      const result = reconcileExpenseItems([depositItem, saldoItem], noAmountOcr);
+
+      const deposit = result.items.find((i) => i.description.includes('Deposito'));
+      expect(deposit?.excludedFromTotal).toBeFalsy();
+      expect(result.totalAmount).toBeCloseTo(9410.47 + 10208.47);
     });
 
     it('should KEEP the deposit in the total when no saldo invoice declares a matching acconto', () => {
