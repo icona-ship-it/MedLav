@@ -3,7 +3,8 @@
 SELECT
   (SELECT count(*) FROM information_schema.columns
     WHERE table_name = 'documents' AND column_name IN ('merged_into_document_id', 'merge_order')) AS colonne_attese_2,
-  (SELECT count(*) FROM information_schema.table_constraints
-    WHERE table_name = 'documents' AND constraint_name = 'documents_merged_into_document_id_documents_id_fk') AS fk_attesa_1,
+  -- pg_constraint, non information_schema (che qui rispondeva 0 con la FK presente — verificato 2026-09-04)
+  (SELECT count(*) FROM pg_constraint
+    WHERE conrelid = 'public.documents'::regclass AND conname = 'documents_merged_into_document_id_documents_id_fk' AND contype = 'f') AS fk_attesa_1,
   (SELECT count(*) FROM pg_indexes
     WHERE tablename = 'documents' AND indexname = 'idx_documents_merged_into') AS indice_atteso_1;
