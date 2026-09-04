@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { anonymizeDocsForExport, anonymizeEventsForExport, collectKnownIdentityNames } from '@/services/export/anonymize-export';
+import { buildVerificationAppendix } from '@/services/export/verification-appendix';
+import { documentsForExport } from '@/services/export/load-case-data';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -7,7 +10,7 @@ import { generateHtmlReport, generateProfessionalHtmlReport } from '@/services/e
 import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
-import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs, formatDocumentazioneSanitaria, computeTranscriptionCoverage } from '@/services/calculations/deterministic-tables';
 import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -77,9 +80,12 @@ export async function GET(
 
     // --- Timeline-only export for extraction_only pipeline ---
     if (pipelineMode === 'extraction_only') {
-      if (!data.events || data.events.length === 0) {
+      const hasAnyText = (data.documentsWithPages ?? []).some((d) => d.pages.some((p) => p.ocrText.trim().length > 0));
+      // La trascrizione è il deliverable: senza eventi ma con testo letto la
+      // cronistoria esce comunque (cronologia vuota + trascrizione + appendice).
+      if ((!data.events || data.events.length === 0) && !hasAnyText) {
         return NextResponse.json(
-          { success: false, error: 'Nessun evento trovato per questo caso. Impossibile generare la cronistoria.' },
+          { success: false, error: 'Nessun evento né testo letto per questo caso. Impossibile generare la cronistoria.' },
           { status: 404 },
         );
       }
@@ -130,12 +136,41 @@ export async function GET(
           temporal_scope: (e.temporal_scope as string | null) ?? null,
         }));
 
+      // Trascrizione per documento + appendice di verifica (2026-09-04): il
+      // deliverable "un documento = un blocco" con il testo del clinico, e le
+      // reti rese visibili. I file uniti non sono documenti a sé.
+      // Anonimizzazione ALLA FONTE (giro avversariale 2026-09-04): nomi file e
+      // struttura/medico negli header di blocco non sono catturati dal solo
+      // passaggio prosa a valle (underscore, minuscole, medici senza titolo).
+      const pmTimelineAnon = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const exportDocs = documentsForExport(data.documentsWithPages ?? []);
+      const docsForTranscription = shouldAnonymizeTimeline
+        ? anonymizeDocsForExport(exportDocs, pmTimelineAnon, collectKnownIdentityNames(data.events ?? []))
+        : exportDocs;
+      const eventsForTranscription = shouldAnonymizeTimeline
+        ? anonymizeEventsForExport(data.events ?? [], pmTimelineAnon)
+        : (data.events ?? []);
+      const detDocs = toDeterministicDocs(docsForTranscription);
+      const detEvents = toDeterministicEvents(eventsForTranscription);
+      // Cronistoria = trascrizione INTEGRALE (niente filtro per-pagina) e mai
+      // nomi file nel deliverable.
+      const transcriptionOpts = { includeFileNames: false, pageFilter: false };
+      const transcriptionMarkdown = formatDocumentazioneSanitaria(detDocs, detEvents, transcriptionOpts);
+      const verificationAppendixMarkdown = buildVerificationAppendix({
+        mode: 'cronistoria',
+        documents: data.documentsWithPages ?? [],
+        events: (data.events ?? []) as unknown as Parameters<typeof buildVerificationAppendix>[0]['events'],
+        transcription: computeTranscriptionCoverage(detDocs, detEvents, transcriptionOpts),
+      });
+
       const timelineHtml = generateTimelineHtml({
         caseCode: data.caseData.code as string,
         patientInitials: shouldAnonymizeTimeline ? '[PAZIENTE]' : (data.caseData.patient_initials as string | null),
         events: timelineEvents,
         moduleName,
-        documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
+        documents: exportDocs.map((d) => ({ id: d.id, documentType: d.documentType })),
+        transcriptionMarkdown,
+        verificationAppendixMarkdown,
       });
 
       // Passaggio di anonimizzazione REALE su tutto il documento (come l'export
@@ -221,7 +256,7 @@ export async function GET(
       synthesis = expandDeterministicBlocks(
         synthesis,
         toDeterministicEvents(data.events ?? []),
-        toDeterministicDocs(data.documentsWithPages ?? []),
+        toDeterministicDocs(documentsForExport(data.documentsWithPages ?? [])),
         { incidentDate: (pm?.dataSinistro as string | undefined) ?? null },
       );
       const images = await resolveOcrImages(synthesis, caseId);

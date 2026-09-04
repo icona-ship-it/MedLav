@@ -13,6 +13,24 @@ export interface DocumentWithPages {
   documentType: string;
   pageCount: number | null;
   pages: DocumentPage[];
+  /** File unito come pagina di un altro documento (migration 0033): le sue
+   * pagine e i suoi eventi vivono sotto il primario. */
+  mergedIntoDocumentId?: string | null;
+}
+
+/** Documenti da riprodurre negli export: primari e standalone, più i file
+ * uniti che hanno ANCORA pagine proprie (unione fatta su un caso già
+ * elaborato, non ancora riavviato: le loro pagine non sono state riassorbite
+ * dal primario — nasconderli perderebbe testo in silenzio). Un file unito
+ * senza pagine è già assorbito e non è un documento a sé. */
+export function documentsForExport<T extends { mergedIntoDocumentId?: string | null; pages: ReadonlyArray<unknown> }>(docs: ReadonlyArray<T>): T[] {
+  return docs.filter((d) => !d.mergedIntoDocumentId || d.pages.length > 0);
+}
+
+/** File uniti non ancora riassorbiti (hanno pagine proprie): l'export deve
+ * dirlo, così il medico sa che serve riavviare l'analisi. */
+export function mergedDocumentsPendingReprocess<T extends { mergedIntoDocumentId?: string | null; pages: ReadonlyArray<unknown> }>(docs: ReadonlyArray<T>): T[] {
+  return docs.filter((d) => !!d.mergedIntoDocumentId && d.pages.length > 0);
 }
 
 /**
@@ -65,7 +83,7 @@ export async function loadCaseDataForExport(caseId: string) {
       .maybeSingle(),
     supabase
       .from('documents')
-      .select('id, file_name, document_type, page_count')
+      .select('id, file_name, document_type, page_count, merged_into_document_id')
       .eq('case_id', caseId)
       .order('created_at', { ascending: true }),
   ]);
@@ -97,12 +115,20 @@ export async function loadCaseDataForExport(caseId: string) {
     });
   }
 
+  // Fallimento RUMOROSO (giro avversariale 2026-09-04): se la select fallisce
+  // (es. colonna merged_into_document_id assente in un ambiente senza la
+  // migration 0033), un export con ZERO documenti e HTTP 200 sarebbe
+  // un'omissione silenziosa dell'intera trascrizione.
+  if (documentsRes.error) {
+    throw new Error(`Failed to load documents for export: ${documentsRes.error.message}`);
+  }
   const documentsWithPages: DocumentWithPages[] = (documentsRes.data ?? []).map((doc) => ({
     id: doc.id as string,
     fileName: doc.file_name as string,
     documentType: (doc.document_type as string) ?? 'altro',
     pageCount: doc.page_count as number | null,
     pages: pagesByDoc.get(doc.id as string) ?? [],
+    mergedIntoDocumentId: (doc.merged_into_document_id as string | null) ?? null,
   }));
 
   // Calculate medico-legal periods from events. La data sinistro del form

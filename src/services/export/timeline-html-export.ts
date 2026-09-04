@@ -1,5 +1,6 @@
 import { formatEventDateByPrecision } from '@/lib/format';
 import { groupEventsByDocument, RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
+import { markdownToHtml } from './markdown-to-html';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
@@ -41,6 +42,13 @@ interface TimelineHtmlParams {
   moduleName?: string;
   /** Tipi documento classificati per le intestazioni-blocco (mai nomi file). */
   documents?: Array<{ id: string; documentType?: string | null }>;
+  /** Trascrizione verbatim per documento (markdown, già sanificato) — il
+   * deliverable che il medico legale usa: "un documento = un blocco" con il
+   * testo del clinico, non solo la scomposizione in eventi (2026-09-04). */
+  transcriptionMarkdown?: string | null;
+  /** Appendice di verifica (markdown): documenti ricevuti/trascritti/esclusi,
+   * pagine lette, eventi da verificare — le reti rese visibili. */
+  verificationAppendixMarkdown?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +166,20 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     </section>`;
     }).join('\n');
 
+  const transcriptionHtml = params.transcriptionMarkdown && params.transcriptionMarkdown.trim().length > 0
+    ? `<section class="transcription">
+  <h2 class="section-head">Trascrizione dei documenti</h2>
+  <p class="section-note">Testo dei documenti riprodotto integralmente così come letto (OCR), un blocco per documento in ordine cronologico; le pagine illeggibili e le immagini non riprodotte sono segnalate fra parentesi quadre.</p>
+  ${markdownToHtml(params.transcriptionMarkdown)}
+</section>`
+    : '';
+  const appendixHtml = params.verificationAppendixMarkdown && params.verificationAppendixMarkdown.trim().length > 0
+    ? `<section class="appendix">
+  <h2 class="section-head">Appendice di verifica</h2>
+  ${markdownToHtml(params.verificationAppendixMarkdown)}
+</section>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="it">
 <head>
@@ -188,6 +210,13 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   .sublist .event-head { font-size: 13px; color: #334155; }
   .sublist .event-desc { font-size: 13px; }
   .event-scope { font-weight: 400; color: #92400e; font-size: 12px; }
+  .section-head { font-size: 17px; margin: 28px 0 6px; padding-bottom: 4px; border-bottom: 2px solid #1b3a6b; color: #1b3a6b; }
+  .section-note { font-size: 12px; color: #64748b; font-style: italic; margin-bottom: 10px; }
+  .transcription h3, .transcription strong { color: #1b3a6b; }
+  .transcription p, .transcription li { font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .transcription table { border-collapse: collapse; margin: 6px 0; max-width: 100%; }
+  .transcription td, .transcription th { border: 1px solid #cbd5e1; padding: 3px 6px; font-size: 12.5px; vertical-align: top; }
+  .appendix p, .appendix li { font-size: 13px; }
   .watermark-wrapper { position: relative; }
   .watermark-wrapper::after {
     content: 'RISERVATO';
@@ -249,6 +278,8 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
 <div class="timeline">
   ${eventsHtml}
 </div>
+${transcriptionHtml}
+${appendixHtml}
 
 <div class="footer">
   Generato con LegMed &mdash; ${escapeHtml(caseCode)} &mdash; ${now}

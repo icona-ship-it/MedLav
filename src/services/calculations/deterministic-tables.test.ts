@@ -10,6 +10,7 @@ import {
   DETERMINISTIC_MARKERS,
   type DeterministicTableEvent,
   type DeterministicDoc,
+  computeTranscriptionCoverage,
 } from './deterministic-tables';
 
 function ev(partial: Partial<DeterministicTableEvent>): DeterministicTableEvent {
@@ -445,5 +446,44 @@ describe('ambito temporale nelle tabelle deterministiche (0034)', () => {
     );
     expect(out).toMatch(/UOC Oncologia Cittàdemo in data 22\.05\.2026/);
     expect(out).not.toMatch(/Centro Esterno Demo in data/);
+  });
+});
+
+describe('trascrizione: opzioni e copertura (giro avversariale 2026-09-04)', () => {
+  const bigDoc = doc({ documentId: 'big', fileName: 'cartella_rossi.pdf', documentType: 'cartella_clinica', pages: Array.from({ length: 12 }, (_, i) => ({ pageNumber: i + 1, ocrText: `pagina ${i + 1}` })) });
+  const evs = [ev({ document_id: 'big', event_date: '2026-03-03', event_type: 'intervento', title: 'Osteosintesi', diagnosis: 'Frattura', source_pages: [3] })];
+
+  it('includeFileNames:false → il nome file NON compare (può contenere il nome del paziente)', () => {
+    expect(formatDocumentazioneSanitaria([bigDoc], evs)).toContain('cartella_rossi.pdf');
+    expect(formatDocumentazioneSanitaria([bigDoc], evs, { includeFileNames: false })).not.toContain('cartella_rossi.pdf');
+  });
+
+  it('pageFilter:false → trascrizione integrale anche sui documenti grandi; la copertura lo riflette', () => {
+    const filtered = computeTranscriptionCoverage([bigDoc], evs);
+    const integral = computeTranscriptionCoverage([bigDoc], evs, { pageFilter: false });
+    expect(integral.get('big')).toEqual({ rendered: 12, total: 12, withText: 12 });
+    expect(filtered.get('big')!.total).toBe(12);
+    expect(filtered.get('big')!.rendered).toBeLessThanOrEqual(12);
+    const outIntegral = formatDocumentazioneSanitaria([bigDoc], evs, { pageFilter: false });
+    expect(outIntegral).not.toContain('Riprodotte le');
+    expect(outIntegral).toContain('pagina 12');
+  });
+
+  it('la copertura ignora i tipi esclusi (spese, atti) e rispecchia la regola del renderer', () => {
+    const spese = doc({ documentId: 'f', fileName: 'f.pdf', documentType: 'spese_mediche', pages: [{ pageNumber: 1, ocrText: 'fattura' }] });
+    const cov = computeTranscriptionCoverage([bigDoc, spese], evs, { pageFilter: false });
+    expect(cov.has('f')).toBe(false);
+    expect(cov.has('big')).toBe(true);
+  });
+});
+
+describe('computeTranscriptionCoverage — pagine con testo (giro avversariale 2026-09-04)', () => {
+  it('conta separatamente le pagine rese e quelle con testo leggibile', () => {
+    const doc = {
+      documentId: 'blankish', fileName: 'x.pdf', documentType: 'cartella_clinica',
+      pages: [{ pageNumber: 1, ocrText: 'testo' }, { pageNumber: 2, ocrText: '' }, { pageNumber: 3, ocrText: '  \n' }],
+    };
+    const cov = computeTranscriptionCoverage([doc as never], [], { pageFilter: false });
+    expect(cov.get('blankish')).toEqual({ rendered: 3, total: 3, withText: 1 });
   });
 });

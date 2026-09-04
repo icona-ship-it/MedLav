@@ -65,7 +65,7 @@ const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
  * Professional titles followed by a capitalized name (Dott./Prof./Sig. etc.)
  * Matches: "Dott. Mario Rossi", "Prof.ssa Anna Bianchi", "Sig.ra Giovanni Verdi"
  */
-const TITLE_NAME_REGEX = /(?:Dott\.?(?:ssa|\.ssa)?|Prof\.?(?:ssa|\.ssa)?|Sig\.?(?:ra|\.ra)?|Avv\.?|Ing\.?)\s+[A-Z][a-z\u00E0\u00E8\u00E9\u00EC\u00F2\u00F9]+(?:\s+[A-Z][a-z\u00E0\u00E8\u00E9\u00EC\u00F2\u00F9]+){0,2}/g;
+const TITLE_NAME_REGEX = /(?:Dott\.?(?:ssa|\.ssa)?|Dr\.?(?:ssa|\.ssa)?|Prof\.?(?:ssa|\.ssa)?|Sig\.?(?:ra|\.ra)?|Avv\.?|Ing\.?)\s+[A-Z][a-z\u00E0\u00E8\u00E9\u00EC\u00F2\u00F9]+(?:\s+[A-Z][a-z\u00E0\u00E8\u00E9\u00EC\u00F2\u00F9]+){0,2}/g;
 
 /**
  * Italian dates in numeric format: dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
@@ -145,7 +145,12 @@ const NAME_BEFORE_NATO_REGEX = new RegExp(
  * Hospital and healthcare facility names.
  * Matches: "Ospedale San Raffaele", "ASST Spedali Civili", "Policlinico Gemelli"
  */
-const HOSPITAL_REGEX = /(?:Ospedale|ASST|ASL|ATS|Policlinico|Clinica|Istituto|Casa di Cura)\s+[A-Z][^\.,;:\n]{2,40}/g;
+// Studio/Centro/Poliambulatorio/Laboratorio/Presidio/Fondazione aggiunti il
+// 2026-09-04 (la trascrizione integrale dell'OCR porta nel corpo i nomi delle
+// strutture minori, prima invisibili). Solo con iniziale MAIUSCOLA seguita da
+// nome proprio: "centro del ginocchio" / "lo studio della lastra" non toccati;
+// "Studio RM/TC/RX ..." (sigla d'esame) è contenuto clinico, non una struttura.
+const HOSPITAL_REGEX = /(?:Ospedale|ASST|ASL|ATS|AOU|IRCCS|Policlinico|Clinica|Istituto|Casa di Cura|Presidio Ospedaliero|Fondazione|Studio(?!\s+(?:RM|RMN|RX|TC|TAC|PET|MOC|ECO|ECG|EEG|EMG|EGDS|TSA|US)\b)|Centro|Poliambulatorio|Laboratorio)\s+[A-Z][^\.,;:\n]{2,40}/g;
 
 /**
  * Court references (RG numbers).

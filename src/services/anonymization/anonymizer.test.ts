@@ -304,3 +304,34 @@ describe('anonymizer', () => {
     });
   });
 });
+
+describe('titoli e strutture ricorrenti nell\'OCR integrale (giro avversariale 2026-09-04)', () => {
+  it('redige "Dr." e "Dr.ssa" come "Dott."', () => {
+    const { anonymizedText } = anonymizeText({ text: 'Refertato da Dr. Bianchi Luca e Dr.ssa Verdi Anna.' });
+    expect(anonymizedText).not.toContain('Bianchi');
+    expect(anonymizedText).not.toContain('Verdi');
+  });
+
+  it('redige Studio/Centro/Poliambulatorio/Laboratorio seguiti da nome proprio', () => {
+    const text = 'Eseguito presso Studio Radiologico Verdi. Poi Centro Diagnostico Esempi, Poliambulatorio Demprova e Laboratorio Analisi Cittàdemo.';
+    const { anonymizedText } = anonymizeText({ text });
+    expect(anonymizedText).not.toContain('Verdi');
+    expect(anonymizedText).not.toContain('Esempi');
+    expect(anonymizedText).not.toContain('Demprova');
+    expect(anonymizedText).not.toContain('Cittàdemo');
+  });
+
+  it('non redige "centro" e "studio" come parole comuni minuscole', () => {
+    const text = 'dolore al centro del ginocchio; lo studio della lastra non mostra fratture.';
+    const { anonymizedText } = anonymizeText({ text });
+    expect(anonymizedText).toBe(text);
+  });
+});
+
+describe('"Studio RM/TC" è contenuto clinico, non una struttura', () => {
+  it('non redige "Studio RM del ginocchio" né "Studio TC cranio"', () => {
+    const text = 'Studio RM del ginocchio destro: lesione meniscale. Studio TC cranio negativo.';
+    const { anonymizedText } = anonymizeText({ text });
+    expect(anonymizedText).toBe(text);
+  });
+});

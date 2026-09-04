@@ -110,6 +110,11 @@ interface DocxExportParams {
   /** Tabella spese (modulo analisi_spese_mediche): senza, il DOCX di un caso
    * SPESE usciva senza una spesa dentro (feedback medici 2026-08-19). */
   expenseItems?: ExpenseDocxItem[] | null;
+  /** Trascrizione verbatim per documento (markdown) — cronistoria documentale,
+   * 2026-09-04: il deliverable "un documento = un blocco" accanto agli eventi. */
+  transcriptionMarkdown?: string | null;
+  /** Appendice di verifica (markdown): reti rese visibili al medico. */
+  verificationAppendixMarkdown?: string | null;
   /** Export anonimizzato: le intestazioni-blocco omettono la struttura
    * (l'anonimizzatore copre solo la synthesis, non la cronologia da eventi raw
    * — audit 2026-07-23: la facility nel titolo-gruppo sarebbe trapelata). */
@@ -716,6 +721,30 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
         );
       }
     }
+  }
+
+  // Trascrizione dei documenti + Appendice di verifica (strumenti standalone,
+  // 2026-09-04): il testo del clinico per documento e i conteggi di verifica
+  // calcolati, prima della firma. Lettere per non collidere con la numerazione
+  // condizionale delle sezioni sopra.
+  if (params.transcriptionMarkdown && params.transcriptionMarkdown.trim().length > 0) {
+    children.push(
+      new Paragraph({ text: 'A. TRASCRIZIONE DEI DOCUMENTI', heading: HeadingLevel.HEADING_1, pageBreakBefore: true }),
+      new Paragraph({
+        children: [new TextRun({ text: 'Testo dei documenti riprodotto integralmente così come letto (OCR), un blocco per documento in ordine cronologico; le pagine illeggibili e le immagini non riprodotte sono segnalate fra parentesi quadre.', italics: true, color: '64748B', size: 20 })],
+      }),
+      new Paragraph({ text: '' }),
+      ...markdownToDocxParagraphs(params.transcriptionMarkdown),
+      new Paragraph({ text: '' }),
+    );
+  }
+  if (params.verificationAppendixMarkdown && params.verificationAppendixMarkdown.trim().length > 0) {
+    children.push(
+      new Paragraph({ text: 'B. APPENDICE DI VERIFICA', heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: '' }),
+      ...markdownToDocxParagraphs(params.verificationAppendixMarkdown),
+      new Paragraph({ text: '' }),
+    );
   }
 
   // Signature block

@@ -7,6 +7,7 @@ import type { PeriziaMetadata } from '@/types';
 import {
   anonymizeEventsForExport,
   anonymizeDocsForExport,
+  collectKnownIdentityNames,
   anonymizePmForExport,
 } from './anonymize-export';
 
@@ -113,5 +114,93 @@ describe('anonymizePmForExport — redige nomi/date/indirizzi, preserva i non-PI
 
   it('null → null', () => {
     expect(anonymizePmForExport(null, PM)).toBeNull();
+  });
+});
+
+describe('anonymizeDocsForExport — propagazione cross-pagina (giro avversariale 2026-09-04)', () => {
+  it('redige a pagina 5 la forma minuscola/invertita del nome rilevato a pagina 1', () => {
+    const docs = [
+      {
+        id: 'doc-x',
+        fileName: 'referto.pdf',
+        pages: [
+          { pageNumber: 1, ocrText: 'Paziente: DEMPROVA MARIO\nvisita del giorno' },
+          { pageNumber: 2, ocrText: 'pagina intermedia senza nomi' },
+          { pageNumber: 5, ocrText: 'consegnato a demprova mario in data 12/03/2026.' },
+        ],
+      },
+    ];
+    const [out] = anonymizeDocsForExport(docs, PM);
+    const texts = (out.pages as Array<{ ocrText: string }>).map((p) => p.ocrText);
+    expect(texts).toHaveLength(3);
+    expect(texts[1]).toBe('pagina intermedia senza nomi');
+    expect(texts.join('\n').toLowerCase()).not.toContain('demprova');
+    expect(texts.join('\n').toLowerCase()).not.toContain('mario');
+  });
+
+  it('usa placeholder coerenti tra pagine dello stesso documento (stessa data → stesso placeholder)', () => {
+    const docs = [
+      {
+        id: 'doc-y',
+        fileName: 'referto.pdf',
+        pages: [
+          { pageNumber: 1, ocrText: 'Data esame 12/03/2026' },
+          { pageNumber: 2, ocrText: 'Data esame 12/03/2026 e controllo 20/04/2026' },
+        ],
+      },
+    ];
+    const [out] = anonymizeDocsForExport(docs, PM);
+    const texts = (out.pages as Array<{ ocrText: string }>).map((p) => p.ocrText);
+    const first = texts[0].match(/\[DATA_\d+\]/)?.[0];
+    expect(first).toBeTruthy();
+    expect(texts[1]).toContain(first!);
+    expect(texts[1]).toMatch(/\[DATA_\d+\].*\[DATA_\d+\]/);
+    const [a, b] = texts[1].match(/\[DATA_\d+\]/g)!;
+    expect(a).not.toBe(b);
+  });
+
+  it('non tocca le pagine senza ocrText e conserva il numero di pagine', () => {
+    const docs = [
+      { id: 'doc-z', fileName: 'x.pdf', pages: [{ pageNumber: 1 }, { pageNumber: 2, ocrText: '' }, { pageNumber: 3, ocrText: 'Sig. Mario Demprova' }] },
+    ];
+    const [out] = anonymizeDocsForExport(docs, PM);
+    const pages = out.pages as Array<Record<string, unknown>>;
+    expect(pages).toHaveLength(3);
+    expect(pages[0]).toEqual({ pageNumber: 1 });
+    expect(pages[1].ocrText).toBe('');
+    expect(String(pages[2].ocrText).toLowerCase()).not.toContain('demprova');
+  });
+});
+
+describe('anonymizeDocsForExport — medici/strutture noti dagli eventi', () => {
+  it('redige nel corpo OCR il medico e la struttura degli eventi anche senza titolo e in minuscolo', () => {
+    const known = collectKnownIdentityNames([
+      { doctor: 'Dott. Bianchi Luca', facility: 'Studio Fisioterapico Esempi' },
+      { doctor: 'Rossi', facility: null },
+    ]);
+    const docs = [{ id: 'd', fileName: 'x.pdf', pages: [{ pageNumber: 1, ocrText: 'refertato da Bianchi   Luca presso lo studio fisioterapico esempi; il dott. Rossi non c\'era. Il costato è integro.' }] }];
+    const [out] = anonymizeDocsForExport(docs, PM, known);
+    const text = String((out.pages as Array<{ ocrText: string }>)[0].ocrText);
+    expect(text).not.toContain('Bianchi');
+    expect(text).not.toContain('esempi');
+    expect(text).toContain('[MEDICO]');
+    expect(text).toContain('[STRUTTURA]');
+    // cognome singolo: NON redatto qui (resta al passaggio-prosa), parole comuni intatte
+    expect(text).toContain('costato');
+  });
+});
+
+describe('anonymizeDocsForExport — nomi noti: forme invertite e valori generici', () => {
+  it('redige anche l\'ordine invertito di un nome a 2 token e NON i valori generici', () => {
+    const known = collectKnownIdentityNames([
+      { doctor: 'Dott.ssa Anna Verdi', facility: 'Pronto Soccorso' },
+      { doctor: 'Medico curante', facility: 'Non specificato' },
+    ]);
+    const docs = [{ id: 'd', fileName: 'x.pdf', pages: [{ pageNumber: 1, ocrText: 'Visita con Verdi Anna; accesso in pronto soccorso; il medico curante non è specificato.' }] }];
+    const [out] = anonymizeDocsForExport(docs, PM, known);
+    const text = String((out.pages as Array<{ ocrText: string }>)[0].ocrText);
+    expect(text).not.toContain('Verdi');
+    expect(text).toContain('pronto soccorso');
+    expect(text).toContain('medico curante');
   });
 });

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { anonymizeDocsForExport, anonymizeEventsForExport, collectKnownIdentityNames } from '@/services/export/anonymize-export';
+import { buildVerificationAppendix } from '@/services/export/verification-appendix';
+import { documentsForExport } from '@/services/export/load-case-data';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -6,7 +9,7 @@ import { loadCaseDataForExport } from '@/services/export/load-case-data';
 import { generateDocxReport, generateProfessionalDocxReport, validateDepositableExport, validateAnonymizedExport } from '@/services/export/docx-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
-import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs } from '@/services/calculations/deterministic-tables';
+import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs, formatDocumentazioneSanitaria, computeTranscriptionCoverage } from '@/services/calculations/deterministic-tables';
 import { logAccess } from '@/lib/audit';
 import { checkFeatureAccess } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
@@ -118,7 +121,7 @@ export async function GET(
       synthesis = expandDeterministicBlocks(
         synthesis,
         toDeterministicEvents(data.events ?? []),
-        toDeterministicDocs(data.documentsWithPages ?? []),
+        toDeterministicDocs(documentsForExport(data.documentsWithPages ?? [])),
         { incidentDate: (pm?.dataSinistro as string | undefined) ?? null },
       );
       const images = await resolveOcrImages(synthesis, caseId);
@@ -163,6 +166,34 @@ export async function GET(
         notes: anonStr(item.notes),
         excludedFromTotal: item.excludedFromTotal === true,
         exclusionReason: typeof item.exclusionReason === 'string' ? item.exclusionReason : null,
+      }));
+    }
+
+    // Trascrizione per documento (solo cronistoria) + appendice di verifica
+    // (cronistoria e spese), 2026-09-04. Anonimizzate come il resto.
+    let transcriptionForDocx: string | null = null;
+    let appendixForDocx: string | null = null;
+    if (pipelineModeDocx === 'extraction_only' || pipelineModeDocx === 'expenses_only') {
+      const pmAnon = (data.periziaMetadata ?? undefined) as PeriziaMetadata | undefined;
+      const anonMd = (md: string): string => (shouldAnonymize ? anonymizeText({ text: md, periziaMetadata: pmAnon }).anonymizedText : md);
+      // Anonimizzazione ALLA FONTE (docs: nome file; eventi: medico/struttura
+      // negli header di blocco) + passaggio prosa a valle come seconda rete.
+      const exportDocs = documentsForExport(data.documentsWithPages ?? []);
+      const detDocs = toDeterministicDocs(shouldAnonymize ? anonymizeDocsForExport(exportDocs, pmAnon, collectKnownIdentityNames(data.events ?? [])) : exportDocs);
+      const detEvents = toDeterministicEvents(shouldAnonymize ? anonymizeEventsForExport(data.events ?? [], pmAnon) : (data.events ?? []));
+      const transcriptionOpts = { includeFileNames: false, pageFilter: false };
+      if (pipelineModeDocx === 'extraction_only') {
+        const md = formatDocumentazioneSanitaria(detDocs, detEvents, transcriptionOpts);
+        transcriptionForDocx = md ? anonMd(md) : null;
+      }
+      appendixForDocx = anonMd(buildVerificationAppendix({
+        mode: pipelineModeDocx === 'extraction_only' ? 'cronistoria' : 'spese',
+        documents: data.documentsWithPages ?? [],
+        events: (data.events ?? []) as unknown as Parameters<typeof buildVerificationAppendix>[0]['events'],
+        transcription: pipelineModeDocx === 'extraction_only' ? computeTranscriptionCoverage(detDocs, detEvents, transcriptionOpts) : undefined,
+        expenses: pipelineModeDocx === 'expenses_only'
+          ? { items: (expenseItemsForDocx ?? []).length, excludedFromTotal: (expenseItemsForDocx ?? []).filter((i) => i.excludedFromTotal).length }
+          : undefined,
       }));
     }
 
@@ -218,6 +249,8 @@ export async function GET(
         documents: (data.documentsWithPages ?? []).map((d) => ({ id: d.id, documentType: d.documentType })),
         anonymized: shouldAnonymize,
         expenseItems: expenseItemsForDocx,
+        transcriptionMarkdown: transcriptionForDocx,
+        verificationAppendixMarkdown: appendixForDocx,
       });
 
     const suffix = shouldAnonymize ? '-anonimizzato' : '';

@@ -41,3 +41,15 @@ export const EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA: ReadonlySet<string> = new S
   'perizia_ctu',
   'spese_mediche',
 ]);
+
+/** Motivo (per il medico) per cui un tipo escluso NON viene trascritto.
+ * Stessa sorgente del Set: un test verifica che le chiavi coincidano. */
+export const EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA_REASONS: Readonly<Record<string, string>> = {
+  memoria_difensiva: 'atto giudiziario, non documentazione sanitaria',
+  documento_amministrativo: 'documento amministrativo, non documentazione sanitaria',
+  certificato: 'certificato: i suoi dati entrano nella cronologia degli eventi, il testo non è riprodotto',
+  perizia_precedente: 'atto peritale, non documentazione sanitaria',
+  perizia_ctp: 'atto peritale, non documentazione sanitaria',
+  perizia_ctu: 'atto peritale, non documentazione sanitaria',
+  spese_mediche: 'giustificativo di spesa, non documentazione sanitaria',
+};

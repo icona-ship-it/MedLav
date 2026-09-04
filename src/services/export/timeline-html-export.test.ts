@@ -200,3 +200,21 @@ describe('generateTimelineHtml — senza-data nei sotto-elenchi e date per preci
     expect(html).not.toContain('01.01.2019');
   });
 });
+
+describe('generateTimelineHtml — trascrizione per documento e appendice di verifica (2026-09-04)', () => {
+  it('rende le due sezioni quando fornite, dopo la cronologia; assenti se vuote', () => {
+    const base = { caseCode: 'C6', patientInitials: null, events: [ev({ title: 'Visita', document_id: 'ref' })], documents: [{ id: 'ref', documentType: 'referto_specialistico' }] };
+    const withSections = generateTimelineHtml({
+      ...base,
+      transcriptionMarkdown: '**Referto Specialistico, UOC Demo in data 22.05.2026:**\n\n«Visita oncologica di controllo»',
+      verificationAppendixMarkdown: '**Documenti**\n- Documenti ricevuti: 1',
+    });
+    expect(withSections).toContain('Trascrizione dei documenti');
+    expect(withSections).toContain('Appendice di verifica');
+    expect(withSections).toContain('Documenti ricevuti: 1');
+    expect(withSections.indexOf('Trascrizione dei documenti')).toBeGreaterThan(withSections.indexOf('class="timeline"'));
+    const without = generateTimelineHtml({ ...base, transcriptionMarkdown: '', verificationAppendixMarkdown: null });
+    expect(without).not.toContain('Trascrizione dei documenti');
+    expect(without).not.toContain('Appendice di verifica');
+  });
+});

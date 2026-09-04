@@ -89,11 +89,90 @@ export function anonymizeEventsForExport<T>(
   });
 }
 
+/** Separatore per anonimizzare le pagine di UN documento in un passaggio solo.
+ * Per-pagina, il nome rilevato a pagina 1 ("Paziente: DEMPROVA MARIO") non
+ * propagava alla forma minuscola/invertita di pagina 5 ("demprova mario") e i
+ * placeholder ripartivano da [DATA_1] a ogni pagina (giro avversariale
+ * 2026-09-04). Se l'anonimizzatore alterasse il separatore, il conteggio non
+ * torna e si ricade nel per-pagina (mai meno redazione di prima). */
+const PAGE_SEP = '\n\n[[LEGMED-SEP-PAGINA]]\n\n';
+
+function hasOcrText(p: unknown): p is Record<string, unknown> & { ocrText: string } {
+  return !!p && typeof p === 'object' && typeof (p as Record<string, unknown>).ocrText === 'string'
+    && ((p as Record<string, unknown>).ocrText as string).length > 0;
+}
+
+/** Nomi noti dal caso (medici/strutture degli eventi): esatti, ≥2 token, redatti
+ * nell'OCR case-insensitive. Un cognome singolo NON si redige così (corromperebbe
+ * parole comuni tipo "costa"/"ferro"): resta al passaggio-prosa. */
+export interface KnownIdentityNames {
+  doctors?: ReadonlyArray<string | null | undefined>;
+  facilities?: ReadonlyArray<string | null | undefined>;
+}
+
+const LEADING_TITLE_RE = /^(?:dott\.?(?:ssa)?|dr\.?(?:ssa)?|prof\.?(?:ssa)?|sig\.?(?:ra)?)\s+/i;
+
+/** Valori generici che l'estrazione mette al posto di un nome: redigerli
+ * cancellerebbe contenuto clinico ("accesso in pronto soccorso"). */
+const GENERIC_IDENTITY_PHRASES = new Set([
+  'pronto soccorso', 'medico curante', 'medico di base', 'medico di famiglia',
+  'medico di medicina generale', 'medicina generale', 'struttura sanitaria',
+  'non specificato', 'non specificata', 'non indicato', 'non indicata', 'non riportato', 'non riportata',
+]);
+
+/** Forme da redigere per un nome noto: la frase (≥2 token) e, se di 2 token,
+ * anche l'ordine invertito ("Anna Verdi" ↔ "Verdi Anna"). */
+function identityPhraseForms(raw: string | null | undefined): string[] {
+  if (typeof raw !== 'string') return [];
+  const phrase = raw.trim().replace(LEADING_TITLE_RE, '').replace(/\s+/g, ' ');
+  const tokens = phrase.split(' ').filter((t) => t.replace(/[^\p{L}]/gu, '').length >= 2);
+  if (tokens.length < 2 || GENERIC_IDENTITY_PHRASES.has(phrase.toLowerCase())) return [];
+  return tokens.length === 2 ? [phrase, `${tokens[1]} ${tokens[0]}`] : [phrase];
+}
+
+function redactKnownIdentities(text: string, known: KnownIdentityNames | undefined): string {
+  if (!known) return text;
+  let out = text;
+  const apply = (values: ReadonlyArray<string | null | undefined> | undefined, placeholder: string): void => {
+    for (const v of values ?? []) {
+      for (const phrase of identityPhraseForms(v)) {
+        const pattern = phrase.split(' ').map(escapeRe).join('\\s+');
+        out = out.replace(new RegExp(`(?<![\\p{L}])${pattern}(?![\\p{L}])`, 'giu'), placeholder);
+      }
+    }
+  };
+  apply(known.doctors, '[MEDICO]');
+  apply(known.facilities, '[STRUTTURA]');
+  return out;
+}
+
+/** Anonimizza le pagine di un documento in un passaggio unico (propagazione
+ * cross-pagina + placeholder coerenti); fallback per-pagina se il separatore
+ * non sopravvive. Le pagine senza ocrText restano intatte. */
+function anonymizePagesTogether(pages: unknown[], pm: PeriziaMetadata | undefined, known: KnownIdentityNames | undefined): unknown[] {
+  const withText = pages.map((p, i) => (hasOcrText(p) ? i : -1)).filter((i) => i >= 0);
+  if (withText.length === 0) return pages;
+  const texts = withText.map((i) => (pages[i] as { ocrText: string }).ocrText);
+  const joined = anonymizeText({ text: texts.join(PAGE_SEP), periziaMetadata: pm }).anonymizedText;
+  const parts = joined.split(PAGE_SEP);
+  const perPage = parts.length === texts.length
+    ? parts
+    : texts.map((t) => anonymizeText({ text: t, periziaMetadata: pm }).anonymizedText);
+  return pages.map((p, i) => {
+    const k = withText.indexOf(i);
+    if (k < 0) return p;
+    return { ...(p as Record<string, unknown>), ocrText: redactKnownIdentities(perPage[k]!, known) };
+  });
+}
+
 /** Copie anonimizzate dei documenti: fileName e testo OCR delle pagine; id,
- * tipo e conteggi restano invariati. */
+ * tipo e conteggi restano invariati. `known` = medici/strutture degli eventi
+ * del caso, redatti anche nel corpo OCR (la trascrizione integrale li porta in
+ * chiaro dove l'anonimizzatore-prosa non ha un titolo da agganciare). */
 export function anonymizeDocsForExport<T>(
   docs: T[] | null | undefined,
   pm: PeriziaMetadata | undefined,
+  known?: KnownIdentityNames,
 ): T[] {
   if (!docs) return [];
   return docs.map((d) => {
@@ -101,14 +180,23 @@ export function anonymizeDocsForExport<T>(
     const doc: Record<string, unknown> = { ...(d as Record<string, unknown>) };
     if ('fileName' in doc) doc.fileName = redactFileName(doc.fileName, pm);
     if (Array.isArray(doc.pages)) {
-      doc.pages = (doc.pages as unknown[]).map((p) =>
-        p && typeof p === 'object' && 'ocrText' in (p as Record<string, unknown>)
-          ? { ...(p as Record<string, unknown>), ocrText: anonStr((p as Record<string, unknown>).ocrText, pm) }
-          : p,
-      );
+      doc.pages = anonymizePagesTogether(doc.pages as unknown[], pm, known);
     }
     return doc as T;
   });
+}
+
+/** Medici e strutture degli eventi del caso, per `anonymizeDocsForExport`. */
+export function collectKnownIdentityNames(
+  events: ReadonlyArray<{ doctor?: string | null; facility?: string | null }> | null | undefined,
+): KnownIdentityNames {
+  const doctors = new Set<string>();
+  const facilities = new Set<string>();
+  for (const e of events ?? []) {
+    if (typeof e.doctor === 'string' && e.doctor.trim()) doctors.add(e.doctor.trim());
+    if (typeof e.facility === 'string' && e.facility.trim()) facilities.add(e.facility.trim());
+  }
+  return { doctors: [...doctors], facilities: [...facilities] };
 }
 
 /** Copia anonimizzata di periziaMetadata: ogni campo stringa (e array di stringhe)

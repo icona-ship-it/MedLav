@@ -288,10 +288,60 @@ function buildImportantPagesByDoc(events: DeterministicTableEvent[]): Map<string
   return byDoc;
 }
 
+export interface DocSanitariaOptions {
+  /** Nome file nell'elenco analitico (riferimento tecnico della perizia).
+   * false per la cronistoria: i nomi file possono contenere il nome del
+   * paziente e nel deliverable non servono (giro avversariale 2026-09-04). */
+  includeFileNames?: boolean;
+  /** Filtro per-pagina sui documenti grandi. false = trascrizione integrale. */
+  pageFilter?: boolean;
+}
+
+/** Pagine effettivamente rese per un documento (stessa regola del renderer):
+ * filtro per-pagina SOLO su documenti grandi con pagine-importanti risolte;
+ * se il filtro azzererebbe tutto, intero. Puro, riusato dalla copertura. */
+export function selectDocSanitariaPages(
+  doc: DeterministicDoc,
+  importantPages: Set<number> | undefined,
+  pageFilter: boolean = DOC_SANITARIA_PAGE_FILTER,
+): { pages: DeterministicDocPage[]; partial: boolean } {
+  const isLarge = doc.pages.length > DOC_SANITARIA_LARGE_DOC_PAGES;
+  const applyFilter = pageFilter && isLarge && importantPages !== undefined && importantPages.size > 0;
+  const pagesToRender = applyFilter ? doc.pages.filter((p) => importantPages!.has(p.pageNumber)) : doc.pages;
+  const finalPages = pagesToRender.length > 0 ? pagesToRender : doc.pages;
+  return { pages: finalPages, partial: applyFilter && finalPages.length < doc.pages.length };
+}
+
+/** Copertura della trascrizione per documento clinico: pagine rese / totali.
+ * È ciò che l'appendice di verifica dichiara — calcolato con la STESSA regola
+ * del renderer, mai affermato (giro avversariale 2026-09-04). */
+export function computeTranscriptionCoverage(
+  docs: DeterministicDoc[],
+  events: DeterministicTableEvent[],
+  opts: DocSanitariaOptions = {},
+): Map<string, { rendered: number; total: number; withText: number }> {
+  const pageFilter = opts.pageFilter ?? DOC_SANITARIA_PAGE_FILTER;
+  const importantPagesByDoc = pageFilter ? buildImportantPagesByDoc(events) : new Map<string, Set<number>>();
+  const out = new Map<string, { rendered: number; total: number; withText: number }>();
+  for (const doc of docs) {
+    if (EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(doc.documentType)) continue;
+    const { pages } = selectDocSanitariaPages(doc, importantPagesByDoc.get(doc.documentId), pageFilter);
+    // withText: pagine rese CON testo leggibile. Una pagina resa come
+    // "[testo non disponibile]" non è trascritta: l'appendice non deve dire
+    // "integralmente" (giro avversariale 2026-09-04).
+    const withText = pages.filter((p) => (p.ocrText ?? '').trim().length > 0).length;
+    out.set(doc.documentId, { rendered: pages.length, total: doc.pages.length, withText });
+  }
+  return out;
+}
+
 export function formatDocumentazioneSanitaria(
   docs: DeterministicDoc[],
   events: DeterministicTableEvent[],
+  opts: DocSanitariaOptions = {},
 ): string {
+  const includeFileNames = opts.includeFileNames ?? true;
+  const pageFilter = opts.pageFilter ?? DOC_SANITARIA_PAGE_FILTER;
   // Only CLINICAL documents (atti/perizie/spese live in their own sections).
   const clinicalDocs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
   if (clinicalDocs.length === 0) return '';
@@ -358,11 +408,12 @@ export function formatDocumentazioneSanitaria(
     const d = docDate.get(doc.documentId);
     const pageInfo = doc.pages.length ? ` (${doc.pages.length} ${doc.pages.length === 1 ? 'pagina' : 'pagine'})` : '';
     const dateInfo = d ? `, ${formatDate(d)}` : '';
-    parts.push(`- ${getDocumentTypeLabel(doc.documentType)} — *${doc.fileName}*${pageInfo}${dateInfo}`);
+    const fileRef = includeFileNames ? ` — *${doc.fileName}*` : '';
+    parts.push(`- ${getDocumentTypeLabel(doc.documentType)}${fileRef}${pageInfo}${dateInfo}`);
   }
 
   // Pagine importanti per documento (T1/T2) — per il filtro per-pagina.
-  const importantPagesByDoc = DOC_SANITARIA_PAGE_FILTER
+  const importantPagesByDoc = pageFilter
     ? buildImportantPagesByDoc(events)
     : new Map<string, Set<number>>();
 
@@ -380,16 +431,8 @@ export function formatDocumentazioneSanitaria(
     } else {
       // Filtro per-pagina: SOLO su documenti grandi, e solo se il documento ha
       // pagine-importanti risolte (altrimenti fallback conservativo = intero).
-      const importantPages = importantPagesByDoc.get(doc.documentId);
-      const isLarge = doc.pages.length > DOC_SANITARIA_LARGE_DOC_PAGES;
-      const applyFilter =
-        DOC_SANITARIA_PAGE_FILTER && isLarge && importantPages !== undefined && importantPages.size > 0;
-      const pagesToRender = applyFilter
-        ? doc.pages.filter((p) => importantPages!.has(p.pageNumber))
-        : doc.pages;
-      // Se il filtro azzererebbe tutto (paradosso), riproduci intero (safe).
-      const finalPages = pagesToRender.length > 0 ? pagesToRender : doc.pages;
-      if (applyFilter && finalPages.length < doc.pages.length) {
+      const { pages: finalPages, partial } = selectDocSanitariaPages(doc, importantPagesByDoc.get(doc.documentId), pageFilter);
+      if (partial) {
         parts.push(`*[Riprodotte le ${finalPages.length} pagine con i reperti principali su ${doc.pages.length}; documento integrale agli atti.]*`);
       }
       for (const page of finalPages) {
