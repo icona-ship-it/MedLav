@@ -311,6 +311,7 @@ export function EventCard({
     <div
       className={`rounded-md border p-3 transition-colors ${isHighlighted ? 'border-primary bg-primary/5 ring-1 ring-primary' : ''}`}
       id={`event-${event.order_number}`}
+      data-event-id={event.id}
     >
       {/* Header row — always visible */}
       <div className="flex items-start justify-between">

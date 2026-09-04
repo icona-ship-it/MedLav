@@ -14,6 +14,7 @@ import { statusConfig, caseTypeLabels, moduleLabels } from '@/lib/constants';
 import { formatRelativeDate } from '@/lib/format-date';
 import { RC_MODULE, MODULE_CATALOG } from '@/types/modules';
 import { getElaborationCost } from '@/services/credits/credit-costs';
+import { DemoCaseButton } from './demo-case-button';
 
 // rc-mvp: la perizia RC è il cavallo di battaglia (CTA principale). Sotto,
 // gli strumenti standalone riesposti (2026-07-06): cronistoria, spese,
@@ -103,6 +104,22 @@ export default async function DashboardPage() {
           </div>
         </section>
       )}
+
+      {/* Caso dimostrativo: dati fittizi, nessun credito (ambiente demo 2026-09-04) */}
+      <section className="space-y-3">
+        <Card className="rounded-xl border-dashed">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold">Prova con un caso dimostrativo</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Cronistoria già pronta su documenti interamente fittizi: eventi avvenuti, riferiti in anamnesi e programmati,
+                trascrizione per documento e appendice di verifica negli export. Nessun credito consumato.
+              </p>
+            </div>
+            <DemoCaseButton />
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Recent cases */}
       <section className="space-y-4">
