@@ -163,3 +163,14 @@ describe('pulizia del depositabile (panel giro 3)', () => {
     expect(out.markdown).not.toContain('decorso regolare');
   });
 });
+
+describe('referti in degenza: niente screening pre-operatorio', () => {
+  it('RX torace ed ECG di routine restano fuori, la RX del distretto colpito resta', () => {
+    const fasc: RubricDocument = { documentId: 'f', documentType: 'cartella_clinica', header: '**Cartella clinica, dal 16.07.2023 al 25.07.2023:**', sortDate: '2023-07-16', pages: Array.from({ length: 12 }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 2 ? 'RX torace\nNon lesioni pleuro-parenchimali in atto. Ombra cardiaca nei limiti.' : i === 3 ? 'ECG\nRitmo sinusale, frequenza 72.' : i === 4 ? 'RX femore sinistro\nFrattura pertrocanterica composta; mezzi di sintesi in sede.' : `DIARIO\ngiorno ${i + 1}` })) };
+    const let2: RubricDocument = { documentId: 'l', documentType: 'lettera_dimissione', header: '**Lettera di dimissione, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura pertrocanterica trattata.' }] };
+    const out = renderRubricDocSanitaria([fasc, let2], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('RX femore sinistro: Frattura pertrocanterica composta');
+    expect(out.markdown).not.toContain('pleuro-parenchimali');
+    expect(out.markdown).not.toContain('Ritmo sinusale');
+  });
+});

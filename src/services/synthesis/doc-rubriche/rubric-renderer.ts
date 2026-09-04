@@ -165,8 +165,10 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     if (rimando) {
       // Fascicolo contenitore: resta il rimando + i referti d'esame eseguiti in
       // degenza (RX/TC/ECO dentro la cartella), che il gold riporta a parte.
+      // Spec Lavini: si scartano RX torace / ECG / screening pre-operatori (routine di degenza).
       const embedded = parseRubriche(doc.pages)
-        .filter((s) => s.label === 'referto' && s.rawLabel && /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)\b/i.test(s.rawLabel))
+        .filter((s) => s.label === 'referto' && s.rawLabel && /^(rx|rm|rmn|tc|tac|eco|ecografia|pet|moc|doppler|ecocolordoppler)\b/i.test(s.rawLabel))
+        .filter((s) => !/torace|toracic|pre-?operator|screening|elettrocardio/i.test(`${s.rawLabel} ${s.text.slice(0, 80)}`))
         .map((s) => renderSegment(s, seen, stats, Math.ceil(tp.maxParole / 2)))
         .filter((l): l is string => l !== null);
       blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
