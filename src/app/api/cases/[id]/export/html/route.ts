@@ -116,6 +116,7 @@ export async function GET(
           order_number: (e.order_number as number) ?? 0,
           document_id: (e.document_id as string | null) ?? null,
           event_date: (e.event_date as string) ?? '',
+          date_precision: (e.date_precision as string | null) ?? null,
           event_type: (e.event_type as string) ?? 'altro',
           title: (e.title as string) ?? '',
           description: (e.description as string) ?? '',
@@ -126,6 +127,7 @@ export async function GET(
           requires_verification: e.requires_verification === true,
           diagnosis: (e.diagnosis as string | null) ?? null,
           is_relevant_for_chronology: e.is_relevant_for_chronology !== false,
+          temporal_scope: (e.temporal_scope as string | null) ?? null,
         }));
 
       const timelineHtml = generateTimelineHtml({

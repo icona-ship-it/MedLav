@@ -1,6 +1,7 @@
 import type { ExtractedEvent } from '../extraction/extraction-schemas';
 import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance';
 import { logger } from '@/lib/logger';
+import { temporalScopeRank } from '@/lib/temporal-scope';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -215,8 +216,14 @@ function dedupWithinSameDocument(
       if (b.eventDate !== a.eventDate || b.eventType !== a.eventType) break;
       if (b.documentId !== a.documentId) continue;
       if (!isSimilarEvent(a, b)) continue;
-      // Drop the lower-confidence twin (or the second one if equal)
-      if ((b.confidence ?? 0) > (a.confidence ?? 0)) {
+      // Sopravvive il gemello con ambito temporale più forte (corrente <
+      // programmato < retrospettivo: un atto avvenuto nel documento batte la
+      // sua menzione anamnestica anche se il LLM le ha dato più confidence —
+      // collaudo 2026-09-04), poi la confidence più alta; a parità il primo.
+      const rankA = temporalScopeRank(a.temporalScope);
+      const rankB = temporalScopeRank(b.temporalScope);
+      const bWins = rankB < rankA || (rankB === rankA && (b.confidence ?? 0) > (a.confidence ?? 0));
+      if (bWins) {
         droppedIndices.add(i);
         break; // a is dropped, move on
       } else {
@@ -265,7 +272,10 @@ function aggregateIdenticalEventsPerDay(
     const ev = events[i];
     if (!ev.eventDate || ev.eventDate === SENTINEL_DATE) continue;
     if (!AGGREGABLE_EXAM_TYPES.has(ev.eventType)) continue;
-    const key = `${ev.eventDate}|${ev.eventType}|${ev.sourceType}|${ev.documentId}`;
+    // Lo scope entra nella chiave: un esame eseguito e uno solo citato in
+    // anamnesi (o programmato) lo stesso giorno non collassano in un aggregato
+    // che erediterebbe lo scope del primo membro.
+    const key = `${ev.eventDate}|${ev.eventType}|${ev.sourceType}|${ev.documentId}|${ev.temporalScope ?? 'corrente'}`;
     const g = groups.get(key);
     if (g) g.push(i);
     else groups.set(key, [i]);
@@ -415,6 +425,14 @@ interface DiscrepancyResult {
   requiresVerification: boolean;
 }
 
+/** True se una diagnosi è contenuta nell'altra (normalizzate): impoverimento, non conflitto. */
+function isDiagnosisSubset(a: string, b: string): boolean {
+  const norm = (t: string): string => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  const na = norm(a);
+  const nb = norm(b);
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
 function findDiscrepancyInGroup(
   event: ExtractedEvent & { documentId: string },
   currentIndex: number,
@@ -446,6 +464,45 @@ function findDiscrepancyInGroup(
       other.documentId !== event.documentId &&
       isSimilarEvent(event, other)
     ) {
+      // Menzione anamnestica vs fonte primaria (collaudo 2026-09-04): la
+      // citazione di seconda mano in un referto ("esiti di intervento del…")
+      // ha quasi sempre una diagnosi più povera di quella della cartella
+      // operatoria — NON è una discordanza: la fonte primaria non va cappata
+      // né mandata in coda per una sua stessa citazione. Solo nota informativa.
+      // Vale anche per 'programmato' vs 'corrente' (lettera pre-operatoria che
+      // ANTICIPA l'intervento poi documentato dalla cartella): la cartella non
+      // va cappata per la sua stessa anticipazione.
+      const eventIsMention = event.temporalScope === 'retrospettivo' || event.temporalScope === 'programmato';
+      const otherIsMention = other.temporalScope === 'retrospettivo' || other.temporalScope === 'programmato';
+      if (eventIsMention !== otherIsMention) {
+        // Una discordanza VERA fra menzione e fonte primaria (lateralità,
+        // diagnosi diversa) resta escalata: nota ⚠ su entrambi, coda solo
+        // sulla menzione, MAI cap sulla fonte primaria (giro avversariale
+        // 2026-09-04).
+        // Una menzione con diagnosi più POVERA ("Carcinoma lobulare" vs
+        // "Carcinoma lobulare infiltrante G2…") non è discordante: conflitto
+        // solo se nessuna delle due contiene l'altra (lateralità invertita,
+        // patologia diversa).
+        const diagnosisConflict = !!(event.diagnosis && other.diagnosis && !isDiagnosisSubset(event.diagnosis, other.diagnosis));
+        const doctorConflict = !!(event.doctor && other.doctor && event.doctor !== other.doctor);
+        if (diagnosisConflict) {
+          discrepancies.push(
+            `⚠ DIAGNOSI DISCORDANTE fra menzione e fonte primaria — richiede verifica del perito: "${event.diagnosis}" vs "${other.diagnosis}". Verificare sul documento originale.`,
+          );
+        }
+        if (doctorConflict) {
+          discrepancies.push(`⚠ MEDICO DISCORDANTE fra menzione e fonte primaria — richiede verifica: "${event.doctor}" vs "${other.doctor}".`);
+        }
+        if (eventIsMention && (diagnosisConflict || doctorConflict)) {
+          requiresVerification = true;
+        }
+        if (!diagnosisConflict && !doctorConflict) {
+          discrepancies.push(eventIsMention
+            ? 'Menzione (anamnesi/previsione): il fatto è documentato da fonte primaria in un altro documento'
+            : 'Riferito anche come menzione (anamnesi/previsione) in un altro documento');
+        }
+        continue;
+      }
       // Check for specific discrepancies — NEVER auto-resolve, always escalate
       if (event.diagnosis && other.diagnosis && event.diagnosis !== other.diagnosis) {
         discrepancies.push(

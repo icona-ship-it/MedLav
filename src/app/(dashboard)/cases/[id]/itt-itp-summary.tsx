@@ -18,6 +18,7 @@ export function IttItpSummary({ events, incidentDate }: { events: EventRow[]; in
       title: e.title,
       description: e.description,
       date_precision: e.date_precision, // F-P2: le date anno-only non ancorano l'ITP
+      temporal_scope: e.temporal_scope ?? null, // 0034: stessi numeri del report (programmati esclusi)
     })),
     incidentDate,
   );

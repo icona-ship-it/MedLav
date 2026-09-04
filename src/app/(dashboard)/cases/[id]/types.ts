@@ -116,6 +116,8 @@ export interface EventRow {
   source_pages: string | null;
   extraction_pass: string | null;
   is_relevant_for_chronology?: boolean;
+  /** Ambito temporale (migration 0034): corrente | retrospettivo | programmato. */
+  temporal_scope?: string | null;
 }
 
 export interface AnomalyRow {

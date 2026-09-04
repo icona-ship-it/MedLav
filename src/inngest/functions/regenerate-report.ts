@@ -319,7 +319,7 @@ export const regenerateReport = inngest.createFunction(
       caseTypes: prep.metadata.caseTypes.length > 1 ? prep.metadata.caseTypes : undefined,
     });
     const calculations = calculateMedicoLegalPeriods(
-      allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description, date_precision: e.datePrecision })),
+      allEvents.map((e) => ({ event_date: e.eventDate, event_type: e.eventType, title: e.title, description: e.description, date_precision: e.datePrecision, temporal_scope: e.temporalScope })),
       undefined,
       prep.metadata.periziaMetadata?.dataSinistro,
     );

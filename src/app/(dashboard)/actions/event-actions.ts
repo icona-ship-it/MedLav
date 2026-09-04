@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 
 /**
@@ -41,6 +42,9 @@ export async function updateEvent(params: {
   expertNotes?: string | null;
   requiresVerification?: boolean;
   isRelevantForChronology?: boolean;
+  /** Ambito temporale (0034): corrente | retrospettivo | programmato. Il campo
+   * pilota calcoli e resa: uno scope sbagliato dal LLM deve essere correggibile. */
+  temporalScope?: string;
   /** Quick-fix inline (2026-07-17): quando il perito risolve un dato rimosso
    * ("Nome struttura non riscontrato"), la nota corrispondente va tolta o
    * resterebbe una segnalazione ormai falsa. */
@@ -93,6 +97,7 @@ export async function updateEvent(params: {
   if (params.expertNotes !== undefined) updateFields.expert_notes = params.expertNotes;
   if (params.requiresVerification !== undefined) updateFields.requires_verification = params.requiresVerification;
   if (params.isRelevantForChronology !== undefined) updateFields.is_relevant_for_chronology = params.isRelevantForChronology;
+  if (params.temporalScope !== undefined) updateFields.temporal_scope = normalizeTemporalScope(params.temporalScope);
   if (params.reliabilityNotes !== undefined) updateFields.reliability_notes = params.reliabilityNotes;
 
   const { error } = await supabase

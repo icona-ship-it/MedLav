@@ -43,6 +43,9 @@ export interface DeterministicTableEvent {
    * toDeterministicEvents) sia la stringa JSON grezza del DB (viewer client che
    * passa EventRow direttamente); parseSourcePages normalizza entrambi. */
   source_pages?: number[] | string | null;
+  /** Ambito temporale (migration 0034): corrente | retrospettivo | programmato.
+   * Assente/null = corrente (righe legacy). */
+  temporal_scope?: string | null;
 }
 
 /** A single OCR page of a document (verbatim text). */
@@ -201,8 +204,14 @@ export function formatChronologyIndex(events: DeterministicTableEvent[]): string
 
   // Niente colonna Tipo: dicitura interna dell'app che il perito elimina
   // sempre dalla cronologia (benchmark gold passaniti 2026-06-10).
+  // Ambito temporale (0034): una menzione anamnestica o un esame programmato
+  // non può leggersi come atto autonomo dentro una perizia depositabile.
+  const scopeSuffix = (e: DeterministicTableEvent): string =>
+    e.temporal_scope === 'retrospettivo' ? ' (riferito in anamnesi)'
+      : e.temporal_scope === 'programmato' ? ' (programmato nel documento)'
+        : '';
   const rows = sortEventsChrono(clinical).map((e) =>
-    `| ${displayDate(e.event_date)} | ${cell(e.facility ?? e.doctor)} | ${cell(e.title)} |`,
+    `| ${displayDate(e.event_date)} | ${cell(e.facility ?? e.doctor)} | ${cell(`${e.title}${scopeSuffix(e)}`)} |`,
   );
 
   return [
@@ -287,25 +296,47 @@ export function formatDocumentazioneSanitaria(
   const clinicalDocs = docs.filter((d) => !EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA.has(d.documentType));
   if (clinicalDocs.length === 0) return '';
 
-  // Earliest dated event per document → the document's chronological position.
+  // Earliest dated CURRENT event per document → the document's chronological
+  // position (0034: l'anamnesi di un referto del 22.05 non lo data al 27.02).
+  // Fallback: qualsiasi evento datato, per righe legacy o documenti di sole
+  // menzioni — mai un documento senza posizione se una data ce l'ha.
+  // Fallback a gradini: corrente → retrospettivo → programmato (mai una data
+  // PREVISTA usata come data di un documento che ha fatti riferiti).
   const docDate = new Map<string, string>();
+  const docDateRetro = new Map<string, string>();
+  const docDateScheduled = new Map<string, string>();
   for (const e of events) {
     const id = e.document_id;
     const d = e.event_date;
     if (!id || !d || d === SENTINEL_DATE || !ISO_DATE_RE.test(d)) continue;
-    const prev = docDate.get(id);
-    if (!prev || d < prev) docDate.set(id, d);
+    const target = e.temporal_scope === 'retrospettivo' ? docDateRetro
+      : e.temporal_scope === 'programmato' ? docDateScheduled
+        : docDate;
+    const prev = target.get(id);
+    if (!prev || d < prev) target.set(id, d);
+  }
+  for (const tier of [docDateRetro, docDateScheduled]) {
+    for (const [id, d] of tier) {
+      if (!docDate.has(id)) docDate.set(id, d);
+    }
   }
 
   // Struttura/autore per documento (benchmark gold 2026-06-10: l'header del
   // blocco è "Tipo, Struttura/Autore in data DD.MM.YYYY:" — mai il filename,
   // che non compare in una perizia depositabile). Primo evento con il dato.
+  // Attribuzione dai soli eventi 'corrente' (0034): l'evento più antico è
+  // quasi sempre la menzione anamnestica, con la struttura di un ALTRO ente.
+  // Fallback su tutti gli eventi (righe legacy, documenti di sole menzioni).
   const docAttribution = new Map<string, string>();
-  for (const e of events) {
-    const id = e.document_id;
-    if (!id || docAttribution.has(id)) continue;
-    const attribution = e.facility?.trim() || e.doctor?.trim();
-    if (attribution) docAttribution.set(id, attribution);
+  const isDatingScope = (e: DeterministicTableEvent): boolean =>
+    e.temporal_scope !== 'retrospettivo' && e.temporal_scope !== 'programmato';
+  for (const pass of [events.filter(isDatingScope), events]) {
+    for (const e of pass) {
+      const id = e.document_id;
+      if (!id || docAttribution.has(id)) continue;
+      const attribution = e.facility?.trim() || e.doctor?.trim();
+      if (attribution) docAttribution.set(id, attribution);
+    }
   }
 
   // Chronological order: dated docs first (by date), undated last in input order.
@@ -439,6 +470,7 @@ export function toDeterministicEvents(
     source_text: (e.source_text as string | null) ?? null,
     diagnosis: (e.diagnosis as string | null) ?? null,
     source_pages: parseSourcePages(e.source_pages),
+    temporal_scope: (e.temporal_scope as string | null) ?? null,
   }));
 }
 

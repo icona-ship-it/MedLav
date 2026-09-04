@@ -9,6 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { MarkdownPreview } from '@/components/markdown-preview';
 import { caseTypeLabels, anomalyTypeLabels } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import { normalizeTemporalScope, TEMPORAL_SCOPE_LABELS } from '@/lib/temporal-scope';
 
 interface SharedCaseViewProps {
   caseData: {
@@ -29,6 +30,8 @@ interface SharedCaseViewProps {
     diagnosis: string | null;
     doctor: string | null;
     facility: string | null;
+    /** Ambito temporale (migration 0034), strutturale: passa la whitelist pubblica. */
+    temporal_scope?: string | null;
   }>;
   anomalies: Array<{
     id: string;
@@ -217,6 +220,9 @@ function SharedEventCard({ event }: { event: SharedCaseViewProps['events'][numbe
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {normalizeTemporalScope(event.temporal_scope) !== 'corrente' && (
+              <Badge variant="secondary" className="text-xs">{TEMPORAL_SCOPE_LABELS[normalizeTemporalScope(event.temporal_scope)]}</Badge>
+            )}
             <Badge variant="outline" className="text-xs">{event.event_type}</Badge>
             {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </div>

@@ -15,6 +15,7 @@ import { anonymizeEventsForExport, anonymizeDocsForExport, anonymizePmForExport 
 import type { PeriziaMetadata } from '@/types';
 import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
 import { buildExpenseDocxSection, type ExpenseDocxItem } from './expense-docx';
+import { RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
 import { groupEventsByDocument } from './event-grouping';
 
 const DOCX_ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -39,6 +40,10 @@ interface DocxEvent {
   confidence: number;
   requires_verification: boolean;
   expert_notes: string | null;
+  /** Ambito temporale (migration 0034): corrente | retrospettivo | programmato. */
+  temporal_scope?: string | null;
+  /** Inclusione nella cronologia esportata (false = escluso dal perito). */
+  is_relevant_for_chronology?: boolean;
 }
 
 interface DocxAnomaly {
@@ -511,7 +516,10 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Filter non-clinical events from the chronology (Passaniti regression):
   // SSN cost notices, ticket payments, and admin docs don't belong in the
   // medical timeline.
-  const clinicalEvents = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  // Rispetta anche l'esclusione manuale del perito ("Fuori cronologia"), come
+  // già fa la cronistoria HTML (giro avversariale 2026-09-04).
+  const clinicalEvents = events.filter((e) =>
+    !NON_CLINICAL_EVENT_TYPES.has(e.event_type) && e.is_relevant_for_chronology !== false);
 
   // Un documento = UN blocco (feedback beta 2026-07-20): il verbale di PS
   // estratto in 6 eventi resta un blocco unico con le sue sotto-voci, invece
@@ -519,16 +527,11 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   const groupableEvents = params.anonymized
     ? clinicalEvents.map((e) => ({ ...e, facility: null }))
     : clinicalEvents;
-  for (const group of groupEventsByDocument(groupableEvents, params.documents)) {
-    if (group.heading) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: group.heading, bold: true, size: 26 })],
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 260 },
-      }));
-    }
-    for (const event of group.events) {
+  const pushEvent = (event: DocxEvent, inlineScope = false): void => {
     const datePrecNote = event.date_precision !== 'giorno' ? ` [${event.date_precision}]` : '';
+    const scopeNote = inlineScope && event.temporal_scope === 'retrospettivo' ? ' (riferito in anamnesi)'
+      : inlineScope && event.temporal_scope === 'programmato' ? ' (programmato)'
+        : '';
     const source = sourceLabels[event.source_type] ?? event.source_type;
     // Wave B.1/B.2: surface confidence + verification flag in DOCX export.
     // Threshold 60% mirrors the events-tab UI badge cutoff.
@@ -548,7 +551,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
         spacing: { before: 200 },
       }),
       new Paragraph({
-        children: [new TextRun({ text: event.title, bold: true, italics: isLowConfidence })],
+        children: [new TextRun({ text: `${event.title}${scopeNote}`, bold: true, italics: isLowConfidence })],
       }),
       new Paragraph({
         children: [new TextRun({ text: event.description, italics: isLowConfidence })],
@@ -582,7 +585,32 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
         shading: { type: ShadingType.SOLID, color: 'EFF6FF' },
       }));
     }
+  };
+
+  // Sotto-elenco (feedback medici 2026-08-19 Mail 2): anamnesi riferita e
+  // programmato restano nel blocco del documento, sotto una propria etichetta.
+  const pushSublist = (label: string, items: DocxEvent[]): void => {
+    if (items.length === 0) return;
+    children.push(new Paragraph({
+      children: [new TextRun({ text: label, italics: true, bold: true, color: '64748B', size: 20 })],
+      spacing: { before: 200 },
+    }));
+    for (const event of items) pushEvent(event);
+  };
+
+  for (const group of groupEventsByDocument(groupableEvents, params.documents)) {
+    if (!group.heading) {
+      for (const event of group.events) pushEvent(event, true);
+      continue;
     }
+    children.push(new Paragraph({
+      children: [new TextRun({ text: group.heading, bold: true, size: 26 })],
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 260 },
+    }));
+    for (const event of group.current) pushEvent(event);
+    pushSublist(RETROSPECTIVE_SUBLIST_LABEL, group.retrospective);
+    pushSublist(SCHEDULED_SUBLIST_LABEL, group.scheduled);
   }
 
   children.push(new Paragraph({ text: '' }));

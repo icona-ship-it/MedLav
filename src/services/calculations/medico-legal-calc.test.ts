@@ -521,6 +521,46 @@ describe('Data sinistro — eventi preesistenti esclusi dai calcoli (feedback be
     expect(total!.endDate).toBe('2026-06-05');
   });
 
+  it('un evento PROGRAMMATO con data ormai PASSATA (esame "previsto per il 18.06" letto a settembre) NON entra nel periodo di malattia (0034)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      makeEvent('2026-05-22', 'visita', 'Visita oncologica'),
+      { ...makeEvent('2026-06-18', 'esame', 'Scintigrafia ossea programmata'), temporal_scope: 'programmato' },
+    ], undefined, '2026-04-18');
+    const total = calcs.find((c) => c.label === 'Periodo totale malattia');
+    expect(total!.endDate).toBe('2026-05-22');
+  });
+
+  it('la menzione anamnestica dello STESSO intervento documentato da fonte primaria (stessa data+tipo) conta UNA volta sola', () => {
+    const attested = [
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      { ...makeEvent('2026-04-20', 'intervento', 'Osteosintesi polso destro'), temporal_scope: 'corrente' },
+      makeEvent('2026-06-22', 'visita', 'Visita di controllo'),
+    ];
+    const withMention = [
+      ...attested,
+      { ...makeEvent('2026-04-20', 'intervento', 'Esiti di osteosintesi polso destro'), temporal_scope: 'retrospettivo' },
+    ];
+    expect(calculateMedicoLegalPeriods(withMention, 'ortopedica', '2026-04-18'))
+      .toEqual(calculateMedicoLegalPeriods(attested, 'ortopedica', '2026-04-18'));
+  });
+
+  it('INVARIANTE: un evento RETROSPETTIVO con data precisa CONTA esattamente come un corrente (intervento documentato solo in anamnesi = fatto reale)', () => {
+    // Il ricovero è riferito SOLO nell'anamnesi di un referto successivo
+    // (cartella non agli atti): deve pesare nei computi come se fosse corrente.
+    const base = [
+      makeEvent('2026-04-18', 'visita', 'Accesso PS'),
+      makeEvent('2026-05-10', 'ricovero', 'Ricovero per osteosintesi'),
+      makeEvent('2026-05-14', 'ricovero', 'Lettera di dimissione', 'dimissione a domicilio'),
+      makeEvent('2026-06-22', 'visita', 'Visita di controllo'),
+    ];
+    const asCorrente = calculateMedicoLegalPeriods(base.map((e) => ({ ...e, temporal_scope: 'corrente' })), undefined, '2026-04-18');
+    const asRetro = calculateMedicoLegalPeriods(base.map((e, i) => ({ ...e, temporal_scope: i === 1 || i === 2 ? 'retrospettivo' : 'corrente' })), undefined, '2026-04-18');
+    expect(asRetro).toEqual(asCorrente);
+    const withoutStay = calculateMedicoLegalPeriods([base[0], base[3]], undefined, '2026-04-18');
+    expect(asRetro).not.toEqual(withoutStay); // il ricovero riferito PESA (giorni di ricovero)
+  });
+
   it('solo eventi futuri → nessun calcolo', () => {
     expect(calculateMedicoLegalPeriods([makeEvent('2099-01-01', 'follow-up', 'Programmato')])).toEqual([]);
   });

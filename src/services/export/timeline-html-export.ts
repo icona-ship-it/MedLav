@@ -1,5 +1,5 @@
-import { formatDate } from '@/lib/format';
-import { groupEventsByDocument } from './event-grouping';
+import { formatEventDateByPrecision } from '@/lib/format';
+import { groupEventsByDocument, RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
@@ -12,6 +12,9 @@ export interface TimelineHtmlEvent {
   /** Per il raggruppamento "un documento = un blocco" (feedback beta 2026-07-20). */
   document_id?: string | null;
   event_date: string;
+  /** Precisione della data (giorno|mese|anno|sconosciuta): una menzione
+   * anno-only si stampa "2019", mai "01.01.2019" (giorno fabbricato). */
+  date_precision?: string | null;
   event_type: string;
   title: string;
   description: string;
@@ -23,6 +26,8 @@ export interface TimelineHtmlEvent {
   diagnosis?: string | null;
   /** Inclusione nella cronologia esportata. Assente o true = incluso. */
   is_relevant_for_chronology?: boolean;
+  /** Ambito temporale (migration 0034): corrente | retrospettivo | programmato. */
+  temporal_scope?: string | null;
 }
 
 interface TimelineHtmlParams {
@@ -70,9 +75,14 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   // === false; default incluso), poi ordina cronologicamente (difensivo).
   // Difesa in profondità (oltre al filtro nelle route): mai eventi non clinici
   // (spese/amministrativi) nella cronistoria — il perito li cancella sempre.
+  // I senza-data restano SOLO nei sotto-elenchi (riferito/programmato): lì non
+  // serve una posizione cronologica e un follow-up "visita ginecologica" senza
+  // data è comunque un fatto del referto (collaudo foto vere 2026-09-04).
+  const isSublistScope = (ev: TimelineHtmlEvent): boolean =>
+    ev.temporal_scope === 'retrospettivo' || ev.temporal_scope === 'programmato';
   const events = sortEventsChrono(
     allEvents.filter((ev) =>
-      ev.event_date !== SENTINEL_DATE &&
+      (ev.event_date !== SENTINEL_DATE || isSublistScope(ev)) &&
       ev.is_relevant_for_chronology !== false &&
       !NON_CLINICAL_EVENT_TYPES.has(ev.event_type)),
   );
@@ -91,6 +101,13 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   // "Dr. — Struttura".
   // Un documento = UN blocco (feedback beta 2026-07-20): intestazione per
   // documento (tipo + struttura + data/intervallo) e gli eventi come sotto-voci.
+  // Fuori da un blocco-documento (eventi manuali senza document_id) non c'è
+  // sotto-elenco: l'ambito va detto inline, o un esame previsto passerebbe
+  // per eseguito.
+  const scopeInline = (ev: TimelineHtmlEvent): string =>
+    !ev.document_id && ev.temporal_scope === 'retrospettivo' ? ' <span class="event-scope">(riferito in anamnesi)</span>'
+      : !ev.document_id && ev.temporal_scope === 'programmato' ? ' <span class="event-scope">(programmato)</span>'
+        : '';
   const renderEvent = (ev: TimelineHtmlEvent): string => {
       const meta: string[] = [];
       if (ev.doctor) meta.push(ev.doctor.startsWith('Dr') ? escapeHtml(ev.doctor) : `Dr. ${escapeHtml(ev.doctor)}`);
@@ -101,9 +118,10 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
       const diag = ev.diagnosis
         ? `<p class="event-diag"><strong>Diagnosi:</strong> ${escapeHtml(ev.diagnosis)}</p>`
         : '';
+      const dateLabel = formatEventDateByPrecision(ev.event_date, ev.date_precision ?? undefined);
       const head = ev.title
-        ? `${escapeHtml(formatDate(ev.event_date))} &mdash; ${escapeHtml(ev.title)}`
-        : escapeHtml(formatDate(ev.event_date));
+        ? `${escapeHtml(dateLabel)} &mdash; ${escapeHtml(ev.title)}${scopeInline(ev)}`
+        : `${escapeHtml(dateLabel)}${scopeInline(ev)}`;
       // Documento professionale: nessun flag interno di lavoro (DA VERIFICARE).
       return `<div class="event-block">
       <p class="event-head">${head}</p>
@@ -113,11 +131,27 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     </div>`;
   };
 
+  // Sotto-elenco (feedback medici 2026-08-19 Mail 2): ciò che il documento
+  // RIFERISCE del passato o PREVEDE non è un accadimento del documento — resta
+  // nel blocco (mai perso), ma sotto un'intestazione propria e in forma
+  // compatta, dopo le voci correnti.
+  const renderSublist = (label: string, items: TimelineHtmlEvent[]): string => {
+    if (items.length === 0) return '';
+    return `<div class="sublist">
+      <h3 class="sublist-head">${escapeHtml(label)}</h3>
+      ${items.map(renderEvent).join('\n')}
+    </div>`;
+  };
+
   const eventsHtml = events.length === 0
     ? '<p style="text-align:center;padding:20px;font-style:italic;color:#64748b">Nessun evento estratto.</p>'
     : groupEventsByDocument(events, params.documents).map((group) => {
-      const body = group.events.map(renderEvent).join('\n');
-      if (!group.heading) return body; // eventi senza documento: lista piatta
+      if (!group.heading) return group.events.map(renderEvent).join('\n'); // eventi senza documento: lista piatta
+      const body = [
+        group.current.map(renderEvent).join('\n'),
+        renderSublist(RETROSPECTIVE_SUBLIST_LABEL, group.retrospective),
+        renderSublist(SCHEDULED_SUBLIST_LABEL, group.scheduled),
+      ].filter(Boolean).join('\n');
       return `<section class="doc-group">
       <h2 class="doc-group-head">${escapeHtml(group.heading)}</h2>
       ${body}
@@ -148,6 +182,12 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     margin-bottom: 8px;
   }
   .doc-group .event-block { margin-left: 14px; }
+  .sublist { margin: 10px 0 0 14px; padding-left: 10px; border-left: 2px solid #e2e8f0; }
+  .sublist-head { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px; }
+  .sublist .event-block { margin-left: 0; margin-bottom: 10px; padding-bottom: 8px; }
+  .sublist .event-head { font-size: 13px; color: #334155; }
+  .sublist .event-desc { font-size: 13px; }
+  .event-scope { font-weight: 400; color: #92400e; font-size: 12px; }
   .watermark-wrapper { position: relative; }
   .watermark-wrapper::after {
     content: 'RISERVATO';

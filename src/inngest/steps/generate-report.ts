@@ -102,6 +102,7 @@ export function calculatePeriodsStep(
     title: e.title,
     description: e.description,
     date_precision: e.datePrecision, // F-P2: le date anno-only non ancorano ITT/ITP
+    temporal_scope: e.temporalScope, // 0034: i 'programmato' non entrano nei computi
   }));
   return calculateMedicoLegalPeriods(calcEvents, caseType, incidentDate);
 }
@@ -522,6 +523,7 @@ export async function assembleSectionsAndSaveReport(
   const validationEvents = synthesisParams.events.map((e) => ({
     event_date: e.eventDate,
     date_precision: e.datePrecision,
+    temporal_scope: e.temporalScope, // 0034: il testo validato = quello reso a read-time
     event_type: e.eventType,
     title: e.title,
     description: e.description,

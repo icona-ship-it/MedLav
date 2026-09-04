@@ -103,12 +103,17 @@ export function formatStimaDannoBlock(
     // gonfiavano il range e innescavano la nota Balthazard, in disaccordo col
     // percorso calcoli che li filtra (audit 2026-08-11, F-P2 — fix d23db68 non
     // propagato qui).
-    .filter((e) => !ISO_DATE_RE.test(e.event_date) || e.event_date <= today);
+    .filter((e) => !ISO_DATE_RE.test(e.event_date) || e.event_date <= today)
+    // Eventi PROGRAMMATI nel documento (esame/intervento previsto) non sono
+    // accadimenti: fuori dalla stima anche quando la data è ormai passata
+    // (migration 0034, collaudo 2026-09-04).
+    .filter((e) => e.temporal_scope !== 'programmato');
   const calcEvents = clinical.map((e) => ({
     event_date: e.event_date,
     event_type: e.event_type,
     title: e.title,
     description: e.description,
+    temporal_scope: e.temporal_scope ?? null,
   }));
 
   const estimate = estimateBiologicalDamage(

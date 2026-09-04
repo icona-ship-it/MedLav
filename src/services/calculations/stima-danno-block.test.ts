@@ -88,6 +88,14 @@ describe('formatStimaDannoBlock', () => {
     expect(out).not.toContain('2027');
   });
 
+  it('un intervento PROGRAMMATO con data ormai passata non gonfia la stima né innesca Balthazard (0034)', () => {
+    const out = formatStimaDannoBlock([
+      { event_date: '2026-01-10', event_type: 'intervento', title: 'Osteosintesi', description: '' },
+      { event_date: '2026-03-01', event_type: 'intervento', title: 'Rimozione mezzi di sintesi programmata', description: 'In programma', temporal_scope: 'programmato' },
+    ], 'ortopedica', '2026-09-04');
+    expect(out).not.toMatch(/Balthazard/i);
+  });
+
   it('includes the table-routing note derived from the earliest dated event (Cass. 8630/2026)', () => {
     const out = formatStimaDannoBlock(ORTOPEDICA_EVENTS, 'ortopedica');
     // 2025-03-10 ≥ TUN effective date 2025-03-05 → direct application

@@ -149,6 +149,14 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     // Bigon). Gestisce anche la sentinella 1900-01-01 → "s.d." (no sentinel_date_leak).
     const date = formatEventDateByPrecision(e.eventDate, e.datePrecision);
     const precision = e.datePrecision !== 'giorno' ? ` [data ${e.datePrecision}]` : '';
+    // Ambito temporale (0034): il LLM deve sapere che un fatto è solo RIFERITO
+    // (anamnesi) o solo PREVISTO — altrimenti l'epicrisi narra come avvenuto
+    // un esame programmato che i calcoli escludono (giro avversariale 2026-09-04).
+    const scopeTag = e.temporalScope === 'retrospettivo'
+      ? ' [RIFERITO IN ANAMNESI: non è un atto di questo documento]'
+      : e.temporalScope === 'programmato'
+        ? ' [PROGRAMMATO: previsto, NON documentato come eseguito]'
+        : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
     const reliabilityScore = getSourceReliabilityScore(e.sourceType);
     const reliabilityLabel = getReliabilityLabel(reliabilityScore);
@@ -162,7 +170,7 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     const verbatim = e.sourceText && e.sourceText.trim().length > 0
       ? `\n   CITAZIONE TESTUALE (riproduci virgolettata, NON parafrasare): "${e.sourceText.trim()}"`
       : '';
-    return `${e.orderNumber}. ${date}${precision} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}${confidenceQualifier}
+    return `${e.orderNumber}. ${date}${precision}${scopeTag} | FONTE: ${sourceLabel} [${reliabilityLabel} ${reliabilityScore}/100] | TIPO: ${e.eventType.toUpperCase()}${confidenceQualifier}
    TITOLO: ${e.title}
    DESCRIZIONE: ${e.description}${diagnosis}${doctor}${facility}${verbatim}${discrepancy}`;
   }).join('\n\n');
@@ -185,11 +193,19 @@ export function formatEventsByDocumentForPrompt(
     else byDoc.set(e.documentId, [e]);
   }
   const metaByDoc = new Map((docsMeta ?? []).map((d) => [d.documentId, d.documentType ?? null]));
+  // Data e struttura del blocco dai soli eventi 'corrente' (0034): l'anamnesi
+  // di un referto del 22.05 non lo data al 27.02 né lo attribuisce al centro
+  // esterno citato. Fallback: tutti (righe legacy, documenti di sole menzioni).
+  const datingOf = (evs: ConsolidatedEvent[]): ConsolidatedEvent[] => {
+    const current = evs.filter((e) => e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato');
+    return current.length > 0 ? current : evs;
+  };
   const earliest = (evs: ConsolidatedEvent[]): string =>
-    evs.reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
+    datingOf(evs).reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
   const groups = Array.from(byDoc.values()).sort((a, b) => earliest(a).localeCompare(earliest(b)));
 
-  return groups.map((evs, i) => {
+  return groups.map((allEvs, i) => {
+    const evs = datingOf(allEvs);
     const rep = evs.find((e) => e.facility) ?? evs[0];
     // DATA DEL BLOCCO dai fatti, mai inventata (feedback beta 2026-07-20): una
     // data unica se il documento ne ha una sola O se una data DOMINA nettamente
@@ -232,14 +248,20 @@ export function formatEventsByDocumentForPrompt(
     // così smette di comporre titoli-evento data-prima. Backstop deterministico in
     // section-generator (normalizeDocSanitariaBlockHeaders) se non obbedisce.
     const canonicalHeader = buildDocSanitariaBlockHeader(sourceLabel, rep.facility, date);
-    const content = evs.map((e) => {
+    // CONTENUTO: TUTTI gli eventi del documento (anche riferiti/previsti — mai
+    // perdere un fatto), con l'ambito dichiarato così il LLM non li narra come
+    // atti del documento.
+    const content = allEvs.map((e) => {
       // Cap sulle description LUNGHE (fonte delle "descrizioni lunghissime"): il
       // sourceText (ancora verbatim ≤200 char) è preferito; la description LLM,
       // quando usata, è capata a ~300 char su confine di parola.
       const src = e.sourceText?.trim();
       const txt = src || capText(e.description?.trim() || e.title || '', 300);
       const diag = e.diagnosis ? `\n     [Diagnosi: ${e.diagnosis}]` : '';
-      return `   • ${txt}${diag}`;
+      const scope = e.temporalScope === 'retrospettivo' ? ' [riferito in anamnesi]'
+        : e.temporalScope === 'programmato' ? ' [programmato, non eseguito nel documento]'
+          : '';
+      return `   • ${txt}${scope}${diag}`;
     }).join('\n');
     return `DOCUMENTO ${i + 1}\nINTESTAZIONE-BLOCCO (copiala IDENTICA come PRIMA RIGA del blocco, in grassetto, senza anteporre la data né aggiungere un titolo dell'evento):\n${canonicalHeader}\nCONTENUTO-FONTE (cita da qui, verbatim tra «...»; raccordo minimo, MAI parafrasi lunga):\n${content}`;
   }).join('\n\n');

@@ -22,6 +22,7 @@ import {
   prepareExtractionChunks,
   inferMissingDates,
   normalizeDateFormat,
+  discardUnattestedYears,
   EXTRACTION_JSON_SCHEMA,
 } from './extraction-service';
 import type { ExtractedEvent } from './extraction-schemas';
@@ -868,5 +869,49 @@ describe('normalizeDateFormat — bound di plausibilità anni (audit 2026-07-16)
     expect(normalizeDateFormat('2074-03-15')).toBeNull(); // 2014→2074 misread
     expect(normalizeDateFormat('1014-03-15')).toBeNull(); // 2014→1014 misread
     expect(normalizeDateFormat('1899-12-31')).toBeNull();
+  });
+});
+
+describe('discardUnattestedYears — anno "stimato" dal LLM (collaudo foto vere 2026-09-04: "Appendicectomia (pregressa)" datata 2000-01-01 [anno] con nota "anno stimato")', () => {
+  const base = {
+    eventDate: '2019-01-01', datePrecision: 'anno', eventType: 'intervento', title: 'Pregressa meniscectomia', description: 'x',
+    sourceType: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 70,
+    requiresVerification: false, reliabilityNotes: null, sourceText: 'x', sourcePages: [1], temporalScope: 'retrospettivo' as const,
+  };
+
+  it('anno assente dal testo del documento → data SCARTATA (sentinella), da verificare, nota [AUTO]; il fatto resta', () => {
+    const { events, discardedCount } = discardUnattestedYears(
+      [{ ...base, eventDate: '2000-01-01', title: 'Appendicectomia (pregressa)' }],
+      'APR: appendicectomia, ernioplastica. Visita del 22/05/2026.',
+    );
+    expect(discardedCount).toBe(1);
+    expect(events[0].eventDate).toBe('1900-01-01');
+    expect(events[0].datePrecision).toBe('sconosciuta');
+    expect(events[0].requiresVerification).toBe(true);
+    expect(events[0].reliabilityNotes).toMatch(/Anno non presente/);
+    expect(events[0].title).toBe('Appendicectomia (pregressa)');
+  });
+
+  it('anno PRESENTE nel testo → data conservata (mese e anno)', () => {
+    const { events, discardedCount } = discardUnattestedYears(
+      [{ ...base }, { ...base, eventDate: '2025-10-01', datePrecision: 'mese', title: 'Frattura polso' }],
+      'APR: meniscectomia dx nel 2019. Frattura polso a metà ottobre 2025.',
+    );
+    expect(discardedCount).toBe(0);
+    expect(events[0].eventDate).toBe('2019-01-01');
+    expect(events[1].eventDate).toBe('2025-10-01');
+  });
+
+  it('non tocca le date a precisione giorno/sconosciuta né le sentinelle (ambito: solo anno/mese)', () => {
+    const { events, discardedCount } = discardUnattestedYears(
+      [
+        { ...base, eventDate: '2026-11-22', datePrecision: 'giorno', title: 'Calcolata' },
+        { ...base, eventDate: '1900-01-01', datePrecision: 'sconosciuta', title: 'Senza data' },
+      ],
+      'testo senza anni',
+    );
+    expect(discardedCount).toBe(0);
+    expect(events[0].eventDate).toBe('2026-11-22');
+    expect(events[1].eventDate).toBe('1900-01-01');
   });
 });

@@ -36,3 +36,18 @@ describe('generateCsvExport — anti formula-injection', () => {
     expect(csv).toContain('Frattura composta del radio');
   });
 });
+
+describe('generateCsvExport — colonna Ambito temporale (0034)', () => {
+  it('etichetta in italiano per ogni scope; assente = Avvenuto nel documento', () => {
+    const base = { order_number: 1, event_date: '2026-05-22', date_precision: 'giorno', event_type: 'visita', title: 'V', description: 'd', source_type: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 90, requires_verification: false };
+    const csv = generateCsvExport([
+      { ...base },
+      { ...base, order_number: 2, temporal_scope: 'retrospettivo' },
+      { ...base, order_number: 3, temporal_scope: 'programmato' },
+    ]);
+    expect(csv).toContain('Ambito temporale');
+    expect(csv).toContain('Avvenuto nel documento');
+    expect(csv).toContain('Riferito (anamnesi / storia)');
+    expect(csv).toContain('Programmato / previsto');
+  });
+});

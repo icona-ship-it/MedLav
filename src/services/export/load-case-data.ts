@@ -116,6 +116,7 @@ export async function loadCaseDataForExport(caseId: string) {
       title: e.title as string,
       description: e.description as string,
       date_precision: e.date_precision as string | null | undefined, // F-P2
+      temporal_scope: (e.temporal_scope as string | null | undefined) ?? null, // 0034
     })),
     undefined,
     pmForCalc?.dataSinistro,

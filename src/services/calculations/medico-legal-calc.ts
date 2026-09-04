@@ -14,6 +14,12 @@ interface CalcEvent {
    * come 'giorno' (legacy). Usata per escludere dai FATTI deterministici le menzioni
    * anno-only (anamnesi remota → 01.01.YYYY fabbricato) che falserebbero ricovero/span. */
   date_precision?: string | null;
+  /** Ambito temporale (migration 0034). 'programmato' = previsto nel documento,
+   * non avvenuto: NON entra nei computi (un controllo "previsto per il 18.06"
+   * letto a settembre passava il filtro data-futura e allungava ITT/ITP).
+   * 'retrospettivo' con data precisa CONTA: è un fatto reale documentato solo
+   * in anamnesi. Assente/null = 'corrente' (legacy). */
+  temporal_scope?: string | null;
 }
 
 /** Sentinel date written by the extractor when no real date can be inferred. */
@@ -72,9 +78,23 @@ function isClinicalCertificate(e: CalcEvent): boolean {
  * (CASO-2026-027: 116 giorni invece di 74). L'evento NEL giorno del sinistro
  * è incluso (>=).
  */
+/** Una menzione anamnestica (retrospettivo) dello STESSO fatto documentato da
+ * fonte primaria (corrente, stessa data e tipo) non conta due volte: senza
+ * questa guardia lo stesso intervento pesava doppio (Balthazard, intervalli
+ * fra interventi, range danno) — giro avversariale 2026-09-04. */
+function isMentionOfAttestedEvent(e: CalcEvent, all: CalcEvent[]): boolean {
+  if (e.temporal_scope !== 'retrospettivo') return false;
+  return all.some((o) =>
+    o !== e &&
+    (o.temporal_scope == null || o.temporal_scope === 'corrente') &&
+    o.event_date === e.event_date &&
+    o.event_type === e.event_type);
+}
+
 function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null): CalcEvent[] {
   const today = todayRomeIso();
   return events
+    .filter((e) => !isMentionOfAttestedEvent(e, events))
     .filter(
       (e) =>
         (!NON_CLINICAL_EVENT_TYPES.has(e.event_type) || isClinicalCertificate(e)) &&
@@ -85,6 +105,7 @@ function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null):
         // — audit 2026-08-11, F-P2. Stesso filtro del blocco FATTI (e7ec54d).
         (e.date_precision == null || e.date_precision === 'giorno') &&
         e.event_date <= today &&
+        e.temporal_scope !== 'programmato' &&
         (!incidentIso || e.event_date >= incidentIso),
     )
     .slice()

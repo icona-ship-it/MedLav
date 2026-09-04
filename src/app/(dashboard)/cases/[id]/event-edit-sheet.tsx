@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { TEMPORAL_SCOPES, TEMPORAL_SCOPE_LABELS, normalizeTemporalScope } from '@/lib/temporal-scope';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -50,6 +51,8 @@ interface EditFormState {
   doctor: string;
   facility: string;
   expertNotes: string;
+  /** Ambito temporale (0034): correggibile dal perito perché pilota calcoli e resa. */
+  temporalScope: string;
 }
 
 function buildFormState(event: EventRow): EditFormState {
@@ -62,6 +65,7 @@ function buildFormState(event: EventRow): EditFormState {
     doctor: event.doctor ?? '',
     facility: event.facility ?? '',
     expertNotes: event.expert_notes ?? '',
+    temporalScope: normalizeTemporalScope(event.temporal_scope),
   };
 }
 
@@ -145,6 +149,7 @@ function EventEditForm({ event, caseId, onClose, onDirtyChange, onSaved, onDelet
         doctor: form.doctor || null,
         facility: form.facility || null,
         expertNotes: form.expertNotes || null,
+        temporalScope: form.temporalScope,
       });
       if (result?.error) {
         toast.error(result.error);
@@ -214,6 +219,20 @@ function EventEditForm({ event, caseId, onClose, onDirtyChange, onSaved, onDelet
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Ambito temporale</Label>
+              <Select value={form.temporalScope} onValueChange={(v) => setForm({ ...form, temporalScope: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TEMPORAL_SCOPES.map((s) => (
+                    <SelectItem key={s} value={s}>{TEMPORAL_SCOPE_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                «Riferito» = il documento lo cita come già avvenuto (anamnesi); «Programmato» = previsto, non conta nei calcoli.
+              </p>
             </div>
             <div>
               <Label>Diagnosi</Label>

@@ -126,3 +126,77 @@ describe('generateTimelineHtml — documento scritto (non tabella)', () => {
     expect(html.indexOf('Accesso PS')).toBeLessThan(html.indexOf('Dimissione PS'));
   });
 });
+
+describe('generateTimelineHtml — ambito temporale (feedback medici 2026-08-19 Mail 2: referto di 3 pagine)', () => {
+  const referto = () => generateTimelineHtml({
+    caseCode: 'C2',
+    patientInitials: null,
+    events: [
+      ev({ order_number: 1, title: 'Riscontro nodulo mammario', event_date: '2026-02-27', document_id: 'ref', temporal_scope: 'retrospettivo' }),
+      ev({ order_number: 2, title: 'Mastectomia', event_date: '2026-04-14', document_id: 'ref', temporal_scope: 'retrospettivo' }),
+      ev({ order_number: 3, title: 'Visita oncologica', event_date: '2026-05-22', document_id: 'ref', temporal_scope: 'corrente', facility: 'UOC Oncologia Cittàdemo' }),
+      ev({ order_number: 4, title: 'Scintigrafia ossea programmata', event_date: '2026-06-18', document_id: 'ref', temporal_scope: 'programmato' }),
+    ],
+    documents: [{ id: 'ref', documentType: 'referto_specialistico' }],
+  });
+
+  it('intestazione del blocco con la sola data della visita', () => {
+    const html = referto();
+    expect(html).toContain('in data 22.05.2026');
+    expect(html).not.toContain('dal 27.02.2026');
+  });
+
+  it('la visita viene PRIMA dei sotto-elenchi; anamnesi e programmato sotto le rispettive etichette; nessun evento perso', () => {
+    const html = referto();
+    const iVisita = html.indexOf('Visita oncologica');
+    const iAnamnesi = html.indexOf('Riferito nel documento (anamnesi / storia clinica)');
+    const iProgrammato = html.indexOf('Programmato / previsto nel documento');
+    expect(iVisita).toBeGreaterThan(-1);
+    expect(iAnamnesi).toBeGreaterThan(iVisita);
+    expect(iProgrammato).toBeGreaterThan(iAnamnesi);
+    expect(html.indexOf('Riscontro nodulo mammario')).toBeGreaterThan(iAnamnesi);
+    expect(html.indexOf('Scintigrafia ossea programmata')).toBeGreaterThan(iProgrammato);
+    expect(html).toContain('Mastectomia');
+  });
+
+  it('senza eventi retrospettivi/programmati non compaiono etichette di sotto-elenco (righe legacy invariate)', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C3', patientInitials: null,
+      events: [ev({ title: 'Accesso PS', document_id: 'doc-ps' })],
+      documents: [{ id: 'doc-ps', documentType: 'cartella_clinica' }],
+    });
+    expect(html).not.toContain('Riferito nel documento');
+    expect(html).not.toContain('Programmato / previsto');
+  });
+});
+
+describe('generateTimelineHtml — senza-data nei sotto-elenchi e date per precisione (collaudo foto vere 2026-09-04)', () => {
+  it('un follow-up PROGRAMMATO senza data compare nel sotto-elenco come "s.d."; un corrente senza data resta escluso', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C4', patientInitials: null,
+      events: [
+        ev({ order_number: 1, title: 'Visita oncologica', event_date: '2026-05-22', document_id: 'ref', temporal_scope: 'corrente' }),
+        ev({ order_number: 2, title: 'Visita ginecologica basale (programmata)', event_date: '1900-01-01', document_id: 'ref', temporal_scope: 'programmato' }),
+        ev({ order_number: 3, title: 'EventoCorrenteSenzaData', event_date: '1900-01-01', document_id: 'ref' }),
+      ],
+      documents: [{ id: 'ref', documentType: 'referto_specialistico' }],
+    });
+    expect(html).toContain('Visita ginecologica basale (programmata)');
+    expect(html).toContain('s.d. &mdash; Visita ginecologica');
+    expect(html).not.toContain('EventoCorrenteSenzaData');
+    expect(html).toContain('in data 22.05.2026');
+  });
+
+  it('una menzione anamnestica anno-only si stampa "2019", mai "01.01.2019"', () => {
+    const html = generateTimelineHtml({
+      caseCode: 'C5', patientInitials: null,
+      events: [
+        ev({ order_number: 1, title: 'Visita', event_date: '2026-05-22', document_id: 'ref', temporal_scope: 'corrente' }),
+        ev({ order_number: 2, title: 'Pregressa meniscectomia', event_date: '2019-01-01', date_precision: 'anno', document_id: 'ref', temporal_scope: 'retrospettivo' }),
+      ],
+      documents: [{ id: 'ref', documentType: 'referto_specialistico' }],
+    });
+    expect(html).toContain('2019 &mdash; Pregressa meniscectomia');
+    expect(html).not.toContain('01.01.2019');
+  });
+});

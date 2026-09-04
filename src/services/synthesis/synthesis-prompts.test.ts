@@ -407,3 +407,29 @@ describe('formatEventsForPrompt — sicurezza data sentinella', () => {
     expect(out).toContain('15.03.2024');
   });
 });
+
+describe('temporalScope nei prompt di sintesi (giro avversariale 2026-09-04)', () => {
+  it('formatEventsForPrompt marca riferiti e programmati: il LLM non narra come avvenuto un esame previsto', () => {
+    const out = formatEventsForPrompt([
+      makeEvent({ orderNumber: 1, eventDate: '2026-05-22', title: 'Visita oncologica', temporalScope: 'corrente' }),
+      makeEvent({ orderNumber: 2, eventDate: '2026-04-14', title: 'Mastectomia', temporalScope: 'retrospettivo' }),
+      makeEvent({ orderNumber: 3, eventDate: '2026-06-18', title: 'Scintigrafia ossea', temporalScope: 'programmato' }),
+    ]);
+    expect(out).toContain('[RIFERITO IN ANAMNESI');
+    expect(out).toContain('[PROGRAMMATO');
+    expect(out.split('Visita oncologica')[0]).not.toContain('[RIFERITO');
+  });
+
+  it('formatEventsByDocumentForPrompt: intestazione-blocco datata e attribuita dal solo evento corrente, contenuto con TUTTI gli eventi marcati', () => {
+    const out = formatEventsByDocumentForPrompt([
+      makeEvent({ orderNumber: 1, documentId: 'ref', eventDate: '2026-02-27', title: 'Ecografia esterna', facility: 'Centro Esterno Demo', sourceText: 'ecografia presso centro esterno', temporalScope: 'retrospettivo' }),
+      makeEvent({ orderNumber: 2, documentId: 'ref', eventDate: '2026-05-22', title: 'Visita oncologica', facility: 'UOC Oncologia Cittàdemo', sourceText: 'visita oncologica del 22/05/2026', temporalScope: 'corrente' }),
+      makeEvent({ orderNumber: 3, documentId: 'ref', eventDate: '2026-06-18', title: 'Scintigrafia', facility: null, sourceText: 'scintigrafia ossea in programma per il 18/06/2026', temporalScope: 'programmato' }),
+    ], [{ documentId: 'ref', documentType: 'referto_specialistico' }]);
+    expect(out).toMatch(/UOC Oncologia Cittàdemo[^\n]*22\.05\.2026/);
+    expect(out).not.toMatch(/dal 27\.02\.2026/);
+    expect(out).not.toMatch(/Centro Esterno Demo[^\n]*in data/);
+    expect(out).toContain('ecografia presso centro esterno [riferito in anamnesi]');
+    expect(out).toContain('[programmato, non eseguito nel documento]');
+  });
+});

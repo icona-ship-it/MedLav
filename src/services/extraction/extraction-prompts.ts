@@ -130,7 +130,7 @@ Un documento clinico mescola tre cose: ciò che ACCADE nell'episodio di cura che
 
 REGOLE:
 - La storia clinica riportata dentro un referto produce eventi "retrospettivo" (uno per fatto DATATO), MAI eventi "corrente".
-- Un fatto anamnestico SENZA ALCUNA data (nemmeno l'anno) NON diventa un evento a sé: resta nella description dell'evento corrente che lo cita. In ogni caso l'anamnesi va SEMPRE riassunta anche nella description dell'evento corrente (visita/accettazione), così nulla si perde.
+- Un fatto anamnestico SENZA ALCUNA data (nemmeno l'anno) NON diventa un evento a sé: resta nella description dell'evento corrente che lo cita. MAI "stimare" un anno che non è scritto nel testo (il sistema scarta le date il cui anno non compare nel documento). In ogni caso l'anamnesi va SEMPRE riassunta anche nella description dell'evento corrente (visita/accettazione), così nulla si perde.
 - Un evento "programmato" senza data nel testo → eventDate null (non usare la data della visita).
 
 Esempio: visita di controllo del 10/02/2026 che dice "Paziente con esiti di osteosintesi del polso destro per frattura avvenuta a metà ottobre 2025. Controllo RX programmato per il 12/03/2026."

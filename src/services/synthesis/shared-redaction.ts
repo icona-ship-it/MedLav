@@ -113,6 +113,7 @@ export function redactEventsForPublic<T>(events: readonly T[]): T[] {
       event_date: r.event_date,
       event_type: r.event_type,
       date_precision: r.date_precision, // F-P2: anche sul link pubblico le date anno-only non ancorano ITT/ITP
+      temporal_scope: r.temporal_scope ?? 'corrente', // 0034: strutturale, non clinico — i 'programmato' restano fuori dai calcoli anche qui
       title: '',
       description: '',
       diagnosis: null,

@@ -410,3 +410,40 @@ describe('formatDocumentazioneSanitaria — filtro per-pagina (Lavini, 2026-07-0
     expect(out).not.toContain('CONTENUTO_PAGINA_1');
   });
 });
+
+describe('ambito temporale nelle tabelle deterministiche (0034)', () => {
+  it('CRONO: menzioni anamnestiche e programmati sono etichettati, mai spacciati per atti autonomi', () => {
+    const out = formatChronologyIndex([
+      { event_date: '2026-04-14', event_type: 'intervento', title: 'Mastectomia', description: '', temporal_scope: 'retrospettivo' },
+      { event_date: '2026-05-22', event_type: 'visita', title: 'Visita oncologica', description: '' },
+      { event_date: '2026-06-18', event_type: 'esame', title: 'Scintigrafia', description: '', temporal_scope: 'programmato' },
+    ]);
+    expect(out).toContain('Mastectomia (riferito in anamnesi)');
+    expect(out).toContain('| Visita oncologica |');
+    expect(out).toContain('Scintigrafia (programmato nel documento)');
+  });
+
+  it('doc-sanitaria: il referto è datato con la visita (22.05), non con la sua anamnesi (27.02)', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ documentId: 'ref', fileName: 'ref.jpg', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Visita oncologica del 22/05/2026. Storia: 27/02/2026 nodulo.' }] })],
+      [
+        ev({ document_id: 'ref', event_date: '2026-02-27', title: 'Nodulo', temporal_scope: 'retrospettivo' }),
+        ev({ document_id: 'ref', event_date: '2026-05-22', title: 'Visita oncologica', temporal_scope: 'corrente' }),
+      ],
+    );
+    expect(out).toContain('22.05.2026');
+    expect(out).not.toMatch(/in data 27\.02\.2026/);
+  });
+
+  it('doc-sanitaria: la STRUTTURA dell\'intestazione viene dall\'evento corrente, non dalla menzione anamnestica più antica', () => {
+    const out = formatDocumentazioneSanitaria(
+      [doc({ documentId: 'ref', fileName: 'ref.jpg', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Visita del 22/05/2026.' }] })],
+      [
+        ev({ document_id: 'ref', event_date: '2026-02-27', title: 'Ecografia esterna', facility: 'Centro Esterno Demo', temporal_scope: 'retrospettivo' }),
+        ev({ document_id: 'ref', event_date: '2026-05-22', title: 'Visita oncologica', facility: 'UOC Oncologia Cittàdemo', temporal_scope: 'corrente' }),
+      ],
+    );
+    expect(out).toMatch(/UOC Oncologia Cittàdemo in data 22\.05\.2026/);
+    expect(out).not.toMatch(/Centro Esterno Demo in data/);
+  });
+});

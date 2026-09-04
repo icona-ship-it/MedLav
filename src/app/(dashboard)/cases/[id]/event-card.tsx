@@ -29,6 +29,7 @@ import {
   formatDate, confidenceColor, confidenceLabel,
 } from '@/lib/format';
 import { sourceLabels } from '@/lib/constants';
+import { normalizeTemporalScope, TEMPORAL_SCOPE_LABELS } from '@/lib/temporal-scope';
 import type { EventRow } from './types';
 
 // --- Source Text Section (collapsible) ---
@@ -333,6 +334,17 @@ export function EventCard({
               )}
               {isClinical && !includeInChrono && (
                 <Badge variant="secondary" className="text-xs">Fuori cronologia</Badge>
+              )}
+              {normalizeTemporalScope(event.temporal_scope) !== 'corrente' && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs"
+                  title={normalizeTemporalScope(event.temporal_scope) === 'retrospettivo'
+                    ? 'Il documento lo riferisce come già avvenuto (anamnesi/storia clinica): nella cronistoria compare nel sotto-elenco del documento, non come atto del giorno.'
+                    : 'Il documento lo prevede per il futuro (controllo/esame programmato): non conta come avvenuto e resta fuori dai calcoli.'}
+                >
+                  {TEMPORAL_SCOPE_LABELS[normalizeTemporalScope(event.temporal_scope)]}
+                </Badge>
               )}
             </div>
             <p className="mt-1 text-sm font-medium">{event.title}</p>

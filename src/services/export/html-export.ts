@@ -1,5 +1,6 @@
 import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import { normalizeTemporalScope, TEMPORAL_SCOPE_LABELS } from '@/lib/temporal-scope';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
 import type { DocumentWithPages } from './load-case-data';
 import { assembleFullReport, synthesisHasOwnHeader, type ExportMode, type PeriziaMetadataExport as AssemblerPeriziaMetadata } from './report-assembler';
@@ -21,6 +22,8 @@ interface ExportEvent {
   requires_verification: boolean;
   reliability_notes: string | null;
   expert_notes: string | null;
+  /** Ambito temporale (migration 0034). */
+  temporal_scope?: string | null;
 }
 
 interface ExportAnomaly {
@@ -258,6 +261,7 @@ ${getAiActHtmlMetaTags()}
   .event-date { font-weight: 600; }
   .event-type { background: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
   .event-source { background: #dbeafe; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #1e40af; }
+  .event-scope { background: #fef3c7; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #92400e; }
   .event-title { font-weight: 600; margin-bottom: 4px; }
   .event-description { font-size: 14px; white-space: pre-wrap; }
   .event-meta { font-size: 13px; color: #64748b; margin-top: 4px; }
@@ -300,7 +304,7 @@ ${getAiActHtmlMetaTags()}
     h3 { page-break-after: avoid; }
     .header-info, .stats, #toc { page-break-inside: avoid; }
     .stat { background: none !important; border: 1px solid #ccc; }
-    .event-type, .event-source, .severity { background: none !important; border: 1px solid #999; color: #000 !important; }
+    .event-type, .event-source, .event-scope, .severity { background: none !important; border: 1px solid #999; color: #000 !important; }
     a { color: #000; text-decoration: none; }
     .synthesis { background: none !important; border: 1px solid #ddd; }
     .synthesis .ocr-table thead { display: table-header-group; }
@@ -362,6 +366,7 @@ ${events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type)).map((e) => `
     <span class="event-date">${formatDate(e.event_date)}${e.date_precision !== 'giorno' ? ` [${e.date_precision}]` : ''}</span>
     <span class="event-type">${escapeHtml(e.event_type)}</span>
     <span class="event-source">${escapeHtml(sourceLabels[e.source_type] ?? e.source_type)}</span>
+    ${normalizeTemporalScope(e.temporal_scope) !== 'corrente' ? `<span class="event-scope">${escapeHtml(TEMPORAL_SCOPE_LABELS[normalizeTemporalScope(e.temporal_scope)])}</span>` : ''}
     <span class="${confidenceClass(e.confidence)}">${e.confidence}%</span>
     ${e.requires_verification ? '<span class="verification">⚠ DA VERIFICARE</span>' : ''}
   </div>

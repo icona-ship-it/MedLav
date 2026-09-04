@@ -906,3 +906,90 @@ describe('ordinamento same-day — orario reale + sequenza clinica', () => {
     expect(result.map((e) => e.title)).toEqual(['Prima valutazione', 'TC encefalo']);
   });
 });
+
+describe('temporalScope nel consolidamento (collaudo 2026-09-04: referto esploso in 12 eventi)', () => {
+  it('dedup intra-documento: il gemello "corrente" sopravvive alla menzione "retrospettivo" anche con confidence più bassa', () => {
+    const result = consolidateEvents([{
+      documentId: 'referto',
+      events: [
+        makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale', confidence: 95, temporalScope: 'retrospettivo' }),
+        makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale con ricostruzione', confidence: 70, temporalScope: 'corrente' }),
+      ],
+    }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].temporalScope).toBe('corrente');
+  });
+
+  it('dedup intra-documento: a parità di scope vince ancora la confidence più alta (comportamento storico)', () => {
+    const result = consolidateEvents([{
+      documentId: 'doc',
+      events: [
+        makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Osteosintesi piatto tibiale', confidence: 60 }),
+        makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Osteosintesi piatto tibiale dx', confidence: 90 }),
+      ],
+    }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe(90);
+  });
+
+  it('aggregazione esami: un esame solo citato in anamnesi non collassa con i 3 eseguiti lo stesso giorno', () => {
+    const exam = (title: string, scope: 'corrente' | 'retrospettivo') =>
+      makeEvent({ eventDate: '2026-03-03', eventType: 'esame_ematochimico', sourceType: 'esame_ematochimico', title, temporalScope: scope });
+    const result = consolidateEvents([{
+      documentId: 'cartella',
+      events: [exam('Emocromo', 'corrente'), exam('Glicemia', 'corrente'), exam('Creatinina', 'corrente'), exam('Emocromo pregresso riferito', 'retrospettivo')],
+    }]);
+    const scopes = result.map((e) => e.temporalScope).sort();
+    expect(scopes).toEqual(['corrente', 'retrospettivo']);
+    expect(result.find((e) => e.temporalScope === 'corrente')?.title).toContain('raggruppati');
+  });
+
+  it('discrepanze cross-documento: la fonte primaria NON viene cappata a 30 dalla sua menzione anamnestica con diagnosi diversa', () => {
+    const result = consolidateEvents([
+      { documentId: 'cartella-operatoria', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale', diagnosis: 'Carcinoma lobulare infiltrante G2 mm 7, DCIS diffuso', confidence: 95, temporalScope: 'corrente' })] },
+      { documentId: 'referto-oncologico', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale', diagnosis: 'Carcinoma lobulare', confidence: 90, temporalScope: 'retrospettivo' })] },
+    ]);
+    const primary = result.find((e) => e.documentId === 'cartella-operatoria')!;
+    const mention = result.find((e) => e.documentId === 'referto-oncologico')!;
+    expect(primary.confidence).toBe(95);
+    expect(primary.requiresVerification).toBe(false);
+    expect(primary.discrepancyNote).toContain('anamnesi');
+    expect(mention.discrepancyNote).toContain('fonte primaria');
+    expect(mention.confidence).toBe(90);
+  });
+
+  it('discrepanze fra due fonti primarie restano escalate come prima (mai auto-risolte)', () => {
+    const result = consolidateEvents([
+      { documentId: 'a', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Osteosintesi piatto tibiale', diagnosis: 'Frattura composta', confidence: 95 })] },
+      { documentId: 'b', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Osteosintesi piatto tibiale', diagnosis: 'Frattura scomposta', confidence: 90 })] },
+    ]);
+    expect(result.every((e) => e.confidence <= 30 && e.requiresVerification)).toBe(true);
+  });
+});
+
+describe('temporalScope — discordanze fra menzione e fonte primaria (giro avversariale 2026-09-04)', () => {
+  it('lateralità/diagnosi DISCORDANTE fra anamnesi e cartella: ⚠ su entrambi, coda SOLO sulla menzione, fonte primaria mai cappata', () => {
+    const result = consolidateEvents([
+      { documentId: 'cartella', events: [makeEvent({ eventDate: '2026-03-10', eventType: 'intervento', title: 'Osteosintesi polso', diagnosis: 'Frattura polso sinistro', confidence: 95, temporalScope: 'corrente' })] },
+      { documentId: 'referto', events: [makeEvent({ eventDate: '2026-03-10', eventType: 'intervento', title: 'Osteosintesi polso', diagnosis: 'Frattura polso destro', confidence: 90, temporalScope: 'retrospettivo' })] },
+    ]);
+    const primary = result.find((e) => e.documentId === 'cartella')!;
+    const mention = result.find((e) => e.documentId === 'referto')!;
+    expect(primary.discrepancyNote).toContain('⚠ DIAGNOSI DISCORDANTE');
+    expect(primary.confidence).toBe(95);
+    expect(primary.requiresVerification).toBe(false);
+    expect(mention.discrepancyNote).toContain('⚠ DIAGNOSI DISCORDANTE');
+    expect(mention.requiresVerification).toBe(true);
+    expect(mention.confidence).toBe(90);
+  });
+
+  it('intervento PREVISTO in una lettera pre-operatoria ed ESEGUITO in cartella: la cartella non viene cappata per la sua anticipazione', () => {
+    const result = consolidateEvents([
+      { documentId: 'pre-op', events: [makeEvent({ eventDate: '2026-05-10', eventType: 'intervento', title: 'Rimozione mezzi di sintesi', diagnosis: 'Programmata rimozione placca', confidence: 90, temporalScope: 'programmato' })] },
+      { documentId: 'cartella', events: [makeEvent({ eventDate: '2026-05-10', eventType: 'intervento', title: 'Rimozione mezzi di sintesi', diagnosis: 'Esiti di frattura radio distale dx, rimozione placca', confidence: 95, temporalScope: 'corrente' })] },
+    ]);
+    const primary = result.find((e) => e.documentId === 'cartella')!;
+    expect(primary.confidence).toBe(95);
+    expect(primary.requiresVerification).toBe(false);
+  });
+});

@@ -307,7 +307,11 @@ async function extractChunkOnce(params: ExtractChunkParams): Promise<ExtractionR
 
   const result = parseExtractionResponse(content, chunkLabel);
   const validatedEvents = validateExtractedNamesAgainstOcr(result.events, chunkText);
-  const inferredEvents = inferMissingDates(validatedEvents);
+  const yearGuard = discardUnattestedYears(validatedEvents, chunkText);
+  if (yearGuard.discardedCount > 0) {
+    logger.info('extraction', ` ${chunkLabel}: ${yearGuard.discardedCount} date anno/mese scartate (anno assente dal testo)`);
+  }
+  const inferredEvents = inferMissingDates(yearGuard.events);
   const filteredEvents = flagLegislativeReferences(inferredEvents);
   // "Mai perdere un fatto": se il JSON è stato riparato/recuperato (non parse pulito),
   // la coda può essere stata troncata → flagghiamo OGNI evento del chunk per la
@@ -437,6 +441,43 @@ const SENTINEL_DATE = '1900-01-01';
  * For events with sentinel date '1900-01-01', tries to find a "donor" event
  * on the same page (or ±1 page) that has a valid date.
  */
+/** Nota per una data anno/mese il cui anno NON compare nel testo del documento. */
+export const UNATTESTED_YEAR_NOTE =
+  '[AUTO] Anno non presente nel testo del documento: data scartata (stimata dal modello) — verificare sul documento originale';
+
+/**
+ * Rete deterministica anti-anno-inventato (collaudo foto vere 2026-09-04: il
+ * LLM ha datato "Appendicectomia (pregressa)" 2000-01-01 [anno] con nota
+ * "anno stimato"). Una data a precisione anno/mese è legittima SOLO se quel
+ * numero d'anno sta nel testo OCR del chunk; altrimenti la data si scarta
+ * (sentinella, precisione 'sconosciuta'), l'evento va in coda con nota e il
+ * FATTO resta ("mai perdere un fatto"). Le date a precisione giorno hanno
+ * già le loro reti (verifica citazione, Rete A). Pura.
+ */
+export function discardUnattestedYears(
+  events: ExtractedEvent[],
+  chunkText: string,
+): { events: ExtractedEvent[]; discardedCount: number } {
+  let discardedCount = 0;
+  const out = events.map((event) => {
+    if (event.datePrecision !== 'anno' && event.datePrecision !== 'mese') return event;
+    if (!event.eventDate || event.eventDate === SENTINEL_DATE) return event;
+    const year = event.eventDate.slice(0, 4);
+    if (!/^\d{4}$/.test(year) || chunkText.includes(year)) return event;
+    discardedCount++;
+    return {
+      ...event,
+      eventDate: SENTINEL_DATE,
+      datePrecision: 'sconosciuta',
+      requiresVerification: true,
+      reliabilityNotes: event.reliabilityNotes
+        ? `${event.reliabilityNotes} | ${UNATTESTED_YEAR_NOTE}`
+        : UNATTESTED_YEAR_NOTE,
+    };
+  });
+  return { events: out, discardedCount };
+}
+
 export function inferMissingDates(events: ExtractedEvent[]): ExtractedEvent[] {
   if (events.length === 0) return events;
 
