@@ -26,6 +26,14 @@ globs: ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"]
 - Keys in liste: usare ID stabili, MAI indici
 - No prop drilling oltre 2 livelli — usare Context o composizione
 
+## Versione della pipeline (avviso "riavvia l'analisi")
+
+- Ogni commit che cambia l'OUTPUT di un'analisi (prompt, estrazione, consolidamento,
+  calcoli, tabelle, reconciler) aggiorna `PIPELINE_CHANGED_AT` in
+  `src/lib/build-info.ts` all'ora prevista del deploy (UTC). È la data con cui
+  l'app avvisa il medico che un caso già elaborato non include le novità. Un
+  commit di sola UI NON la tocca (l'avviso fa spendere crediti per rielaborare).
+
 ## Stile Codice
 
 - Punto e virgola (semicolons) alla fine delle istruzioni
