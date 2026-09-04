@@ -191,7 +191,11 @@ export function resolveSectionPlan(params: {
     // hard-verificate vs OCR, routine parafrasata) — la riproduzione INTEGRALE
     // da 100+ pagine "prende troppe informazioni" e resta disponibile con
     // docSanitariaMode: 'integrale' o on-demand dall'editor.
-    spec.id === 'documentazione_sanitaria' && periziaMetadata?.docSanitariaMode !== 'integrale'
+    // 'rubriche' (2026-09-04): come 'integrale' è un placeholder deterministico
+    // espanso a lettura, ma con i soli passaggi-chiave per rubrica (doc-rubriche/).
+    spec.id === 'documentazione_sanitaria'
+      && periziaMetadata?.docSanitariaMode !== 'integrale'
+      && periziaMetadata?.docSanitariaMode !== 'rubriche'
       ? buildDocSanitariaSelectiveSpec(spec)
       : spec
   ));

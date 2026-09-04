@@ -487,3 +487,20 @@ describe('computeTranscriptionCoverage — pagine con testo (giro avversariale 2
     expect(cov.get('blankish')).toEqual({ rendered: 3, total: 3, withText: 1 });
   });
 });
+
+describe('expandDeterministicBlocks — docSanitariaMode "rubriche" (2026-09-04)', () => {
+  const docsRub = [{
+    documentId: 'd1', fileName: 'verbale.pdf', documentType: 'cartella_clinica',
+    pages: [{ pageNumber: 1, ocrText: 'TRIAGE\nCodice verde PA 120/80\nDIAGNOSI\nFrattura composta del radio destro.\nPROGNOSI\nGiorni 30.' }],
+  }];
+  const evsRub = [{ event_date: '2026-02-10', event_type: 'visita', title: 'PS', description: 'accesso', document_id: 'd1', facility: 'Ospedale Civile di Cittàdemo', temporal_scope: 'corrente' }];
+  it('con mode rubriche la sezione è per rubriche (niente triage), altrimenti integrale', () => {
+    const md = `## Doc\n\n${DETERMINISTIC_MARKERS.DOC_SANITARIA}`;
+    const rub = expandDeterministicBlocks(md, evsRub as never, docsRub as never, { docSanitariaMode: 'rubriche' });
+    expect(rub).toContain('**Cartella clinica, Ospedale Civile di Cittàdemo, in data 10.02.2026:**');
+    expect(rub).toContain('Diagnosi: «Frattura composta del radio destro.»');
+    expect(rub).not.toContain('PA 120/80');
+    const full = expandDeterministicBlocks(md, evsRub as never, docsRub as never, { docSanitariaMode: null });
+    expect(full).toContain('PA 120/80');
+  });
+});

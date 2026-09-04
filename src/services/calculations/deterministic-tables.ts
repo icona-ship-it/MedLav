@@ -17,6 +17,7 @@ import { computeRelevanceTier } from '@/lib/event-relevance';
 import { calculateITTITP, formatITTITPTable, formatRicoveroITTFactsBlock } from './medico-legal-calc';
 import { expandStimaDannoMarkers, STIMA_DANNO_MARKER_PREFIX } from './stima-danno-block';
 import { sanitizeVerbatimOcr } from './verbatim-sanitizer';
+import { formatDocumentazioneSanitariaRubriche } from '@/services/synthesis/doc-rubriche/rubric-section';
 
 /** Minimal event shape needed to render the deterministic tables. Compatible
  * with the DB row (snake_case) and easily mapped from ConsolidatedEvent. */
@@ -589,6 +590,9 @@ export function expandDeterministicBlocks(
     /** Data sinistro (periziaMetadata.dataSinistro, IT o ISO): esclude le
      * preesistenze dai blocchi calcolati (ITT/ITP, durata malattia, stima danno). */
     incidentDate?: string | null;
+    /** periziaMetadata.docSanitariaMode: 'rubriche' → passaggi-chiave per rubrica
+     * (doc-rubriche/, nessun LLM); altrimenti riproduzione integrale. */
+    docSanitariaMode?: string | null;
   },
 ): string {
   if (!synthesis || !hasDeterministicMarkers(synthesis)) return synthesis;
@@ -610,12 +614,12 @@ export function expandDeterministicBlocks(
     [DETERMINISTIC_MARKERS.CRONO, formatChronologyIndex(events) || EMPTY_FALLBACK.CRONO],
     [DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS, formatEpicrisiFactsBlock(events, opts?.incidentDate) || EMPTY_FALLBACK.ITT_RICOVERO_FACTS],
   ];
-  replacements.push([
-    DETERMINISTIC_MARKERS.DOC_SANITARIA,
-    docs !== undefined
-      ? formatDocumentazioneSanitaria(docs, events) || EMPTY_FALLBACK.DOC_SANITARIA
-      : DOC_SANITARIA_OMITTED,
-  ]);
+  const docSanitaria = docs === undefined
+    ? DOC_SANITARIA_OMITTED
+    : opts?.docSanitariaMode === 'rubriche'
+      ? formatDocumentazioneSanitariaRubriche(docs, events).markdown || EMPTY_FALLBACK.DOC_SANITARIA
+      : formatDocumentazioneSanitaria(docs, events) || EMPTY_FALLBACK.DOC_SANITARIA;
+  replacements.push([DETERMINISTIC_MARKERS.DOC_SANITARIA, docSanitaria]);
 
   let out = synthesis;
   for (const [marker, rendered] of replacements) {

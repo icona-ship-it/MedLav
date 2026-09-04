@@ -56,7 +56,7 @@ export default async function SharedCasePage({
     // dataSinistro: SOLO quella colonna del JSONB (una data, nessun dato personale)
     // — serve a espandere i blocchi calcolati con gli STESSI numeri del report del
     // perito (preesistenze escluse); il resto del perizia_metadata resta fuori.
-    admin.from('cases').select('id, code, case_type, case_role, patient_initials, status, dataSinistro:perizia_metadata->>dataSinistro').eq('id', caseId).single(),
+    admin.from('cases').select('id, code, case_type, case_role, patient_initials, status, dataSinistro:perizia_metadata->>dataSinistro, docSanitariaMode:perizia_metadata->>docSanitariaMode').eq('id', caseId).single(),
     admin.from('events').select('*').eq('case_id', caseId).eq('is_deleted', false).order('order_number', { ascending: true }),
     admin.from('anomalies').select('*').eq('case_id', caseId),
     admin.from('missing_documents').select('id, document_name, reason').eq('case_id', caseId),
@@ -101,7 +101,7 @@ export default async function SharedCasePage({
               undefined,
               // Stessi numeri del report del perito: la data sinistro esclude
               // le preesistenze da ITT/ITP, durata malattia e stima danno.
-              { incidentDate: (caseResult.data as { dataSinistro?: string | null }).dataSinistro ?? null },
+              { incidentDate: (caseResult.data as { dataSinistro?: string | null }).dataSinistro ?? null, docSanitariaMode: (caseResult.data as { docSanitariaMode?: string | null }).docSanitariaMode ?? null },
             )
           : reportResult.data.synthesis,
       }

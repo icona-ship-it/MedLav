@@ -567,3 +567,12 @@ describe('section-catalog', () => {
     });
   });
 });
+
+describe('docSanitariaMode "rubriche" (2026-09-04)', () => {
+  it('documentazione_sanitaria resta placeholder deterministico come integrale', () => {
+    const plan = resolveSectionPlan({ ...STRAGIUDIZIALE_PARAMS, periziaMetadata: { docSanitariaMode: 'rubriche' } });
+    const doc = plan.find((s) => s.id === 'documentazione_sanitaria');
+    expect(doc?.isPlaceholder).toBe(true);
+    expect(doc?.placeholderText).toContain('MEDLAV:DOC_SANITARIA');
+  });
+});

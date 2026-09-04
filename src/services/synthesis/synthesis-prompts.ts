@@ -8,6 +8,7 @@ import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { DocumentSummary } from './document-summarizer';
 import { formatDate, formatEventDateByPrecision } from '@/lib/format';
 import { getSourceReliabilityScore, getReliabilityLabel } from '../consolidation/source-reliability';
+import { describeDocumentBlock } from './doc-rubriche/block-header';
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   ortopedica: 'Malasanità Ortopedica',
@@ -44,7 +45,7 @@ const DOC_BLOCK_TYPE_LABELS: Record<string, string> = {
 // più affidabile del sourceType del singolo evento estratto (feedback beta
 // 2026-07-20: uno storico appuntamenti era intestato "Referto di controllo
 // medico" perché i suoi eventi-appuntamento avevano quel sourceType).
-const DOCUMENT_TYPE_BLOCK_LABELS: Record<string, string> = {
+export const DOCUMENT_TYPE_BLOCK_LABELS: Record<string, string> = {
   cartella_clinica: 'Cartella clinica',
   referto_specialistico: 'Referto specialistico',
   esame_strumentale: 'Referto di esame strumentale',
@@ -194,43 +195,17 @@ export function formatEventsByDocumentForPrompt(
     else byDoc.set(e.documentId, [e]);
   }
   const metaByDoc = new Map((docsMeta ?? []).map((d) => [d.documentId, d.documentType ?? null]));
-  // Data e struttura del blocco dai soli eventi 'corrente' (0034): l'anamnesi
-  // di un referto del 22.05 non lo data al 27.02 né lo attribuisce al centro
-  // esterno citato. Fallback: tutti (righe legacy, documenti di sole menzioni).
-  const datingOf = (evs: ConsolidatedEvent[]): ConsolidatedEvent[] => {
-    const current = evs.filter((e) => e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato');
-    return current.length > 0 ? current : evs;
-  };
-  const earliest = (evs: ConsolidatedEvent[]): string =>
-    datingOf(evs).reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
-  const groups = Array.from(byDoc.values()).sort((a, b) => earliest(a).localeCompare(earliest(b)));
+  // Data e struttura del blocco: UNA implementazione (doc-rubriche/block-header)
+  // condivisa col renderer deterministico per rubriche — dai soli eventi
+  // 'corrente' (0034), fallback a tutti.
+  const groups = Array.from(byDoc.values()).sort((a, b) => describeDocumentBlock(a).sortIso.localeCompare(describeDocumentBlock(b).sortIso));
 
   return groups.map((allEvs, i) => {
-    const evs = datingOf(allEvs);
+    const dating = describeDocumentBlock(allEvs);
+    const currentOnly = allEvs.filter((e) => e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato');
+    const evs = currentOnly.length > 0 ? currentOnly : allEvs;
     const rep = evs.find((e) => e.facility) ?? evs[0];
-    // DATA DEL BLOCCO dai fatti, mai inventata (feedback beta 2026-07-20): una
-    // data unica se il documento ne ha una sola O se una data DOMINA nettamente
-    // (≥60% degli eventi datati — es. verbale di PS del 18.04 il cui testo
-    // anamnestico cita un intervento preesistente del 03.03: la data del
-    // documento è il 18.04, non un falso intervallo che ingloba la
-    // preesistenza); date sparse senza dominante (storici appuntamenti,
-    // cartelle di ricovero) → intervallo "dal X al Y"; nessuna data valida →
-    // la data del rappresentativo precision-aware ('2002', 's.d.', ...).
-    const datedIso = evs
-      .filter((e) => e.datePrecision == null || e.datePrecision === 'giorno')
-      .map((e) => e.eventDate)
-      .filter((d): d is string => !!d && d !== '1900-01-01' && /^\d{4}-\d{2}-\d{2}$/.test(d));
-    const dayIso = Array.from(new Set(datedIso)).sort();
-    const dateCounts = new Map<string, number>();
-    for (const d of datedIso) dateCounts.set(d, (dateCounts.get(d) ?? 0) + 1);
-    const dominant = Array.from(dateCounts.entries()).sort((a, b) => b[1] - a[1])[0];
-    const date = dayIso.length === 1
-      ? formatEventDateByPrecision(dayIso[0], 'giorno')
-      : dayIso.length > 1 && dominant[1] / datedIso.length >= 0.6
-        ? formatEventDateByPrecision(dominant[0], 'giorno')
-        : dayIso.length > 1
-          ? `dal ${formatEventDateByPrecision(dayIso[0], 'giorno')} al ${formatEventDateByPrecision(dayIso[dayIso.length - 1], 'giorno')}`
-          : formatEventDateByPrecision(rep.eventDate, rep.datePrecision);
+    const date = dating.dateLabel;
     // Il LABEL della doc-sanitaria NON deve portare il codice classificatore (A-/B-/C-/D-):
     // l'LLM lo copiava nel titolo grassetto del blocco ("**B - Referto...:**" su Bigon).
     // Qui resta solo il nome leggibile. Le categorie (A/B/C/D) per la citazione CTU/CTP

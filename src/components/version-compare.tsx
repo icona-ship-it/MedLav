@@ -27,6 +27,7 @@ export function VersionCompare({
   events,
   docs,
   incidentDate,
+  docSanitariaMode,
 }: {
   currentReport: ReportVersion;
   versions: ReportVersion[];
@@ -34,6 +35,7 @@ export function VersionCompare({
   docs?: DeterministicDoc[];
   /** Data sinistro: esclude le preesistenze dai blocchi calcolati. */
   incidentDate?: string | null;
+  docSanitariaMode?: string | null;
 }) {
   const olderVersions = versions.filter((v) => v.version < currentReport.version);
   const [selectedVersion, setSelectedVersion] = useState<string>(
@@ -72,7 +74,7 @@ export function VersionCompare({
           </p>
           <div className="rounded-md border p-4 max-h-[600px] overflow-y-auto">
             {selectedReport?.synthesis ? (
-              <MarkdownPreview content={expandDeterministicBlocks(selectedReport.synthesis, events, docs, { incidentDate })} />
+              <MarkdownPreview content={expandDeterministicBlocks(selectedReport.synthesis, events, docs, { incidentDate, docSanitariaMode })} />
             ) : (
               <p className="text-sm text-muted-foreground">Nessun contenuto</p>
             )}
@@ -84,7 +86,7 @@ export function VersionCompare({
           </p>
           <div className="rounded-md border p-4 max-h-[600px] overflow-y-auto">
             {currentReport.synthesis ? (
-              <MarkdownPreview content={expandDeterministicBlocks(currentReport.synthesis, events, docs, { incidentDate })} />
+              <MarkdownPreview content={expandDeterministicBlocks(currentReport.synthesis, events, docs, { incidentDate, docSanitariaMode })} />
             ) : (
               <p className="text-sm text-muted-foreground">Nessun contenuto</p>
             )}

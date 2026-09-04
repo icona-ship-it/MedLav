@@ -167,6 +167,7 @@ export function CaseDetailClient({
   });
   const incidentDate = ((caseData.perizia_metadata as Record<string, unknown> | null)
     ?.dataSinistro as string | undefined) ?? null;
+  const docSanitariaMode = ((caseData.perizia_metadata as Record<string, unknown> | null)?.docSanitariaMode as string | undefined) ?? null;
   const isExtractionOnly = pipelineMode === 'extraction_only';
   const isExpensesOnly = pipelineMode === 'expenses_only';
   const isAnonymizeOnly = pipelineMode === 'anonymize_only';
@@ -456,6 +457,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                initialDocSanitariaMode={docSanitariaMode}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
                 recentDiagnostics={recentDiagnostics}
@@ -498,6 +500,7 @@ export function CaseDetailClient({
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
                 incidentDate={incidentDate}
+                docSanitariaMode={docSanitariaMode}
               />
             </div>
           )}
@@ -536,6 +539,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                initialDocSanitariaMode={docSanitariaMode}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
                 recentDiagnostics={recentDiagnostics}
@@ -562,6 +566,7 @@ export function CaseDetailClient({
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
                 incidentDate={incidentDate}
+                docSanitariaMode={docSanitariaMode}
               />
             </div>
           )}
@@ -616,6 +621,7 @@ export function CaseDetailClient({
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
+                initialDocSanitariaMode={docSanitariaMode}
                 processingStartedAt={processingStartedAt}
                 extractedEventsCount={events.length}
                 recentDiagnostics={recentDiagnostics}
@@ -642,6 +648,7 @@ export function CaseDetailClient({
                 pipelineWarnings={pipelineWarnings}
                 regenerateNote={regenerateNote}
                 incidentDate={incidentDate}
+                docSanitariaMode={docSanitariaMode}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
               />
             </div>

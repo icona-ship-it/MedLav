@@ -20,7 +20,8 @@ import { ProcessingProgress, computeWeightedProgress } from '@/components/proces
 import { csrfHeaders } from '@/lib/csrf-client';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { getElaborationCost, getElaborationLabel } from '@/services/credits/credit-costs';
-import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder } from '../../actions';
+import { getReportSectionOptions, updateReportSectionExclusions, updateReportSectionOrder, updateDocSanitariaMode } from '../../actions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { estimateAnalysisTime } from '@/lib/analysis-time-estimate';
 import { stallNotice } from '@/lib/processing-stall';
 import { DIAGNOSTIC_CODE_LABELS, type DiagnosticCode } from '@/lib/pipeline-diagnostics';
@@ -38,6 +39,8 @@ interface ProcessingSectionProps {
   lastError?: string;
   pipelineMode?: string;
   initialExcludedSections?: string[];
+  /** perizia_metadata.docSanitariaMode (selettiva | rubriche | integrale). */
+  initialDocSanitariaMode?: string | null;
   /** Timestamp REALE di avvio elaborazione (perizia_metadata.processingStartedAt).
    * Passato a ProcessingProgress per far partire il timer dall'invio a Inngest,
    * non dall'ora di upload dei documenti. */
@@ -83,6 +86,7 @@ export function ProcessingSection({
   lastError,
   pipelineMode = 'full',
   initialExcludedSections = [],
+  initialDocSanitariaMode = null,
   processingStartedAt,
   onProcessingStarted,
   hasExistingResults = false,
@@ -146,6 +150,18 @@ export function ProcessingSection({
   const [sectionOptions, setSectionOptions] = useState<ReportSectionOption[]>([]);
   const [excludedSections, setExcludedSections] = useState<string[]>(initialExcludedSections);
   const sectionsHydratedRef = useRef(false);
+  // Modalità documentazione sanitaria (2026-09-04): 'selettiva' (LLM), 'rubriche'
+  // (passaggi-chiave copiati dal codice), 'integrale' (verbatim completo).
+  type DocSanitariaMode = 'selettiva' | 'rubriche' | 'integrale';
+  const isDocMode = (v: string | null | undefined): v is DocSanitariaMode => v === 'selettiva' || v === 'rubriche' || v === 'integrale';
+  const [docSanitariaMode, setDocSanitariaMode] = useState<DocSanitariaMode>(isDocMode(initialDocSanitariaMode) ? initialDocSanitariaMode : 'selettiva');
+  const handleDocSanitariaMode = (value: string) => {
+    if (!isDocMode(value)) return;
+    setDocSanitariaMode(value);
+    void updateDocSanitariaMode(caseId, value).then((res) => {
+      if (!res.success) toast.error(res.error ?? 'Errore nel salvataggio della modalità');
+    });
+  };
 
   useEffect(() => {
     if (!showSectionPicker) return;
@@ -549,6 +565,22 @@ export function ProcessingSection({
                       <p className="text-xs font-medium text-muted-foreground">
                         {enabledSectionCount} {enabledSectionCount === 1 ? 'sezione verrà generata' : 'sezioni verranno generate'}.
                       </p>
+                      <div className="space-y-1.5 border-t border-primary/20 pt-3">
+                        <p className="text-sm font-semibold">Documentazione medica: come riprodurre i documenti?</p>
+                        <Select value={docSanitariaMode} onValueChange={handleDocSanitariaMode} disabled={isStartingProcessing}>
+                          <SelectTrigger className="h-9 w-full sm:w-[420px]" aria-label="Modalità documentazione sanitaria">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rubriche">Passaggi-chiave per rubrica (diagnosi, EO, conclusioni, prognosi) copiati dal documento</SelectItem>
+                            <SelectItem value="selettiva">Trascrizione con selezione del modello (citazioni verificate)</SelectItem>
+                            <SelectItem value="integrale">Riproduzione integrale di ogni documento</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Nella modalità per rubrica il testo del medico viene copiato dal software, mai riscritto.
+                        </p>
+                      </div>
                     </div>
                   )}
 

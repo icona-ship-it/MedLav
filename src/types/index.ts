@@ -122,7 +122,9 @@ export interface PeriziaMetadata {
   // 'selettiva' = narrativa clinica che VIRGOLETTA verbatim i passaggi
   // significativi (citazioni hard-verificate vs OCR) e parafrasa la routine;
   // 'integrale' = riproduzione verbatim completa (sentinella deterministica).
-  docSanitariaMode?: 'selettiva' | 'integrale';
+  // 'rubriche' (2026-09-04) = passaggi-chiave per rubrica copiati dal codice
+  // dal testo OCR (nessun LLM), policy per tipo di documento (doc-rubriche/).
+  docSanitariaMode?: 'selettiva' | 'integrale' | 'rubriche';
   // ── Tracking operativo retention (NON contenuto della perizia) ──
   // Scritti dal cron data-retention quando invia l'email di preavviso 30 giorni
   // prima dell'eliminazione automatica del caso archiviato (GDPR Art. 5(1)(e)).

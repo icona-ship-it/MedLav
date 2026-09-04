@@ -549,6 +549,7 @@ export async function assembleSectionsAndSaveReport(
   }
   const reportForValidation = expandDeterministicBlocks(fullReport, validationEvents, docsForValidation, {
     incidentDate: synthesisParams.periziaMetadata?.dataSinistro,
+    docSanitariaMode: synthesisParams.periziaMetadata?.docSanitariaMode ?? null,
   });
   let validation = validateReport(reportForValidation, synthesisParams.events.length, validationContext);
   // #5 (audit 2026-06-09): quando la doc-sanitaria verbatim viene espansa nel testo

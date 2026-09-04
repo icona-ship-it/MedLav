@@ -76,6 +76,7 @@ const periziaMetadataFields = z.object({
   anamnesiLavorativa: z.string().max(5000).optional(),
   excludedReportSections: z.array(z.string().max(80)).max(50).optional(),
   sectionOrder: z.array(z.string().max(80)).max(50).optional(),
+  docSanitariaMode: z.enum(['selettiva', 'integrale', 'rubriche']).optional(),
 }).strict();
 
 const periziaMetadataSchema = periziaMetadataFields.nullable().optional();
@@ -356,7 +357,7 @@ export async function updateCase(params: {
       // altrimenti un salvataggio del form con uno snapshot stale cancellerebbe
       // in silenzio l'ordine/le esclusioni appena scelti (review 2026-07-21).
       const preservedSectionPrefs = Object.fromEntries(
-        (['excludedReportSections', 'sectionOrder'] as const)
+        (['excludedReportSections', 'sectionOrder', 'docSanitariaMode'] as const)
           .filter((k) => !(k in params.periziaMetadata!) && k in existingMeta)
           .map((k) => [k, existingMeta[k]]),
       );
@@ -668,6 +669,47 @@ export async function updateReportSectionExclusions(
     .eq('id', parsed.data.caseId)
     .eq('user_id', user.id);
   if (error) return { success: false, error: 'Errore salvataggio sezioni' };
+
+  revalidateCase(parsed.data.caseId);
+  return { success: true };
+}
+
+/**
+ * Salva SOLO la modalità della documentazione sanitaria (selettore nello step
+ * Elaborazione, 2026-09-04): 'selettiva' (narrativa LLM con citazioni),
+ * 'rubriche' (passaggi-chiave per rubrica copiati dal codice, nessun LLM),
+ * 'integrale' (riproduzione verbatim completa). Read-modify-write con ownership,
+ * come updateReportSectionExclusions: il resto del metadata non si tocca.
+ */
+export async function updateDocSanitariaMode(
+  caseId: string,
+  mode: 'selettiva' | 'integrale' | 'rubriche',
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = z
+    .object({ caseId: z.string().min(1), mode: z.enum(['selettiva', 'integrale', 'rubriche']) })
+    .safeParse({ caseId, mode });
+  if (!parsed.success) return { success: false, error: 'Dati non validi' };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Non autenticato' };
+
+  const { data: caseRow } = await supabase
+    .from('cases')
+    .select('perizia_metadata')
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id)
+    .single();
+  if (!caseRow) return { success: false, error: 'Caso non trovato' };
+
+  const current = (caseRow.perizia_metadata as Record<string, unknown> | null) ?? {};
+  const merged = { ...current, docSanitariaMode: parsed.data.mode };
+  const { error } = await supabase
+    .from('cases')
+    .update({ perizia_metadata: merged, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.caseId)
+    .eq('user_id', user.id);
+  if (error) return { success: false, error: 'Errore salvataggio modalità documentazione' };
 
   revalidateCase(parsed.data.caseId);
   return { success: true };

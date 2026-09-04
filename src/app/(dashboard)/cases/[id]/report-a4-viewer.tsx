@@ -35,6 +35,7 @@ interface ReportA4ViewerProps {
   /** Data sinistro (periziaMetadata.dataSinistro): esclude le preesistenze dai
       blocchi calcolati (ITT/ITP, durata malattia, stima danno). */
   incidentDate?: string | null;
+  docSanitariaMode?: string | null;
   onEventClick?: (orderNumber: number) => void;
   regeneratingSection: string | null;
   onSectionRegenerated: (sectionId?: string) => void;
@@ -49,6 +50,7 @@ export function ReportA4Viewer({
   events,
   docs,
   incidentDate,
+  docSanitariaMode,
   onEventClick,
   regeneratingSection,
   onSectionRegenerated,
@@ -64,7 +66,7 @@ export function ReportA4Viewer({
   // CURRENT events at read time → always in sync, no LLM, no regeneration.
   // No-op on legacy reports (no sentinel markers).
   const rawSynthesis = report.synthesis ?? '';
-  const synthesis = expandDeterministicBlocks(rawSynthesis, events, docs, { incidentDate });
+  const synthesis = expandDeterministicBlocks(rawSynthesis, events, docs, { incidentDate, docSanitariaMode });
   const sections = parseSections(synthesis);
   // The editor must operate on the RAW content (preserving the sentinel marker),
   // never on the expanded table — otherwise a save would freeze the table.
@@ -331,7 +333,7 @@ export function ReportA4Viewer({
       {/* Version compare below A4 page */}
       {showVersionCompare && versions.length > 1 && (
         <div className="mt-6">
-          <VersionCompare currentReport={report} versions={versions} events={events} docs={docs} incidentDate={incidentDate} />
+          <VersionCompare currentReport={report} versions={versions} events={events} docs={docs} incidentDate={incidentDate} docSanitariaMode={docSanitariaMode} />
         </div>
       )}
 
