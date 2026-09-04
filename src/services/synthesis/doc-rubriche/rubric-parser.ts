@@ -26,20 +26,20 @@ export interface RubricSegment {
 
 /** Vocabolario: ordine = priorità (le voci più specifiche prima). */
 const VOCABULARY: ReadonlyArray<{ key: string; re: RegExp; keepLabel?: boolean }> = [
-  { key: 'dimissione', re: /^((diagnosi|terapia|indicazioni|condizioni|note)( [a-z]+)? (alla |di |della )?dimissione|dimissione|alla dimissione|lettera di dimissione|relazione di dimissione)$/ },
-  { key: 'esame_obiettivo', re: /^(e\.? ?o\.?|esame obiettivo( generale| locale| clinico)?|obiettivita( clinica)?|esame clinico|eo)$/ },
+  { key: 'dimissione', re: /^((diagnosi|terapia|indicazioni|condizioni|note)( [a-z]+)? (alla |di |della )?dimissione|dimissione|alla dimissione|lettera di dimissione|relazione di dimissione|esito|si dimette)$/ },
+  { key: 'esame_obiettivo', re: /^(e\.? ?o\.?|esame obiettivo( generale| locale| clinico)?|obiettivita( clinica)?|esame clinico|eo|clinicamente|obiettivamente|all'?esame( obiettivo)?)$/ },
   { key: 'diagnosi', re: /^(diagnosi( di (ingresso|accettazione|entrata)| principale| clinica| finale)?|conclusioni diagnostiche|diagnosi e conclusioni)$/ },
   { key: 'conclusioni', re: /^(conclusion[ei]|giudizio( conclusivo| clinico| diagnostico)?|in conclusione|considerazioni conclusive|valutazione conclusiva|commento( conclusivo)?|impressione diagnostica)$/ },
   { key: 'prognosi', re: /^prognosi\b.*$/ },
   { key: 'anamnesi_remota', re: /^(anamnesi (patologica |fisiologica )?remota|a\.?p\.?r\.?|anamnesi remota)$/ },
-  { key: 'anamnesi_prossima', re: /^(anamnesi (patologica )?prossima|a\.?p\.?p\.?|motivo (del ricovero|della visita|dell'?accesso|del ricorso)|quesito( clinico| diagnostico)?|storia clinica)$/ },
+  { key: 'anamnesi_prossima', re: /^(anamnesi (patologica |medica )?prossima|anamnesi medica|a\.?p\.?p\.?|motivo (del ricovero|della visita|dell'?accesso|del ricorso)|quesito( clinico| diagnostico)?|storia clinica|notizie cliniche|ricoverat[oa] dal)$/ },
   { key: 'anamnesi', re: /^anamnesi\b.*$/ },
-  { key: 'intervento', re: /^(intervento( chirurgico| eseguito)?|descrizione (dell'?)?intervento|verbale operatorio|atto operatorio|tecnica operatoria|procedura( eseguita)?)$/ },
+  { key: 'intervento', re: /^(intervento( chirurgico| eseguito)?|descrizione (dell'?)?intervento|verbale operatorio|atto operatorio|tecnica operatoria|procedura( eseguita)?|trattamento adottato|(1|2|3|i|ii|iii)[°º]? tempo chirurgico)$/ },
   { key: 'diario', re: /^(diario( clinico| medico| infermieristico)?|decorso( clinico| post ?operatorio| della degenza)?)$/ },
-  { key: 'referto', re: /^(referto|descrizione|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|risposta)$/ },
+  { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|risposta|esami visionati|visionat[io]|esiti di [a-z ]+)$/ },
   // Titoli di esame dentro una cartella ("RX gomito sn", "ECO ginocchio dx"): aprono un referto interno.
   { key: 'referto', re: /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)( [a-z'.-]+){0,4}$/, keepLabel: true },
-  { key: 'terapia', re: /^(terapia( consigliata| domiciliare| in atto| prescritta| farmacologica| medica| effettuata| praticata)?|prescrizion[ei]|farmaci|trattamento)$/ },
+  { key: 'terapia', re: /^(terapia( consigliata| domiciliare| in atto| prescritta| farmacologica| medica| effettuata| praticata)?( in corso)?|terapia e comportamento domiciliare|comportamento domiciliare|prescrizion[ei]|farmaci( ad uso abituale| abituali)?|trattamento)$/ },
   { key: 'indicazioni', re: /^(indicazioni|si consiglia|consigli|consiglio|raccomandazioni|controll[oi]|follow ?up|programma|piano terapeutico|note per il curante)$/ },
   { key: 'triage', re: /^triage\b.*$/ },
   { key: 'parametri', re: /^(parametri( vitali)?|pv|rilevazion[ei]( parametri)?)$/ },

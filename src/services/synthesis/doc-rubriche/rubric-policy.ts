@@ -8,7 +8,9 @@
  * Nessun dato reale: solo etichette.
  */
 
-export type RubricMode = 'passaggi' | 'integrale' | 'una_riga' | 'ometti';
+/** 'contenitore' = fascicolo di ricovero: nessun blocco proprio se la lettera di
+ * dimissione è agli atti a parte (una riga di rimando); altrimenti i passaggi-chiave. */
+export type RubricMode = 'passaggi' | 'integrale' | 'una_riga' | 'ometti' | 'contenitore';
 
 export interface RubricTypePolicy {
   mode: RubricMode;
@@ -29,17 +31,27 @@ export interface RubricPolicy {
 
 const KEY_CLINICAL: ReadonlyArray<string> = ['diagnosi', 'conclusioni', 'prognosi', 'indicazioni'];
 
+/** Oltre queste pagine una "cartella clinica" è un fascicolo di ricovero, non un verbale di PS. */
+export const PS_MAX_PAGES = 8;
+/** Marcatori testuali di un verbale di Pronto Soccorso (per riclassificare 'altro'/'cartella'). */
+export const PS_MARKERS_RE = /pronto soccorso|\btriage\b|codice (verde|giallo|rosso|bianco|arancione|azzurro)|verbale di (accesso|pronto soccorso)|\bp\.?s\.?\b/i;
+
 export const DEFAULT_RUBRIC_POLICY: RubricPolicy = {
   version: '2026-09-04-default',
   tipoDefault: 'referto_specialistico',
   tipi: {
     // Verbale di Pronto Soccorso / cartella: diagnosi + dimissione + prognosi (+ intervento se c'è).
     // Triage, parametri, laboratorio, consensi, diario infermieristico: MAI.
-    cartella_clinica: { mode: 'passaggi', copia: ['anamnesi_prossima', 'esame_obiettivo', 'intervento', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: false, maxParole: 400 },
-    lettera_dimissione: { mode: 'passaggi', copia: ['anamnesi_prossima', 'intervento', 'diario', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 350 },
-    referto_specialistico: { mode: 'passaggi', copia: ['anamnesi_prossima', 'esame_obiettivo', 'diagnosi', 'conclusioni', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 300 },
+    // Fascicolo di ricovero (spec Lavini 2026-09-04): "contenitore" — il gold copia
+    // 0 parole da 117 pagine, usa la lettera di dimissione. Un verbale di PS breve
+    // (≤ PS_MAX_PAGES pagine) classificato cartella è invece un PS: passaggi-chiave.
+    cartella_clinica: { mode: 'contenitore', copia: ['anamnesi_prossima', 'esame_obiettivo', 'intervento', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: false, maxParole: 400 },
+    // Lettera di dimissione: motivo, diagnosi, trattamento adottato, terapia domiciliare;
+    // NIENTE esame obiettivo d'ingresso, laboratorio, consulenze incorporate (spec).
+    lettera_dimissione: { mode: 'passaggi', copia: ['anamnesi_prossima', 'intervento', 'diario', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 400 },
+    referto_specialistico: { mode: 'passaggi', copia: ['anamnesi_prossima', 'referto', 'esame_obiettivo', 'diagnosi', 'conclusioni', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 300 },
     // Esami strumentali: il referto per intero (sono brevi), con le conclusioni.
-    esame_strumentale: { mode: 'integrale', copia: ['referto', 'conclusioni', 'corpo'], fallbackCorpo: true, maxParole: 250 },
+    esame_strumentale: { mode: 'integrale', copia: ['referto', 'conclusioni', 'corpo'], fallbackCorpo: true, maxParole: 200 },
     esame_laboratorio: { mode: 'ometti', copia: [], fallbackCorpo: false, maxParole: 0 },
     certificato: { mode: 'una_riga', copia: ['prognosi', 'diagnosi'], fallbackCorpo: false, maxParole: 60 },
     altro: { mode: 'passaggi', copia: KEY_CLINICAL, fallbackCorpo: false, maxParole: 200 },
@@ -68,7 +80,7 @@ export function loadRubricPolicy(raw: unknown): RubricPolicy {
     const base = tipi[tipo] ?? DEFAULT_RUBRIC_POLICY.tipi[DEFAULT_RUBRIC_POLICY.tipoDefault]!;
     const mode = t.mode;
     tipi[tipo] = {
-      mode: mode === 'passaggi' || mode === 'integrale' || mode === 'una_riga' || mode === 'ometti' ? mode : base.mode,
+      mode: mode === 'passaggi' || mode === 'integrale' || mode === 'una_riga' || mode === 'ometti' || mode === 'contenitore' ? mode : base.mode,
       copia: Array.isArray(t.copia) ? t.copia.filter((x): x is string => typeof x === 'string') : base.copia,
       fallbackCorpo: typeof t.fallbackCorpo === 'boolean' ? t.fallbackCorpo : base.fallbackCorpo,
       maxParole: typeof t.maxParole === 'number' && t.maxParole >= 0 ? t.maxParole : base.maxParole,

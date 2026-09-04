@@ -12,7 +12,7 @@
  */
 
 import { parseRubriche, type RubricPage, type RubricSegment } from './rubric-parser';
-import { policyForType, RUBRIC_EXCLUDED_DOC_TYPES, type RubricPolicy, type RubricTypePolicy } from './rubric-policy';
+import { policyForType, RUBRIC_EXCLUDED_DOC_TYPES, PS_MAX_PAGES, PS_MARKERS_RE, type RubricPolicy, type RubricTypePolicy } from './rubric-policy';
 
 export interface RubricDocument {
   documentId: string;
@@ -98,6 +98,28 @@ function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: nu
   return title ? `${title}: «${body}»` : `«${body}»`;
 }
 
+/** Un verbale di Pronto Soccorso: poche pagine e i marcatori tipici nel testo. */
+function looksLikePsVerbale(doc: RubricDocument): boolean {
+  if (doc.pages.length > PS_MAX_PAGES) return false;
+  const head = doc.pages.slice(0, 2).map((p) => p.ocrText).join('\n');
+  return PS_MARKERS_RE.test(head);
+}
+
+/** Policy EFFETTIVA del documento (spec Lavini 2026-09-04): un fascicolo di ricovero
+ * è un contenitore (rimando alla lettera di dimissione se agli atti, altrimenti i soli
+ * passaggi-chiave); un verbale di PS breve classificato 'cartella' o 'altro' è un PS. */
+function effectivePolicy(doc: RubricDocument, policy: RubricPolicy, hasLetteraDimissione: boolean): { tp: RubricTypePolicy; rimando: string | null } {
+  const tp = policyForType(policy, doc.documentType);
+  const psPolicy = policy.tipi.cartella_clinica ?? tp;
+  if (doc.documentType === 'altro' && looksLikePsVerbale(doc)) return { tp: { ...psPolicy, mode: 'passaggi' }, rimando: null };
+  if (tp.mode !== 'contenitore') return { tp, rimando: null };
+  if (looksLikePsVerbale(doc)) return { tp: { ...tp, mode: 'passaggi' }, rimando: null };
+  if (hasLetteraDimissione) {
+    return { tp, rimando: `Fascicolo di ricovero agli atti (${doc.pages.length} pagine): si riporta la lettera di dimissione.` };
+  }
+  return { tp: { ...tp, mode: 'passaggi', copia: ['anamnesi_prossima', 'intervento', 'diagnosi', 'dimissione', 'prognosi'] }, rimando: null };
+}
+
 export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument>, policy: RubricPolicy): RubricRenderResult {
   const seen = new Set<string>();
   const stats = { dedup: 0 };
@@ -105,12 +127,14 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
   const blocks: string[] = [];
   const certificates: RubricDocument[] = [];
   const ordered = [...documents].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+  const hasLetteraDimissione = documents.some((d) => d.documentType === 'lettera_dimissione' && d.pages.some((p) => p.ocrText.trim().length > 0));
 
   for (const doc of ordered) {
     if (RUBRIC_EXCLUDED_DOC_TYPES.has(doc.documentType ?? '')) { omitted++; continue; }
-    const tp = policyForType(policy, doc.documentType);
+    const { tp, rimando } = effectivePolicy(doc, policy, hasLetteraDimissione);
     if (tp.mode === 'ometti') { omitted++; continue; }
     if (tp.mode === 'una_riga') { certificates.push(doc); continue; }
+    if (rimando) { blocks.push(`${doc.header}\n${rimando}`); continue; }
     const segments = parseRubriche(doc.pages);
     if (segments.length === 0) { blocks.push(`${doc.header}\nDocumento senza testo leggibile: consultare l'originale agli atti.`); fallbackDocs++; continue; }
     const { chosen, fallback } = selectSegments(segments, tp);

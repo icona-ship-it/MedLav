@@ -108,3 +108,34 @@ describe('capAtSentence e policy', () => {
     expect(loadRubricPolicy(null)).toBe(DEFAULT_RUBRIC_POLICY);
   });
 });
+
+describe('spec Lavini 2026-09-04 — fascicolo contenitore, PS riclassificato', () => {
+  const pages = (n: number, text: string) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 0 ? text : `DIARIO\ndecorso regolare giorno ${i + 1}` }));
+  const fascicolo = (): RubricDocument => ({ documentId: 'fasc', documentType: 'cartella_clinica', header: '**Cartella clinica, in data 16.07.2023:**', sortDate: '2023-07-16', pages: pages(12, 'CARTELLA CLINICA\nDIAGNOSI\nFrattura del femore sinistro.\nINTERVENTO\nOsteosintesi con chiodo.') });
+  const lettera = (): RubricDocument => ({ documentId: 'let', documentType: 'lettera_dimissione', header: '**Lettera di dimissione, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'Ricoverato dal 16/07/2023 al 25/07/2023\nDIAGNOSI DI DIMISSIONE\nFrattura del femore sinistro trattata.\nTRATTAMENTO ADOTTATO\nOsteosintesi con chiodo.\nTERAPIA E COMPORTAMENTO DOMICILIARE\nEparina per 30 giorni.' }] });
+
+  it('con la lettera agli atti il fascicolo diventa una riga di rimando; la lettera porta diagnosi, trattamento e terapia', () => {
+    const out = renderRubricDocSanitaria([fascicolo(), lettera()], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Fascicolo di ricovero agli atti (12 pagine): si riporta la lettera di dimissione.');
+    expect(out.markdown).not.toContain('decorso regolare giorno');
+    expect(out.markdown).toContain('Intervento: «Osteosintesi con chiodo.»');
+    expect(out.markdown).toContain('Terapia: «Eparina per 30 giorni.»');
+    expect(out.markdown).toContain('Dimissione: «Frattura del femore sinistro trattata.»');
+  });
+
+  it('senza lettera il fascicolo cede i soli passaggi-chiave (diagnosi, intervento), mai il diario', () => {
+    const out = renderRubricDocSanitaria([fascicolo()], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Diagnosi: «Frattura del femore sinistro.»');
+    expect(out.markdown).toContain('Intervento: «Osteosintesi con chiodo.»');
+    expect(out.markdown).not.toContain('decorso regolare');
+  });
+
+  it('un verbale di PS breve classificato cartella o altro resta un PS con i suoi passaggi', () => {
+    const ps = (type: string): RubricDocument => ({ documentId: `ps-${type}`, documentType: type, header: `**PS ${type}, in data 13.09.2025:**`, sortDate: '2025-09-13', pages: [{ pageNumber: 1, ocrText: 'PRONTO SOCCORSO - Verbale di accesso\nTRIAGE\nCodice verde\nDIAGNOSI\nDistorsione della caviglia destra con edema perimalleolare laterale.\nPROGNOSI\nGiorni 10.' }] });
+    const out = renderRubricDocSanitaria([ps('cartella_clinica'), ps('altro'), lettera()], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown.match(/Diagnosi: «Distorsione della caviglia destra con edema perimalleolare laterale\.»/g)).toHaveLength(1); // il secondo è dedup
+    expect(out.markdown).toContain('Prognosi: «Giorni 10.»');
+    expect(out.markdown).not.toContain('Codice verde');
+    expect(out.markdown).not.toContain('Fascicolo di ricovero');
+  });
+});

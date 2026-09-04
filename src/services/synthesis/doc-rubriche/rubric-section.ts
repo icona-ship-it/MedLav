@@ -25,6 +25,18 @@ export interface RubricSectionEvent {
   temporal_scope?: string | null;
 }
 
+const RICOVERO_RANGE_RE = /dal\s+(\d{1,2})[./](\d{1,2})[./](\d{4})\s+al\s+(\d{1,2})[./](\d{1,2})[./](\d{4})/i;
+const DIMESSO_RE = /dimess[oa]\s+(?:il|in data)\s+(\d{1,2})[./](\d{1,2})[./](\d{4})/i;
+
+/** La lettera di dimissione sta alla data di DIMISSIONE (spec Lavini), letta dal testo. */
+export function dischargeDateFromText(text: string): string | null {
+  const range = RICOVERO_RANGE_RE.exec(text);
+  const iso = (d: string, m: string, y: string): string => `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  if (range) return iso(range[4]!, range[5]!, range[6]!);
+  const dim = DIMESSO_RE.exec(text);
+  return dim ? iso(dim[1]!, dim[2]!, dim[3]!) : null;
+}
+
 export function formatDocumentazioneSanitariaRubriche(
   docs: ReadonlyArray<RubricSectionDoc>,
   events: ReadonlyArray<RubricSectionEvent>,
@@ -41,11 +53,14 @@ export function formatDocumentazioneSanitariaRubriche(
     }));
     const dating = describeDocumentBlock(evs);
     const label = (d.documentType && d.documentType !== 'altro' ? DOCUMENT_TYPE_BLOCK_LABELS[d.documentType] : undefined) ?? 'Documento sanitario';
+    const discharge = d.documentType === 'lettera_dimissione'
+      ? dischargeDateFromText(d.pages.slice(0, 2).map((p) => p.ocrText ?? '').join('\n'))
+      : null;
     return {
       documentId: d.documentId,
       documentType: d.documentType,
       header: buildBlockHeader(label, dating.facility, dating.dateLabel),
-      sortDate: dating.sortIso,
+      sortDate: discharge ?? dating.sortIso,
       // Stessa pulizia dell'integrale (tabelle → testo, marker e immagini via).
       pages: d.pages.map((p) => ({ pageNumber: p.pageNumber, ocrText: sanitizeVerbatimOcr(p.ocrText ?? '') })),
     };
