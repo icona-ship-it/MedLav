@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { formatBuildLabel } from '@/lib/build-info';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
@@ -53,6 +54,9 @@ export default async function DashboardLayout({
           <div className="mx-auto max-w-7xl p-4 sm:p-6">
             {children}
           </div>
+          <footer className="mx-auto max-w-7xl px-4 pb-4 text-[11px] text-muted-foreground sm:px-6" aria-label="Versione dell'app">
+            LegMed · versione {formatBuildLabel()}
+          </footer>
         </main>
       </div>
       {showOnboarding && <OnboardingDialog />}

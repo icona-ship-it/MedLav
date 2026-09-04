@@ -11,6 +11,7 @@ import type { GenerationProgress } from './report-step';
 import { AnonymizeStep } from './anonymize-step';
 import { ExpenseTable } from './expense-table';
 import { WizardStepBar } from './wizard-step-bar';
+import { OutdatedAnalysisBanner } from './outdated-analysis-banner';
 import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
 } from './types';
@@ -327,6 +328,13 @@ export function CaseDetailClient({
         report={report}
         hasProcessingDocs={hasProcessingDocs}
         hasResults={hasResults}
+      />
+
+      {/* Analisi di una build precedente: il medico deve saperlo PRIMA di leggere i dati */}
+      <OutdatedAnalysisBanner
+        processingStage={processingStage}
+        processingStartedAt={processingStartedAt}
+        onGoToProcessing={() => handleSetStep(2)}
       />
 
       {/* Wizard Step Bar */}

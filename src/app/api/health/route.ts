@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BUILD_SHA, BUILD_TIME } from '@/lib/build-info';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
@@ -55,6 +56,8 @@ export async function GET(request: NextRequest) {
     status: allOk ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version ?? '0.1.0',
+    // Versione visibile: quale build risponde (sha corto + data di build).
+    build: { sha: BUILD_SHA?.slice(0, 7) ?? null, builtAt: BUILD_TIME ?? null },
     latencyMs: totalLatencyMs,
     checks,
   }, { status: allOk ? 200 : 503 });
