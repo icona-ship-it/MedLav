@@ -139,3 +139,27 @@ describe('spec Lavini 2026-09-04 — fascicolo contenitore, PS riclassificato', 
     expect(out.markdown).not.toContain('Fascicolo di ricovero');
   });
 });
+
+describe('pulizia del depositabile (panel giro 3)', () => {
+  it('righe amministrative, caselle e marker tabella/immagine non entrano nelle «...»; il tetto di blocco non spezza una citazione', () => {
+    const text = 'DIAGNOSI\nFrattura composta del radio destro.\nCodice Fiscale: DMPMRA70A01H501X\nTel. 045 000000 - e-mail ps@cittademo.it\n[tbl-1.html] ![img-0.jpeg](img-0.jpeg)\n☐ dimissione ☑ ricovero\nPROGNOSI\nGiorni 30.\nCONSULENZA ORTOPEDICA\nPolso destro: frattura composta, si consiglia gesso per 30 giorni e controllo a 7 giorni.';
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ps', documentType: 'cartella_clinica', text: `PRONTO SOCCORSO\n${text}` })], loadRubricPolicy({ tipi: { cartella_clinica: { maxParole: 20 } } }));
+    expect(out.markdown).not.toContain('Codice Fiscale');
+    expect(out.markdown).not.toContain('Tel.');
+    expect(out.markdown).not.toContain('[tbl-');
+    expect(out.markdown).not.toContain('![img');
+    expect(out.markdown).not.toContain('☐');
+    expect(out.markdown).toContain('Diagnosi: «Frattura composta del radio destro.»');
+    const opens = (out.markdown.match(/«/g) ?? []).length; const closes = (out.markdown.match(/»/g) ?? []).length;
+    expect(opens).toBe(closes);
+    expect(out.markdown).toContain('[...]');
+  });
+  it('fascicolo contenitore: rimando + referti d\'esame eseguiti in degenza', () => {
+    const fasc: RubricDocument = { documentId: 'f', documentType: 'cartella_clinica', header: '**Cartella clinica, dal 16.07.2023 al 25.07.2023:**', sortDate: '2023-07-16', pages: Array.from({ length: 12 }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 3 ? 'RX femore sinistro\nFrattura pertrocanterica composta; mezzi di sintesi in sede.' : `DIARIO\ngiorno ${i + 1} decorso regolare` })) };
+    const let2: RubricDocument = { documentId: 'l', documentType: 'lettera_dimissione', header: '**Lettera di dimissione, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura pertrocanterica trattata.' }] };
+    const out = renderRubricDocSanitaria([fasc, let2], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Referti eseguiti in degenza:');
+    expect(out.markdown).toContain('«RX femore sinistro: Frattura pertrocanterica composta; mezzi di sintesi in sede.»');
+    expect(out.markdown).not.toContain('decorso regolare');
+  });
+});

@@ -39,8 +39,34 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
   anamnesi: 'Anamnesi', anamnesi_remota: 'Anamnesi remota', anamnesi_prossima: 'Anamnesi prossima',
   esame_obiettivo: 'Esame obiettivo', diagnosi: 'Diagnosi', conclusioni: 'Conclusioni', prognosi: 'Prognosi',
   terapia: 'Terapia', indicazioni: 'Indicazioni', intervento: 'Intervento', diario: 'Decorso', dimissione: 'Dimissione',
-  referto: 'Referto', corpo: '', preambolo: '',
+  referto: 'Referto', consulenza: 'Consulenza', corpo: '', preambolo: '',
 };
+
+/** Righe amministrative che l'OCR mette dentro le rubriche cliniche (anagrafica, recapiti,
+ * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
+const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
+
+function isAdminNoiseLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  return ADMIN_NOISE_RE.test(t) && !/(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i.test(t);
+}
+
+function stripAdminNoise(text: string): string {
+  return text.split('\n').filter((l) => !isAdminNoiseLine(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Tetto di blocco per RIGHE intere (mai a metà di una «...»): oltre, resta "[...]" fuori dalle virgolette. */
+function capBlockLines(lines: ReadonlyArray<string>, maxWords: number): string[] {
+  if (maxWords <= 0) return [...lines];
+  const out: string[] = []; let used = 0;
+  for (const l of lines) {
+    const w = countWords(l);
+    if (out.length > 0 && used + w > maxWords) { out.push('[...]'); break; }
+    out.push(l); used += w;
+  }
+  return out;
+}
 
 function normalizeForDedup(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -94,7 +120,9 @@ function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: nu
   if (key.length >= 40 && seen.has(key)) { stats.dedup++; return null; }
   if (key.length >= 40) seen.add(key);
   const title = RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '');
-  const body = capAtSentence(seg.text.replace(/\n{2,}/g, '\n').trim(), maxWords);
+  const cleaned = stripAdminNoise(seg.text);
+  if (!cleaned) return null;
+  const body = capAtSentence(cleaned.replace(/\n{2,}/g, '\n').trim(), maxWords);
   return title ? `${title}: «${body}»` : `«${body}»`;
 }
 
@@ -134,7 +162,16 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     const { tp, rimando } = effectivePolicy(doc, policy, hasLetteraDimissione);
     if (tp.mode === 'ometti') { omitted++; continue; }
     if (tp.mode === 'una_riga') { certificates.push(doc); continue; }
-    if (rimando) { blocks.push(`${doc.header}\n${rimando}`); continue; }
+    if (rimando) {
+      // Fascicolo contenitore: resta il rimando + i referti d'esame eseguiti in
+      // degenza (RX/TC/ECO dentro la cartella), che il gold riporta a parte.
+      const embedded = parseRubriche(doc.pages)
+        .filter((s) => s.label === 'referto' && s.rawLabel && /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)\b/i.test(s.rawLabel))
+        .map((s) => renderSegment(s, seen, stats, Math.ceil(tp.maxParole / 2)))
+        .filter((l): l is string => l !== null);
+      blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
+      continue;
+    }
     const segments = parseRubriche(doc.pages);
     if (segments.length === 0) { blocks.push(`${doc.header}\nDocumento senza testo leggibile: consultare l'originale agli atti.`); fallbackDocs++; continue; }
     const { chosen, fallback } = selectSegments(segments, tp);
@@ -147,7 +184,7 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto già riprodotto nel documento precedente.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
       continue;
     }
-    blocks.push(`${doc.header}\n${capAtSentence(lines.join('\n'), tp.maxParole)}`);
+    blocks.push(`${doc.header}\n${capBlockLines(lines, tp.maxParole).join('\n')}`);
   }
 
   if (certificates.length > 0) {

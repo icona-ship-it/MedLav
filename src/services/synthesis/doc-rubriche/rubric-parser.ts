@@ -36,7 +36,8 @@ const VOCABULARY: ReadonlyArray<{ key: string; re: RegExp; keepLabel?: boolean }
   { key: 'anamnesi', re: /^anamnesi\b.*$/ },
   { key: 'intervento', re: /^(intervento( chirurgico| eseguito)?|descrizione (dell'?)?intervento|verbale operatorio|atto operatorio|tecnica operatoria|procedura( eseguita)?|trattamento adottato|(1|2|3|i|ii|iii)[°º]? tempo chirurgico)$/ },
   { key: 'diario', re: /^(diario( clinico| medico| infermieristico)?|decorso( clinico| post ?operatorio| della degenza)?)$/ },
-  { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|risposta|esami visionati|visionat[io]|esiti di [a-z ]+)$/ },
+  { key: 'consulenza', re: /^(consulenza( [a-z]+){0,3}|risposta( del(lo)? specialista| consulente)?|parere( specialistico)?)$/ },
+  { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|esami visionati|visionat[io]|esiti di [a-z ]+)$/ },
   // Titoli di esame dentro una cartella ("RX gomito sn", "ECO ginocchio dx"): aprono un referto interno.
   { key: 'referto', re: /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)( [a-z'.-]+){0,4}$/, keepLabel: true },
   { key: 'terapia', re: /^(terapia( consigliata| domiciliare| in atto| prescritta| farmacologica| medica| effettuata| praticata)?( in corso)?|terapia e comportamento domiciliare|comportamento domiciliare|prescrizion[ei]|farmaci( ad uso abituale| abituali)?|trattamento)$/ },
@@ -82,6 +83,8 @@ export function cleanOcrLine(line: string): string {
     .replace(/^\s*#{1,6}\s+/, '')
     .replace(/\*\*|__/g, '')
     .replace(/(^|\s)\*(?=\S)|(?<=\S)\*(?=\s|$)/g, '$1')
+    .replace(/^.*[☐☑☒■□▪].*$/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)|\[(?:tbl|img|table)[-_][^\]]*\](?:\([^)]*\))?/gi, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
   // Riga di tabella markdown: "| a | b |" → "a | b"; separatori "|---|" → vuoto.
@@ -99,7 +102,7 @@ interface HeadingHit { key: string; rawLabel: string; inlineText: string; }
 
 /** I titoli di esame ("RX polso dx: …") sono testo del medico: restano nel corpo. */
 function withLabelIfKept(hit: { key: string; keepLabel: boolean }, rawLabel: string, inlineText: string): HeadingHit {
-  const text = hit.keepLabel ? (inlineText ? `${rawLabel}: ${inlineText}` : rawLabel) : inlineText;
+  const text = hit.keepLabel ? (inlineText ? `${rawLabel}: ${inlineText}` : `${rawLabel}:`) : inlineText;
   return { key: hit.key, rawLabel, inlineText: text };
 }
 
@@ -122,7 +125,11 @@ export function parseRubriche(pages: ReadonlyArray<RubricPage>): RubricSegment[]
 
   const flush = (): void => {
     if (!current) return;
-    const text = current.lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    // Titolo d'esame senza testo inline ("RX polso dx:") + prima riga di contenuto → una riga.
+    const lines = current.lines.length > 1 && /:$/.test(current.lines[0] ?? '') && current.lines[1]
+      ? [`${current.lines[0]} ${current.lines[1]}`, ...current.lines.slice(2)]
+      : current.lines;
+    const text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     if (text.length > 0) {
       segments.push({ label: current.label, rawLabel: current.rawLabel, text, pageNumber: current.pageNumber, order: segments.length });
     }

@@ -15,7 +15,7 @@ describe('formatDocumentazioneSanitariaRubriche — dal DB al blocco', () => {
     const out = formatDocumentazioneSanitariaRubriche(docs, events);
     expect(out.blocks).toBe(2);
     expect(out.markdown.indexOf('Referto di esame strumentale')).toBeLessThan(out.markdown.indexOf('Lettera di dimissione'));
-    expect(out.markdown).toContain('**Lettera di dimissione, Ospedale Civile di Cittàdemo, in data 16.07.2023:**');
+    expect(out.markdown).toContain('**Lettera di dimissione, Ospedale Civile di Cittàdemo, dal 16.07.2023 al 25.07.2023:**');
     expect(out.markdown).toContain('Intervento: «Osteosintesi.»');
   });
   it('dischargeDateFromText legge "dal … al …" e "dimesso il …"', () => {
