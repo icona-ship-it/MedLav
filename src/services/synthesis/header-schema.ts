@@ -246,3 +246,78 @@ export function sanitizeHeaderData(data: HeaderData): HeaderData {
       : null,
   };
 }
+
+// ── Data dell'evento indice: solo se attestata (gate gold 2026-09-04, giro 1) ──
+// Il modello ha intestato un caso con "intervento chirurgico del 14/11/2014" al
+// posto del sinistro del 13.11.2024: "2014" non esisteva in nessun documento.
+// Una data dell'intestazione deve trovarsi tra le date del caso (eventi o
+// metadati del perito), con tolleranza di 2 giorni (il sinistro precede di poco
+// l'accesso in PS). Altrimenti torna placeholder: il perito la conosce.
+
+const ATTESTED_TOLERANCE_DAYS = 2;
+
+function toDayNumber(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const v = value.trim();
+  let y: number; let m: number; let d: number;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  const dmy = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(v);
+  if (iso) { y = Number(iso[1]); m = Number(iso[2]); d = Number(iso[3]); }
+  else if (dmy) { d = Number(dmy[1]); m = Number(dmy[2]); y = Number(dmy[3]); }
+  else return null;
+  if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
+}
+
+/** Giorni (numero) attestati dal caso: date degli eventi (mai la sentinella) + data sinistro del perito. */
+export function collectAttestedDays(
+  events: ReadonlyArray<{ eventDate?: string | null }>,
+  periziaMetadata?: { dataSinistro?: string | null } | null,
+): Set<number> {
+  const days = new Set<number>();
+  for (const e of events) {
+    if (!e.eventDate || e.eventDate.startsWith('1900-01-01')) continue;
+    const n = toDayNumber(e.eventDate);
+    if (n !== null) days.add(n);
+  }
+  const sinistro = toDayNumber(periziaMetadata?.dataSinistro ?? null);
+  if (sinistro !== null) days.add(sinistro);
+  return days;
+}
+
+/** Annulla `oggetto.dataEvento` se non è a ±2 giorni da una data attestata. Puro. */
+export function discardUnattestedEventDate(data: HeaderData, attestedDays: ReadonlySet<number>): HeaderData {
+  const n = toDayNumber(data.oggetto.dataEvento);
+  if (n === null) return data;
+  if (attestedDays.size === 0) return data;
+  let attested = false;
+  for (const day of attestedDays) {
+    if (Math.abs(day - n) <= ATTESTED_TOLERANCE_DAYS) { attested = true; break; }
+  }
+  return attested ? data : { ...data, oggetto: { ...data.oggetto, dataEvento: null } };
+}
+
+/** Intestazione tutta a placeholder (fallback quando il JSON del modello non passa la validazione). */
+export function emptyHeaderData(): HeaderData {
+  return {
+    perito: null,
+    paziente: {
+      nome: null,
+      dataNascita: null,
+      luogoNascita: null,
+      residenza: null,
+      codiceFiscale: null,
+      telefono: null,
+    },
+    oggetto: {
+      eventoIndice: null,
+      dataEvento: null,
+      lesione: null,
+      struttura: null,
+      ambito: null,
+    },
+    dataVisitaMedicoLegale: null,
+    soggettoRichiedente: null,
+    giudiziale: null,
+  };
+}

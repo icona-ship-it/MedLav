@@ -41,6 +41,9 @@ import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tab
 import {
   HEADER_JSON_SCHEMA_DESCRIPTION,
   parseHeaderData,
+  collectAttestedDays,
+  discardUnattestedEventDate,
+  emptyHeaderData,
   type HeaderData,
 } from './header-schema';
 import { renderHeaderMarkdown, genderFromCodiceFiscale } from './header-template';
@@ -50,6 +53,7 @@ import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { scrubContactDetails } from './contact-scrub';
+import { stripPromptArtifacts, stripItalicMetaParagraphs } from './prompt-artifacts';
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -507,6 +511,12 @@ export async function generateSingleSection(params: {
   // "[dato non risultante…]" DENTRO una citazione verbatim «...», rompendone la fedeltà.
   // Toglili dall'interno delle «...» (la cautela resta valida FUORI dal virgolettato).
   finalContent = stripGuardMarkersInsideQuotes(finalContent);
+  // Artefatti del prompt ricopiati nel testo (tag di ambito, sigle-fonte,
+  // parentesi di pseudo-verifica) — gate gold 2026-09-04, giro 1.
+  finalContent = stripPromptArtifacts(finalContent);
+  if (spec.id === 'documentazione_sanitaria') {
+    finalContent = stripItalicMetaParagraphs(finalContent);
+  }
   // Recapiti (telefono/email) di terzi trascritti dalla cartella: mai nel
   // depositabile (GDPR, gate gold 2026-09-04). Solo doc-sanitaria: le altre
   // sezioni non riproducono testo integrale dei documenti.
@@ -1211,7 +1221,11 @@ async function generateHeaderSection(params: {
     logger.warn('section-generator', `Header JSON parse/validation failed for ${spec.id}: ${parsed.error}. Falling back to empty header.`);
     headerData = emptyHeaderData();
   } else {
-    headerData = parsed.data;
+    // Data dell'evento indice solo se attestata dal caso (gate gold 2026-09-04).
+    headerData = discardUnattestedEventDate(
+      parsed.data,
+      collectAttestedDays(synthesisParams.events, synthesisParams.periziaMetadata),
+    );
   }
 
   const markdown = renderHeaderMarkdown(headerData);
@@ -1274,26 +1288,3 @@ function buildHeaderUserPrompt(params: SynthesisParams): string {
   return parts.join('\n');
 }
 
-function emptyHeaderData(): HeaderData {
-  return {
-    perito: null,
-    paziente: {
-      nome: null,
-      dataNascita: null,
-      luogoNascita: null,
-      residenza: null,
-      codiceFiscale: null,
-      telefono: null,
-    },
-    oggetto: {
-      eventoIndice: null,
-      dataEvento: null,
-      lesione: null,
-      struttura: null,
-      ambito: null,
-    },
-    dataVisitaMedicoLegale: null,
-    soggettoRichiedente: null,
-    giudiziale: null,
-  };
-}

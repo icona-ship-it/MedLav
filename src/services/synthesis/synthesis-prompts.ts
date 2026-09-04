@@ -267,7 +267,7 @@ export function formatEventsByDocumentForPrompt(
           : '';
       return `   • ${txt}${scope}${diag}`;
     }).join('\n');
-    return `DOCUMENTO ${i + 1}\nINTESTAZIONE-BLOCCO (copiala IDENTICA come PRIMA RIGA del blocco, in grassetto, senza anteporre la data né aggiungere un titolo dell'evento):\n${canonicalHeader}\nCONTENUTO-FONTE (cita da qui, verbatim tra «...»; raccordo minimo, MAI parafrasi lunga):\n${content}`;
+    return `DOCUMENTO ${i + 1}\nINTESTAZIONE-BLOCCO (copiala IDENTICA come PRIMA RIGA del blocco, in grassetto, senza anteporre la data né aggiungere un titolo dell'evento):\n${canonicalHeader}\nCONTENUTO-FONTE (cita da qui, verbatim tra «...»; raccordo minimo, MAI parafrasi lunga; i tag tra parentesi quadre come [riferito in anamnesi] sono istruzioni per te, MAI da ricopiare nel testo):\n${content}`;
   }).join('\n\n');
 }
 

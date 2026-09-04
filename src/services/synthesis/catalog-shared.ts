@@ -70,7 +70,7 @@ export const EXPENSE_EVENT_TYPES = new Set([
 
 // ── Shared prompt fragments ─────────────────────────────────────────
 
-export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (es. «come da referto ortopedico del 13.11.2024»). NON racchiudere le citazioni tra parentesi quadre: né riferimenti numerati agli eventi né del tipo «tipo, data».';
+export const NO_EVN_RULE = 'Cita i documenti IN PROSA, per tipo, autore e data (es. come da referto ortopedico del 13.11.2024 — SENZA virgolette: le «...» sono riservate alle parole del medico, mai ai rinvii alla fonte). NON racchiudere le citazioni tra parentesi quadre: né riferimenti numerati agli eventi né del tipo [tipo, data]. MAI riportare nel testo le sigle interne delle fonti (A/B/C/D, "FONTE:") né tag tra parentesi quadre del materiale fornito.';
 
 /**
  * Registro anagrafico (audit 2026-07-16): "la sig.ra" per una dodicenne, "Il
