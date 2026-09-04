@@ -1249,7 +1249,9 @@ export const processCase = inngest.createFunction(
           const coverage = checkSelectiveCoverage(combinedContent, synthesisParams.events);
           coverageMissing = coverage.missing.length;
           coverageT1 = coverage.t1Total;
-          if (coverageMissing > 0) {
+          // RC (trascrizione depositabile): NIENTE banner nel testo — il segnale
+          // "possibile omissione" vive nel pannello "Da controllare" (warning sotto).
+          if (coverageMissing > 0 && !spec.excludeLabTests) {
             finalContent = `${buildOmissionBanner(coverageMissing)}\n\n${combinedContent}`;
           }
         }
@@ -1268,7 +1270,7 @@ export const processCase = inngest.createFunction(
         pipelineWarnings.push({
           step: 'synthesis',
           severity: 'warning',
-          message: `Documentazione sanitaria selettiva: ${combineResult.coverageMissing} ${combineResult.coverageMissing === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${combineResult.coverageT1} verificati). Banner di verifica inserito nella sezione.`,
+          message: `Documentazione sanitaria: ${combineResult.coverageMissing} ${combineResult.coverageMissing === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${combineResult.coverageT1} verificati). ${spec.excludeLabTests ? 'Confrontare la trascrizione con i documenti.' : 'Banner di verifica inserito nella sezione.'}`,
           failedCount: combineResult.coverageMissing,
           totalCount: combineResult.coverageT1,
         });
@@ -1461,14 +1463,17 @@ export const processCase = inngest.createFunction(
       // stesso check di completezza di prima.
       const coverage = checkSelectiveCoverage(docSanSection.content, synthesisParams.events);
       if (coverage.missing.length > 0) {
-        completedSections.set('documentazione_sanitaria', {
-          ...docSanSection,
-          content: `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
-        });
+        const isRcTranscription = sectionPlan.some((s) => s.id === 'documentazione_sanitaria' && s.excludeLabTests);
+        if (!isRcTranscription) {
+          completedSections.set('documentazione_sanitaria', {
+            ...docSanSection,
+            content: `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
+          });
+        }
         pipelineWarnings.push({
           step: 'synthesis',
           severity: 'warning',
-          message: `Documentazione sanitaria selettiva: ${coverage.missing.length} ${coverage.missing.length === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${coverage.t1Total} verificati). Banner di verifica inserito nella sezione.`,
+          message: `Documentazione sanitaria: ${coverage.missing.length} ${coverage.missing.length === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${coverage.t1Total} verificati). ${isRcTranscription ? 'Confrontare la trascrizione con i documenti.' : 'Banner di verifica inserito nella sezione.'}`,
           failedCount: coverage.missing.length,
           totalCount: coverage.t1Total,
         });

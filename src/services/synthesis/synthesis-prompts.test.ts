@@ -433,3 +433,14 @@ describe('temporalScope nei prompt di sintesi (giro avversariale 2026-09-04)', (
     expect(out).toContain('[programmato, non eseguito nel documento]');
   });
 });
+
+describe('formatEventsByDocumentForPrompt — suggerimenti [Diagnosi] disattivabili (gate gold 2026-09-04)', () => {
+  it('con includeDiagnosisHints:false il CONTENUTO-FONTE non contiene "[Diagnosi:" (il LLM li copiava dentro le «...»)', () => {
+    const events = [makeEvent({ orderNumber: 1, documentId: 'd1', diagnosis: 'Frattura del radio', sourceText: 'frattura composta del radio' })];
+    const withHints = formatEventsByDocumentForPrompt(events, undefined);
+    const withoutHints = formatEventsByDocumentForPrompt(events, undefined, { includeDiagnosisHints: false });
+    expect(withHints).toContain('[Diagnosi: Frattura del radio]');
+    expect(withoutHints).not.toContain('[Diagnosi:');
+    expect(withoutHints).toContain('frattura composta del radio');
+  });
+});

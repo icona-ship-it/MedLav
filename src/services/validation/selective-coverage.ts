@@ -110,6 +110,8 @@ export function checkSelectiveCoverage(
  * selective mode is the DEFAULT since the doctors' decision of 2026-06-12).
  */
 export function buildOmissionBanner(missingCount: number): string {
-  const plural = missingCount === 1 ? 'un evento clinicamente rilevante non risulta' : `${missingCount} eventi clinicamente rilevanti non risultano`;
-  return `⚠️ *[Possibile omissione: ${plural} riportati nel testo selettivo. Verificare la documentazione completa prima del deposito.]*`;
+  const plural = missingCount === 1
+    ? 'un evento clinicamente rilevante non risulta riportato'
+    : `${missingCount} eventi clinicamente rilevanti non risultano riportati`;
+  return `⚠️ *[Possibile omissione: ${plural} nel testo selettivo. Verificare la documentazione completa prima del deposito.]*`;
 }

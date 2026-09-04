@@ -97,7 +97,7 @@ Se un dato non è chiaramente attestato negli eventi forniti, NON scriverlo.`;
 
 export const REGISTRO_ANAGRAFICO_RULE = `REGISTRO ANAGRAFICO (vincolante):
 - Rispetta il GENERE del periziando in ogni forma ("la paziente", "la perizianda", participi accordati): MAI il maschile generico per una donna.
-- Se il periziando è MINORENNE alla data dei fatti (verificalo dalla data di nascita), MAI "sig./sig.ra": scrivi "il minore"/"la minore".
+- "il minore"/"la minore" SOLO se una data di nascita ESPLICITA nei dati prova che il periziando aveva meno di 18 anni alla data dei fatti. Per un adulto, o se la data di nascita non è nei dati, usa SEMPRE "sig./sig.ra": chiamare "la minore" una persona adulta o anziana è un errore grave di fedeltà.
 - VIETATE le parentesi editoriali o di pseudo-verifica nel testo ("dato parzialmente riscontrato", "dato riferito al periziando", "non esplicitamente identificato", "confermato nella…"): la verifica di fedeltà avviene a valle, fuori dall'atto. Se un dato non è attribuibile con certezza, semplicemente NON scriverlo.`;
 
 /**

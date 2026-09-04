@@ -382,3 +382,32 @@ describe('planRcDocSanitariaBatches — per-documento con cap sul numero di fine
     expect(planRcDocSanitariaBatches([], 50).batches).toEqual([]);
   });
 });
+
+describe('planDocSanitariaEventBatchesByDocument — ordine dei documenti dai soli eventi correnti (gate gold 2026-09-04)', () => {
+  it('un documento del 2025 con una menzione anamnestica del 2002 NON va in testa alla trascrizione', () => {
+    const events: ConsolidatedEvent[] = [
+      makeEvent({ orderNumber: 1, eventDate: '2002-01-01', documentId: 'doc-2025', title: 'pregressa colecistectomia', temporalScope: 'retrospettivo' }),
+      makeEvent({ orderNumber: 2, eventDate: '2024-11-13', documentId: 'doc-ps', title: 'accesso PS', temporalScope: 'corrente' }),
+      makeEvent({ orderNumber: 3, eventDate: '2025-08-13', documentId: 'doc-2025', title: 'visita', temporalScope: 'corrente' }),
+      makeEvent({ orderNumber: 4, eventDate: '2026-03-01', documentId: 'doc-2026', title: 'controllo', temporalScope: 'corrente' }),
+    ];
+    const [win] = planDocSanitariaEventBatchesByDocument(events, 100);
+    expect(win.docIds).toEqual(['doc-ps', 'doc-2025', 'doc-2026']);
+    // gli eventi del documento restano insieme (mai spezzato) e la menzione resta nel suo documento
+    expect(win.events.map((e) => e.orderNumber)).toEqual([2, 1, 3, 4]);
+  });
+
+  it('senza eventi correnti (solo menzioni) il documento è datato dalla prima menzione, e l\'ordine legacy (senza scope) è invariato', () => {
+    const legacy: ConsolidatedEvent[] = [
+      makeEvent({ orderNumber: 1, eventDate: '2024-01-01', documentId: 'a' }),
+      makeEvent({ orderNumber: 2, eventDate: '2024-02-01', documentId: 'b' }),
+      makeEvent({ orderNumber: 3, eventDate: '2024-03-01', documentId: 'a' }),
+    ];
+    expect(planDocSanitariaEventBatchesByDocument(legacy, 100)[0].docIds).toEqual(['a', 'b']);
+    const onlyMentions: ConsolidatedEvent[] = [
+      makeEvent({ orderNumber: 1, eventDate: '2020-01-01', documentId: 'm', temporalScope: 'retrospettivo' }),
+      makeEvent({ orderNumber: 2, eventDate: '2024-02-01', documentId: 'b', temporalScope: 'corrente' }),
+    ];
+    expect(planDocSanitariaEventBatchesByDocument(onlyMentions, 100)[0].docIds).toEqual(['m', 'b']);
+  });
+});

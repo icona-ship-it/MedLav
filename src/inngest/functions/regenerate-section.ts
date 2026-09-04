@@ -267,6 +267,7 @@ export const regenerateSectionJob = inngest.createFunction(
         // Fedeltà citazioni: valorizzato solo quando la doc-sanitaria selettiva
         // viene davvero rigenerata — guida il refresh del warning in finalize.
         let quoteCheck: { ungroundedQuotes: string[]; quoteTotal: number } | undefined;
+        let coverageCheck: { missing: number; total: number } | undefined;
         const updatedSynthesis = await regenerateSection({
           sectionId: target.sectionId,
           currentSynthesis: currentReport.synthesis as string,
@@ -286,6 +287,7 @@ export const regenerateSectionJob = inngest.createFunction(
           elaborated: target.elaborated,
           selective: target.selective,
           onQuoteCheck: (info) => { quoteCheck = info; },
+          onCoverageCheck: (info) => { coverageCheck = info; },
         });
 
         // No-op (es. doc-sanitaria in variante AI rigenerata in modo generico):
@@ -307,7 +309,7 @@ export const regenerateSectionJob = inngest.createFunction(
           imageAnalysis,
           auditExtra: { batchId, async: true },
         });
-        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version, quoteCheck };
+        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version, quoteCheck, coverageCheck };
       });
       outcomes.push(result);
     }
@@ -321,12 +323,29 @@ export const regenerateSectionJob = inngest.createFunction(
         (o): o is typeof o & { quoteCheck: { ungroundedQuotes: string[]; quoteTotal: number } } =>
           'quoteCheck' in o && o.quoteCheck !== undefined,
       )?.quoteCheck;
+      const freshCoverage = outcomes.find(
+        (o): o is typeof o & { coverageCheck: { missing: number; total: number } } =>
+          'coverageCheck' in o && o.coverageCheck !== undefined,
+      )?.coverageCheck;
       if (freshQuoteCheck) {
         const admin = createAdminClient();
         const { data: caseRow } = await admin.from('cases').select('perizia_metadata').eq('id', caseId).single();
         const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
         const prev = Array.isArray(meta.pipelineWarnings) ? meta.pipelineWarnings as Array<Record<string, unknown>> : [];
-        const kept = prev.filter((w) => w?.step !== 'quote-verification');
+        // Rete anti-omissione: la voce riflette l'ULTIMA rigenerazione (nella perizia
+        // RC il banner non entra nel testo: il pannello è l'unico segnale, gate gold 2026-09-04).
+        const isCoverageWarning = (w: Record<string, unknown>): boolean =>
+          w?.step === 'synthesis' && typeof w?.message === 'string' && (w.message as string).startsWith('Documentazione sanitaria');
+        const keptBase = prev.filter((w) => w?.step !== 'quote-verification' && !(freshCoverage && isCoverageWarning(w)));
+        const kept = freshCoverage && freshCoverage.missing > 0
+          ? [...keptBase, {
+              step: 'synthesis',
+              severity: 'warning',
+              message: `Documentazione sanitaria: ${freshCoverage.missing} ${freshCoverage.missing === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${freshCoverage.total} verificati). Confrontare la trascrizione con i documenti.`,
+              failedCount: freshCoverage.missing,
+              totalCount: freshCoverage.total,
+            }]
+          : keptBase;
         const n = freshQuoteCheck.ungroundedQuotes.length;
         const next = n > 0
           ? [...kept, {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
-import { checkSelectiveCoverage, stripAttiIndex } from './selective-coverage';
+import { checkSelectiveCoverage, stripAttiIndex, buildOmissionBanner } from './selective-coverage';
 import { buildAttiIndex } from '../synthesis/section-generator';
 
 function ev(partial: Partial<ConsolidatedEvent>): ConsolidatedEvent {
@@ -166,5 +166,12 @@ describe('checkSelectiveCoverage — lab T1 load-bearing NON soppresso (fix pane
     const res = checkSelectiveCoverage('Narrazione senza la data.', events);
     expect(res.t1Total).toBe(1);
     expect(res.missing).toHaveLength(1);
+  });
+});
+
+describe('buildOmissionBanner — grammatica (gate gold 2026-09-04)', () => {
+  it('accorda singolare e plurale', () => {
+    expect(buildOmissionBanner(1)).toContain('un evento clinicamente rilevante non risulta riportato');
+    expect(buildOmissionBanner(3)).toContain('3 eventi clinicamente rilevanti non risultano riportati');
   });
 });

@@ -49,6 +49,8 @@ interface RegenerateSectionParams {
    * vuoto) delle «...» senza riscontro esatto nell'OCR — il chiamante aggiorna
    * il warning quote-verification in perizia_metadata (mai stantio). */
   onQuoteCheck?: (info: { ungroundedQuotes: string[]; quoteTotal: number }) => void;
+  /** Rete anti-omissione della doc-sanitaria: eventi T1 non riscontrati / verificati. */
+  onCoverageCheck?: (info: { missing: number; total: number }) => void;
   /** On-demand "selective (AI)" variant of documentazione_sanitaria: a
    * chronological narrative that quotes significant findings verbatim and
    * paraphrases routine content. Verbatim quotes are hard-verified against the
@@ -215,9 +217,12 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
     });
 
     const coverage = checkSelectiveCoverage(finalContent, events);
-    if (coverage.missing.length > 0) {
+    // RC (trascrizione depositabile): niente banner nel testo (gate gold 2026-09-04);
+    // il segnale resta nel log e nel callback per il pannello "Da controllare".
+    if (coverage.missing.length > 0 && !spec.excludeLabTests) {
       finalContent = `${buildOmissionBanner(coverage.missing.length)}\n\n${finalContent}`;
     }
+    params.onCoverageCheck?.({ missing: coverage.missing.length, total: coverage.t1Total });
 
     if (checked.ungroundedCount > 0 || checked.nonGuillemetQuotesDetected || coverage.missing.length > 0) {
       logger.warn('section-regenerator', 'Selective doc-sanitaria: review flags raised', {

@@ -185,6 +185,7 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
 export function formatEventsByDocumentForPrompt(
   events: ConsolidatedEvent[],
   docsMeta?: ReadonlyArray<DocBlockMeta>,
+  opts: { includeDiagnosisHints?: boolean } = {},
 ): string {
   const byDoc = new Map<string, ConsolidatedEvent[]>();
   for (const e of events) {
@@ -257,7 +258,10 @@ export function formatEventsByDocumentForPrompt(
       // quando usata, è capata a ~300 char su confine di parola.
       const src = e.sourceText?.trim();
       const txt = src || capText(e.description?.trim() || e.title || '', 300);
-      const diag = e.diagnosis ? `\n     [Diagnosi: ${e.diagnosis}]` : '';
+      // [Diagnosi: …] è un riassunto ESTRATTO, non testo del medico: nella
+      // trascrizione RC il LLM lo copiava come riga "Diagnosi: …" dentro le
+      // «...» (gate gold 2026-09-04, caso C: 32 righe). Disattivabile dal chiamante.
+      const diag = e.diagnosis && (opts.includeDiagnosisHints ?? true) ? `\n     [Diagnosi: ${e.diagnosis}]` : '';
       const scope = e.temporalScope === 'retrospettivo' ? ' [riferito in anamnesi]'
         : e.temporalScope === 'programmato' ? ' [programmato, non eseguito nel documento]'
           : '';

@@ -115,6 +115,13 @@ export interface GeneratedSection {
   /** Totale citazioni «...» esaminate dal verificatore (per il rapporto N/tot). */
   quoteTotal?: number;
   /**
+   * Doc-sanitaria selettiva/trascrizione: eventi T1 NON riscontrati nel testo
+   * (rete anti-omissione) e totale verificati. Nella perizia RC il segnale va
+   * al pannello "Da controllare", non nel testo depositabile (gate gold 2026-09-04).
+   */
+  coverageMissing?: number;
+  coverageT1?: number;
+  /**
    * Doc-sanitaria: citazioni AGGANCIATE alla fonte (quote snapping) — riscritte
    * deterministicamente col testo esatto dell'OCR perché il modello le aveva
    * ricomposte con piccole divergenze (parole rimescolate, refusi introdotti).

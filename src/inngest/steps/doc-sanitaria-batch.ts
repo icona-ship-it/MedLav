@@ -150,17 +150,31 @@ export function dedupeEventsAcrossDocuments(events: ConsolidatedEvent[]): Consol
  * (un documento i cui eventi scavalcavano una finestra di 50 veniva ri-narrato → era la
  * causa principale della verbosità ~3× su Bigon). Stesso shape di planDocSanitariaEventBatches.
  */
+/** Data che colloca un documento nella cronologia: il primo evento corrente
+ * (non riferito, non programmato) o, se non ce n'è, il primo evento. */
+function documentDatingDate(group: ConsolidatedEvent[]): string {
+  const current = group.filter((e) => e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato');
+  const pool = current.length > 0 ? current : group;
+  return pool.reduce((min, e) => (e.eventDate && e.eventDate < min ? e.eventDate : min), '9999-12-31');
+}
+
 export function planDocSanitariaEventBatchesByDocument(
   events: ConsolidatedEvent[],
   size: number = DOC_SANITARIA_EVENT_BATCH_SIZE,
 ): DocSanitariaEventBatch[] {
   const deduped = dedupeEventsAcrossDocuments(dedupeDocumentsByContent(events));
   const byDoc = new Map<string, ConsolidatedEvent[]>();
-  const order: string[] = [];
+  const firstSeen: string[] = [];
   for (const e of deduped) {
-    if (!byDoc.has(e.documentId)) { byDoc.set(e.documentId, []); order.push(e.documentId); }
+    if (!byDoc.has(e.documentId)) { byDoc.set(e.documentId, []); firstSeen.push(e.documentId); }
     byDoc.get(e.documentId)!.push(e);
   }
+  // Ordine dei documenti dalla data del loro primo evento CORRENTE (0034): una
+  // menzione anamnestica ("colecistectomia nel 2002") datava un referto del 2025
+  // in testa alla trascrizione e la sezione usciva in ordine casuale (gate gold
+  // 2026-09-04, caso C). Fallback: prima menzione (documenti di sole menzioni,
+  // righe legacy senza scope → ordine invariato). Sort stabile su firstSeen.
+  const order = [...firstSeen].sort((a, b) => documentDatingDate(byDoc.get(a) ?? []).localeCompare(documentDatingDate(byDoc.get(b) ?? [])));
   const windows: ConsolidatedEvent[][] = [];
   let cur: ConsolidatedEvent[] = [];
   for (const id of order) {

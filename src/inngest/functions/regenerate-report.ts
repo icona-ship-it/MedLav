@@ -499,7 +499,9 @@ export const regenerateReport = inngest.createFunction(
           const coverage = checkSelectiveCoverage(combinedContent, allEvents);
           coverageMissing = coverage.missing.length;
           coverageT1 = coverage.t1Total;
-          if (coverageMissing > 0) {
+          // RC (trascrizione depositabile): niente banner nel testo — segnale nel
+          // pannello "Da controllare" via coverageMissing (regen-finalize).
+          if (coverageMissing > 0 && !spec.excludeLabTests) {
             finalContent = `${buildOmissionBanner(coverageMissing)}\n\n${combinedContent}`;
           }
         }
@@ -531,6 +533,7 @@ export const regenerateReport = inngest.createFunction(
         // un report che non lo è. Era il bug del RE-RUN di un caso voluminoso.
         ...(ungroundedQuotesAll.length > 0 ? { ungroundedQuotes: ungroundedQuotesAll.slice(0, 24) } : {}),
         ...(quotesSnappedAll > 0 ? { quotesSnapped: quotesSnappedAll } : {}),
+        ...(combineResult.coverageMissing > 0 ? { coverageMissing: combineResult.coverageMissing, coverageT1: combineResult.coverageT1 } : {}),
       };
     };
 
@@ -616,11 +619,15 @@ export const regenerateReport = inngest.createFunction(
       && !docSanSection.content.includes(DETERMINISTIC_MARKERS.DOC_SANITARIA)) {
       const coverage = checkSelectiveCoverage(docSanSection.content, allEvents);
       if (coverage.missing.length > 0) {
+        const isRcTranscription = sectionPlan.some((s) => s.id === 'documentazione_sanitaria' && s.excludeLabTests);
         completedSections.set('documentazione_sanitaria', {
           ...docSanSection,
-          content: `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
+          // RC: il segnale va al pannello "Da controllare" (regen-finalize), non nel testo.
+          content: isRcTranscription ? docSanSection.content : `${buildOmissionBanner(coverage.missing.length)}\n\n${docSanSection.content}`,
+          coverageMissing: coverage.missing.length,
+          coverageT1: coverage.t1Total,
         });
-        logger.warn('regenerate-report', `Doc-sanitaria selettiva: ${coverage.missing.length}/${coverage.t1Total} eventi T1 non riscontrati — banner inserito`);
+        logger.warn('regenerate-report', `Doc-sanitaria: ${coverage.missing.length}/${coverage.t1Total} eventi T1 non riscontrati${isRcTranscription ? '' : ' — banner inserito'}`);
       }
     }
 
@@ -761,16 +768,34 @@ export const regenerateReport = inngest.createFunction(
       const prevWarnings = Array.isArray(cleaned.pipelineWarnings)
         ? cleaned.pipelineWarnings as Array<Record<string, unknown>>
         : [];
-      const keptWarnings = prevWarnings.filter((w) => w?.step !== 'quote-verification');
-      const nextWarnings = freshQuotes.length > 0
-        ? [...keptWarnings, {
+      // Idem per la rete anti-omissione della doc-sanitaria: la voce riflette
+      // SEMPRE l'ultima generazione (gate gold 2026-09-04: nella perizia RC il
+      // banner non entra più nel testo, quindi il pannello è l'unico segnale).
+      const isCoverageWarning = (w: Record<string, unknown>): boolean =>
+        w?.step === 'synthesis' && typeof w?.message === 'string' && (w.message as string).startsWith('Documentazione sanitaria');
+      const keptWarnings = prevWarnings.filter((w) => w?.step !== 'quote-verification' && !isCoverageWarning(w));
+      const docSan = completedSections.get('documentazione_sanitaria');
+      const isRcTranscription = sectionPlan.some((s) => s.id === 'documentazione_sanitaria' && s.excludeLabTests);
+      const coverageWarning = docSan && (docSan.coverageMissing ?? 0) > 0
+        ? [{
+            step: 'synthesis',
+            severity: 'warning',
+            message: `Documentazione sanitaria: ${docSan.coverageMissing} ${docSan.coverageMissing === 1 ? 'evento clinicamente rilevante potrebbe non essere citato' : 'eventi clinicamente rilevanti potrebbero non essere citati'} nel testo (su ${docSan.coverageT1 ?? 0} verificati). ${isRcTranscription ? 'Confrontare la trascrizione con i documenti.' : 'Banner di verifica inserito nella sezione.'}`,
+            failedCount: docSan.coverageMissing,
+            totalCount: docSan.coverageT1 ?? 0,
+          }]
+        : [];
+      const nextWarnings = [
+        ...keptWarnings,
+        ...coverageWarning,
+        ...(freshQuotes.length > 0 ? [{
             step: 'quote-verification',
             severity: 'warning',
             message: `${freshQuotes.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
             failedCount: freshQuotes.length,
             failedItems: freshQuotes.slice(0, 24),
-          }]
-        : keptWarnings;
+          }] : []),
+      ];
       const restMeta = Object.fromEntries(Object.entries(cleaned).filter(([k]) => k !== 'pipelineWarnings'));
       // CAS (A-2): scrive 'completato' solo se il run è ANCORA quello attivo. Se
       // il caso è stato annullato mentre il finalize era in volo, non lo resuscita.

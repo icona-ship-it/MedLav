@@ -390,3 +390,17 @@ describe('buildDocSanitariaBlockHeader — intestazione canonica formato gold', 
       .toBe('**Referto di esame strumentale, in data 05.03.2024:**');
   });
 });
+
+describe('stripGuardMarkersInsideQuotes — varianti tra parentesi tonde (gate gold 2026-09-04)', () => {
+  it('toglie "(dato non riscontrato…)" / "(dato non risultante…)" / "(non documentato)" DENTRO le «...» e li lascia FUORI', () => {
+    const text = '«Dimessa in data 25.07 (dato non riscontrato nella cartella) con terapia (non documentato)» — prognosi (dato non risultante dalla documentazione in atti) di 30 giorni.';
+    const out = stripGuardMarkersInsideQuotes(text);
+    expect(out).toContain('«Dimessa in data 25.07 con terapia»');
+    expect(out).toContain('prognosi (dato non risultante dalla documentazione in atti) di 30 giorni');
+  });
+
+  it('non tocca parentesi cliniche legittime dentro le «...»', () => {
+    const text = '«RX polso (2 proiezioni): frattura (composta) del radio»';
+    expect(stripGuardMarkersInsideQuotes(text)).toBe(text);
+  });
+});

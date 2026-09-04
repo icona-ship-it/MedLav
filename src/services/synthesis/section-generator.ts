@@ -49,6 +49,7 @@ import { mergeUsage, createEmptyUsage } from '@/services/cost-tracking/cost-calc
 import { logger } from '@/lib/logger';
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
+import { scrubContactDetails } from './contact-scrub';
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -221,7 +222,9 @@ export function buildSectionUserPrompt(params: {
       // dall'OCR context quando presente, dalle sintesi (map-reduce) altrimenti.
       const docsMeta = (documentsOcrText && documentsOcrText.length > 0 ? documentsOcrText : synthesisParams.documentSummaries)
         ?.map((d) => ({ documentId: d.documentId, documentType: d.documentType }));
-      parts.push(`## DOCUMENTAZIONE SANITARIA RAGGRUPPATA PER DOCUMENTO (${new Set(medical.map((e) => e.documentId)).size} documenti, ${medical.length} reperti)\n\n${formatEventsByDocumentForPrompt(medical, docsMeta)}\n`);
+      // RC (trascrizione): niente suggerimenti [Diagnosi: …] nel contenuto-fonte —
+      // il LLM li ricopiava come righe "Diagnosi:" dentro le «...» (gate gold 2026-09-04).
+      parts.push(`## DOCUMENTAZIONE SANITARIA RAGGRUPPATA PER DOCUMENTO (${new Set(medical.map((e) => e.documentId)).size} documenti, ${medical.length} reperti)\n\n${formatEventsByDocumentForPrompt(medical, docsMeta, { includeDiagnosisHints: !spec.excludeLabTests })}\n`);
     } else {
       parts.push(`## EVENTI CLINICI (${medical.length} medici su ${events.length} totali)\n\n${formatEventsForPrompt(medical)}\n`);
     }
@@ -504,6 +507,12 @@ export async function generateSingleSection(params: {
   // "[dato non risultante…]" DENTRO una citazione verbatim «...», rompendone la fedeltà.
   // Toglili dall'interno delle «...» (la cautela resta valida FUORI dal virgolettato).
   finalContent = stripGuardMarkersInsideQuotes(finalContent);
+  // Recapiti (telefono/email) di terzi trascritti dalla cartella: mai nel
+  // depositabile (GDPR, gate gold 2026-09-04). Solo doc-sanitaria: le altre
+  // sezioni non riproducono testo integrale dei documenti.
+  if (spec.id === 'documentazione_sanitaria') {
+    finalContent = scrubContactDetails(finalContent);
+  }
 
   // Sprint 1 S1.1 (Lavini quality, 2026-05-17): output-side cap enforcement.
   // The LLM ignores prompt-level "max N parole" instructions ~40% of the
@@ -834,10 +843,14 @@ export function capEventsForNarrativeSection<T extends {
 
 export function stripGuardMarkersInsideQuotes(text: string): string {
   return text.replace(/«[^»]*»/g, (quote) =>
-    quote.replace(
-      /[ \t]*\[(?:non documentato|dato non risultante[^\]]*|non risultante[^\]]*|(?:Diagnosi|Raccomandazioni|Follow[- ]?up|Terapia|Prognosi|Conclusioni|Clinica)\s*:[^\]]*)\]/gi,
-      '',
-    ),
+    quote
+      .replace(
+        /[ \t]*\[(?:non documentato|dato non risultante[^\]]*|non risultante[^\]]*|(?:Diagnosi|Raccomandazioni|Follow[- ]?up|Terapia|Prognosi|Conclusioni|Clinica)\s*:[^\]]*)\]/gi,
+        '',
+      )
+      // Stesse formule tra parentesi TONDE (gate gold 2026-09-04, caso B: 5 marker
+      // "(dato non riscontrato…)" dentro le «...»): fuori dal virgolettato restano.
+      .replace(/[ \t]*\((?:dato )?non (?:riscontrat[oa]|risultante|documentat[oa])[^)]*\)/gi, ''),
   );
 }
 
