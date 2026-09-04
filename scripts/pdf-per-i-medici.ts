@@ -49,7 +49,7 @@ async function markdownToPdf(mdPath: string, outPath: string): Promise<void> {
 
 // ── Compilabili: pdf-lib con campi modulo ───────────────────────────────────
 function ansi(s: string): string {
-  return Array.from(s).map((ch) => (ch.charCodeAt(0) <= 0xff ? ch : ch === '–' || ch === '—' ? '-' : ch === '’' ? "'" : ch === '…' ? '...' : '?')).join('');
+  return Array.from(s).map((ch) => (ch.charCodeAt(0) <= 0xff ? ch : ch === '–' || ch === '—' ? '-' : ch === '’' ? "'" : ch === '…' ? '...' : ch === '•' ? '-' : ch === '«' ? '"' : ch === '»' ? '"' : '?')).join('');
 }
 
 function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
