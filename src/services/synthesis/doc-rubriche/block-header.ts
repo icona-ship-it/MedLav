@@ -35,7 +35,13 @@ export function describeDocumentBlock(events: ReadonlyArray<BlockDatingEvent>): 
     .filter((e) => e.datePrecision == null || e.datePrecision === 'giorno')
     .map((e) => e.eventDate)
     .filter((d): d is string => !!d && d !== '1900-01-01' && ISO_DAY_RE.test(d));
-  const dayIso = Array.from(new Set(datedIso)).sort();
+  // Intervallo robusto: una data isolata a mesi di distanza (evento estratto male)
+  // non allarga il ricovero ("dal 16.01 al 25.07"). Si tengono le date entro 90
+  // giorni dalla mediana.
+  const allDays = Array.from(new Set(datedIso)).sort();
+  const median = allDays[Math.floor(allDays.length / 2)];
+  const dayNum = (iso: string): number => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) / 86_400_000;
+  const dayIso = allDays.length > 2 && median ? allDays.filter((d) => Math.abs(dayNum(d) - dayNum(median)) <= 90) : allDays;
   const counts = new Map<string, number>();
   for (const d of datedIso) counts.set(d, (counts.get(d) ?? 0) + 1);
   const dominant = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];

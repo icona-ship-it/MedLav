@@ -174,3 +174,19 @@ describe('referti in degenza: niente screening pre-operatorio', () => {
     expect(out.markdown).not.toContain('Ritmo sinusale');
   });
 });
+
+describe('maschere di modulo e codici (panel giro 4)', () => {
+  it('righe di tabella con separatori, campi di maschera e codici lunghi restano fuori; il referto integrale non ha etichette di rubrica', () => {
+    const ps = doc({ documentId: 'ps', documentType: 'cartella_clinica', text: 'PRONTO SOCCORSO\nANAMNESI\nCaduta dalla bicicletta.\nDinamica | caduta | ore 09:15\nRIFIUTO PRESTAZIONI: no\nFIRMA | PAZIENTE\nCodice uscita 12 | DGRV 1234\nDIAGNOSI\nFrattura composta del radio destro.' });
+    const rx = doc({ documentId: 'rx', documentType: 'esame_strumentale', text: 'NOTIZIE CLINICHE\nTrauma da caduta.\nREFERTO\nFrattura composta del radio. 1234567890 Rossi Mario richiedente\nCONCLUSIONI\nFrattura composta.' });
+    const out = renderRubricDocSanitaria([ps, rx], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Anamnesi: «Caduta dalla bicicletta.»');
+    expect(out.markdown).not.toContain('Dinamica |');
+    expect(out.markdown).not.toContain('RIFIUTO');
+    expect(out.markdown).not.toContain('DGRV');
+    expect(out.markdown).not.toContain('1234567890');
+    expect(out.markdown).not.toContain('Referto: «');
+    expect(out.markdown).toContain('«Trauma da caduta.»');
+    expect(out.markdown).toContain('«Frattura composta.»');
+  });
+});

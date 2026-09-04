@@ -24,3 +24,18 @@ describe('formatDocumentazioneSanitariaRubriche — dal DB al blocco', () => {
     expect(dischargeDateFromText('nessuna data')).toBeNull();
   });
 });
+
+describe('intestazione: qualificatore esame, struttura dalla carta intestata, medico', () => {
+  it('esame strumentale senza eventi con struttura: titolo esame nel tipo, struttura dalla carta intestata', () => {
+    const docs = [{ documentId: 'rx', documentType: 'esame_strumentale', pages: [{ pageNumber: 1, ocrText: 'CENTRO DIAGNOSTICO ESEMPI\nVia degli Esempi 10 - Cittàdemo\nRX polso destro\nFrattura composta del radio. Ulna integra.' }] }];
+    const out = formatDocumentazioneSanitariaRubriche(docs, [{ event_date: '2026-02-10', document_id: 'rx', temporal_scope: 'corrente' }]);
+    expect(out.markdown).toContain('**Referto di esame strumentale – RX polso destro, Centro Diagnostico Esempi, in data 10.02.2026:**');
+    expect(out.markdown).not.toContain('Via degli Esempi');
+    expect(out.markdown).toContain('«RX polso destro: Frattura composta del radio. Ulna integra.»');
+  });
+  it('visita senza struttura: il medico degli eventi entra nell\'intestazione', () => {
+    const docs = [{ documentId: 'v', documentType: 'referto_specialistico', pages: [{ pageNumber: 1, ocrText: 'Visita ortopedica\nCONCLUSIONI\nQuadro in evoluzione favorevole.' }] }];
+    const out = formatDocumentazioneSanitariaRubriche(docs, [{ event_date: '2026-03-04', document_id: 'v', doctor: 'Dott.ssa Fittizi Marta', temporal_scope: 'corrente' }]);
+    expect(out.markdown).toContain('**Referto specialistico, Dott.ssa Fittizi Marta, in data 04.03.2026:**');
+  });
+});

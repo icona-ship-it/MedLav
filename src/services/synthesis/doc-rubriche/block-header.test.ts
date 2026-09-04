@@ -28,3 +28,11 @@ describe('describeDocumentBlock — data e struttura del blocco dai soli eventi 
     expect(buildBlockHeader('Referto', null, 's.d.')).toBe('**Referto, s.d.:**');
   });
 });
+
+describe('intervallo robusto', () => {
+  it('una data isolata a mesi di distanza non allarga il ricovero', () => {
+    const d = describeDocumentBlock([{ eventDate: '2023-01-16' }, { eventDate: '2023-07-16' }, { eventDate: '2023-07-20' }, { eventDate: '2023-07-25' }]);
+    expect(d.dateLabel).toBe('dal 16.07.2023 al 25.07.2023');
+    expect(d.sortIso).toBe('2023-07-16');
+  });
+});

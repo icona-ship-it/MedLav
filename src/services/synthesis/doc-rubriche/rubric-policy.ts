@@ -45,11 +45,11 @@ export const DEFAULT_RUBRIC_POLICY: RubricPolicy = {
     // Fascicolo di ricovero (spec Lavini 2026-09-04): "contenitore" — il gold copia
     // 0 parole da 117 pagine, usa la lettera di dimissione. Un verbale di PS breve
     // (≤ PS_MAX_PAGES pagine) classificato cartella è invece un PS: passaggi-chiave.
-    cartella_clinica: { mode: 'contenitore', copia: ['anamnesi_prossima', 'esame_obiettivo', 'consulenza', 'referto', 'intervento', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: false, maxParole: 450 },
+    cartella_clinica: { mode: 'contenitore', copia: ['anamnesi_prossima', 'anamnesi', 'esame_obiettivo', 'consulenza', 'referto', 'intervento', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: false, maxParole: 450 },
     // Lettera di dimissione: motivo, diagnosi, trattamento adottato, terapia domiciliare;
     // NIENTE esame obiettivo d'ingresso, laboratorio, consulenze incorporate (spec).
     lettera_dimissione: { mode: 'passaggi', copia: ['anamnesi_prossima', 'intervento', 'diario', 'diagnosi', 'dimissione', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 400 },
-    referto_specialistico: { mode: 'passaggi', copia: ['anamnesi_prossima', 'referto', 'consulenza', 'esame_obiettivo', 'diagnosi', 'conclusioni', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 300 },
+    referto_specialistico: { mode: 'passaggi', copia: ['anamnesi_prossima', 'anamnesi', 'referto', 'consulenza', 'esame_obiettivo', 'diagnosi', 'conclusioni', 'prognosi', 'indicazioni', 'terapia'], fallbackCorpo: true, maxParole: 300 },
     // Esami strumentali: il referto per intero (sono brevi), con le conclusioni.
     esame_strumentale: { mode: 'integrale', copia: ['referto', 'conclusioni', 'corpo'], fallbackCorpo: true, maxParole: 200 },
     esame_laboratorio: { mode: 'ometti', copia: [], fallbackCorpo: false, maxParole: 0 },

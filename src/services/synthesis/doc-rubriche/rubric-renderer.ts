@@ -46,9 +46,16 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
 const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
+const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d)/i;
+const LONG_CODE_RE = /\d{8,}/;
+
 function isAdminNoiseLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
+  // Righe di tabella/maschera (≥2 separatori) e codici lunghi: rumore di modulo.
+  if ((t.match(/ \| /g) ?? []).length >= 2) return true;
+  if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
+  if (FORM_NOISE_RE.test(t)) return true;
   return ADMIN_NOISE_RE.test(t) && !/(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i.test(t);
 }
 
@@ -115,11 +122,11 @@ function selectSegments(segments: ReadonlyArray<RubricSegment>, policy: RubricTy
   return { chosen: [], fallback: true };
 }
 
-function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number): string | null {
+function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number, withTitle = true): string | null {
   const key = normalizeForDedup(seg.text);
   if (key.length >= 40 && seen.has(key)) { stats.dedup++; return null; }
   if (key.length >= 40) seen.add(key);
-  const title = RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '');
+  const title = withTitle ? (RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
   const cleaned = stripAdminNoise(seg.text);
   if (!cleaned) return null;
   const body = capAtSentence(cleaned.replace(/\n{2,}/g, '\n').trim(), maxWords);
@@ -181,7 +188,8 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     // Tetto per rubrica (metà del tetto di blocco: la diagnosi non è mai tagliata
     // da un'anamnesi lunga) e tetto di blocco (la lunghezza tipica del gold).
     const perRubric = tp.maxParole > 0 ? Math.ceil(tp.maxParole / 2) : 0;
-    const lines = chosen.map((s) => renderSegment(s, seen, stats, perRubric)).filter((l): l is string => l !== null);
+    // Referto integrale (esami strumentali): il testo del medico com'è, senza etichette di rubrica.
+    const lines = chosen.map((s) => renderSegment(s, seen, stats, perRubric, tp.mode !== 'integrale')).filter((l): l is string => l !== null);
     if (lines.length === 0) {
       blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto già riprodotto nel documento precedente.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
       continue;
