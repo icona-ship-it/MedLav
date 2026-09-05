@@ -88,7 +88,7 @@ ${ANTI_DISTORSIONE_RULE}`,
     // non prosa. Dominanza e negazioni esplicite solo se documentate.
     promptDirective: `Genera i dati anamnestici del periziando come SCHEDA a righe brevi etichettate (formato dei benchmark depositati), NON in prosa:
 "Paziente [destrimane/mancino/ambidestro]" (solo se documentato)
-"In passato: [patologie pregresse e interventi rilevanti, separati da virgola]"
+"In passato: [SOLO ciò che i documenti riferiscono come PREGRESSO — eventi marcati RIFERITO IN ANAMNESI; MAI le lesioni o gli esami dell'evento indice, che non sono anamnesi remota. Se non c'è nulla di pregresso documentato: 'nulla di rilevante documentato']"
 "Peso: Kg [N]" / "Altezza: [N]" (solo se documentati)
 "Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate come terapia IN CORSO abituale — lettera del curante, elenco farmaci domiciliari, anamnesi farmacologica; una prescrizione acuta del Pronto Soccorso o della dimissione, es. antidolorifico "al bisogno" o antibiotico per pochi giorni, NON è terapia attuale e va omessa qui)
 "Anamnesi familiare: [solo se pertinente e documentata]"
@@ -108,7 +108,7 @@ ${ANTI_DISTORSIONE_RULE}`,
     // RIASSUNTO breve (l'evento indice + primo soccorso condensato). Il decorso
     // clinico dettagliato (controlli, interventi, terapie, evoluzione) si sposta
     // nell'Epicrisi. Il Pronto Soccorso va condensato alle cose importanti.
-    promptDirective: `RIASSUNTO breve e denso dell'evento indice e del primo soccorso. 1-2 paragrafi totali, MAI più di 2. Allineato al benchmark Antoniazzi "IL FATTO E LA STORIA CLINICA" per perizia medico-legale RC.
+    promptDirective: `RIASSUNTO breve e denso dell'evento indice e del primo soccorso. 1-2 paragrafi totali, MAI più di 2, MASSIMO 120 PAROLE (i benchmark del perito ne hanno ~100). NESSUNA citazione tra «...»: qui si racconta, le parole del medico stanno nella Documentazione. Allineato al benchmark Antoniazzi "IL FATTO E LA STORIA CLINICA" per perizia medico-legale RC.
 
 ESEMPIO DI STILE (dati INTERAMENTE FITTIZI — solo per il registro):
 "Mentre stava attraversando la strada sulle strisce pedonali in via degli Esempi 1, Cittàdemo, in data 03/02/2020 verso le ore 11.15 veniva urtato da un velocipede. Cadeva a terra. Non ricorda svenimento, ma ricorda i passanti radunatisi attorno. Dopo essersi rialzato veniva accompagnato a casa da un familiare. Successivamente, aumentando il dolore a livello del polso sinistro, contattava il proprio medico curante che consigliava di eseguire Rx dell'area dolente."
@@ -221,7 +221,7 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     // aggrava il rischio di troncamento su macrodanno; un lab T1 load-bearing
     // resta comunque). Il decorso è fatto di visite/interventi/terapie, non di lab.
     excludeLabTests: true,
-    promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi).
+    promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi). MASSIMO 500 PAROLE. NESSUNA citazione tra «...»: degli esami riporta l'ESITO in poche parole (es. "RM del 13.09.2025: lesione meniscale mediale"), mai il testo del referto, già riprodotto nella Documentazione. Ogni data che scrivi deve essere una data degli eventi forniti: se non la trovi lì, non scriverla.
 
 Includi:
 1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").

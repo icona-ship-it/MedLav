@@ -54,6 +54,10 @@ import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { scrubContactDetails } from './contact-scrub';
 import { stripPromptArtifacts, stripItalicMetaParagraphs } from './prompt-artifacts';
+import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays } from './narrative-nets';
+
+/** Sezioni narrative su cui girano le reti date/citazioni. */
+const NARRATIVE_SECTION_IDS: ReadonlySet<string> = new Set(['il_fatto_e_storia_clinica', 'anamnesi', 'epicrisi']);
 
 /** Timeout per section LLM call: 10 minutes (Vercel maxDuration is 800s, same budget as monolithic synthesis). */
 const SECTION_TIMEOUT_MS = 600_000;
@@ -517,6 +521,19 @@ export async function generateSingleSection(params: {
   if (spec.id === 'documentazione_sanitaria') {
     finalContent = stripItalicMetaParagraphs(finalContent);
   }
+  // Reti narrative (2026-09-05): l'Epicrisi non cita; "In passato" mai con le date
+  // dell'evento indice; le date senza riscontro vanno al pannello, mai cancellate.
+  let unattestedDatesMeta: { unattestedDates: string[] } | undefined;
+  if (spec.id === 'epicrisi') finalContent = unwrapGuillemets(finalContent);
+  if (spec.id === 'anamnesi') {
+    const past = sanitizeAnamnesiPast(finalContent, collectCurrentDays(synthesisParams.events));
+    if (past.replaced) logger.warn('section-generator', 'Anamnesi: riga "In passato" con date dell\'evento indice sostituita');
+    finalContent = past.text;
+  }
+  if (NARRATIVE_SECTION_IDS.has(spec.id)) {
+    const dates = findUnattestedDates(finalContent, collectAttestedDays(synthesisParams.events, synthesisParams.periziaMetadata));
+    if (dates.length > 0) unattestedDatesMeta = { unattestedDates: dates.slice(0, 24) };
+  }
   // Recapiti (telefono/email) di terzi trascritti dalla cartella: mai nel
   // depositabile (GDPR, gate gold 2026-09-04). Solo doc-sanitaria: le altre
   // sezioni non riproducono testo integrale dei documenti.
@@ -677,6 +694,7 @@ export async function generateSingleSection(params: {
     ...coveMeta,
     ...(quoteFidelityMeta ?? {}),
     ...(quotesSnappedMeta ?? {}),
+    ...(unattestedDatesMeta ?? {}),
     ...(truncatedByCap ? { truncatedByCap, originalCharLength } : {}),
     ...(fidelity.mode ? { fidelityMode: fidelity.mode } : {}),
     ...(fidelity.mode === 'summaries' ? { fidelitySummaryCount: summaryCount } : {}),

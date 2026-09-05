@@ -773,7 +773,18 @@ export const regenerateReport = inngest.createFunction(
       // banner non entra più nel testo, quindi il pannello è l'unico segnale).
       const isCoverageWarning = (w: Record<string, unknown>): boolean =>
         w?.step === 'synthesis' && typeof w?.message === 'string' && (w.message as string).startsWith('Documentazione sanitaria');
-      const keptWarnings = prevWarnings.filter((w) => w?.step !== 'quote-verification' && !isCoverageWarning(w));
+      const keptWarnings = prevWarnings.filter((w) => w?.step !== 'quote-verification' && w?.step !== 'date-verification' && !isCoverageWarning(w));
+      const unattestedDatesReport = Array.from(new Set(Array.from(completedSections.values())
+        .flatMap((s) => (s.unattestedDates ?? []).map((d) => `${s.title}: ${d}`))));
+      const dateWarning = unattestedDatesReport.length > 0
+        ? [{
+            step: 'date-verification',
+            severity: 'warning',
+            message: `${unattestedDatesReport.length} date nel testo (Fatto/Anamnesi/Epicrisi) senza riscontro fra le date dei documenti: verificare sui documenti originali`,
+            failedCount: unattestedDatesReport.length,
+            failedItems: unattestedDatesReport.slice(0, 24),
+          }]
+        : [];
       const docSan = completedSections.get('documentazione_sanitaria');
       const isRcTranscription = sectionPlan.some((s) => s.id === 'documentazione_sanitaria' && s.excludeLabTests);
       const coverageWarning = docSan && (docSan.coverageMissing ?? 0) > 0
@@ -788,6 +799,7 @@ export const regenerateReport = inngest.createFunction(
       const nextWarnings = [
         ...keptWarnings,
         ...coverageWarning,
+        ...dateWarning,
         ...(freshQuotes.length > 0 ? [{
             step: 'quote-verification',
             severity: 'warning',

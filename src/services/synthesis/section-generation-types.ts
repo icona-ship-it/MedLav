@@ -121,6 +121,8 @@ export interface GeneratedSection {
    */
   coverageMissing?: number;
   coverageT1?: number;
+  /** Sezioni narrative: date DD.MM.AAAA nel testo NON attestate da eventi/metadati (pannello "Da controllare"). */
+  unattestedDates?: string[];
   /**
    * Doc-sanitaria: citazioni AGGANCIATE alla fonte (quote snapping) — riscritte
    * deterministicamente col testo esatto dell'OCR perché il modello le aveva

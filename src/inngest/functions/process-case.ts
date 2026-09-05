@@ -1402,6 +1402,20 @@ export const processCase = inngest.createFunction(
         failedItems: ungroundedQuotesReport.slice(0, 24),
       });
     }
+    // Date nelle sezioni narrative senza riscontro negli eventi/metadati (2026-09-05):
+    // il modello scriveva "RX del 07.01.2025" inesistente. Non si cancella nulla:
+    // il perito vede l'elenco nel pannello e controlla sui documenti.
+    const unattestedDatesReport = Array.from(new Set(Array.from(completedSections.values())
+      .flatMap((s) => (s.unattestedDates ?? []).map((d) => `${s.title}: ${d}`))));
+    if (unattestedDatesReport.length > 0) {
+      pipelineWarnings.push({
+        step: 'date-verification',
+        severity: 'warning',
+        message: `${unattestedDatesReport.length} date nel testo (Fatto/Anamnesi/Epicrisi) senza riscontro fra le date dei documenti: verificare sui documenti originali`,
+        failedCount: unattestedDatesReport.length,
+        failedItems: unattestedDatesReport.slice(0, 24),
+      });
+    }
 
     // ULTIMA CHANCE prima del fallback (CASO-2026-219, 2026-07-14: Anamnesi+Fatto
     // fallite dopo i retry in-step): un tentativo FINALE per ogni sezione fallita,
