@@ -36,6 +36,12 @@ describe('sanitizeAnamnesiPast — mai le lesioni dell\'evento indice come pregr
     const good = 'In passato: frattura clavicola sinistra (2019).';
     expect(sanitizeAnamnesiPast(good, current)).toEqual({ text: good, replaced: false });
   });
+  it('toglie solo le voci con data corrente e tiene le pregresse vere', () => {
+    const mixed = 'In passato: ipertensione arteriosa, colecistectomia (2002), frattura del radio (13.09.2025), diabete tipo 2.';
+    const r = sanitizeAnamnesiPast(mixed, current);
+    expect(r.replaced).toBe(true);
+    expect(r.text).toBe('In passato: ipertensione arteriosa, colecistectomia (2002), diabete tipo 2.');
+  });
   it('riga con grassetto o elenco', () => {
     const r = sanitizeAnamnesiPast('- **In passato:** intervento del 13.09.2025', current);
     expect(r.text).toBe('- **In passato:** nulla di rilevante documentato.');

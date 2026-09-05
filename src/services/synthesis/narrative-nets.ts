@@ -39,21 +39,27 @@ export function unwrapGuillemets(text: string): string {
 
 const PAST_LINE_RE = /^(\s*(?:[-*•]\s*)?(?:\*\*)?In passato\s*:?\s*(?:\*\*)?\s*:?)(.*)$/im;
 
-/** Anamnesi: la riga "In passato:" non può contenere date dell'evento indice
- * (eventi correnti): in quel caso diventa "nulla di rilevante documentato". */
+function hasCurrentDate(part: string, currentDays: ReadonlySet<number>): boolean {
+  for (const d of part.matchAll(DATE_RE)) {
+    const n = dayNumber(Number(d[1]), Number(d[2]), Number(d[3]));
+    if (n !== null && currentDays.has(n)) return true;
+  }
+  return false;
+}
+
+/** Anamnesi: nella riga "In passato:" le voci con una data dell'evento indice
+ * (eventi correnti) vengono tolte; le altre pregresse restano. Se non resta
+ * nulla: "nulla di rilevante documentato". */
 export function sanitizeAnamnesiPast(text: string, currentDays: ReadonlySet<number>): { text: string; replaced: boolean } {
   const m = PAST_LINE_RE.exec(text);
   if (!m) return { text, replaced: false };
-  const body = m[2] ?? '';
-  let hit = false;
-  for (const d of body.matchAll(DATE_RE)) {
-    const n = dayNumber(Number(d[1]), Number(d[2]), Number(d[3]));
-    if (n !== null && currentDays.has(n)) { hit = true; break; }
-  }
-  if (!hit) return { text, replaced: false };
+  const body = (m[2] ?? '').trim();
+  if (!hasCurrentDate(body, currentDays)) return { text, replaced: false };
+  const kept = body.replace(/\.$/, '').split(/\s*[;,]\s+(?=[^)]*(?:\(|$))/).map((p) => p.trim()).filter((p) => p && !hasCurrentDate(p, currentDays));
   const label = (m[1] ?? '').trimEnd();
-  const replaced = text.replace(PAST_LINE_RE, `${/[:*]$/.test(label) ? label : `${label}:`} nulla di rilevante documentato.`);
-  return { text: replaced, replaced: true };
+  const head = /[:*]$/.test(label) ? label : `${label}:`;
+  const newBody = kept.length > 0 ? `${kept.join(', ')}.` : 'nulla di rilevante documentato.';
+  return { text: text.replace(PAST_LINE_RE, `${head} ${newBody}`), replaced: true };
 }
 
 /** Giorni (numero) degli eventi CORRENTI: le date dell'evento indice e del decorso. */
