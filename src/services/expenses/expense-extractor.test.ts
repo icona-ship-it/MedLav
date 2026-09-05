@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ExtractedExpenseItem } from './expense-extractor';
+import { EXPENSE_JSON_SCHEMA } from './expense-extractor';
 
 // Mock Mistral client
 const mockStreamMistralChat = vi.fn();
@@ -195,5 +196,19 @@ describe('expense-extractor', () => {
     expect(result.items[0].amount).toBeNull();
     // Second item has valid amount
     expect(result.items[1].amount).toBe(10.00);
+  });
+});
+
+describe('EXPENSE_JSON_SCHEMA — decodifica vincolata per gli importi', () => {
+  it('strict, tutti i campi required, nessun campo extra, categorie chiuse', () => {
+    const def = (EXPENSE_JSON_SCHEMA as { jsonSchema: { strict: boolean; schemaDefinition: Record<string, unknown> } }).jsonSchema;
+    expect(def.strict).toBe(true);
+    const root = def.schemaDefinition as { required: string[]; additionalProperties: boolean; properties: { items: { items: { required: string[]; additionalProperties: boolean; properties: { category: { enum: string[] } } } } } };
+    expect(root.additionalProperties).toBe(false);
+    const item = root.properties.items.items;
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required.sort()).toEqual(Object.keys(item.properties).sort());
+    expect(item.properties.category.enum).toContain('farmaci');
+    expect(item.properties.category.enum).toContain('altro');
   });
 });

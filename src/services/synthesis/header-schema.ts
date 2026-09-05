@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { isValidCodiceFiscale } from '@/lib/validators/codice-fiscale';
 import { isValidItalianDate } from '@/lib/validators/date-format';
+import type { MistralResponseFormat } from '@/lib/mistral/client';
 
 /**
  * Schema dei dati dell'intestazione. Tutti i campi sono nullable o opzionali
@@ -321,3 +322,50 @@ export function emptyHeaderData(): HeaderData {
     giudiziale: null,
   };
 }
+
+// ── Schema RIGIDO per il JSON dell'intestazione (2026-09-05) ─────────────────
+// `json_object` non garantisce la struttura; qui ogni campo del JSON è
+// required e nullable, gli oggetti facoltativi sono nullable, niente campi
+// extra. Rispecchia HeaderDataSchema (zod), che resta la validazione a valle.
+const NS = { type: ['string', 'null'] } as const;
+function nullableObject(fields: ReadonlyArray<string>, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    type: ['object', 'null'],
+    properties: { ...Object.fromEntries(fields.map((f) => [f, NS])), ...extra },
+    required: [...fields, ...Object.keys(extra)],
+    additionalProperties: false,
+  };
+}
+export const HEADER_AMBITO_VALUES = ['rc_civile', 'rc_auto', 'penale', 'previdenziale', 'infortuni', 'malpractice', 'polizza_infortuni', 'altro'] as const;
+export const HEADER_JSON_SCHEMA: MistralResponseFormat = {
+  type: 'json_schema',
+  jsonSchema: {
+    name: 'header_data',
+    strict: true,
+    schemaDefinition: {
+      type: 'object',
+      properties: {
+        perito: nullableObject(['nome', 'qualifica', 'specializzazione', 'iscrizioneAlbo', 'email', 'pec', 'ausiliario', 'coPeritoNome', 'coPeritoQualifica']),
+        paziente: {
+          type: 'object',
+          properties: Object.fromEntries(['nome', 'dataNascita', 'luogoNascita', 'residenza', 'codiceFiscale', 'telefono', 'dataDecesso', 'luogoDecesso', 'email', 'avvocato', 'accompagnatore'].map((f) => [f, NS])),
+          required: ['nome', 'dataNascita', 'luogoNascita', 'residenza', 'codiceFiscale', 'telefono', 'dataDecesso', 'luogoDecesso', 'email', 'avvocato', 'accompagnatore'],
+          additionalProperties: false,
+        },
+        oggetto: {
+          type: 'object',
+          // ambito: enum chiuso (come temporalScope nell'estrazione): 'altro' copre l'ignoto,
+          // così lo zod a valle non scarta più l'intera intestazione per un valore libero.
+          properties: { eventoIndice: NS, dataEvento: NS, lesione: NS, struttura: NS, ambito: { type: 'string', enum: [...HEADER_AMBITO_VALUES] } },
+          required: ['eventoIndice', 'dataEvento', 'lesione', 'struttura', 'ambito'],
+          additionalProperties: false,
+        },
+        dataVisitaMedicoLegale: NS,
+        soggettoRichiedente: NS,
+        giudiziale: nullableObject(['tribunale', 'sezione', 'numeroRG', 'giudice', 'dataConferimento', 'dataGiuramento', 'ricorrente', 'resistente', 'ctpRicorrente', 'ctpResistente', 'tipoProcedimento', 'giudiceQualifica', 'dataInizioOperazioni', 'termineDeposito', 'termineBozza', 'termineOsservazioni', 'provvedimentiOrdinanza', 'fondoSpese', 'oggettoIncarico']),
+      },
+      required: ['perito', 'paziente', 'oggetto', 'dataVisitaMedicoLegale', 'soggettoRichiedente', 'giudiziale'],
+      additionalProperties: false,
+    },
+  },
+};

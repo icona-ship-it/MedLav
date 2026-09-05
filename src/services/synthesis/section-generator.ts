@@ -44,6 +44,7 @@ import {
   collectAttestedDays,
   discardUnattestedEventDate,
   emptyHeaderData,
+  HEADER_JSON_SCHEMA,
   type HeaderData,
 } from './header-schema';
 import { renderHeaderMarkdown, genderFromCodiceFiscale } from './header-template';
@@ -1223,7 +1224,7 @@ async function generateHeaderSection(params: {
     ],
     temperature: 0,
     maxTokens: spec.maxTokens,
-    responseFormat: { type: 'json_object' },
+    responseFormat: HEADER_JSON_SCHEMA,
     timeoutMs: SECTION_TIMEOUT_MS,
     randomSeed: seedForAttempt(attempt),
     label: `header:${spec.id}`,

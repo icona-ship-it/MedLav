@@ -18,6 +18,7 @@ import type { ExpenseCategory } from './expense-analyzer';
 import { reconcileExpenseItems } from './expense-reconciler';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
+import type { MistralResponseFormat } from '@/lib/mistral/client';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -232,7 +233,7 @@ export async function extractExpensesFromOcr(
     ],
     temperature: 0,
     maxTokens: 8192,
-    responseFormat: { type: 'json_object' },
+    responseFormat: EXPENSE_JSON_SCHEMA,
     timeoutMs: TIMEOUT_EXTRACTION,
     randomSeed: DETERMINISTIC_SEED,
     label: 'expense-extraction',
@@ -253,10 +254,57 @@ export async function extractExpensesFromOcr(
 
 // ── Response parsing ──────────────────────────────────────────────────
 
-const VALID_CATEGORIES = new Set<string>([
+const EXPENSE_CATEGORY_VALUES = [
   'farmaci', 'visite_specialistiche', 'esami_diagnostici', 'interventi',
   'riabilitazione', 'ausili_protesi', 'trasporti', 'altro',
-]);
+] as const;
+const VALID_CATEGORIES = new Set<string>(EXPENSE_CATEGORY_VALUES);
+
+const nullableString = { type: ['string', 'null'] } as const;
+
+/**
+ * Schema RIGIDO per l'estrazione spese (ricerca 2026-09-05: `json_object` "non
+ * garantisce lo schema" — docs Mistral; qui si parla di IMPORTI). Decodifica
+ * vincolata come per l'estrazione eventi: tutti i campi required, nullable via
+ * union, additionalProperties false. Il parser a valle resta difensivo.
+ */
+export const EXPENSE_JSON_SCHEMA: MistralResponseFormat = {
+  type: 'json_schema',
+  jsonSchema: {
+    name: 'expense_extraction',
+    strict: true,
+    schemaDefinition: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              date: nullableString,
+              description: { type: 'string' },
+              amount: { type: ['number', 'null'] },
+              receiptNumber: nullableString,
+              drugType: nullableString,
+              category: { type: 'string', enum: [...EXPENSE_CATEGORY_VALUES] },
+              facility: nullableString,
+              linkedDiagnosis: nullableString,
+              notes: nullableString,
+              interpretation: nullableString,
+              sourceDocument: nullableString,
+            },
+            required: ['date', 'description', 'amount', 'receiptNumber', 'drugType', 'category', 'facility', 'linkedDiagnosis', 'notes', 'interpretation', 'sourceDocument'],
+            additionalProperties: false,
+          },
+        },
+        totalAmount: { type: ['number', 'null'] },
+        currency: { type: 'string' },
+      },
+      required: ['items', 'totalAmount', 'currency'],
+      additionalProperties: false,
+    },
+  },
+};
 
 function parseExpenseResponse(raw: string): ExpenseExtractionResult {
   let parsed: unknown;
