@@ -185,6 +185,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="LegMed — bozza prodotta con l'ausilio di sistemi di IA e soggetta a revisione e firma del professionista (art. 50, par. 2, Reg. UE 2024/1689)">
 <title>Cronistoria Documentale - ${escapeHtml(caseCode)}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }

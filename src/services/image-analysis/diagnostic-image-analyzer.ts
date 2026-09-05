@@ -1,6 +1,6 @@
 /**
  * Diagnostic image analysis service.
- * Uses Mistral vision (pixtral-large) to describe diagnostic images objectively.
+ * Uses Mistral vision (mistral-large-2512, multimodale; Pixtral è ritirato) to describe diagnostic images objectively.
  * Descriptions are purely observational — no diagnoses.
  */
 

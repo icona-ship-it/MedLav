@@ -32,7 +32,7 @@ async function mistralOcr(bytes: Buffer, mime: string): Promise<string> {
       ? { type: 'image_url', image_url: `data:${mime};base64,${bytes.toString('base64')}` }
       : { type: 'document_url', document_url: `data:${mime};base64,${bytes.toString('base64')}` },
   };
-  const res = await fetch('https://api.mistral.ai/v1/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` }, body: JSON.stringify(body) });
+  const res = await fetch(`${process.env.MISTRAL_SERVER_URL?.trim() || 'https://api.eu.mistral.ai'}/v1/ocr`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`mistral ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json() as { pages?: Array<{ index: number; markdown: string }> };
   return (json.pages ?? []).map((p) => `--- pagina ${p.index + 1} ---\n${p.markdown}`).join('\n\n');

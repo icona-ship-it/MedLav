@@ -87,12 +87,12 @@ Congiuntamente denominate le "Parti".
 
 | Servizio Mistral | Finalita | Modello |
 |-------------------|----------|---------|
-| **OCR documentazione clinica** | Estrazione testuale da documenti PDF, immagini e file clinici caricati dagli utenti | `mistral-ocr-latest` |
-| **Estrazione eventi** | Identificazione e strutturazione degli eventi clinici rilevanti dal testo estratto via OCR | `mistral-large-latest` |
-| **Generazione sintesi medico-legale** | Produzione del report medico-legale strutturato con analisi, valutazioni e conclusioni | `mistral-large-latest` |
+| **OCR documentazione clinica** | Estrazione testuale da documenti PDF, immagini e file clinici caricati dagli utenti | `mistral-ocr-2512` (OCR 3) |
+| **Estrazione eventi** | Identificazione e strutturazione degli eventi clinici rilevanti dal testo estratto via OCR | `mistral-large-2512` |
+| **Generazione sintesi medico-legale** | Produzione del report medico-legale strutturato con analisi, valutazioni e conclusioni | `mistral-large-2512` (verifica claim-level: `mistral-medium-latest`) |
 | **Embedding semantici** | Generazione di vettori per il sistema RAG (retrieval di linee guida cliniche) | `mistral-embed` |
 
-2.2. Il trattamento consiste nella trasmissione temporanea dei dati ai server Mistral AI, nella loro elaborazione algoritmica, e nella restituzione dei risultati a LegMed. Mistral AI non conserva i dati dopo il completamento della singola richiesta API (zero data retention policy).
+2.2. Il trattamento consiste nella trasmissione temporanea dei dati ai server Mistral AI (endpoint regionale UE `api.eu.mistral.ai`, che garantisce hosting e inferenza nell'Unione — l'endpoint globale non lo garantisce), nella loro elaborazione algoritmica, e nella restituzione dei risultati a LegMed. **Zero Data Retention**: è una configurazione da RICHIEDERE e ottenere per iscritto da Mistral (Help Center, disponibile per i piani pay-as-you-go, stato visibile in Admin › Privacy); fino alla conferma scritta si applica la retention standard del fornitore e questo documento NON può dichiarare la ZDR come in essere (rettifica del 2026-09-05; in precedenza era dichiarata come fatto).
 
 2.3. Non e previsto alcun processo decisionale automatizzato ai sensi dell'Art. 22 GDPR. I report generati sono strumenti di supporto al perito medico-legale che mantiene piena autonomia decisionale.
 
@@ -322,9 +322,9 @@ Firma: ___________________
 
 | Flusso | Dati trasmessi | Endpoint | Retention |
 |--------|---------------|----------|-----------|
-| OCR | PDF/immagini di documenti clinici (referti, cartelle, certificati) | EU API `mistral-ocr-latest` | Zero (elaborazione in-memory) |
-| Estrazione eventi | Testo OCR contenente dati sanitari strutturati e non strutturati | EU API `mistral-large-latest` | Zero (elaborazione in-memory) |
-| Sintesi report | Testo eventi estratti + contesto caso per generazione report | EU API `mistral-large-latest` | Zero (elaborazione in-memory) |
+| OCR | PDF/immagini di documenti clinici (referti, cartelle, certificati) | `api.eu.mistral.ai` `mistral-ocr-2512` | ZDR se approvata da Mistral; altrimenti retention standard del fornitore (da confermare per iscritto) |
+| Estrazione eventi | Testo OCR contenente dati sanitari strutturati e non strutturati | `api.eu.mistral.ai` `mistral-large-2512` | idem |
+| Sintesi report | Testo eventi estratti + contesto caso per generazione report | `api.eu.mistral.ai` `mistral-large-2512` | idem |
 | Embedding linee guida | Testo di linee guida cliniche (non contiene dati personali) | EU API `mistral-embed` | Zero (elaborazione in-memory) |
 | ~~Dettatura vocale (Voxtral)~~ **FLUSSO CESSATO il 2026-06-10** (funzione rimossa dal prodotto) | Clip audio (massimo 5 minuti) registrate dal perito sul browser, contenenti voce del perito con possibili riferimenti orali a dati clinici | EU API `voxtral-mini-latest` (`/v1/audio/transcriptions`) | Zero — l'audio NON veniva salvato da LegMed (no Storage/DB) né conservato da Mistral. Dal 2026-06-10 nessun dato audio viene più trasmesso a Mistral. |
 

@@ -23,7 +23,7 @@ import { DOC_SANITARIA_RC_DIRECTIVE } from '@/services/synthesis/catalog-shared'
 type Chat = (system: string, user: string) => Promise<string>;
 
 const mistralChat: Chat = async (system, user) => {
-  const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+  const res = await fetch(`${process.env.MISTRAL_SERVER_URL?.trim() || 'https://api.eu.mistral.ai'}/v1/chat/completions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
     body: JSON.stringify({ model: 'mistral-large-2512', temperature: 0, random_seed: 42, max_tokens: 16000, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
   });

@@ -35,6 +35,9 @@ export const DETERMINISTIC_SEED = 42;
 // requires the exact model id (recorded in reports.generation_metadata.modelId).
 // Pinning does NOT cover retirement: re-check the Mistral changelog quarterly
 // (next: 2026-09, together with the normative-data staleness check).
+/** Endpoint Mistral: regionale UE per default (dati sanitari, art. 9). */
+export const MISTRAL_SERVER_URL: string = process.env.MISTRAL_SERVER_URL?.trim() || 'https://api.eu.mistral.ai';
+
 export const MISTRAL_MODELS = {
   /** Vision model — Mistral Large 3 (multimodal) post pixtral retirement. */
   PIXTRAL_LARGE: 'mistral-large-2512',
@@ -92,8 +95,13 @@ export function getMistralClient(timeoutMs?: number): Mistral {
   if (!apiKey) {
     throw new Error('MISTRAL_API_KEY environment variable is not set');
   }
+  // Residenza dei dati (ricerca 2026-09-05): l'endpoint globale non garantisce
+  // il luogo di inferenza; quello regionale UE (api.eu.mistral.ai, +10%) sì.
+  // Configurabile per emergenze; default UE. Nessun uso di Files/Batch/Agents
+  // (non disponibili sul regionale), quindi nessun refactor.
   return new Mistral({
     apiKey,
+    serverURL: MISTRAL_SERVER_URL,
     timeoutMs: timeoutMs ?? TIMEOUT_DEFAULT,
     httpClient: new HTTPClient({ fetcher: fetchWithContentLength }),
   });
