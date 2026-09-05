@@ -15,7 +15,7 @@ export const BUILD_TIME: string | undefined = process.env.NEXT_PUBLIC_BUILD_TIME
  * build — altrimenti ogni deploy (anche solo di UI) chiederebbe al medico di
  * rielaborare, spendendo crediti per niente.
  */
-export const PIPELINE_CHANGED_AT = '2026-09-04T16:00:00.000Z';
+export const PIPELINE_CHANGED_AT = '2026-09-05T18:00:00.000Z';
 
 function parseIso(value: string | null | undefined): number | null {
   if (!value) return null;
