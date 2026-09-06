@@ -11,6 +11,7 @@ import {
   type DeterministicTableEvent,
   type DeterministicDoc,
   computeTranscriptionCoverage,
+  formatSsnCostTable,
 } from './deterministic-tables';
 
 function ev(partial: Partial<DeterministicTableEvent>): DeterministicTableEvent {
@@ -502,5 +503,24 @@ describe('expandDeterministicBlocks — docSanitariaMode "rubriche" (2026-09-04)
     expect(rub).not.toContain('PA 120/80');
     const full = expandDeterministicBlocks(md, evsRub as never, docsRub as never, { docSanitariaMode: null });
     expect(full).toContain('PA 120/80');
+  });
+});
+
+describe('formatSsnCostTable — doppioni cross-documento dichiarati', () => {
+  it('la stessa notifica in due documenti conta una volta e la tabella lo dice', () => {
+    const md = formatSsnCostTable([
+      ev({ event_type: 'spesa_medica', event_date: '2024-11-13', title: 'Costo TC', description: 'il SSR ha impiegato euro 521,35', document_id: 'd1' }),
+      ev({ event_type: 'spesa_medica', event_date: '2024-11-13', title: 'Informazione costo esame', description: 'costo sostenuto dal SSR euro 521,35', document_id: 'd2' }),
+      ev({ event_type: 'spesa_medica', event_date: '2025-01-24', title: 'RX', description: 'il SSR ha impiegato euro 83,70', document_id: 'd3' }),
+    ]);
+    expect(md.match(/521,35 €/g)).toHaveLength(1);
+    expect(md).toContain('**605,05 €**');
+    expect(md).toContain('Una notifica con stessa data e stesso importo');
+  });
+  it('senza doppioni nessuna nota', () => {
+    const md = formatSsnCostTable([
+      ev({ event_type: 'spesa_medica', event_date: '2024-11-13', title: 'Costo TC', description: 'il SSR ha impiegato euro 521,35', document_id: 'd1' }),
+    ]);
+    expect(md).not.toContain('contata una sola volta');
   });
 });

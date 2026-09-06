@@ -296,6 +296,9 @@ interface AnalyzableEvent {
    * su 4 senza importo perché l'estrazione non l'aveva copiato in description,
    * ma "€ 120,00" era nel sourceText). */
   source_text?: string | null;
+  /** Documento di origine: serve a riconoscere la STESSA notifica di costo SSN
+   * letta in due documenti diversi (fascicolo ↔ referto). */
+  document_id?: string | null;
 }
 
 /**
@@ -360,6 +363,27 @@ export interface SsnCostItem {
   description: string;
   facility: string | null;
   amount: number | null;
+  documentId?: string | null;
+}
+
+export interface SsnCostSummary {
+  items: SsnCostItem[];
+  total: number | null;
+  /** Notifiche unificate perché stesso importo, stessa data (±1 giorno) e documento
+   * DIVERSO: la stessa notifica letta due volte (fascicolo ↔ referto), non due costi. */
+  mergedDuplicates: number;
+}
+
+/** Stessa notifica vista in due documenti: stesso importo, data a ±1 giorno (il PS a
+ * cavallo di mezzanotte porta la data del giorno dopo), documento diverso. Due voci
+ * nello STESSO documento con pari importo sono due prestazioni (due RX a 27,90). */
+function isSameNotificationFromAnotherDocument(a: SsnCostItem, b: SsnCostItem): boolean {
+  if (a.amount == null || b.amount == null || Math.abs(a.amount - b.amount) > 0.005) return false;
+  if (!a.documentId || !b.documentId || a.documentId === b.documentId) return false;
+  const da = Date.parse(`${a.date}T00:00:00Z`);
+  const db = Date.parse(`${b.date}T00:00:00Z`);
+  if (Number.isNaN(da) || Number.isNaN(db)) return false;
+  return Math.abs(da - db) <= 86_400_000;
 }
 
 /**
@@ -367,8 +391,8 @@ export interface SsnCostItem {
  * ESCLUDE dalle spese del danneggiato — in una lista separata, così il perito ha
  * tutti i costi ordinati ma distinti (out-of-pocket vs pubblici). Puro.
  */
-export function collectSsnCosts(events: AnalyzableEvent[]): { items: SsnCostItem[]; total: number | null } {
-  if (!Array.isArray(events) || events.length === 0) return { items: [], total: null };
+export function collectSsnCosts(events: AnalyzableEvent[]): SsnCostSummary {
+  if (!Array.isArray(events) || events.length === 0) return { items: [], total: null, mergedDuplicates: 0 };
   const items: SsnCostItem[] = [];
   for (const ev of events) {
     if (!ev || typeof ev.title !== 'string') continue;
@@ -376,7 +400,7 @@ export function collectSsnCosts(events: AnalyzableEvent[]): { items: SsnCostItem
     const amount = extractAmount(ev.title)
       ?? extractAmount(ev.description)
       ?? (ev.source_text ? extractAmount(ev.source_text) : null);
-    items.push({ date: ev.event_date ?? '', description: ev.title, facility: ev.facility ?? null, amount });
+    items.push({ date: ev.event_date ?? '', description: ev.title, facility: ev.facility ?? null, amount, documentId: ev.document_id ?? null });
   }
   items.sort((a, b) => a.date.localeCompare(b.date));
   // Dedup deterministica (stessa data + importo + descrizione = stessa notifica).
@@ -387,9 +411,16 @@ export function collectSsnCosts(events: AnalyzableEvent[]): { items: SsnCostItem
     seen.add(key);
     return true;
   });
-  const withAmount = deduped.filter((i) => i.amount != null);
+  // Stessa notifica letta in DUE documenti (panel giro 7, caso C: +2.886,25 € di doppioni).
+  const unified: SsnCostItem[] = [];
+  let mergedDuplicates = 0;
+  for (const item of deduped) {
+    if (unified.some((kept) => isSameNotificationFromAnotherDocument(kept, item))) { mergedDuplicates++; continue; }
+    unified.push(item);
+  }
+  const withAmount = unified.filter((i) => i.amount != null);
   const total = withAmount.length > 0 ? withAmount.reduce((s, i) => s + (i.amount ?? 0), 0) : null;
-  return { items: deduped, total };
+  return { items: unified, total, mergedDuplicates };
 }
 
 export function analyzeExpenses(

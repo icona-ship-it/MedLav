@@ -526,3 +526,47 @@ describe('extractAmount — audit 2026-07-16: importi mai falsati in un atto dep
     expect(extractAmount('fattura di euro 1.500,00')).toBeCloseTo(1500, 2);
   });
 });
+
+// Panel giro 7 (2026-09-06), caso C: la stessa notifica di costo SSN letta in due
+// documenti diversi (fascicolo ↔ referto RX, verbale PS con data 13/14.11) entrava
+// due volte in tabella: +2.886,25 € sul totale.
+describe('collectSsnCosts — stessa notifica in documenti diversi = una voce', () => {
+  const ev = (o: Record<string, unknown>) => ({
+    event_type: 'spesa_medica', title: '', description: '', event_date: '2024-11-13',
+    facility: null, source_type: 'spese_mediche', ...o,
+  });
+  it('stesso importo, stessa data (±1 giorno), documento DIVERSO → unificate e dichiarate', () => {
+    const r = collectSsnCosts([
+      ev({ title: 'Informazione esposizione radiologica e costo esame', description: 'il SSR ha impiegato euro 521,35', document_id: 'doc-rx' }),
+      ev({ title: 'Spesa sanitaria per TC (euro 521,35)', description: 'costo sostenuto dal SSR euro 521,35', document_id: 'doc-fascicolo' }),
+      ev({ title: 'Spesa sanitaria per percorso di cura', description: 'il SSR ha impiegato euro 2.085,90', document_id: 'doc-fascicolo' }),
+      ev({ title: 'Spesa sanitaria per episodio di PS (13-14/11/2024)', description: 'il SSR ha impiegato euro 2.085,90', event_date: '2024-11-14', document_id: 'doc-ps' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+    expect(r.total).toBeCloseTo(2607.25, 2);
+    expect(r.mergedDuplicates).toBe(2);
+  });
+  it('stesso importo e stessa data nello STESSO documento = due prestazioni distinte (due RX a 27,90)', () => {
+    const r = collectSsnCosts([
+      ev({ title: 'RX anca', description: 'il SSR ha impiegato euro 27,90', document_id: 'doc-a' }),
+      ev({ title: 'RX femore', description: 'il SSR ha impiegato euro 27,90', document_id: 'doc-a' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+    expect(r.mergedDuplicates).toBe(0);
+  });
+  it('senza document_id (legacy) si unifica solo l\'identico (data+importo+descrizione)', () => {
+    const r = collectSsnCosts([
+      ev({ title: 'RX anca', description: 'il SSR ha impiegato euro 27,90' }),
+      ev({ title: 'RX femore', description: 'il SSR ha impiegato euro 27,90' }),
+      ev({ title: 'RX femore', description: 'il SSR ha impiegato euro 27,90' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+  });
+  it('a due giorni di distanza NON è la stessa notifica', () => {
+    const r = collectSsnCosts([
+      ev({ title: 'A', description: 'il SSR ha impiegato euro 55,80', event_date: '2024-11-13', document_id: 'x' }),
+      ev({ title: 'B', description: 'il SSR ha impiegato euro 55,80', event_date: '2024-11-15', document_id: 'y' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+  });
+});

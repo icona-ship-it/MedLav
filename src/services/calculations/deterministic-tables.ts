@@ -163,7 +163,7 @@ export function formatSsnCostTable(events: DeterministicTableEvent[]): string {
   const expenses = events.filter((e) => e.event_type === 'spesa_medica');
   if (expenses.length === 0) return '';
 
-  const { items, total } = collectSsnCosts(
+  const { items, total, mergedDuplicates } = collectSsnCosts(
     expenses.map((e) => ({
       event_type: e.event_type,
       title: e.title ?? '',
@@ -172,9 +172,13 @@ export function formatSsnCostTable(events: DeterministicTableEvent[]): string {
       facility: e.facility ?? null,
       source_type: e.source_type ?? 'altro',
       source_text: e.source_text ?? null,
+      document_id: e.document_id ?? null,
     })),
   );
   if (items.length === 0) return '';
+  const mergedNote = mergedDuplicates > 0
+    ? `\n_${mergedDuplicates === 1 ? 'Una notifica' : `${mergedDuplicates} notifiche`} con stessa data e stesso importo, presenti in più documenti, ${mergedDuplicates === 1 ? 'è stata contata' : 'sono state contate'} una sola volta._`
+    : '';
 
   const rows = items.map((it) =>
     `| ${displayDate(it.date)} | ${cell(it.description)} | ${cell(it.facility)} | ${it.amount !== null ? formatEuro(it.amount) : '—'} |`,
@@ -190,7 +194,7 @@ export function formatSsnCostTable(events: DeterministicTableEvent[]): string {
     '|---|---|---|---|',
     ...rows,
     `| **Totale a carico SSN** | | | ${totalCell}${totalNote} |`,
-  ].join('\n');
+  ].join('\n') + mergedNote;
 }
 
 /**
