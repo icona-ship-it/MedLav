@@ -131,7 +131,18 @@ function renderStragiudizialeHeader(data: HeaderData): string {
   const ambitoSuffix = ambitoLabel ? ` in ambito ${ambitoLabel}` : '';
   lines.push(`Al fine di valutare le lesioni patite${eventoStr} e di accertarne le conseguenze di ordine temporaneo e permanente${ambitoSuffix}.`);
 
-  return lines.join('\n').trim();
+  // Interruzioni di riga MARKDOWN (due spazi): nel visualizzatore in app (react-markdown)
+  // righe separate da un solo "\n" finiscono nello stesso paragrafo e i dati anagrafici
+  // uscivano tutti su una riga; nei gold sono uno per riga. L'export HTML/DOCX, che già
+  // rende una riga per paragrafo, non cambia.
+  return withHardBreaks(lines).trim();
+}
+
+/** Aggiunge il "hard break" markdown alle righe seguite da un'altra riga non vuota. */
+function withHardBreaks(lines: ReadonlyArray<string>): string {
+  return lines
+    .map((line, i) => (line.trim() && (lines[i + 1] ?? '').trim() ? `${line}  ` : line))
+    .join('\n');
 }
 
 function ambitoToText(ambito: HeaderData['oggetto']['ambito']): string | null {

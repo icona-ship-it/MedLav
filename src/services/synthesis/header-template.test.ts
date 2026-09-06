@@ -157,3 +157,19 @@ describe('renderHeaderMarkdown — scaffold completo come nei gold, mai inferenz
     expect(md).not.toContain('RC auto');
   });
 });
+
+describe('renderHeaderMarkdown — una riga per dato anche nel visualizzatore', () => {
+  it('le righe consecutive del blocco anagrafico finiscono con il break markdown (due spazi)', () => {
+    const md = renderHeaderMarkdown({
+      perito: { nome: 'Dott. Mario Demprova', specializzazione: 'Medicina legale', iscrizioneAlbo: null, email: null, pec: null },
+      dataVisitaMedicoLegale: '01/09/2026',
+      paziente: { nome: 'DEMPROVA Maria', luogoNascita: 'Cittàdemo', dataNascita: '01/01/1970', residenza: 'Cittàdemo', codiceFiscale: null, email: null, telefono: null, avvocato: null },
+      oggetto: { eventoIndice: 'trauma da caduta', dataEvento: '12/09/2025', ambito: 'rc_civile' },
+    } as never);
+    expect(md).toMatch(/Nato\/a a Cittàdemo il 01\/01\/1970 e residente a Cittàdemo {2}\n/);
+    expect(md).toMatch(/C\.F\. \[da compilare dal perito\] {2}\n/);
+    expect(md).toMatch(/Dott\. Mario Demprova {2}\nMedicina legale/);
+    // le righe vuote restano tali (separano i blocchi)
+    expect(md).toContain('\n\n');
+  });
+});
