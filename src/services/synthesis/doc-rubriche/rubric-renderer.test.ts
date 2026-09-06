@@ -488,3 +488,16 @@ describe('giro 10: boilerplate radiologico, moduli di scala, referto in degenza 
     expect(out).not.toContain('Referti eseguiti in degenza');
   });
 });
+
+describe('dedup sull\'incipit anche per referti brevi (≥15 parole); saluto della lettera informativa fuori', () => {
+  it('un RX di 30 parole nel fascicolo e come referto proprio esce una volta sola; «Gentile Signore/Signora» non è una citazione', () => {
+    const body = 'RX FEMORE SN\nFrattura del collo femorale e frattura scomposta con accavallamento dei monconi al terzo diafisario femorale medio.\nRX GAMBA, CAVIGLIA E PIEDE DX\nNon fratture.';
+    const pages = (n: number, first: string) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 0 ? first : `DIARIO\ndecorso regolare giorno ${i + 1}\nCONSENSO INFORMATO\nfirmato` }));
+    const fasc: RubricDocument = { documentId: 'fasc', documentType: 'cartella_clinica', header: '**Cartella clinica, dal 13.11.2024 al 22.11.2024:**', sortDate: '2024-11-13', pages: pages(12, `CARTELLA CLINICA\nREFERTO\n${body}\nQuesta rappresentazione è conforme all'originale`) };
+    const rx: RubricDocument = { documentId: 'rx', documentType: 'esame_strumentale', header: '**Referto RX, in data 14.11.2024:**', sortDate: '2024-11-14', pages: [{ pageNumber: 1, ocrText: `${body}\nGentile Signore/Signora\nla informiamo che l'esame comporta esposizione radiologica.` }] };
+    const lettera: RubricDocument = { documentId: 'let', documentType: 'lettera_dimissione', header: '**Lettera, in data 22.11.2024:**', sortDate: '2024-11-22', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura trattata.' }] };
+    const out = renderRubricDocSanitaria([fasc, rx, lettera], DEFAULT_RUBRIC_POLICY).markdown;
+    expect(out.match(/accavallamento dei monconi/g)).toHaveLength(1);
+    expect(out).not.toContain('Gentile Signore');
+  });
+});

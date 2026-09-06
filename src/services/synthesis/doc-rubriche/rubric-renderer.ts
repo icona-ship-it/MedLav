@@ -48,7 +48,7 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
 const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
-const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica|informazione relativa all'esposizione|esposizione (della procedura )?radiologica|euratom|decreto legislativo 31 luglio 2020|articolo 161|rappresentazione è conforme|conforme all'originale|validato da|linee guida$|^(barthel|indice di barthel|scala (di )?(braden|conley|morse|tinetti)|mmse|mini[- ]mental)\b|\bdata (ing|dim)\.|(^|\s)_(\s|$)|:\s*_)/i;
+const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica|informazione relativa all'esposizione|esposizione (della procedura )?radiologica|euratom|decreto legislativo 31 luglio 2020|articolo 161|rappresentazione è conforme|conforme all'originale|validato da|linee guida$|^gentile (signor|sig\.)|^(barthel|indice di barthel|scala (di )?(braden|conley|morse|tinetti)|mmse|mini[- ]mental)\b|\bdata (ing|dim)\.|(^|\s)_(\s|$)|:\s*_)/i;
 /** Istruzioni di compilazione di una scala (Barthel, Braden…): righe numerate che
  * parlano di punteggio/indipendenza/prestazione del paziente, non di questo paziente. */
 const SCALE_GUIDELINE_RE = /^\d{1,2}\s*[-.)]\s.*(\bpz\.|punteggio|indipenden|supervisione|prestazione del|incoscienza|in tutte le voci|dovrebbe(ro)? (essere|ricevere))/i;
@@ -240,9 +240,11 @@ function normalizeForDedup(text: string): string {
  * letto in due documenti (fascicolo ↔ referto proprio) differisce solo nel piè
  * di pagina, e la chiave sul testo intero non lo riconosceva (C: RX 14.11 x2). */
 const DEDUP_PREFIX_WORDS = 40;
+/** Sotto questa lunghezza un referto è troppo generico per una chiave sull'incipit. */
+const DEDUP_MIN_WORDS = 15;
 function dedupPrefixKey(cleaned: string): string | null {
   const words = normalizeForDedup(cleaned).split(' ').filter(Boolean);
-  return words.length >= DEDUP_PREFIX_WORDS ? words.slice(0, DEDUP_PREFIX_WORDS).join(' ') : null;
+  return words.length >= DEDUP_MIN_WORDS ? words.slice(0, DEDUP_PREFIX_WORDS).join(' ') : null;
 }
 
 function countWords(text: string): number {
