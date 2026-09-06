@@ -80,6 +80,8 @@ function renderStragiudizialeHeader(data: HeaderData): string {
       for (const spec of data.perito.specializzazione.split(/\n|;|\s\/\s/).map((s) => s.trim()).filter(Boolean)) {
         lines.push(spec);
       }
+    } else {
+      lines.push(`[specializzazioni del perito: ${TBD}]`);
     }
     if (data.perito.iscrizioneAlbo) lines.push(`Iscrizione Albo: ${data.perito.iscrizioneAlbo}`);
     if (data.perito.email) lines.push(`E-mail: ${data.perito.email}`);
@@ -102,22 +104,17 @@ function renderStragiudizialeHeader(data: HeaderData): string {
 
   // Dati del periziando, riga per riga (gold Antoniazzi).
   lines.push(`**${p.nome ?? TBD}**`);
-  if (p.luogoNascita || p.dataNascita) {
-    // Genere dal CF quando disponibile (audit 2026-07-16): "Nato/a" non risolto
-    // in un atto con perizianda identificata era una stonatura immediata.
-    const gender = genderFromCodiceFiscale(p.codiceFiscale);
-    let nato = gender === 'f' ? 'Nata' : gender === 'm' ? 'Nato' : 'Nato/a';
-    if (p.luogoNascita) nato += ` a ${p.luogoNascita}`;
-    if (p.dataNascita) nato += ` il ${p.dataNascita}`;
-    if (p.residenza) nato += ` e residente a ${p.residenza}`;
-    lines.push(nato);
-  } else if (p.residenza) {
-    lines.push(`Residente a ${p.residenza}`);
-  }
-  if (p.codiceFiscale) lines.push(`C.F. ${p.codiceFiscale}`);
+  // Blocco anagrafico come nei gold: ogni dato mancante resta un segnaposto per il
+  // perito, mai una riga in meno (panel giri 9-11). Genere dal CF quando c'è.
+  const gender = genderFromCodiceFiscale(p.codiceFiscale);
+  let nato = gender === 'f' ? 'Nata' : gender === 'm' ? 'Nato' : 'Nato/a';
+  nato += ` a ${p.luogoNascita ?? TBD} il ${p.dataNascita ?? TBD} e residente a ${p.residenza ?? TBD}`;
+  lines.push(nato);
+  lines.push(`C.F. ${p.codiceFiscale ?? TBD}`);
   if (p.email) lines.push(`MAIL: ${p.email}`);
   if (p.telefono) lines.push(`TEL: ${p.telefono}`);
-  if (p.avvocato) lines.push(`Avvocato di parte: ${p.avvocato}`);
+  if (!p.email && !p.telefono) lines.push(`Recapiti: ${TBD}`);
+  lines.push(`Avvocato di parte: ${p.avvocato ?? TBD}`);
   lines.push('');
 
   // Riga-scopo. Decisione Lavini 2026-06-23 (#3): ENTRAMBE le formule dei gold —
@@ -125,7 +122,9 @@ function renderStragiudizialeHeader(data: HeaderData): string {
   // temporaneo e permanente" (MOTTA). L'ambito (es. responsabilità civile) chiude.
   const o = data.oggetto;
   const eventoParts: string[] = [];
-  if (o.eventoIndice) eventoParts.push(`in occasione di ${o.eventoIndice.toLowerCase()}`);
+  // Niente virgolettati nell'oggetto: sarebbero frasi attribuite che nessun documento riporta.
+  const eventoIndice = o.eventoIndice ? o.eventoIndice.replace(/[«»"“”]/g, '').replace(/\s+/g, ' ').trim() : null;
+  if (eventoIndice) eventoParts.push(`in occasione di ${eventoIndice.toLowerCase()}`);
   if (o.dataEvento) eventoParts.push(`occorso in data ${o.dataEvento}`);
   const eventoStr = eventoParts.length > 0 ? ` ${eventoParts.join(' ')}` : ` in occasione di ${TBD}`;
   const ambitoLabel = ambitoToText(o.ambito);
@@ -139,7 +138,7 @@ function ambitoToText(ambito: HeaderData['oggetto']['ambito']): string | null {
   if (!ambito) return null;
   const map: Record<NonNullable<HeaderData['oggetto']['ambito']>, string> = {
     rc_civile: 'di responsabilità civile',
-    rc_auto: 'di RC auto',
+    rc_auto: 'di responsabilità civile', // auto/generale è distinzione del perito, non dei documenti
     penale: 'penale',
     previdenziale: 'previdenziale',
     infortuni: 'infortunistico',

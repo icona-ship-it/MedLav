@@ -64,3 +64,28 @@ describe('sanitizeAnamnesiPast — etichette equivalenti e lesioni senza data (v
     expect(sanitizeAnamnesiPast(line, current, lesions)).toEqual({ text: line, replaced: false });
   });
 });
+
+// Panel giri 9-11 (casi B e C): «In passato: nulla di rilevante documentato.» seguito
+// dall'elenco stesso delle comorbilità, perché la clausola di fonte («come da cartella
+// clinica del 16.07.2023») portava la data del sinistro e la voce veniva scartata.
+describe('sanitizeAnamnesiPast — clausola di fonte ed elenco puntato', () => {
+  const days = collectCurrentDays([{ eventDate: '2023-07-16', temporalScope: 'corrente' }]);
+  it('la data nella clausola di fonte non rende «indice» una comorbilità pregressa', () => {
+    const text = 'In passato: cardiopatia ischemica, come da cartella clinica del 16.07.2023; ipotiroidismo in trattamento, come da cartella clinica del 16.07.2023.';
+    const out = sanitizeAnamnesiPast(text, days, ['frattura del femore']);
+    expect(out.replaced).toBe(false);
+    expect(out.text).toBe(text);
+  });
+  it('quando la riga si svuota ma sotto c\'è l\'elenco puntato, resta l\'etichetta senza «nulla di rilevante»', () => {
+    const text = 'In passato: frattura del femore del 16.07.2023.\n- Cardiopatia ischemica, riferita in anamnesi, come da cartella clinica del 16.07.2023.\n- Ipotiroidismo.';
+    const out = sanitizeAnamnesiPast(text, days, ['frattura del femore']);
+    expect(out.replaced).toBe(true);
+    expect(out.text.split('\n')[0]).toBe('In passato:');
+    expect(out.text).not.toContain('nulla di rilevante');
+    expect(out.text).toContain('- Cardiopatia ischemica');
+  });
+  it('senza elenco sotto, la riga svuotata dice «nulla di rilevante documentato»', () => {
+    const out = sanitizeAnamnesiPast('In passato: frattura del femore del 16.07.2023.\n\nPeso: 70 kg', days, ['frattura del femore']);
+    expect(out.text).toContain('In passato: nulla di rilevante documentato.');
+  });
+});

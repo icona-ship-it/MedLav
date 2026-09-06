@@ -19,9 +19,9 @@ describe('formatRicoveroITTFactsBlock — fatti deterministici Epicrisi (ricover
       makeEvent('2025-01-16', 'follow-up', 'Controllo ortopedico'),
     ];
     const block = formatRicoveroITTFactsBlock(events);
-    expect(block).toContain('Giorni di ricovero');
+    expect(block).toContain('Giorni di degenza');
     expect(block).toContain('9 (nove)'); // inclusivo (gold), coerente con calculateHospitalDays e la sezione PERIODI
-    expect(block).toContain('Durata complessiva del periodo di malattia');
+    expect(block).toContain('Intervallo tra il primo e l\'ultimo documento clinico');
     // il numero della durata NON va etichettato come ITT/invalidità (era il bug "448 gg ITT")
     expect(block).not.toMatch(/invalidità temporanea/i);
     expect(block).not.toContain('ITT');
@@ -47,8 +47,8 @@ describe('formatRicoveroITTFactsBlock — fatti deterministici Epicrisi (ricover
       makeEvent('2024-06-15', 'follow-up', 'Ultimo controllo'),
     ];
     const block = formatRicoveroITTFactsBlock(events);
-    expect(block).not.toContain('Giorni di ricovero');
-    expect(block).toContain('Durata complessiva del periodo di malattia');
+    expect(block).not.toContain('Giorni di degenza');
+    expect(block).toContain('Intervallo tra il primo e l\'ultimo documento clinico');
   });
 
   it('fasce graduate 75/50/25 NON incluse (restano scaffold del perito)', () => {
@@ -631,13 +631,13 @@ describe('fatti deterministici robusti — diario ≠ ammissione, certificato �
       makeEvent('2025-06-24', 'certificato', 'Certificato medico di controllo domiciliare per inabilità lavorativa', 'Visita INPS; agli atti la lettera di dimissione del 22/11/2024 per frattura femore.'),
     ]);
     // La degenza parte dall'ammissione in reparto (14.11), non dall'accesso in PS: 9 gg come il gold.
-    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
+    expect(block).toContain('Giorni di degenza: 9 (nove), dal 14.11.2024 al 22.11.2024');
     expect(block).not.toContain('212');
-    const ricoveroLines = block.split('\n').filter((l) => l.includes('Giorni di ricovero'));
+    const ricoveroLines = block.split('\n').filter((l) => l.includes('Giorni di degenza'));
     expect(ricoveroLines).toHaveLength(1);
     expect(ricoveroLines[0]).not.toContain('24.06.2025');
     // Il certificato INPS resta l'ultimo evento del periodo di malattia (è clinico).
-    expect(block).toContain("all'ultimo (24.06.2025)");
+    expect(block).toContain('al 24.06.2025');
   });
 
   it('la citazione della dimissione nella description di un CERTIFICATO non è una dimissione', () => {
@@ -683,7 +683,7 @@ describe('fatti deterministici robusti — diario ≠ ammissione, certificato �
       makeEvent('2014-11-14', 'visita', 'Valutazione anestesiologica'),
       ...stay,
     ]);
-    expect(block).toContain('dal primo evento documentato (13.11.2024)');
+    expect(block).toContain('dal 13.11.2024 al');
     expect(block).not.toContain('2014');
     expect(block).not.toContain('4163');
     expect(block).toMatch(/1 evento .*isolat/i);
@@ -695,7 +695,7 @@ describe('fatti deterministici robusti — diario ≠ ammissione, certificato �
       makeEvent('2024-01-10', 'visita', 'Accesso PS'),
       makeEvent('2025-06-01', 'visita', 'Controllo tardivo'),
     ]);
-    expect(block).toContain('dal primo evento documentato (10.01.2024)');
+    expect(block).toContain('dal 10.01.2024 al');
     expect(block).not.toMatch(/isolat/i);
   });
 
@@ -734,7 +734,7 @@ describe('fatti deterministici robusti — giro avversariale', () => {
       makeEvent('2014-03-01', 'visita', 'Visita A'), makeEvent('2014-03-05', 'visita', 'Visita B'),
       makeEvent('2024-03-01', 'visita', 'Visita C'), makeEvent('2024-03-05', 'visita', 'Visita D'),
     ]);
-    expect(block).toContain('dal primo evento documentato (01.03.2024)');
+    expect(block).toContain('dal 01.03.2024 al');
     expect(block).toMatch(/2 eventi isolati/);
   });
 });
@@ -750,8 +750,8 @@ describe('accesso in Pronto Soccorso ≠ ricovero', () => {
       makeEvent('2025-09-13', 'referto', 'Dimissione dal Pronto Soccorso con tutore'),
       makeEvent('2025-10-20', 'visita', 'Controllo ortopedico'),
     ]);
-    expect(block).not.toContain('Giorni di ricovero');
-    expect(block).toContain('Durata complessiva');
+    expect(block).not.toContain('Giorni di degenza');
+    expect(block).toContain('Intervallo tra il primo e l\'ultimo documento clinico');
   });
 
   it('accesso PS il 13, ricovero in reparto il 14, dimissione il 22 → la degenza parte dal 14 (9 giorni, come il gold)', () => {
@@ -763,7 +763,7 @@ describe('accesso in Pronto Soccorso ≠ ricovero', () => {
       makeEvent('2024-11-19', 'ricovero', 'Decorso post-operatorio del 19/11/2024'),
       makeEvent('2024-11-22', 'referto', 'Lettera di dimissione del 22/11/2024'),
     ]);
-    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
+    expect(block).toContain('Giorni di degenza: 9 (nove), dal 14.11.2024 al 22.11.2024');
   });
 
   it('un accesso PS seguito da una degenza lunga (unica dimissione dopo 10 giorni) resta una degenza', () => {
@@ -808,7 +808,7 @@ describe('accesso in Pronto Soccorso ≠ ricovero — giro avversariale', () => 
       makeEvent('2024-11-14', 'referto', 'Dimissione da PS: nessuna terapia farmacologica prescritta'),
       makeEvent('2024-11-22', 'referto', 'Lettera di dimissione del 22/11/2024'),
     ]);
-    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
+    expect(block).toContain('Giorni di degenza: 9 (nove), dal 14.11.2024 al 22.11.2024');
   });
 });
 

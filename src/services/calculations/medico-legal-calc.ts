@@ -600,14 +600,14 @@ export function formatRicoveroITTFactsBlock(events: CalcEvent[], incidentDate?: 
   // (1) Giorni di ricovero (esclusivi, come l'intero modulo calc).
   for (const r of calculateHospitalDays(clinical)) {
     if (r.days === null || !r.startDate || !r.endDate) continue;
-    lines.push(`- **Giorni di ricovero:** ${r.days} (${numberToItalianWords(r.days)}), dal ${formatDate(r.startDate)} al ${formatDate(r.endDate)}.`);
+    lines.push(`- Giorni di degenza: ${r.days} (${numberToItalianWords(r.days)}), dal ${formatDate(r.startDate)} al ${formatDate(r.endDate)}, conteggio inclusivo dei due estremi.`);
   }
 
   // (2) Durata complessiva del periodo di malattia (intervallo calendariale primo→ultimo
   // evento). Etichetta esplicita: NON è una valutazione di inabilità (riservata al perito).
   const span = calculateTotalIllnessPeriod(clinical);
   if (span.days !== null && span.days > 0 && span.startDate && span.endDate) {
-    lines.push(`- **Durata complessiva del periodo di malattia:** ${span.days} (${numberToItalianWords(span.days)}) giorni, dal primo evento documentato (${formatDate(span.startDate)}) all'ultimo (${formatDate(span.endDate)}) — intervallo calendariale, non una valutazione di inabilità (riservata al perito).`);
+    lines.push(`- Intervallo tra il primo e l'ultimo documento clinico: ${span.days} (${numberToItalianWords(span.days)}) giorni, dal ${formatDate(span.startDate)} al ${formatDate(span.endDate)}. Non è il periodo di malattia né una valutazione di inabilità temporanea, che restano al perito.`);
   }
 
   // (3) Trasparenza: se la data sinistro ha escluso eventi, il perito deve saperlo
@@ -623,7 +623,10 @@ export function formatRicoveroITTFactsBlock(events: CalcEvent[], incidentDate?: 
   }
 
   if (lines.length === 0) return '';
-  return `**Dati medico-legali calcolati (deterministici):**\n${lines.join('\n')}`;
+  // Riferimenti in CORSIVO: sono un appunto dell'applicazione per il perito (che li
+  // verifica e li usa nella graduazione), non un'asserzione del corpo depositabile
+  // (panel giri 8-11: «numero auto-calcolato in blocco non scaffold» su tutti i casi).
+  return `*Riferimenti calcolati dall'applicazione sui documenti (da verificare prima del deposito):*\n${lines.map((l) => `*${l}*`).join('\n')}`;
 }
 
 function calculateInterSurgeryIntervals(events: CalcEvent[]): MedicoLegalCalculation[] {

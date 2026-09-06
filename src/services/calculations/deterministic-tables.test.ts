@@ -159,7 +159,7 @@ describe('expandDeterministicBlocks', () => {
     const md = `## Epicrisi\n\n${DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS}`;
     const out = expandDeterministicBlocks(md, clinical);
     expect(out).not.toContain(DETERMINISTIC_MARKERS.ITT_RICOVERO_FACTS);
-    expect(out).toContain('Giorni di ricovero');
+    expect(out).toContain('Giorni di degenza');
     expect(out).toContain('9 (nove)'); // inclusivo (gold): 14→22.11 conta entrambi i giorni
   });
 

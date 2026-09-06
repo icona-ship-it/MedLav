@@ -71,17 +71,35 @@ function mentionsCurrentLesion(part: string, lesions: ReadonlyArray<string>): bo
 /** Anamnesi: nella riga "In passato:" le voci con una data dell'evento indice
  * (eventi correnti) vengono tolte; le altre pregresse restano. Se non resta
  * nulla: "nulla di rilevante documentato". */
+/** Clausola di FONTE ("come da cartella clinica del 16.07.2023", "riferita in anamnesi
+ * … del …"): porta la data del documento, non quella del fatto pregresso. Va tolta
+ * prima di decidere se la voce è dell'evento indice (panel giri 9-11, casi B e C:
+ * comorbilità citate «come da cartella del giorno del sinistro» sparivano tutte e
+ * restava «nulla di rilevante documentato» sopra l'elenco stesso). */
+const SOURCE_CLAUSE_RE = /,?\s*(?:come (?:da|riferit[oa] (?:in|nel|nella))|riferit[oa] in anamnesi|secondo|documentat[oa] (?:in|nella|dal))\b[^,;]*/gi;
+
+function stripSourceClauses(part: string): string {
+  return part.replace(SOURCE_CLAUSE_RE, '').trim();
+}
+
 export function sanitizeAnamnesiPast(text: string, currentDays: ReadonlySet<number>, currentLesions: ReadonlyArray<string> = []): { text: string; replaced: boolean } {
   const m = PAST_LINE_RE.exec(text);
   if (!m) return { text, replaced: false };
   const body = (m[2] ?? '').trim();
-  const isIndex = (part: string): boolean => hasCurrentDate(part, currentDays) || mentionsCurrentLesion(part, currentLesions);
+  const isIndex = (part: string): boolean => {
+    const bare = stripSourceClauses(part);
+    return hasCurrentDate(bare, currentDays) || mentionsCurrentLesion(bare, currentLesions);
+  };
   if (!isIndex(body)) return { text, replaced: false };
   const kept = body.replace(/\.$/, '').split(/\s*[;,]\s+(?=[^)]*(?:\(|$))/).map((p) => p.trim()).filter((p) => p && !isIndex(p));
   const label = (m[1] ?? '').trimEnd();
   const head = /[:*]$/.test(label) ? label : `${label}:`;
-  const newBody = kept.length > 0 ? `${kept.join(', ')}.` : 'nulla di rilevante documentato.';
-  return { text: text.replace(PAST_LINE_RE, `${head} ${newBody}`), replaced: true };
+  // Se sotto la riga segue un elenco puntato (le voci pregresse scritte a parte),
+  // la riga resta un'etichetta: mai «nulla di rilevante» sopra un elenco.
+  const after = text.slice((m.index ?? 0) + m[0].length);
+  const bulletsFollow = /^\s*\n\s*[-*•]\s+\S/.test(after);
+  const newBody = kept.length > 0 ? `${kept.join(', ')}.` : bulletsFollow ? '' : 'nulla di rilevante documentato.';
+  return { text: text.replace(PAST_LINE_RE, `${head}${newBody ? ` ${newBody}` : ''}`), replaced: true };
 }
 
 /** Giorni (numero) degli eventi CORRENTI: le date dell'evento indice e del decorso. */

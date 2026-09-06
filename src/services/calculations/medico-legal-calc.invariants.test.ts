@@ -43,7 +43,7 @@ function randomEvents(r: () => number): Array<{ event_date: string; event_type: 
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date()); // stesso calendario del codice (mezzanotte di Roma ≠ UTC)
 
 describe('invarianti — calcoli medico-legali (fuzz, seme fisso, 3000 casi)', () => {
   it('nessun NaN, nessun periodo negativo, ogni data dentro i dati, mai date sentinella o future', () => {
@@ -73,7 +73,7 @@ describe('invarianti — calcoli medico-legali (fuzz, seme fisso, 3000 casi)', (
       }
       const block = formatRicoveroITTFactsBlock(events);
       expect(block).not.toMatch(/NaN|undefined|1900|\(\d+\)\s*giorni/); // mai la cifra tra parentesi al posto delle lettere
-      expect(block).not.toMatch(/Giorni di ricovero:\*\* 0 /);
+      expect(block).not.toMatch(/Giorni di degenza: 0 /);
     }
   });
 

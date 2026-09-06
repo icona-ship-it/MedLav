@@ -136,3 +136,24 @@ describe('normalizeAccompagnatore — articolo sui gradi di parentela (audit 202
     expect(normalizeAccompagnatore('Mario Rossi')).toBe('Mario Rossi');
   });
 });
+
+// Panel giri 9-11: intestazione «senza placeholder per anagrafica, recapiti e legale»
+// (gold r.17-47), «RC auto» inferito, virgolettato inesistente nell'oggetto.
+describe('renderHeaderMarkdown — scaffold completo come nei gold, mai inferenze nell\'oggetto', () => {
+  it('dati mancanti → segnaposti per nascita, residenza, C.F., recapiti e legale; specializzazioni del perito se assenti', () => {
+    const md = renderHeaderMarkdown({
+      perito: { nome: 'Dott. Mario Demprova', specializzazione: null, iscrizioneAlbo: null, email: null, pec: null },
+      dataVisitaMedicoLegale: null,
+      paziente: { nome: 'DEMPROVA Maria', luogoNascita: null, dataNascita: null, residenza: null, codiceFiscale: null, email: null, telefono: null, avvocato: null },
+      oggetto: { eventoIndice: 'Trauma stradale «come da referti controlli medici del 2024»', dataEvento: '12/09/2025', ambito: 'rc_auto' },
+    } as never);
+    expect(md).toContain('[specializzazioni del perito: [da compilare dal perito]]');
+    expect(md).toContain('Nato/a a [da compilare dal perito] il [da compilare dal perito] e residente a [da compilare dal perito]');
+    expect(md).toContain('C.F. [da compilare dal perito]');
+    expect(md).toContain('Recapiti: [da compilare dal perito]');
+    expect(md).toContain('Avvocato di parte: [da compilare dal perito]');
+    expect(md).not.toContain('«');
+    expect(md).toContain('in ambito di responsabilità civile');
+    expect(md).not.toContain('RC auto');
+  });
+});
