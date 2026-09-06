@@ -305,7 +305,8 @@ describe('renderRubricDocSanitaria — tetto di blocco: la rubrica che non entra
     const text = ['REFERTO', referto, 'ANAMNESI PROSSIMA', anamnesi, 'ESAME OBIETTIVO', eo, 'DIAGNOSI', 'Esiti di frattura.'].join('\n');
     const out = renderRubricDocSanitaria([doc({ documentId: 'fis', text })], DEFAULT_RUBRIC_POLICY);
     expect(out.markdown).toContain('(8/10 NRS)');
-    expect(out.markdown).toMatch(/Esame obiettivo: «Non dolore a riposo[\s\S]*\[\.\.\.\]»/);
+    expect(out.markdown).toMatch(/Esame obiettivo: «Non dolore a riposo/);
+    expect(out.markdown).toContain('Diagnosi: «Esiti di frattura.»');
     const words = out.markdown.split(/\s+/).length;
     expect(words).toBeLessThan(340);
   });
@@ -340,11 +341,83 @@ describe('renderRubricDocSanitaria — piè di pagina dello studio radiologico f
     ].join('\n');
     const out = renderRubricDocSanitaria([doc({ documentId: 'rxt', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
     expect(out.markdown).toContain('Campi polmonari ipoespansi');
-    expect(out.markdown).toContain('RX TORACE:');
+    // "RX TORACE: I" (titolo + classe di dose) è una citazione vuota: non si emette.
+    expect(out.markdown).not.toMatch(/«RX TORACE:\s*I»/);
     expect(out.markdown).not.toContain('orario');
     expect(out.markdown).not.toContain('Prenotazione');
     expect(out.markdown).not.toContain('Densitometria');
     expect(out.markdown).not.toContain('Consul.');
     expect(out.markdown).not.toContain('OSPEDALE CIVILE');
+  });
+});
+
+// Panel giro 8 (2026-09-06) — reperti B/C sul renderer. Fixture fittizie.
+describe('renderRubricDocSanitaria — giro 8: citazioni vuote, righe di tabella, priorità alle rubriche-cuore', () => {
+  it('citazioni vuote o con soli residui ("I", "III", titolo d\'esame senza testo) non vengono emesse', () => {
+    const text = ['CARTELLA CLINICA', 'REFERTO', 'RX FEMORE SN:', 'I', 'RX GOMITO SN:', 'III', 'RX ANCA SN: Esiti di frattura pluriframmentaria del III prossimale, sintetizzata.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'cc', documentType: 'lettera_dimissione', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('RX ANCA SN: Esiti di frattura');
+    expect(out.markdown).not.toMatch(/«I»|«III»|«RX FEMORE SN:»|«RX GOMITO SN:»/);
+  });
+
+  it('righe di tabella a una cella ("Nr. Radiologico: | 2023/45615", "Data nascita: | …") e l\'equipe inline non entrano', () => {
+    const text = ['REFERTO', 'Nr. Radiologico: | 2023/45615', 'Data nascita: | 01/01/1950', 'Provenienza: | PRONTO SOCCORSO', 'Frattura composta del radio distale.', 'Equipe Medica: Dr.ssa Anna Demprova Dr. Mario Demprova'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rx', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Frattura composta del radio distale.');
+    expect(out.markdown).not.toContain('Nr. Radiologico');
+    expect(out.markdown).not.toContain('01/01/1950');
+    expect(out.markdown).not.toContain('Equipe');
+  });
+
+  it('tetto di blocco: diagnosi, conclusioni, prognosi e indicazioni restano anche dopo un\'anamnesi lunga', () => {
+    const long = (label: string, n: number) => Array.from({ length: n }, (_, i) => `${label} frase numero ${i + 1} con dieci parole di riempimento qui dentro.`).join(' ');
+    const text = ['ANAMNESI PROSSIMA', long('Anamnesi', 20), 'ESAME OBIETTIVO', long('Obiettività', 20), 'CONCLUSIONI', 'Quadro clinico stabilizzato; si invia a valutazione otoneurologica.', 'INDICAZIONI', 'Controllo tra 6 mesi.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'fis', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Conclusioni: «Quadro clinico stabilizzato; si invia a valutazione otoneurologica.»');
+    expect(out.markdown).toContain('Indicazioni: «Controllo tra 6 mesi.»');
+    expect(out.markdown.split(/\s+/).length).toBeLessThan(380);
+  });
+
+  it('lettera in prosa con la sola rubrica "Si consiglia": il corpo (anamnesi e obiettività in prosa) entra prima delle indicazioni', () => {
+    const text = ['Gentile Collega,', 'ho visitato oggi la paziente per esiti di frattura del capitello radiale destro. Riferisce dolore in flesso-estensione; obiettivamente instabilità in valgo del gomito, flessione completa e dolente a fine corsa, deficit estensorio minimo.', 'Si consiglia ciclo di onde d\'urto focali e tutore anti varo-valgo per 3 mesi.', 'Cordiali saluti'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ort', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('instabilità in valgo del gomito');
+    expect(out.markdown).toContain('Indicazioni: «Si consiglia ciclo di onde d\'urto focali');
+    expect(out.markdown.indexOf('instabilità')).toBeLessThan(out.markdown.indexOf('Indicazioni:'));
+  });
+
+  it('fascicolo di ricovero classificato "altro" (molte pagine, marcatori di cartella) è un contenitore: rimando alla lettera', () => {
+    const pages = Array.from({ length: 20 }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 0 ? 'RICOVERO IN REGIME DI DEGENZA ORDINARIA\nCARTELLA CLINICA\nDIAGNOSI\nFrattura del femore sinistro.' : `DIARIO CLINICO\ndecorso regolare giorno ${i + 1}\nCONSENSO INFORMATO\nfirmato` }));
+    const fasc: RubricDocument = { documentId: 'fasc', documentType: 'altro', header: '**Documento sanitario, in data 16.07.2023:**', sortDate: '2023-07-16', pages };
+    const lettera: RubricDocument = { documentId: 'let', documentType: 'lettera_dimissione', header: '**Lettera di dimissione, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura del femore sinistro trattata.' }] };
+    const out = renderRubricDocSanitaria([fasc, lettera], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Fascicolo di ricovero agli atti (20 pagine): si riporta la lettera di dimissione.');
+    expect(out.markdown).not.toContain('decorso regolare giorno 5');
+  });
+
+  it('impegnativa/ricetta SSN: una riga col quesito diagnostico, niente modulistica tra virgolette', () => {
+    const text = ['QUESITO DIAGNOSTICO: 386.19 Altre vertigini periferiche (386.19)', 'N.CONFEZIONI/PRESTAZIONI: 1 TIPO RICETTA: Assist. SSN', 'CODICE AUTENTICAZIONE: 070420261540381650009402518258', 'DATA: 07/04/2026', 'COGNOME E NOME DEL MEDICO: DEMPROVA ANNA', 'Rilasciato ai sensi dell\'art.11, comma 16 del DL 31 mag 2010'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ric', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Impegnativa');
+    expect(out.markdown).toContain('386.19 Altre vertigini periferiche');
+    expect(out.markdown).not.toContain('TIPO RICETTA');
+    expect(out.markdown).not.toContain('CODICE AUTENTICAZIONE');
+  });
+});
+
+describe('renderRubricDocSanitaria — giro 8, avversariale: nomi soli nel preambolo, avvisi di cassa', () => {
+  it('nel preambolo di un referto sottile le righe con il solo nome (periziando, direttore) non entrano; "Ulna integra" sì', () => {
+    const text = ['OSPEDALE CIVILE DI CITTÀDEMO', 'DEMPROVA MARIA', 'Campi polmonari ipoespansi.', 'Ulna integra', 'Mario Demprova', 'RX TORACE:', 'I'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rxt', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Campi polmonari ipoespansi.');
+    expect(out.markdown).toContain('Ulna integra');
+    expect(out.markdown).not.toContain('DEMPROVA MARIA');
+    expect(out.markdown).not.toContain('Mario Demprova');
+  });
+  it('"Guaribile in giorni | clinici 30" resta (prognosi), l\'avviso di cassa "entro 30 giorni" no', () => {
+    const text = ['PROGNOSI', 'Guaribile in giorni | clinici 30', 'Gli esami non allegati devono essere ritirati alla cassa entro 30 giorni, pena il pagamento della tariffa.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ps', documentType: 'cartella_clinica', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Guaribile in giorni | clinici 30');
+    expect(out.markdown).not.toContain('cassa');
   });
 });

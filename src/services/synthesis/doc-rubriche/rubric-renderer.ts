@@ -48,7 +48,7 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
 const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
-const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.)/i;
+const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica)/i;
 /** Titolo d'esame ("RX FEMORE SN:", "TAC ANCA SN SMDC:"): testo del medico, mai rumore. */
 const EXAM_TITLE_RE = /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)\b/i;
 /** Etichetta corta orfana ("Mammografia, Densitometria:", "In particolare:"): ≤4 parole, niente cifre, due punti finali. */
@@ -67,14 +67,16 @@ const CODICE_FISCALE_RE = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/g;
 /** Etichetta di modulo/macchina con al più un codice ("Camera:", "Ubic:64", "Med.:"). */
 const MACHINE_LABEL_LINE_RE = /^(camera|ubic|ubicazione|med|tecnico|letto|stanza|cod|ord|rif|prot|n|nr|num)\.?\s*:\s*\S{0,10}$/i;
 const LONG_CODE_RE = /\d{8,}/;
-const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data di nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione)\s*:)/i;
-const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i;
+const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione)\s*:)/i;
+const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto|guaribil)/i;
 
 function isAdminNoiseLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
-  // Righe di tabella/maschera (≥2 separatori) e codici lunghi: rumore di modulo.
+  // Righe di tabella/maschera (≥2 separatori) e codici lunghi: rumore di modulo;
+  // a UNA cella ("Nr. Radiologico: | 2023/45615") solo se senza contenuto clinico.
   if ((t.match(/ \| /g) ?? []).length >= 2) return true;
+  if (/ \| |\|\s*$/.test(t) && !CLINICAL_LINE_RE.test(t)) return true;
   if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
   if (FORM_NOISE_RE.test(t)) return true;
   if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
@@ -108,11 +110,16 @@ const LETTERHEAD_RE = /^(azienda|ospedale|presidio|casa di cura|policlinico|isti
 /** Nome di ente/struttura in qualunque posizione (riga di carta intestata). */
 const ORGANIZATION_RE = /(ospedal|aziend|presidio|clinic|policlinic|dipartiment|radiolog|laborator|ambulator|\basl\b|\bulss\b|\bats\b|\baou|\birccs\b|\bu\.?\s?o\.?\s?c?\b|\bs\.?\s?c\.?\b)/i;
 
+/** Riga con un solo nome di persona (periziando, direttore): 2-3 parole Capitalizzate
+ * o MAIUSCOLE, niente cifre né punteggiatura finale, nessun ente. */
+const BARE_NAME_LINE_RE = /^(?:[\p{Lu}][\p{L}'’-]+|[\p{Lu}][\p{Lu}'’-]+)(?:\s+(?:[\p{Lu}][\p{L}'’-]+|[\p{Lu}][\p{Lu}'’-]+)){1,2}$/u;
+
 function stripLetterhead(text: string): string {
   return text.split('\n').filter((l) => {
     const t = l.trim();
     if (!t || CLINICAL_LINE_RE.test(t)) return true;
     if (LETTERHEAD_RE.test(t)) return false;
+    if (BARE_NAME_LINE_RE.test(t) && !ORGANIZATION_RE.test(t)) return false;
     // Riga tutta maiuscola con nome di ente: intestazione, non referto.
     return !(t === t.toUpperCase() && /[A-ZÀ-Ü]/.test(t) && ORGANIZATION_RE.test(t));
   }).join('\n');
@@ -142,6 +149,21 @@ function isMostlyIllegible(pages: ReadonlyArray<RubricPage>): { markers: number;
   return s.markers >= ILLEGIBLE_MIN_MARKERS && s.markers >= ILLEGIBLE_MIN_SHARE * s.lines ? s : null;
 }
 
+/** Impegnativa / ricetta SSN (≤2 pagine, marcatori del modulo): una riga col
+ * quesito diagnostico, mai la modulistica tra virgolette (panel giro 8, caso C). */
+const RICETTA_RE = /(tipo ricetta|n\.?\s*confezioni|quesito diagnostico\s*:|codice autenticazione|iniziali dell'assistito|\bricetta (medica|elettronica|dematerializzata)\b|\bimpegnativa\b)/i;
+const QUESITO_RE = /quesito diagnostico\s*:\s*([^\n]{3,120})/i;
+const ICD_LINE_RE = /^\s*(\d{3}(?:\.\d{1,2})?\s+\p{L}[^\n]{3,100})$/mu;
+
+function impegnativaLine(doc: RubricDocument): string | null {
+  if (doc.pages.length > 2) return null;
+  const text = doc.pages.map((p) => p.ocrText).join('\n');
+  if (!RICETTA_RE.test(text)) return null;
+  const quesito = QUESITO_RE.exec(text)?.[1] ?? ICD_LINE_RE.exec(text)?.[1] ?? null;
+  const q = quesito ? scrubInlineCodes(quesito).trim() : '';
+  return q ? `Impegnativa/prescrizione SSN agli atti; quesito diagnostico: «${q}»` : 'Impegnativa/prescrizione SSN agli atti (modulistica, nessun referto).';
+}
+
 /** Attestato di malattia telematico (INPS): si aggrega in una riga coi suoi
  * simili. Gli altri certificati (idoneità, visita di controllo, psicologa) sono
  * documenti a sé, con il loro blocco. */
@@ -166,17 +188,25 @@ function trimRenderedLine(line: string, maxWords: number): string {
  * entra viene accorciata al residuo (se ≥ 25 parole: l'esame obiettivo con l'NRS
  * non deve sparire dietro un'anamnesi lunga — panel giro 7), altrimenti resta
  * "[...]" fuori dalle virgolette. */
-function capBlockLines(lines: ReadonlyArray<string>, maxWords: number): string[] {
-  if (maxWords <= 0) return [...lines];
-  const out: string[] = []; let used = 0;
-  for (const l of lines) {
-    const w = countWords(l);
-    if (out.length > 0 && used + w > maxWords) {
-      const remaining = maxWords - used;
-      out.push(remaining >= MIN_TAIL_WORDS ? trimRenderedLine(l, remaining) : '[...]');
-      break;
+function capBlockLines(lines: ReadonlyArray<string | RenderedLine>, maxWords: number): string[] {
+  const entries: RenderedLine[] = lines.map((l) => (typeof l === 'string' ? { text: l, core: false } : l));
+  if (maxWords <= 0) return entries.map((e) => e.text);
+  // Le rubriche-cuore (diagnosi, conclusioni, prognosi, indicazioni) sono sempre
+  // rese: il tetto si applica al resto, col loro peso già sottratto (min 1/3).
+  const coreWords = entries.filter((e) => e.core).reduce((n, e) => n + countWords(e.text), 0);
+  const budget = Math.max(maxWords - coreWords, Math.ceil(maxWords / 3));
+  const out: string[] = []; let used = 0; let cut = false;
+  for (const e of entries) {
+    if (e.core) { out.push(e.text); continue; }
+    if (cut) continue;
+    const w = countWords(e.text);
+    if (out.length > 0 && used + w > budget) {
+      const remaining = budget - used;
+      out.push(remaining >= MIN_TAIL_WORDS ? trimRenderedLine(e.text, remaining) : '[...]');
+      cut = true;
+      continue;
     }
-    out.push(l); used += w;
+    out.push(e.text); used += w;
   }
   return out;
 }
@@ -231,12 +261,30 @@ function selectSegments(segments: ReadonlyArray<RubricSegment>, policy: RubricTy
     if (!prev || (countWords(prev.text) < 5 && countWords(s.text) >= 5)) firstPerLabel.set(s.label, s);
   }
   const chosen = [...firstPerLabel.values()].sort((a, b) => a.order - b.order);
-  if (chosen.length > 0) return { chosen, fallback: false };
+  if (chosen.length > 0) {
+    // Lettera specialistica in prosa: l'unica rubrica riconosciuta è "Si consiglia";
+    // anamnesi e obiettività stanno nel preambolo, che diventa il corpo del referto.
+    const preambolo = segments.find((s) => s.label === 'preambolo');
+    if (preambolo && chosen.every((s) => TRAILING_RUBRICS.has(s.label)) && countWords(stripAdminNoise(preambolo.text)) >= 20) {
+      return { chosen: [{ ...preambolo, label: 'corpo', text: stripLetterhead(preambolo.text) }, ...chosen], fallback: false };
+    }
+    return { chosen, fallback: false };
+  }
   if (policy.fallbackCorpo) {
     const corpo = segments.filter((s) => s.label === 'corpo' || s.label === 'preambolo' || s.label === 'referto');
     return { chosen: corpo.length > 0 ? corpo : [...segments], fallback: true };
   }
   return { chosen: [], fallback: true };
+}
+
+/** Corpo senza contenuto: solo titolo d'esame ("RX FEMORE SN:"), residui di
+ * tabella (I/II/III, classi di dose), nessuna lettera. Mai una «…» vuota. */
+function isEmptyBody(body: string): boolean {
+  // Via le righe-residuo (numeri romani delle classi di dose, righe senza lettere).
+  const lines = body.split('\n').map((l) => l.trim()).filter((l) => l && !/^[IVX]{1,4}$/.test(l) && /\p{L}/u.test(l));
+  if (lines.length === 0) return true;
+  // "RX TORACE:" / "RX TORACE: I" (titolo + classe di dose): niente da citare.
+  return lines.length === 1 && /^[^\n]{1,50}:\s*(?:[IVX]{1,4})?$/.test(lines[0]!);
 }
 
 function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number, withTitle = true): string | null {
@@ -245,10 +293,21 @@ function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: nu
   if (key.length >= 40) seen.add(key);
   const title = withTitle ? (RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
   const cleaned = stripAdminNoise(seg.text);
-  if (!cleaned) return null;
+  if (!cleaned || isEmptyBody(cleaned)) return null;
   const body = capAtSentence(cleaned.replace(/\n{2,}/g, '\n').trim(), maxWords);
   return title ? `${title}: «${body}»` : `«${body}»`;
 }
+
+/** Rubriche-cuore della perizia: non spariscono mai dietro il tetto di blocco. */
+const CORE_RUBRICS: ReadonlySet<string> = new Set(['diagnosi', 'conclusioni', 'prognosi', 'indicazioni', 'dimissione', 'intervento']);
+/** Le anamnesi (e il diario) hanno un tetto più stretto: sono la parte che
+ * più spesso ingoia il blocco a scapito di obiettività e conclusioni. */
+const NARRATIVE_RUBRICS: ReadonlySet<string> = new Set(['anamnesi', 'anamnesi_prossima', 'anamnesi_remota', 'diario']);
+/** Rubriche "di coda": se sono le sole riconosciute, il corpo in prosa che le
+ * precede (lettera specialistica senza intestazioni) è il referto. */
+const TRAILING_RUBRICS: ReadonlySet<string> = new Set(['indicazioni', 'terapia', 'prognosi', 'note', 'consenso']);
+
+interface RenderedLine { text: string; core: boolean; }
 
 /** Un verbale di Pronto Soccorso: poche pagine e i marcatori tipici nel testo. */
 function looksLikePsVerbale(doc: RubricDocument): boolean {
@@ -260,10 +319,20 @@ function looksLikePsVerbale(doc: RubricDocument): boolean {
 /** Policy EFFETTIVA del documento (spec Lavini 2026-09-04): un fascicolo di ricovero
  * è un contenitore (rimando alla lettera di dimissione se agli atti, altrimenti i soli
  * passaggi-chiave); un verbale di PS breve classificato 'cartella' o 'altro' è un PS. */
+/** Fascicolo di ricovero classificato 'altro': molte pagine e i marcatori della cartella. */
+const CARTELLA_MARKERS_RE = /(cartella clinica|diario clinico|foglio unico di terapia|consenso informato|verbale operatorio|regime di degenza|scheda di dimissione|lettera di dimissione)/gi;
+
+function looksLikeFascicolo(doc: RubricDocument): boolean {
+  if (doc.pages.length <= PS_MAX_PAGES) return false;
+  const text = doc.pages.map((p) => p.ocrText).join('\n');
+  return (text.match(CARTELLA_MARKERS_RE) ?? []).length >= 3;
+}
+
 function effectivePolicy(doc: RubricDocument, policy: RubricPolicy, hasLetteraDimissione: boolean): { tp: RubricTypePolicy; rimando: string | null } {
-  const tp = policyForType(policy, doc.documentType);
+  const isFascicolo = doc.documentType === 'altro' && looksLikeFascicolo(doc);
+  const tp = policyForType(policy, isFascicolo ? 'cartella_clinica' : doc.documentType);
   const psPolicy = policy.tipi.cartella_clinica ?? tp;
-  if (doc.documentType === 'altro' && looksLikePsVerbale(doc)) return { tp: { ...psPolicy, mode: 'passaggi' }, rimando: null };
+  if (doc.documentType === 'altro' && !isFascicolo && looksLikePsVerbale(doc)) return { tp: { ...psPolicy, mode: 'passaggi' }, rimando: null };
   if (tp.mode !== 'contenitore') return { tp, rimando: null };
   if (looksLikePsVerbale(doc)) return { tp: { ...tp, mode: 'passaggi' }, rimando: null };
   if (hasLetteraDimissione) {
@@ -305,6 +374,9 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
       continue;
     }
+    // Impegnativa/ricetta SSN: modulistica, non referto. Una riga col quesito.
+    const ricetta = impegnativaLine(doc);
+    if (ricetta) { blocks.push(`${doc.header}\n${ricetta}`); continue; }
     // Manoscritto in larga parte illeggibile: copiare il garble tra «…» non è
     // fedeltà, è rumore depositato. Resta il documento (intestazione) e il rimando.
     const illegible = isMostlyIllegible(doc.pages);
@@ -320,9 +392,18 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     // Tetto per rubrica (metà del tetto di blocco: la diagnosi non è mai tagliata
     // da un'anamnesi lunga) e tetto di blocco (la lunghezza tipica del gold).
     const perRubric = tp.maxParole > 0 ? Math.ceil(tp.maxParole / 2) : 0;
+    const narrativeCap = tp.maxParole > 0 ? Math.ceil(tp.maxParole / 4) : 0;
+    // In integrale (esami strumentali) conta solo il tetto di blocco: le "Notizie
+    // cliniche" di un referto RM contengono il referto stesso, non un'anamnesi.
+    const capFor = (label: string): number =>
+      tp.mode === 'integrale' || label === 'corpo' || label === 'preambolo' ? tp.maxParole : NARRATIVE_RUBRICS.has(label) ? narrativeCap : perRubric;
     // Referto integrale (esami strumentali): il testo del medico com'è, senza etichette di rubrica.
     // Il corpo intero di un documento senza rubriche ha il tetto di blocco, non quello di rubrica.
-    const lines = chosen.map((s) => renderSegment(s, seen, stats, s.label === 'corpo' || s.label === 'preambolo' ? tp.maxParole : perRubric, tp.mode !== 'integrale')).filter((l): l is string => l !== null);
+    const lines: RenderedLine[] = [];
+    for (const s of chosen) {
+      const text = renderSegment(s, seen, stats, capFor(s.label), tp.mode !== 'integrale');
+      if (text !== null) lines.push({ text, core: CORE_RUBRICS.has(s.label) });
+    }
     if (lines.length === 0) {
       blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto già riprodotto nel documento precedente.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
       continue;
