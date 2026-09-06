@@ -811,3 +811,19 @@ describe('accesso in Pronto Soccorso ≠ ricovero — giro avversariale', () => 
     expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
   });
 });
+
+describe('giro avversariale — "alla dimissione" chiude la degenza quando è la dimissione', () => {
+  it('"Diagnosi alla dimissione" come unico evento di dimissione resta una dimissione; "Barthel alla dimissione" no', () => {
+    const a = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero in Ortopedia'),
+      makeEvent('2024-01-20', 'referto', 'Diagnosi alla dimissione: frattura femore trattata'),
+    ]);
+    expect(a.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(11);
+    const b = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero in Ortopedia'),
+      makeEvent('2024-01-19', 'esame', 'Valutazione Indice di Barthel alla dimissione'),
+      makeEvent('2024-01-20', 'referto', 'Lettera di dimissione'),
+    ]);
+    expect(b.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(11);
+  });
+});

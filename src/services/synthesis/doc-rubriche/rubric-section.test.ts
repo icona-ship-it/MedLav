@@ -63,3 +63,17 @@ describe('intestazione: la struttura non è un indirizzo né un nome di persona'
     expect(c.markdown).toContain('Studio Radiologico Demprova');
   });
 });
+
+describe('sanitizeFacility — nomi di strutture a due parole non sono persone', () => {
+  it('"Villa Verde", "Sacro Cuore", "San Bortolo", "Rehab Center" restano strutture', () => {
+    const pages = [{ pageNumber: 1, ocrText: 'RX polso: nella norma.' }];
+    for (const name of ['Villa Verde', 'Sacro Cuore', 'San Bortolo', 'Rehab Center', 'Fisiokinesis Demo']) {
+      const out = formatDocumentazioneSanitariaRubriche(
+        [{ documentId: 'rx', documentType: 'esame_strumentale', pages }],
+        [{ event_date: '2025-09-13', document_id: 'rx', facility: name, temporal_scope: 'corrente' }],
+      );
+      expect(out.markdown).toContain(`, ${name}, in data`);
+      expect(out.markdown).not.toContain(`Dott. ${name}`);
+    }
+  });
+});

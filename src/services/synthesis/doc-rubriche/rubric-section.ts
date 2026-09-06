@@ -32,7 +32,7 @@ const EXAM_TITLE_RE = /^(RX|RM|RMN|TC|TAC|ECO|ECOGRAFIA|ECOCOLORDOPPLER|PET|MOC|
 /** Indirizzo (via/piazza + numero o CAP): non è una struttura. */
 const ADDRESS_RE = /(\b(via|viale|piazza|piazzale|corso|largo|strada|vicolo|contrada)\b[^\n]*\d|\b\d{5}\b)/i;
 /** Ente/struttura riconoscibile (parola-chiave organizzativa). */
-const ORGANIZATION_WORD_RE = /(ospedal|aziend|asl|ulss|ats|aou|irccs|centro|studio|poliambulator|policlinic|radiolog|diagnostic|istituto|clinic|casa di cura|laborator|fondazione|presidio|u\.?\s?o\.?|unit[àa]|dipartiment|reparto|ambulator|servizio|inps|inail|comune|regione|s\.?r\.?l|s\.?p\.?a|s\.?n\.?c|medic|fisioterap|riabilit|ortoped|new life|srl|spa|&)/i;
+const ORGANIZATION_WORD_RE = /(ospedal|hospital|aziend|asl|ulss|ats|aou|irccs|centro|center|centre|studio|poliambulator|policlinic|radiolog|diagnostic|istituto|clinic|casa di cura|laborator|fondazione|presidio|u\.?\s?o\.?|unit[àa]|dipartiment|reparto|ambulator|servizio|inps|inail|comune|regione|provincia|s\.?r\.?l|s\.?p\.?a|s\.?n\.?c|medic|fisio|kines|riabilit|rehab|ortoped|salus|salute|sanit|health|care|life|gruppo|villa|\bsan\b|\bsanta\b|sant'|\bss\.?\b|sacro|cuore|madonna|croce|misericordia|humanitas|gemelli|srl|spa|&)/i;
 
 /** La struttura dell'intestazione non è un indirizzo né un nome di persona
  * (panel giro 8, caso C: "Via …, 17 - 37129 …" e "NOME COGNOME" al posto

@@ -335,7 +335,9 @@ export function isSsrCostNotification(title: string, description?: string | null
     // Lettere di dimissione venete: "spesa sanitaria stimata per il percorso di
     // cura: euro 24.272,60" è il costo del ricovero per il SSR, non una spesa del
     // danneggiato (panel giro 8, caso B: tabellata come spesa con riga Totale).
-    /spesa sanitaria (stimata|complessiva|sostenuta|presunta|per (il |l')?(percorso|episodio|ricovero|esame|procedura|prestazione))|costo (stimato|complessivo|presunto) (del|per il|dell')/.test(t)
+    (/spesa sanitaria (stimata|complessiva|sostenuta|presunta|per (il |l')?(percorso|episodio|ricovero|esame|procedura|prestazione))|costo (stimato|complessivo|presunto) (del|per il|dell')/.test(t) &&
+      // …ma una ricevuta/fattura/ticket pagati dal danneggiato restano suoi.
+      !/(fattura|ricevuta|ticket|pagament|bancomat|\bpos\b|quietanza|bonifico|contanti)/.test(t))
   );
 }
 

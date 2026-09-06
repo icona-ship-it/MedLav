@@ -421,3 +421,29 @@ describe('renderRubricDocSanitaria — giro 8, avversariale: nomi soli nel pream
     expect(out.markdown).not.toContain('cassa');
   });
 });
+
+describe('giro avversariale sul lotto 2 (renderer)', () => {
+  it('tabella a una cella: il campo di modulo esce, la riga clinica lunga resta', () => {
+    const text = ['ANAMNESI', 'Anamnesi | Caduta accidentale in bicicletta con trauma del polso destro', 'Provenienza: | PRONTO SOCCORSO', 'Data Esame | 16/07/2023', 'DIAGNOSI', 'Frattura del radio.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ps', documentType: 'cartella_clinica', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Caduta accidentale in bicicletta con trauma del polso destro');
+    expect(out.markdown).not.toContain('Provenienza');
+    expect(out.markdown).not.toContain('16/07/2023');
+  });
+  it('una lettera che "rilascia impegnativa" NON è un\'impegnativa: il referto resta', () => {
+    const text = ['ANAMNESI', 'Dolore al gomito destro persistente da tre mesi.', 'ESAME OBIETTIVO', 'Instabilità in valgo, flessione completa e dolente.', 'INDICAZIONI', 'Si rilascia impegnativa per RM gomito destro con priorità B.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ort', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).not.toContain('Impegnativa/prescrizione SSN agli atti');
+    expect(out.markdown).toContain('Instabilità in valgo');
+  });
+});
+
+describe('giro avversariale — campi di modulo a una cella con valore lungo', () => {
+  it('"Provenienza: | MDA PRONTO SOCCORSO GENERALE E TRAUMA CENTER" e "Data ed Ora dimissione dal P.S. | Codice di uscita" escono', () => {
+    const text = ['REFERTO', 'Provenienza: | MDA PRONTO SOCCORSO GENERALE E TRAUMA CENTER BT', 'Data ed Ora dimissione dal P.S. | Codice di uscita', 'Frattura composta del radio distale.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rx', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Frattura composta del radio distale.');
+    expect(out.markdown).not.toContain('Provenienza');
+    expect(out.markdown).not.toContain('Codice di uscita');
+  });
+});

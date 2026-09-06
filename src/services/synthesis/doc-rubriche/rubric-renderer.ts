@@ -70,13 +70,27 @@ const LONG_CODE_RE = /\d{8,}/;
 const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione)\s*:)/i;
 const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto|guaribil)/i;
 
+/** Riga di tabella a UNA cella: "etichetta | valore breve" (Nr. radiologico, data
+ * nascita, provenienza, esito) è un campo di modulo; "Anamnesi | Caduta accidentale
+ * in bicicletta con trauma del polso" è contenuto e resta. */
+function isFormFieldRow(t: string): boolean {
+  if (!/ \| |\|\s*$/.test(t)) return false;
+  if (CLINICAL_LINE_RE.test(t)) return false; // "Guaribile in giorni | clinici 30" è la prognosi
+  const [label = '', value = ''] = t.split('|').map((c) => c.trim());
+  const valueWords = value.split(/\s+/).filter(Boolean).length;
+  // Campo di modulo: valore breve ("Data Esame | 16/07/2023", "… | Codice di uscita")
+  // o etichetta amministrativa nota ("Provenienza: | MDA PRONTO SOCCORSO …").
+  return valueWords <= 3 || FORM_LABEL_RE.test(label);
+}
+const FORM_LABEL_RE = /^(provenienza|data|ora|nr|n\.?|num|codice|cod\.?|esito|posizione|regime|reparto|medico|richiedente|priorit|classe|dose|tipo|stato|ticket|esenzione|uo|u\.o\.|struttura|sede|ambulatorio|prestazione|modalit)/i;
+
 function isAdminNoiseLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
   // Righe di tabella/maschera (≥2 separatori) e codici lunghi: rumore di modulo;
   // a UNA cella ("Nr. Radiologico: | 2023/45615") solo se senza contenuto clinico.
   if ((t.match(/ \| /g) ?? []).length >= 2) return true;
-  if (/ \| |\|\s*$/.test(t) && !CLINICAL_LINE_RE.test(t)) return true;
+  if (isFormFieldRow(t)) return true;
   if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
   if (FORM_NOISE_RE.test(t)) return true;
   if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
@@ -151,14 +165,16 @@ function isMostlyIllegible(pages: ReadonlyArray<RubricPage>): { markers: number;
 
 /** Impegnativa / ricetta SSN (≤2 pagine, marcatori del modulo): una riga col
  * quesito diagnostico, mai la modulistica tra virgolette (panel giro 8, caso C). */
-const RICETTA_RE = /(tipo ricetta|n\.?\s*confezioni|quesito diagnostico\s*:|codice autenticazione|iniziali dell'assistito|\bricetta (medica|elettronica|dematerializzata)\b|\bimpegnativa\b)/i;
+const RICETTA_RE = /(tipo ricetta|n\.?\s*confezioni|quesito diagnostico\s*:|codice autenticazione|iniziali dell'assistito|\bricetta (medica|elettronica|dematerializzata)\b|esenzione\s*:|cod(ice|\.)\s*fiscale (dell')?assistito|priorit[àa]\s*:\s*[bdpu]\b)/gi;
 const QUESITO_RE = /quesito diagnostico\s*:\s*([^\n]{3,120})/i;
 const ICD_LINE_RE = /^\s*(\d{3}(?:\.\d{1,2})?\s+\p{L}[^\n]{3,100})$/mu;
 
 function impegnativaLine(doc: RubricDocument): string | null {
   if (doc.pages.length > 2) return null;
   const text = doc.pages.map((p) => p.ocrText).join('\n');
-  if (!RICETTA_RE.test(text)) return null;
+  // Almeno DUE marcatori del modulo: una lettera che dice "si rilascia impegnativa"
+  // non è un'impegnativa.
+  if ((text.match(RICETTA_RE) ?? []).length < 2) return null;
   const quesito = QUESITO_RE.exec(text)?.[1] ?? ICD_LINE_RE.exec(text)?.[1] ?? null;
   const q = quesito ? scrubInlineCodes(quesito).trim() : '';
   return q ? `Impegnativa/prescrizione SSN agli atti; quesito diagnostico: «${q}»` : 'Impegnativa/prescrizione SSN agli atti (modulistica, nessun referto).';

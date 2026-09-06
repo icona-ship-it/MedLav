@@ -158,7 +158,7 @@ function clinicalSortedByDateRaw(events: CalcEvent[], incidentIso?: string | nul
  * valutazioni "alla dimissione", esami pre-dimissione, controlli post-dimissione
  * (panel giro 8, caso B: "preparazione alla dimissione" del 24.07 chiudeva la
  * degenza un giorno prima della lettera di dimissione). */
-const NOT_A_DISCHARGE_RE = /((preparazion|previsione|programmazion|pianificazion|rischio|in vista|prossim)\w*\s+(alla |della |di |delle |dell')?dimission|pre-?dimission|post-?dimission|dopo la dimissione|successiv\w* alla dimissione|\balla dimissione\b)/i;
+const NOT_A_DISCHARGE_RE = /((preparazion|previsione|programmazion|pianificazion|rischio|in vista|prossim)\w*\s+(alla |della |di |delle |dell')?dimission|pre-?dimission|post-?dimission|dopo la dimissione|successiv\w* alla dimissione|(valutazion|indice|scala|esam[ei]|parametri|rilevazion|terapia|condizioni|peso|controllo)\w*[^\n]{0,40}\balla dimissione\b)/i;
 
 function mentionsDischarge(text: string): boolean {
   if (NOT_A_DISCHARGE_RE.test(text) && !/lettera di dimissione|\bdimess[oa]\b/.test(text)) return false;

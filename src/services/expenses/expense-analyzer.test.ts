@@ -611,3 +611,10 @@ describe('giro 8 — costo SSR stimato e righe interne di una fattura', () => {
     expect(r.totalAmount).toBeCloseTo(220, 2);
   });
 });
+
+describe('giro avversariale — "spesa sanitaria per…" pagata dal danneggiato resta sua', () => {
+  it('ricevuta/fattura/ticket con "spesa sanitaria per prestazione" NON è un costo SSR', () => {
+    expect(isSsrCostNotification('Spesa sanitaria per prestazione fisioterapica', 'Ricevuta n. 3 pagata con bancomat, euro 50,00')).toBe(false);
+    expect(isSsrCostNotification('Spesa sanitaria per percorso di cura', 'il Servizio Sanitario Regionale ha impiegato euro 27,90')).toBe(true);
+  });
+});
