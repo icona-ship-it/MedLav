@@ -48,7 +48,10 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
 const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
-const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica)/i;
+const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica|informazione relativa all'esposizione|esposizione (della procedura )?radiologica|euratom|decreto legislativo 31 luglio 2020|articolo 161|rappresentazione è conforme|conforme all'originale|validato da|linee guida$|^(barthel|indice di barthel|scala (di )?(braden|conley|morse|tinetti)|mmse|mini[- ]mental)\b|\bdata (ing|dim)\.|(^|\s)_(\s|$)|:\s*_)/i;
+/** Istruzioni di compilazione di una scala (Barthel, Braden…): righe numerate che
+ * parlano di punteggio/indipendenza/prestazione del paziente, non di questo paziente. */
+const SCALE_GUIDELINE_RE = /^\d{1,2}\s*[-.)]\s.*(\bpz\.|punteggio|indipenden|supervisione|prestazione del|incoscienza|in tutte le voci|dovrebbe(ro)? (essere|ricevere))/i;
 /** Titolo d'esame ("RX FEMORE SN:", "TAC ANCA SN SMDC:"): testo del medico, mai rumore. */
 const EXAM_TITLE_RE = /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)\b/i;
 /** Etichetta corta orfana ("Mammografia, Densitometria:", "In particolare:"): ≤4 parole, niente cifre, due punti finali. */
@@ -67,7 +70,9 @@ const CODICE_FISCALE_RE = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/g;
 /** Etichetta di modulo/macchina con al più un codice ("Camera:", "Ubic:64", "Med.:"). */
 const MACHINE_LABEL_LINE_RE = /^(camera|ubic|ubicazione|med|tecnico|letto|stanza|cod|ord|rif|prot|n|nr|num)\.?\s*:\s*\S{0,10}$/i;
 const LONG_CODE_RE = /\d{8,}/;
-const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione)\s*:)/i;
+const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione|paziente|et[àa])\s*:)/i;
+/** "VERONA il 14/11/2024": luogo e data di stampa, non referto. */
+const CITY_DATE_LINE_RE = /^\p{Lu}[\p{L} ]{2,30},? il \d{1,2}[/.]\d{1,2}[/.]\d{2,4}$/u;
 const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto|guaribil)/i;
 
 /** Riga di tabella a UNA cella: "etichetta | valore breve" (Nr. radiologico, data
@@ -92,8 +97,8 @@ function isAdminNoiseLine(line: string): boolean {
   if ((t.match(/ \| /g) ?? []).length >= 2) return true;
   if (isFormFieldRow(t)) return true;
   if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
-  if (FORM_NOISE_RE.test(t)) return true;
-  if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
+  if (FORM_NOISE_RE.test(t) || SCALE_GUIDELINE_RE.test(t)) return true;
+  if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t) || CITY_DATE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
   if (SHORT_ORPHAN_LABEL_RE.test(t) && t.split(/\s+/).length <= 4 && !EXAM_TITLE_RE.test(t) && !CLINICAL_LINE_RE.test(t)) return true;
   // Anagrafica (nascita, residenza, CF) fuori anche se la riga prosegue con testo
   // clinico ("nata a X il Y, ha effettuato 10 sedute di psicoterapia"): l'identità
@@ -231,6 +236,15 @@ function normalizeForDedup(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
+/** Chiave di dedup sull'INCIPIT (40 parole) del testo ripulito: lo stesso referto
+ * letto in due documenti (fascicolo ↔ referto proprio) differisce solo nel piè
+ * di pagina, e la chiave sul testo intero non lo riconosceva (C: RX 14.11 x2). */
+const DEDUP_PREFIX_WORDS = 40;
+function dedupPrefixKey(cleaned: string): string | null {
+  const words = normalizeForDedup(cleaned).split(' ').filter(Boolean);
+  return words.length >= DEDUP_PREFIX_WORDS ? words.slice(0, DEDUP_PREFIX_WORDS).join(' ') : null;
+}
+
 function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
@@ -307,10 +321,13 @@ function isEmptyBody(body: string): boolean {
 function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number, withTitle = true): string | null {
   const key = normalizeForDedup(seg.text);
   if (key.length >= 40 && seen.has(key)) { stats.dedup++; return null; }
-  if (key.length >= 40) seen.add(key);
   const title = withTitle ? (RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
   const cleaned = stripAdminNoise(seg.text);
   if (!cleaned || isEmptyBody(cleaned)) return null;
+  const prefix = dedupPrefixKey(cleaned);
+  if (prefix && seen.has(prefix)) { stats.dedup++; return null; }
+  if (key.length >= 40) seen.add(key);
+  if (prefix) seen.add(prefix);
   const body = capAtSentence(cleaned.replace(/\n{2,}/g, '\n').trim(), maxWords);
   return title ? `${title}: «${body}»` : `«${body}»`;
 }
@@ -363,6 +380,7 @@ function sameDayRank(doc: RubricDocument): number { return SAME_DAY_RANK[doc.doc
 
 export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument>, policy: RubricPolicy): RubricRenderResult {
   const seen = new Set<string>();
+  const standaloneRefertoPrefixes = new Set<string>();
   const stats = { dedup: 0 };
   let omitted = 0; let fallbackDocs = 0; let illegibleDocs = 0;
   const blocks: string[] = [];
@@ -374,6 +392,15 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
   // di lettura dal DB.
   const ordered = [...documents].sort((a, b) =>
     a.sortDate.localeCompare(b.sortDate) || sameDayRank(a) - sameDayRank(b) || a.documentId.localeCompare(b.documentId));
+  // I referti d'esame con documento PROPRIO vincono sulle copie dentro un fascicolo,
+  // qualunque sia l'ordine delle date: le loro chiavi sono "viste" da subito.
+  for (const d of documents) {
+    if (d.documentType !== 'esame_strumentale') continue;
+    for (const seg of parseRubriche(d.pages)) {
+      const prefix = dedupPrefixKey(stripAdminNoise(seg.text));
+      if (prefix) standaloneRefertoPrefixes.add(prefix);
+    }
+  }
   const hasLetteraDimissione = documents.some((d) => d.documentType === 'lettera_dimissione' && d.pages.some((p) => p.ocrText.trim().length > 0));
 
   for (const doc of ordered) {
@@ -395,6 +422,7 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       const embedded = parseRubriche(doc.pages)
         .filter((s) => s.label === 'referto' && s.rawLabel && /^(rx|rm|rmn|tc|tac|eco|ecografia|pet|moc|doppler|ecocolordoppler)\b/i.test(s.rawLabel))
         .filter((s) => !/torace|toracic|pre-?operator|screening|elettrocardio/i.test(`${s.rawLabel} ${s.text.slice(0, 80)}`))
+        .filter((s) => { const k = dedupPrefixKey(stripAdminNoise(s.text)); return !(k && standaloneRefertoPrefixes.has(k)); })
         .map((s) => renderSegment(s, seen, stats, Math.ceil(tp.maxParole / 2)))
         .filter((l): l is string => l !== null);
       blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
@@ -431,7 +459,7 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       if (text !== null) lines.push({ text, core: CORE_RUBRICS.has(s.label) });
     }
     if (lines.length === 0) {
-      blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto già riprodotto nel documento precedente.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
+      blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto identico a un documento già riprodotto sopra.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
       continue;
     }
     blocks.push(`${doc.header}\n${capBlockLines(lines, tp.maxParole).join('\n')}`);

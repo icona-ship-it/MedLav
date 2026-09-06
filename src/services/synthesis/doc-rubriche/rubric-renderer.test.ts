@@ -461,3 +461,30 @@ describe('ordine a parità di data: referti prima del fascicolo, indipendente da
     expect(a.match(/Frattura pluriframmentata del terzo prossimale/g)).toHaveLength(1);
   });
 });
+
+describe('giro 10: boilerplate radiologico, moduli di scala, referto in degenza già riprodotto dal referto proprio', () => {
+  it('Euratom, "conforme all\'originale", "Validato da", "VERONA il …" restano fuori; il referto resta', () => {
+    const text = ['REFERTO', 'Frattura del collo femorale.', 'Informazione relativa all\'esposizione della procedura radiologica eseguita inserita in ottemperanza all\'articolo 161 del Decreto Legislativo 31 luglio 2020, n. 101 (Euratom)', 'CITTÀDEMO il 14/11/2024', 'Questa rappresentazione è conforme all\'originale conservato presso l\'Azienda', 'Validato da | Dr./Dr.ssa DEMPROVA ANNA'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rx', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Frattura del collo femorale.');
+    for (const bad of ['Euratom', 'conforme', 'Validato', 'CITTÀDEMO il']) expect(out.markdown).not.toContain(bad);
+  });
+  it('modulo Barthel in coda alla visita: istruzioni, segnaposto e "Paziente:/Età:" non entrano nella Diagnosi', () => {
+    const text = ['REFERTO', 'Paziente in esiti di frattura, deambula senza ausili.', 'INDICAZIONI', 'Proseguire FKT per 60 giorni.', 'BARTHEL INDEX: VALUTAZIONE DELLA DISABILITA\'', 'Paziente: DEMPROVA MARIA Età: _ Data ing. 02/04/26', 'Diagnosi: _ Data dim.: 1/1', 'BARTHEL INDEX – LINEE GUIDA', '1- L\'indice dovrebbe essere usato per registrare quello che un pz. fa realmente.', '2- Lo scopo principale è di stabilire il grado di indipendenza da qualsiasi aiuto.', '6- I pz. in stato di incoscienza dovrebbero ricevere un punteggio "0" in tutte le voci.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'fis', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('deambula senza ausili');
+    expect(out.markdown).toContain('Indicazioni: «Proseguire FKT per 60 giorni.»');
+    for (const bad of ['BARTHEL', 'Data ing', 'Data dim', 'incoscienza', 'DEMPROVA MARIA', 'Diagnosi: «_']) expect(out.markdown).not.toContain(bad);
+  });
+  it('lo stesso RX dentro il fascicolo (data precedente) e come referto proprio: una sola citazione, nel referto proprio', () => {
+    const body = 'RX FEMORE SN\nFrattura del collo femorale e frattura scomposta con accavallamento dei monconi al terzo diafisario femorale medio con lieve arretramento del frammento distale rispetto al prossimale e modesta angolazione in varo del focolaio di frattura; non altre lesioni ossee traumatiche apprezzabili nei segmenti esaminati.';
+    const pages = (n: number, first: string) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 0 ? first : `DIARIO\ndecorso regolare giorno ${i + 1}\nCONSENSO INFORMATO\nfirmato` }));
+    const fasc: RubricDocument = { documentId: 'fasc', documentType: 'cartella_clinica', header: '**Cartella clinica, dal 13.11.2024 al 22.11.2024:**', sortDate: '2024-11-13', pages: pages(12, `CARTELLA CLINICA\nREFERTO\n${body}\nQuesta rappresentazione è conforme all'originale`) };
+    const rx: RubricDocument = { documentId: 'rx', documentType: 'esame_strumentale', header: '**Referto RX, in data 14.11.2024:**', sortDate: '2024-11-14', pages: [{ pageNumber: 1, ocrText: body }] };
+    const lettera: RubricDocument = { documentId: 'let', documentType: 'lettera_dimissione', header: '**Lettera, in data 22.11.2024:**', sortDate: '2024-11-22', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura trattata.' }] };
+    const out = renderRubricDocSanitaria([fasc, rx, lettera], DEFAULT_RUBRIC_POLICY).markdown;
+    expect(out.match(/accavallamento dei monconi/g)).toHaveLength(1);
+    expect(out.indexOf('accavallamento')).toBeGreaterThan(out.indexOf('**Referto RX'));
+    expect(out).not.toContain('Referti eseguiti in degenza');
+  });
+});
