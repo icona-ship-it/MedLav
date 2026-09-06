@@ -630,7 +630,8 @@ describe('fatti deterministici robusti — diario ≠ ammissione, certificato �
       makeEvent('2024-11-25', 'ricovero', 'Decorso post-operatorio del 25/11/2024'),
       makeEvent('2025-06-24', 'certificato', 'Certificato medico di controllo domiciliare per inabilità lavorativa', 'Visita INPS; agli atti la lettera di dimissione del 22/11/2024 per frattura femore.'),
     ]);
-    expect(block).toContain('Giorni di ricovero:** 10 (dieci), dal 13.11.2024 al 22.11.2024');
+    // La degenza parte dall'ammissione in reparto (14.11), non dall'accesso in PS: 9 gg come il gold.
+    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
     expect(block).not.toContain('212');
     const ricoveroLines = block.split('\n').filter((l) => l.includes('Giorni di ricovero'));
     expect(ricoveroLines).toHaveLength(1);
@@ -735,5 +736,78 @@ describe('fatti deterministici robusti — giro avversariale', () => {
     ]);
     expect(block).toContain('dal primo evento documentato (01.03.2024)');
     expect(block).toMatch(/2 eventi isolati/);
+  });
+});
+
+// Panel giro 8 (2026-09-06), caso A P0: «Giorni di ricovero: 2» per un accesso in
+// Pronto Soccorso dimesso in mezz'ora (nessun ricovero nei documenti, gold escluso);
+// caso C: «10 gg dal 13.11» mentre il ricovero in reparto è del 14.11 (gold 9 gg).
+describe('accesso in Pronto Soccorso ≠ ricovero', () => {
+  it('menzione del trauma tipizzata ricovero + accesso PS dimesso il giorno dopo → nessuna degenza', () => {
+    const block = formatRicoveroITTFactsBlock([
+      { ...makeEvent('2025-09-12', 'ricovero', 'Trauma gomito destro per investimento da motociclo con frattura olecrano'), temporal_scope: 'retrospettivo' },
+      makeEvent('2025-09-13', 'ricovero', 'Accesso Pronto Soccorso per trauma da investimento pedone'),
+      makeEvent('2025-09-13', 'referto', 'Dimissione dal Pronto Soccorso con tutore'),
+      makeEvent('2025-10-20', 'visita', 'Controllo ortopedico'),
+    ]);
+    expect(block).not.toContain('Giorni di ricovero');
+    expect(block).toContain('Durata complessiva');
+  });
+
+  it('accesso PS il 13, ricovero in reparto il 14, dimissione il 22 → la degenza parte dal 14 (9 giorni, come il gold)', () => {
+    const block = formatRicoveroITTFactsBlock([
+      makeEvent('2024-11-13', 'ricovero', 'Accesso Pronto Soccorso per politrauma (codice giallo)'),
+      makeEvent('2024-11-13', 'ricovero', 'Ricovero Pronto Soccorso per trauma auto con sospetta frattura femore'),
+      makeEvent('2024-11-14', 'ricovero', 'Dimissione dal Pronto Soccorso e ricovero in reparto di degenza'),
+      makeEvent('2024-11-14', 'ricovero', 'Ricovero urgente in Ortopedia per incidente stradale'),
+      makeEvent('2024-11-19', 'ricovero', 'Decorso post-operatorio del 19/11/2024'),
+      makeEvent('2024-11-22', 'referto', 'Lettera di dimissione del 22/11/2024'),
+    ]);
+    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
+  });
+
+  it('un accesso PS seguito da una degenza lunga (unica dimissione dopo 10 giorni) resta una degenza', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2023-07-16', 'ricovero', 'Accesso PS per incidente stradale con fratture multiple'),
+      makeEvent('2023-07-16', 'ricovero', 'Ricovero in Ortopedia per frattura femore'),
+      makeEvent('2023-07-25', 'referto', 'Dimissione con terapia e follow-up'),
+    ]);
+    expect(calcs.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(10);
+    const psOnly = calculateMedicoLegalPeriods([
+      makeEvent('2023-07-16', 'ricovero', 'Accesso PS per incidente stradale'),
+      makeEvent('2023-07-25', 'referto', 'Dimissione dal reparto di Ortopedia'),
+    ]);
+    expect(psOnly.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(10);
+  });
+
+  it('una degenza breve in reparto (2 giorni, "Ricovero in osservazione in Medicina") conta', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero in osservazione in Medicina'),
+      makeEvent('2024-01-11', 'referto', 'Dimissione'),
+    ]);
+    expect(calcs.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(2);
+  });
+});
+
+describe('accesso in Pronto Soccorso ≠ ricovero — giro avversariale', () => {
+  it('"preparazione alla dimissione" e la lettera infermieristica del giorno prima non chiudono la degenza (B: 16→25 = 10)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2023-07-16', 'ricovero', 'Accesso PS per incidente stradale con fratture multiple'),
+      makeEvent('2023-07-16', 'ricovero', 'Ricovero in Ortopedia per frattura femore e gomito sinistro'),
+      makeEvent('2023-07-24', 'visita', 'Buone condizioni generali e preparazione alla dimissione'),
+      makeEvent('2023-07-25', 'esame', 'Valutazione Indice di Barthel alla dimissione'),
+      makeEvent('2023-07-25', 'referto', 'Dimissione con terapia e follow-up programmato'),
+      makeEvent('2023-08-30', 'visita', 'Controllo post-dimissione'),
+    ]);
+    expect(calcs.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(10);
+  });
+  it('un accesso in PS la cui description cita il reparto resta un accesso in PS (C: la degenza parte dal 14.11)', () => {
+    const block = formatRicoveroITTFactsBlock([
+      makeEvent('2024-11-13', 'ricovero', 'Ricovero Pronto Soccorso per trauma auto con sospetta frattura femore', 'in attesa di posto letto in Ortopedia; trasferimento in reparto il giorno seguente'),
+      makeEvent('2024-11-14', 'ricovero', 'Ricovero urgente in Ortopedia per incidente stradale'),
+      makeEvent('2024-11-14', 'referto', 'Dimissione da PS: nessuna terapia farmacologica prescritta'),
+      makeEvent('2024-11-22', 'referto', 'Lettera di dimissione del 22/11/2024'),
+    ]);
+    expect(block).toContain('Giorni di ricovero:** 9 (nove), dal 14.11.2024 al 22.11.2024');
   });
 });

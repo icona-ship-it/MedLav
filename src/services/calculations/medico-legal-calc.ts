@@ -154,18 +154,28 @@ function clinicalSortedByDateRaw(events: CalcEvent[], incidentIso?: string | nul
  * variants (dimissione/dimesso/fine ricovero) and English ("discharge"); the
  * old code matched only "dimission" → a discharge labeled "Relazione di fine
  * ricovero" was missed and the hospital stay vanished from ITT. */
-function isDischargeEvent(e: CalcEvent): boolean {
-  const mentions = (text: string): boolean =>
-    text.includes('dimiss') ||
+/** Parla della dimissione senza ESSERLA: preparazione/previsione/programmazione,
+ * valutazioni "alla dimissione", esami pre-dimissione, controlli post-dimissione
+ * (panel giro 8, caso B: "preparazione alla dimissione" del 24.07 chiudeva la
+ * degenza un giorno prima della lettera di dimissione). */
+const NOT_A_DISCHARGE_RE = /((preparazion|previsione|programmazion|pianificazion|rischio|in vista|prossim)\w*\s+(alla |della |di |delle |dell')?dimission|pre-?dimission|post-?dimission|dopo la dimissione|successiv\w* alla dimissione|\balla dimissione\b)/i;
+
+function mentionsDischarge(text: string): boolean {
+  if (NOT_A_DISCHARGE_RE.test(text) && !/lettera di dimissione|\bdimess[oa]\b/.test(text)) return false;
+  return text.includes('dimiss') ||
     text.includes('dimess') ||
     text.includes('fine ricovero') ||
     text.includes('fine del ricovero') ||
     text.includes('discharge');
-  if (mentions(e.title.toLowerCase())) return true;
+}
+
+function isDischargeEvent(e: CalcEvent): boolean {
+  if (isTransferFromPs(e)) return false;
+  if (mentionsDischarge(e.title.toLowerCase())) return true;
   // La description conta solo per eventi che POSSONO essere una dimissione (voce
   // di degenza/referto): un certificato INPS o una visita che CITANO la lettera di
   // dimissione non chiudono un ricovero (panel giro 7, caso C: "212 giorni").
-  return DISCHARGE_BY_DESCRIPTION_TYPES.has(e.event_type) && mentions(e.description.toLowerCase());
+  return DISCHARGE_BY_DESCRIPTION_TYPES.has(e.event_type) && mentionsDischarge(e.description.toLowerCase());
 }
 
 const DISCHARGE_BY_DESCRIPTION_TYPES: ReadonlySet<string> = new Set(['ricovero', 'referto', 'dimissione']);
@@ -178,6 +188,46 @@ const STAY_DIARY_TITLE_RE = /^(decorso|diario|giornata|consegn[ae]|evoluzione|an
 
 function isStayDiaryEvent(e: CalcEvent): boolean {
   return STAY_DIARY_TITLE_RE.test(e.title.trim());
+}
+
+/** Un evento tipizzato 'ricovero' è un'AMMISSIONE solo se ne ha il lessico: la
+ * menzione anamnestica del trauma ("Trauma gomito destro per investimento…")
+ * tipizzata 'ricovero' dall'estrazione apriva una degenza di 2 giorni fino alla
+ * dimissione del PS (panel giro 8, caso A, gold senza ricoveri). */
+const ADMISSION_RE = /(ricover|accettazion|accesso|ingresso|trasferi|degenza|ospedalizz|ammission)/i;
+
+/** Accesso in Pronto Soccorso (PS/DEA/OBI) senza lessico di reparto: un
+ * passaggio in PS dimesso entro due giorni NON è una degenza; se il giorno dopo
+ * c'è l'ammissione in reparto, la degenza parte da quella (gold C: 14→22 = 9). */
+const PS_ACCESS_RE = /(pronto soccorso|\bp\.?s\.?\b|\bdea\b|\bobi\b|osservazione breve)/i;
+const WARD_RE = /(reparto|\bu\.?\s?o\.?\s?c?\b|degenza|trasferi|ortoped|chirurg|medicina|geriatr|neurolog|cardiolog|rianimazion|terapia intensiva|ricovero ordinario|regime ordinario)/i;
+const PS_ONLY_MAX_DAYS = 2;
+
+function isAdmissionEvent(e: CalcEvent): boolean {
+  if (e.event_type !== 'ricovero' || isDischargeEvent(e) || isStayDiaryEvent(e)) return false;
+  // Una menzione anamnestica (retrospettivo) è ammissione solo se ne ha il lessico;
+  // un evento corrente tipizzato 'ricovero' lo è per costruzione (day hospital compreso).
+  return e.temporal_scope !== 'retrospettivo' || ADMISSION_RE.test(`${e.title} ${e.description}`);
+}
+
+/** Sul TITOLO: la description di un accesso in PS cita spesso il reparto
+ * ("in attesa di posto letto in Ortopedia") e lo travestiva da ammissione. */
+function isPsAccess(e: CalcEvent): boolean {
+  const title = e.title.replace(/non ricoverat\w*/gi, '');
+  return PS_ACCESS_RE.test(title) && !WARD_RE.test(title);
+}
+
+/** "Dimissione dal PS e ricovero in reparto": un TRASFERIMENTO, non la fine della
+ * degenza (e, come evento 'ricovero', è un'ammissione in reparto). */
+function isTransferFromPs(e: CalcEvent): boolean {
+  const text = `${e.title} ${e.description}`;
+  return mentionsDischarge(e.title.toLowerCase()) && PS_ACCESS_RE.test(text) && WARD_RE.test(text);
+}
+
+/** Dimissione DAL PS ("Dimissione da PS: nessuna terapia"): chiude solo un
+ * accesso in PS, mai un'ammissione in reparto dello stesso giorno. */
+function isPsDischarge(e: CalcEvent): boolean {
+  return isDischargeEvent(e) && isPsAccess(e);
 }
 
 /** Oltre questa durata una coppia ricovero→dimissione senza NESSUN evento di
@@ -217,6 +267,7 @@ function pairAdmissionsToDischarges(
     for (const { d, i } of sortedDis) {
       if (used.has(i)) continue;
       if (d.event_date < admission.event_date) continue; // dimissione prima del ricovero: non è sua
+      if (isPsDischarge(d) && !isPsAccess(admission)) continue; // la dimissione dal PS non chiude il reparto
       used.add(i);
       pairs.push({ admission, discharge: d });
       break;
@@ -237,10 +288,17 @@ function mergedHospitalIntervals(events: CalcEvent[]): Array<{ start: string; en
   // Le voci di diario provano la degenza (isPlausibleStay) ma non la aprono; le
   // righe "Dimissione" tipizzate 'ricovero' sono dimissioni, non ammissioni.
   const stayEvents = events.filter((e) => e.event_type === 'ricovero');
-  const admissions = stayEvents.filter((e) => !isDischargeEvent(e) && !isStayDiaryEvent(e));
+  const allAdmissions = stayEvents.filter(isAdmissionEvent);
+  // Un accesso in PS seguito entro due giorni dall'ammissione in reparto non apre
+  // la degenza: la apre il reparto (altrimenti il PS "rubava" l'unica dimissione).
+  const admissions = allAdmissions.filter((a) =>
+    !isPsAccess(a) ||
+    !allAdmissions.some((w) => !isPsAccess(w) && w.event_date >= a.event_date && daysDiff(a.event_date, w.event_date) <= PS_ONLY_MAX_DAYS));
   const discharges = events.filter(isDischargeEvent);
   const rawIntervals = pairAdmissionsToDischarges(admissions, discharges)
     .filter(({ admission, discharge }) => isPlausibleStay(admission, discharge, stayEvents))
+    // Passaggio in PS dimesso entro due giorni: osservazione, non degenza.
+    .filter(({ admission, discharge }) => !(isPsAccess(admission) && inclusiveDays(admission.event_date, discharge.event_date) <= PS_ONLY_MAX_DAYS))
     .map(({ admission, discharge }) => ({ start: admission.event_date, end: discharge.event_date }))
     .filter((iv) => iv.start <= iv.end)
     .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
