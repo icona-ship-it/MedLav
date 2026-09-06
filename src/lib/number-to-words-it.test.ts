@@ -27,7 +27,20 @@ describe('numberToItalianWords', () => {
   });
 
   it('input non gestiti → cifra', () => {
-    expect(numberToItalianWords(1000)).toBe('1000');
+    expect(numberToItalianWords(NaN)).toBe('NaN');
     expect(numberToItalianWords(-5)).toBe('-5');
+  });
+});
+
+describe('numberToItalianWords — migliaia (durata complessiva in giorni, mai la cifra tra parentesi)', () => {
+  it('mille, duemila, composti', () => {
+    expect(numberToItalianWords(1000)).toBe('mille');
+    expect(numberToItalianWords(1001)).toBe('milleuno');
+    expect(numberToItalianWords(2000)).toBe('duemila');
+    expect(numberToItalianWords(4163)).toBe('quattromilacentosessantatré');
+    expect(numberToItalianWords(21008)).toBe('ventunomilaotto');
+  });
+  it('oltre le centinaia di migliaia resta la cifra', () => {
+    expect(numberToItalianWords(1_000_000)).toBe('1000000');
   });
 });

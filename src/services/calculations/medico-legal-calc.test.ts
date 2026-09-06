@@ -607,3 +607,133 @@ describe('Data sinistro — eventi preesistenti esclusi dai calcoli (feedback be
     expect(block.toLowerCase()).not.toContain('preesistenz');
   });
 });
+
+// Panel giro 7 (2026-09-06), caso C: «Giorni di ricovero: 212, dal 25.11.2024 al
+// 24.06.2025» — ammissione = voce di DIARIO tipizzata 'ricovero' dopo la dimissione
+// vera; "dimissione" = certificato INPS di sette mesi dopo la cui description cita
+// la lettera di dimissione. E «Durata complessiva 4163 giorni dal 14.11.2014»: un
+// consenso con anno OCR sbagliato ancorava lo span.
+describe('fatti deterministici robusti — diario ≠ ammissione, certificato ≠ dimissione, span senza date isolate', () => {
+  const stay = [
+    makeEvent('2024-11-13', 'ricovero', 'Accesso in Pronto Soccorso per trauma'),
+    makeEvent('2024-11-14', 'ricovero', 'Ricovero urgente in Ortopedia'),
+    makeEvent('2024-11-15', 'intervento', 'Osteosintesi femore sinistro'),
+    makeEvent('2024-11-19', 'ricovero', 'Decorso post-operatorio del 19/11/2024'),
+    makeEvent('2024-11-22', 'referto', 'Lettera di dimissione del 22/11/2024'),
+    makeEvent('2024-12-20', 'visita', 'Controllo ortopedico'),
+    makeEvent('2025-03-10', 'visita', 'Visita fisiatrica'),
+  ];
+
+  it('una voce di diario tipizzata ricovero DOPO la dimissione non apre un nuovo ricovero', () => {
+    const block = formatRicoveroITTFactsBlock([
+      ...stay,
+      makeEvent('2024-11-25', 'ricovero', 'Decorso post-operatorio del 25/11/2024'),
+      makeEvent('2025-06-24', 'certificato', 'Certificato medico di controllo domiciliare per inabilità lavorativa', 'Visita INPS; agli atti la lettera di dimissione del 22/11/2024 per frattura femore.'),
+    ]);
+    expect(block).toContain('Giorni di ricovero:** 10 (dieci), dal 13.11.2024 al 22.11.2024');
+    expect(block).not.toContain('212');
+    const ricoveroLines = block.split('\n').filter((l) => l.includes('Giorni di ricovero'));
+    expect(ricoveroLines).toHaveLength(1);
+    expect(ricoveroLines[0]).not.toContain('24.06.2025');
+    // Il certificato INPS resta l'ultimo evento del periodo di malattia (è clinico).
+    expect(block).toContain("all'ultimo (24.06.2025)");
+  });
+
+  it('la citazione della dimissione nella description di un CERTIFICATO non è una dimissione', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-11-13', 'ricovero', 'Ricovero in Ortopedia'),
+      makeEvent('2024-11-20', 'ricovero', 'Decorso del 20/11'),
+      makeEvent('2025-06-24', 'certificato', 'Certificato INPS di inabilità', 'cita la lettera di dimissione'),
+    ]);
+    expect(calcs.filter((c) => c.label === 'Giorni di ricovero')).toHaveLength(0);
+  });
+
+  it('la dimissione resta riconosciuta dal titolo anche senza la parola "dimissione" (fine ricovero) e da description su eventi di degenza', () => {
+    const a = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'referto', 'Relazione di fine ricovero', 'Paziente dimesso'),
+    ]);
+    expect(a.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(11);
+    const b = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Ricovero'),
+      makeEvent('2024-01-20', 'ricovero', 'Chiusura cartella', 'Paziente dimessa al domicilio in buone condizioni'),
+    ]);
+    expect(b.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(11);
+  });
+
+  it('coppia ricovero→dimissione oltre 90 giorni SENZA eventi di degenza intermedi = sospetta: non conteggiata; con diario intermedio conta', () => {
+    const suspect = calculateMedicoLegalPeriods([
+      makeEvent('2024-11-25', 'ricovero', 'Ricovero'),
+      makeEvent('2025-01-10', 'visita', 'Controllo ambulatoriale'),
+      makeEvent('2025-06-24', 'referto', 'Dimissione'),
+    ]);
+    expect(suspect.filter((c) => c.label === 'Giorni di ricovero')).toHaveLength(0);
+    const rehab = calculateMedicoLegalPeriods([
+      makeEvent('2024-11-25', 'ricovero', 'Ricovero in riabilitazione'),
+      makeEvent('2025-02-10', 'ricovero', 'Decorso della degenza riabilitativa'),
+      makeEvent('2025-03-05', 'referto', 'Dimissione dalla riabilitazione'),
+    ]);
+    expect(rehab.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(101);
+  });
+
+  it('un consenso informato non ancora lo span; un evento isolato oltre un anno dal resto è escluso e DICHIARATO', () => {
+    const block = formatRicoveroITTFactsBlock([
+      makeEvent('2014-11-14', 'consenso', 'Firma consenso informato per intervento'),
+      makeEvent('2014-11-14', 'visita', 'Valutazione anestesiologica'),
+      ...stay,
+    ]);
+    expect(block).toContain('dal primo evento documentato (13.11.2024)');
+    expect(block).not.toContain('2014');
+    expect(block).not.toContain('4163');
+    expect(block).toMatch(/1 evento .*isolat/i);
+    expect(block).toContain('118 (centodiciotto)');
+  });
+
+  it('con soli due eventi lontani nessuna esclusione (non si sa quale sia l\'errore)', () => {
+    const block = formatRicoveroITTFactsBlock([
+      makeEvent('2024-01-10', 'visita', 'Accesso PS'),
+      makeEvent('2025-06-01', 'visita', 'Controllo tardivo'),
+    ]);
+    expect(block).toContain('dal primo evento documentato (10.01.2024)');
+    expect(block).not.toMatch(/isolat/i);
+  });
+
+  it('gli stessi criteri valgono per il percorso UI (calculateITTITP) e per le righe calcolate', () => {
+    const rows = calculateMedicoLegalPeriods([
+      makeEvent('2014-11-14', 'visita', 'Valutazione (anno OCR errato)'),
+      ...stay,
+    ]);
+    expect(rows.find((c) => c.label === 'Periodo totale malattia')?.startDate).toBe('2024-11-13');
+    const segs = calculateITTITP([
+      makeEvent('2014-11-14', 'visita', 'Valutazione (anno OCR errato)'),
+      ...stay,
+    ]);
+    expect(segs.every((s) => (s.startDate ?? '2024') >= '2024-11-13')).toBe(true);
+  });
+});
+
+describe('fatti deterministici robusti — giro avversariale', () => {
+  it('"Valutazione clinica all\'ingresso" tipizzata ricovero È un\'ammissione (non è diario)', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-01-10', 'ricovero', 'Valutazione clinica all\'ingresso in reparto'),
+      makeEvent('2024-01-20', 'referto', 'Lettera di dimissione'),
+    ]);
+    expect(calcs.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(11);
+  });
+  it('una voce "altro" retrospettiva che cita la dimissione nella description NON allunga la degenza', () => {
+    const calcs = calculateMedicoLegalPeriods([
+      makeEvent('2024-11-13', 'ricovero', 'Ricovero in Ortopedia'),
+      makeEvent('2024-11-22', 'referto', 'Lettera di dimissione'),
+      { ...makeEvent('2024-11-25', 'altro', 'Inizio malattia dichiarato', 'tre giorni dopo la dimissione ospedaliera'), temporal_scope: 'retrospettivo' },
+    ]);
+    expect(calcs.find((c) => c.label === 'Giorni di ricovero')?.days).toBe(10);
+  });
+  it('gruppi di pari numerosità lontani più di un anno: resta il più recente', () => {
+    const block = formatRicoveroITTFactsBlock([
+      makeEvent('2014-03-01', 'visita', 'Visita A'), makeEvent('2014-03-05', 'visita', 'Visita B'),
+      makeEvent('2024-03-01', 'visita', 'Visita C'), makeEvent('2024-03-05', 'visita', 'Visita D'),
+    ]);
+    expect(block).toContain('dal primo evento documentato (01.03.2024)');
+    expect(block).toMatch(/2 eventi isolati/);
+  });
+});

@@ -91,13 +91,51 @@ function isMentionOfAttestedEvent(e: CalcEvent, all: CalcEvent[]): boolean {
     o.event_type === e.event_type);
 }
 
+/** Tipi che non ancorano MAI un computo: un consenso informato è un atto
+ * amministrativo della degenza (panel giro 7, caso C: un consenso con anno OCR
+ * sbagliato — 2014 per 2024 — apriva uno span di 4163 giorni). */
+const NEVER_ANCHOR_EVENT_TYPES: ReadonlySet<string> = new Set(['consenso']);
+
+/** Oltre questa distanza dal resto della documentazione un evento agli estremi
+ * è "isolato": anno letto male dall'OCR o preesistenza non dichiarata. */
+const ISOLATION_GAP_DAYS = 365;
+
+/**
+ * Toglie gli eventi ISOLATI agli estremi: la sequenza (già ordinata) viene
+ * spezzata dove due eventi consecutivi distano più di un anno; resta il gruppo
+ * più numeroso (a parità, il più recente). Con meno di 3 eventi, o se il gruppo
+ * vincente ne ha meno di 2, non si tocca nulla (non si sa quale sia l'errore).
+ * Pura; `dropped` serve alla riga di trasparenza del blocco FATTI.
+ */
+function dropIsolatedExtremes(sorted: CalcEvent[]): { kept: CalcEvent[]; dropped: number } {
+  if (sorted.length < 3) return { kept: sorted, dropped: 0 };
+  const clusters: CalcEvent[][] = [];
+  for (const e of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && daysDiff(last[last.length - 1]!.event_date, e.event_date) <= ISOLATION_GAP_DAYS) last.push(e);
+    else clusters.push([e]);
+  }
+  if (clusters.length === 1) return { kept: sorted, dropped: 0 };
+  let best = clusters[0]!;
+  for (const c of clusters) if (c.length >= best.length) best = c;
+  if (best.length < 2) return { kept: sorted, dropped: 0 };
+  return { kept: best, dropped: sorted.length - best.length };
+}
+
 function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null): CalcEvent[] {
+  return dropIsolatedExtremes(clinicalSortedByDateRaw(events, incidentIso)).kept;
+}
+
+/** Filtro + ordinamento SENZA la potatura degli isolati (serve al blocco FATTI
+ * per contare separatamente preesistenze e isolati). */
+function clinicalSortedByDateRaw(events: CalcEvent[], incidentIso?: string | null): CalcEvent[] {
   const today = todayRomeIso();
   return events
     .filter((e) => !isMentionOfAttestedEvent(e, events))
     .filter(
       (e) =>
         (!NON_CLINICAL_EVENT_TYPES.has(e.event_type) || isClinicalCertificate(e)) &&
+        !NEVER_ANCHOR_EVENT_TYPES.has(e.event_type) &&
         e.event_date !== SENTINEL_EVENT_DATE &&
         ISO_DATE_RE.test(e.event_date) &&
         // Solo date PRECISE (giorno): una menzione anamnestica anno-only, fabbricata
@@ -117,14 +155,38 @@ function clinicalSortedByDate(events: CalcEvent[], incidentIso?: string | null):
  * old code matched only "dimission" → a discharge labeled "Relazione di fine
  * ricovero" was missed and the hospital stay vanished from ITT. */
 function isDischargeEvent(e: CalcEvent): boolean {
-  const text = `${e.title} ${e.description}`.toLowerCase();
-  return (
+  const mentions = (text: string): boolean =>
     text.includes('dimiss') ||
     text.includes('dimess') ||
     text.includes('fine ricovero') ||
     text.includes('fine del ricovero') ||
-    text.includes('discharge')
-  );
+    text.includes('discharge');
+  if (mentions(e.title.toLowerCase())) return true;
+  // La description conta solo per eventi che POSSONO essere una dimissione (voce
+  // di degenza/referto): un certificato INPS o una visita che CITANO la lettera di
+  // dimissione non chiudono un ricovero (panel giro 7, caso C: "212 giorni").
+  return DISCHARGE_BY_DESCRIPTION_TYPES.has(e.event_type) && mentions(e.description.toLowerCase());
+}
+
+const DISCHARGE_BY_DESCRIPTION_TYPES: ReadonlySet<string> = new Set(['ricovero', 'referto', 'dimissione']);
+
+/** Voce di DIARIO della degenza tipizzata 'ricovero' ("Decorso post-operatorio del
+ * 19/11", "Consegne", "Parametri"): documenta che si è ricoverati, non l'ammissione.
+ * Presa come ammissione, una voce datata dopo la dimissione vera (o con data letta
+ * male) apriva un ricovero fantasma fino alla prima "dimissione" successiva. */
+const STAY_DIARY_TITLE_RE = /^(decorso|diario|giornata|consegn[ae]|evoluzione|andamento|nota (clinica|medica|infermieristica)|rilevazion|parametri|medicazion|somministrazion|controllo (ematico|post)|prelievo)/i;
+
+function isStayDiaryEvent(e: CalcEvent): boolean {
+  return STAY_DIARY_TITLE_RE.test(e.title.trim());
+}
+
+/** Oltre questa durata una coppia ricovero→dimissione senza NESSUN evento di
+ * degenza intermedio è un accoppiamento sospetto, non una degenza. */
+const LONG_STAY_NEEDS_EVIDENCE_DAYS = 90;
+
+function isPlausibleStay(admission: CalcEvent, discharge: CalcEvent, stayEvents: CalcEvent[]): boolean {
+  if (daysDiff(admission.event_date, discharge.event_date) <= LONG_STAY_NEEDS_EVIDENCE_DAYS) return true;
+  return stayEvents.some((s) => s.event_date > admission.event_date && s.event_date < discharge.event_date);
 }
 
 /**
@@ -171,11 +233,14 @@ function pairAdmissionsToDischarges(
  * `calculateGraduatedITTITP` sommava le coppie grezze → la stessa degenza da due
  * documenti raddoppiava l'ITT (20 gg invece di 10) senza flag.
  */
-function mergedHospitalIntervals(
-  admissions: CalcEvent[],
-  discharges: CalcEvent[],
-): Array<{ start: string; end: string }> {
+function mergedHospitalIntervals(events: CalcEvent[]): Array<{ start: string; end: string }> {
+  // Le voci di diario provano la degenza (isPlausibleStay) ma non la aprono; le
+  // righe "Dimissione" tipizzate 'ricovero' sono dimissioni, non ammissioni.
+  const stayEvents = events.filter((e) => e.event_type === 'ricovero');
+  const admissions = stayEvents.filter((e) => !isDischargeEvent(e) && !isStayDiaryEvent(e));
+  const discharges = events.filter(isDischargeEvent);
   const rawIntervals = pairAdmissionsToDischarges(admissions, discharges)
+    .filter(({ admission, discharge }) => isPlausibleStay(admission, discharge, stayEvents))
     .map(({ admission, discharge }) => ({ start: admission.event_date, end: discharge.event_date }))
     .filter((iv) => iv.start <= iv.end)
     .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
@@ -416,12 +481,7 @@ export function calculateMedicoLegalPeriods(
 }
 
 function calculateHospitalDays(events: CalcEvent[]): MedicoLegalCalculation[] {
-  // Admissions exclude rows that are themselves discharges (a "Dimissione" row
-  // sometimes carries eventType 'ricovero'). Each discharge is paired once.
-  const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
-  const discharges = events.filter(isDischargeEvent);
-
-  return mergedHospitalIntervals(admissions, discharges).map(({ start, end }) => {
+  return mergedHospitalIntervals(events).map(({ start, end }) => {
     const days = inclusiveDays(start, end);
     return {
       label: 'Giorni di ricovero',
@@ -473,8 +533,9 @@ export function formatRicoveroITTFactsBlock(events: CalcEvent[], incidentDate?: 
   // Data sinistro del perito: le preesistenze (eventi antecedenti) escono dal
   // computo — e la loro esclusione viene DICHIARATA in una riga di trasparenza.
   const incidentIso = normalizeIncidentIso(incidentDate);
-  const clinical = clinicalSortedByDate(precise, incidentIso);
-  const excludedCount = incidentIso ? clinicalSortedByDate(precise).length - clinical.length : 0;
+  const rawAfterIncident = clinicalSortedByDateRaw(precise, incidentIso);
+  const excludedCount = incidentIso ? clinicalSortedByDateRaw(precise).length - rawAfterIncident.length : 0;
+  const { kept: clinical, dropped: isolatedCount } = dropIsolatedExtremes(rawAfterIncident);
   if (clinical.length === 0) return '';
   const lines: string[] = [];
 
@@ -495,6 +556,12 @@ export function formatRicoveroITTFactsBlock(events: CalcEvent[], incidentDate?: 
   // (le preesistenze restano in cronistoria/anamnesi, semplicemente non nei computi).
   if (excludedCount > 0 && incidentIso && lines.length > 0) {
     lines.push(`- Gli eventi antecedenti alla data del sinistro (${formatDate(incidentIso)}) sono esclusi dal computo in quanto preesistenze.`);
+  }
+  // (4) Trasparenza: date isolate (anno letto male dall'OCR o preesistenza non
+  // dichiarata) fuori dal computo, ma mai in silenzio.
+  if (isolatedCount > 0 && lines.length > 0) {
+    const n = isolatedCount;
+    lines.push(`- ${n} ${n === 1 ? 'evento isolato' : 'eventi isolati'} (oltre un anno di distanza dal resto della documentazione) ${n === 1 ? 'è escluso' : 'sono esclusi'} dal computo della durata: data da verificare alla fonte.`);
   }
 
   if (lines.length === 0) return '';
@@ -559,8 +626,6 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
   const results: MedicoLegalCalculation[] = [];
 
   // Find key milestones. Events are pre-sorted chronologically by the caller.
-  const admissions = events.filter((e) => e.event_type === 'ricovero' && !isDischargeEvent(e));
-  const discharges = events.filter(isDischargeEvent);
   const rehabEvents = events.filter((e) => {
     const text = `${e.title} ${e.description}`.toLowerCase();
     return text.includes('riabilitaz') || text.includes('fisioterapi') || text.includes('fkt') ||
@@ -584,7 +649,7 @@ function calculateGraduatedITTITP(events: CalcEvent[]): MedicoLegalCalculation[]
 
   // Hospital days (INCLUSIVI: ogni degenza conta entrambi i giorni — convenzione
   // gold). Intervalli FUSI (F-P2): la stessa degenza da due documenti non raddoppia.
-  for (const { start, end } of mergedHospitalIntervals(admissions, discharges)) {
+  for (const { start, end } of mergedHospitalIntervals(events)) {
     ittDays += inclusiveDays(start, end);
     if (!ittStart) ittStart = start;
     ittEnd = end;
