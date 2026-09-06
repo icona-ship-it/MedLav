@@ -79,7 +79,7 @@ Pipeline: Upload → OCR → Classificazione → Estrazione → Consolidamento �
 5. **consolidate-events** → ordina cronologicamente, dedup cross-doc, rinumera
 6. **link-images-to-events** → collega immagini a eventi via `sourcePages` ↔ `pages.image_path`, popola `event_images`
 7. **analyze-diagnostic-images** → analisi immagini diagnostiche con Pixtral (step 4.6), restituisce `storagePath` per embedding nel report
-8. **detect-anomalies** → 7 tipi anomalie (algoritmico, no LLM)
+8. **detect-anomalies** → anomalie algoritmiche (no LLM): 2 tipi attivi (le altre 5, fra cui i gap temporali, ritirate il 2026-07-14 su scelta di prodotto)
 9. **detect-missing-documents** → documenti mancanti attesi per tipo caso
 10. **calculate-periods** → calcoli medico-legali (ITT, ITP, giorni ricovero)
 11. **generate-report** → report sezionale per ruolo (CTU 11 sez, CTP 10, Stragiudiziale 7) allineato ai benchmark perizie reali. **Su `rc-mvp` è attivo SOLO il ruolo `stragiudiziale`** (enforcement lato server: `caseRoleSchema = z.enum(['stragiudiziale'])`); CTU/CTP vivono su `main`. Placeholder per sezioni che il perito compila. NO [Ev.N]. RAG linee guida + calcoli + immagini. Report troncati bloccati (throw error, Inngest retries).

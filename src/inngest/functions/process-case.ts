@@ -1380,43 +1380,6 @@ export const processCase = inngest.createFunction(
       }
     }
 
-    // Fedeltà citazioni (feedback beta 2026-07-20): aggrega da TUTTE le sezioni
-    // completate — wave parallela, tail sequenziale, doc-sanitaria batched e
-    // auto-split — le «...» senza riscontro esatto nell'OCR. Prima il segnale
-    // esisteva solo nei log: le divergenze arrivavano al DOCX in silenzio.
-    const ungroundedQuotesReport = Array.from(completedSections.values())
-      .flatMap((s) => s.ungroundedQuotes ?? []);
-    // Aggancio alla fonte: quante «...» sono state riscritte col testo esatto
-    // dell'OCR (correzione automatica, non richiede azione del perito — solo log).
-    const quotesSnappedReport = Array.from(completedSections.values())
-      .reduce((sum, s) => sum + (s.quotesSnapped ?? 0), 0);
-    if (quotesSnappedReport > 0) {
-      logger.info('pipeline', `Quote snapping: ${quotesSnappedReport} citazioni agganciate al testo esatto dei documenti`, { caseId });
-    }
-    if (ungroundedQuotesReport.length > 0) {
-      pipelineWarnings.push({
-        step: 'quote-verification',
-        severity: 'warning',
-        message: `${ungroundedQuotesReport.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
-        failedCount: ungroundedQuotesReport.length,
-        failedItems: ungroundedQuotesReport.slice(0, 24),
-      });
-    }
-    // Date nelle sezioni narrative senza riscontro negli eventi/metadati (2026-09-05):
-    // il modello scriveva "RX del 07.01.2025" inesistente. Non si cancella nulla:
-    // il perito vede l'elenco nel pannello e controlla sui documenti.
-    const unattestedDatesReport = Array.from(new Set(Array.from(completedSections.values())
-      .flatMap((s) => (s.unattestedDates ?? []).map((d) => `${s.title}: ${d}`))));
-    if (unattestedDatesReport.length > 0) {
-      pipelineWarnings.push({
-        step: 'date-verification',
-        severity: 'warning',
-        message: `${unattestedDatesReport.length} date nel testo (Fatto/Anamnesi/Epicrisi) senza riscontro fra le date dei documenti: verificare sui documenti originali`,
-        failedCount: unattestedDatesReport.length,
-        failedItems: unattestedDatesReport.slice(0, 24),
-      });
-    }
-
     // ULTIMA CHANCE prima del fallback (CASO-2026-219, 2026-07-14: Anamnesi+Fatto
     // fallite dopo i retry in-step): un tentativo FINALE per ogni sezione fallita,
     // a pipeline scarica (niente contesa col resto delle sezioni) e con seed
@@ -1492,6 +1455,45 @@ export const processCase = inngest.createFunction(
           totalCount: coverage.t1Total,
         });
       }
+    }
+
+    // (2026-09-06) Aggregazioni DOPO l'ultimo tentativo: una sezione rigenerata
+    // all'ultima chance porta le sue citazioni/date nel pannello come le altre.
+    // Fedeltà citazioni (feedback beta 2026-07-20): aggrega da TUTTE le sezioni
+    // completate — wave parallela, tail sequenziale, doc-sanitaria batched e
+    // auto-split — le «...» senza riscontro esatto nell'OCR. Prima il segnale
+    // esisteva solo nei log: le divergenze arrivavano al DOCX in silenzio.
+    const ungroundedQuotesReport = Array.from(completedSections.values())
+      .flatMap((s) => s.ungroundedQuotes ?? []);
+    // Aggancio alla fonte: quante «...» sono state riscritte col testo esatto
+    // dell'OCR (correzione automatica, non richiede azione del perito — solo log).
+    const quotesSnappedReport = Array.from(completedSections.values())
+      .reduce((sum, s) => sum + (s.quotesSnapped ?? 0), 0);
+    if (quotesSnappedReport > 0) {
+      logger.info('pipeline', `Quote snapping: ${quotesSnappedReport} citazioni agganciate al testo esatto dei documenti`, { caseId });
+    }
+    if (ungroundedQuotesReport.length > 0) {
+      pipelineWarnings.push({
+        step: 'quote-verification',
+        severity: 'warning',
+        message: `${ungroundedQuotesReport.length} citazioni della documentazione sanitaria senza riscontro esatto nel testo dei documenti`,
+        failedCount: ungroundedQuotesReport.length,
+        failedItems: ungroundedQuotesReport.slice(0, 24),
+      });
+    }
+    // Date nelle sezioni narrative senza riscontro negli eventi/metadati (2026-09-05):
+    // il modello scriveva "RX del 07.01.2025" inesistente. Non si cancella nulla:
+    // il perito vede l'elenco nel pannello e controlla sui documenti.
+    const unattestedDatesReport = Array.from(new Set(Array.from(completedSections.values())
+      .flatMap((s) => (s.unattestedDates ?? []).map((d) => `${s.title}: ${d}`))));
+    if (unattestedDatesReport.length > 0) {
+      pipelineWarnings.push({
+        step: 'date-verification',
+        severity: 'warning',
+        message: `${unattestedDatesReport.length} date nel testo (Fatto/Anamnesi/Epicrisi) senza riscontro fra le date dei documenti: verificare sui documenti originali`,
+        failedCount: unattestedDatesReport.length,
+        failedItems: unattestedDatesReport.slice(0, 24),
+      });
     }
 
     // Assemble in PLAN order regardless of completion order.

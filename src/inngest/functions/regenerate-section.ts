@@ -268,6 +268,7 @@ export const regenerateSectionJob = inngest.createFunction(
         // viene davvero rigenerata — guida il refresh del warning in finalize.
         let quoteCheck: { ungroundedQuotes: string[]; quoteTotal: number } | undefined;
         let coverageCheck: { missing: number; total: number } | undefined;
+        let narrativeCheck: { unattestedDates: string[] } | undefined;
         const updatedSynthesis = await regenerateSection({
           sectionId: target.sectionId,
           currentSynthesis: currentReport.synthesis as string,
@@ -288,6 +289,7 @@ export const regenerateSectionJob = inngest.createFunction(
           selective: target.selective,
           onQuoteCheck: (info) => { quoteCheck = info; },
           onCoverageCheck: (info) => { coverageCheck = info; },
+          onNarrativeCheck: (info) => { narrativeCheck = info; },
         });
 
         // No-op (es. doc-sanitaria in variante AI rigenerata in modo generico):
@@ -309,7 +311,7 @@ export const regenerateSectionJob = inngest.createFunction(
           imageAnalysis,
           auditExtra: { batchId, async: true },
         });
-        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version, quoteCheck, coverageCheck };
+        return { sectionId: target.sectionId, outcome: 'regenerated' as const, version: persisted.version, quoteCheck, coverageCheck, narrativeCheck };
       });
       outcomes.push(result);
     }
@@ -327,6 +329,31 @@ export const regenerateSectionJob = inngest.createFunction(
         (o): o is typeof o & { coverageCheck: { missing: number; total: number } } =>
           'coverageCheck' in o && o.coverageCheck !== undefined,
       )?.coverageCheck;
+      // Date senza riscontro (2026-09-06): la rigenerazione di Fatto/Anamnesi/Epicrisi
+      // riallinea la voce del pannello (sostituita, o rimossa se non ci sono più).
+      const narrativeChecks = outcomes
+        .filter((o): o is typeof o & { sectionId: string; narrativeCheck: { unattestedDates: string[] } } => 'narrativeCheck' in o && o.narrativeCheck !== undefined);
+      if (narrativeChecks.length > 0) {
+        const admin = createAdminClient();
+        const { data: caseRow } = await admin.from('cases').select('perizia_metadata').eq('id', caseId).single();
+        const meta = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
+        const prev = Array.isArray(meta.pipelineWarnings) ? meta.pipelineWarnings as Array<Record<string, unknown>> : [];
+        const regenerated = new Set(narrativeChecks.map((o) => o.sectionId));
+        const titleOf: Record<string, string> = { il_fatto_e_storia_clinica: 'Il Fatto e la Storia Clinica', anamnesi: 'I Dati Anamnestici', epicrisi: 'Epicrisi' };
+        // Tieni le date delle sezioni NON rigenerate (prefisso "Titolo: "), aggiungi le nuove.
+        const keptItems = prev
+          .filter((w) => w?.step === 'date-verification')
+          .flatMap((w) => (Array.isArray(w.failedItems) ? w.failedItems as string[] : []))
+          .filter((item) => !Array.from(regenerated).some((id) => item.startsWith(`${titleOf[id] ?? id}: `)));
+        const newItems = narrativeChecks.flatMap((o) => o.narrativeCheck.unattestedDates.map((d) => `${titleOf[o.sectionId] ?? o.sectionId}: ${d}`));
+        const items = Array.from(new Set([...keptItems, ...newItems]));
+        const others = prev.filter((w) => w?.step !== 'date-verification');
+        const next = items.length > 0
+          ? [...others, { step: 'date-verification', severity: 'warning', message: `${items.length} date nel testo (Fatto/Anamnesi/Epicrisi) senza riscontro fra le date dei documenti: verificare sui documenti originali`, failedCount: items.length, failedItems: items.slice(0, 24) }]
+          : others;
+        const restMeta = Object.fromEntries(Object.entries(meta).filter(([k]) => k !== 'pipelineWarnings'));
+        await admin.from('cases').update({ perizia_metadata: next.length > 0 ? { ...restMeta, pipelineWarnings: next } : restMeta, updated_at: new Date().toISOString() }).eq('id', caseId);
+      }
       if (freshQuoteCheck) {
         const admin = createAdminClient();
         const { data: caseRow } = await admin.from('cases').select('perizia_metadata').eq('id', caseId).single();

@@ -55,7 +55,7 @@ import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { scrubContactDetails } from './contact-scrub';
 import { stripPromptArtifacts, stripItalicMetaParagraphs } from './prompt-artifacts';
-import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays } from './narrative-nets';
+import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions } from './narrative-nets';
 
 /** Sezioni narrative su cui girano le reti date/citazioni. */
 const NARRATIVE_SECTION_IDS: ReadonlySet<string> = new Set(['il_fatto_e_storia_clinica', 'anamnesi', 'epicrisi']);
@@ -527,7 +527,7 @@ export async function generateSingleSection(params: {
   let unattestedDatesMeta: { unattestedDates: string[] } | undefined;
   if (spec.id === 'epicrisi') finalContent = unwrapGuillemets(finalContent);
   if (spec.id === 'anamnesi') {
-    const past = sanitizeAnamnesiPast(finalContent, collectCurrentDays(synthesisParams.events));
+    const past = sanitizeAnamnesiPast(finalContent, collectCurrentDays(synthesisParams.events), collectCurrentLesions(synthesisParams.events));
     if (past.replaced) logger.warn('section-generator', 'Anamnesi: riga "In passato" con date dell\'evento indice sostituita');
     finalContent = past.text;
   }

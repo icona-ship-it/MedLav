@@ -10,7 +10,7 @@
  * Pure e idempotenti.
  */
 
-const DATE_RE = /\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/g;
+const DATE_RE = /\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/g;
 const PLACEHOLDER_RE = /\[[^\]]*\]/g;
 
 function dayNumber(d: number, m: number, y: number): number | null {
@@ -37,7 +37,7 @@ export function unwrapGuillemets(text: string): string {
   return text.replace(/«\s*([^«»]*?)\s*»/g, '$1');
 }
 
-const PAST_LINE_RE = /^(\s*(?:[-*•]\s*)?(?:\*\*)?In passato\s*:?\s*(?:\*\*)?\s*:?)(.*)$/im;
+const PAST_LINE_RE = /^(\s*(?:[-*•]\s*)?(?:\*\*)?(?:In passato|Patologie pregresse|Anamnesi (?:patologica )?remota|Pregressi|A\.?P\.?R\.?)\s*:?\s*(?:\*\*)?\s*:?)(.*)$/im;
 
 function hasCurrentDate(part: string, currentDays: ReadonlySet<number>): boolean {
   for (const d of part.matchAll(DATE_RE)) {
@@ -47,15 +47,37 @@ function hasCurrentDate(part: string, currentDays: ReadonlySet<number>): boolean
   return false;
 }
 
+const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Lesioni/diagnosi dell'evento indice (eventi correnti), come frasi normalizzate ≥ 3 parole. */
+export function collectCurrentLesions(events: ReadonlyArray<{ diagnosis?: string | null; title?: string | null; temporalScope?: string | null }>): string[] {
+  const out = new Set<string>();
+  for (const e of events) {
+    if (e.temporalScope === 'retrospettivo' || e.temporalScope === 'programmato') continue;
+    for (const raw of [e.diagnosis, e.title]) {
+      const f = raw ? fold(raw) : '';
+      if (f.split(' ').length >= 3 && f.length >= 15) out.add(f);
+    }
+  }
+  return [...out];
+}
+
+function mentionsCurrentLesion(part: string, lesions: ReadonlyArray<string>): boolean {
+  const f = fold(part);
+  if (!f) return false;
+  return lesions.some((l) => f.includes(l) || (l.length >= 25 && l.includes(f) && f.split(' ').length >= 3));
+}
+
 /** Anamnesi: nella riga "In passato:" le voci con una data dell'evento indice
  * (eventi correnti) vengono tolte; le altre pregresse restano. Se non resta
  * nulla: "nulla di rilevante documentato". */
-export function sanitizeAnamnesiPast(text: string, currentDays: ReadonlySet<number>): { text: string; replaced: boolean } {
+export function sanitizeAnamnesiPast(text: string, currentDays: ReadonlySet<number>, currentLesions: ReadonlyArray<string> = []): { text: string; replaced: boolean } {
   const m = PAST_LINE_RE.exec(text);
   if (!m) return { text, replaced: false };
   const body = (m[2] ?? '').trim();
-  if (!hasCurrentDate(body, currentDays)) return { text, replaced: false };
-  const kept = body.replace(/\.$/, '').split(/\s*[;,]\s+(?=[^)]*(?:\(|$))/).map((p) => p.trim()).filter((p) => p && !hasCurrentDate(p, currentDays));
+  const isIndex = (part: string): boolean => hasCurrentDate(part, currentDays) || mentionsCurrentLesion(part, currentLesions);
+  if (!isIndex(body)) return { text, replaced: false };
+  const kept = body.replace(/\.$/, '').split(/\s*[;,]\s+(?=[^)]*(?:\(|$))/).map((p) => p.trim()).filter((p) => p && !isIndex(p));
   const label = (m[1] ?? '').trimEnd();
   const head = /[:*]$/.test(label) ? label : `${label}:`;
   const newBody = kept.length > 0 ? `${kept.join(', ')}.` : 'nulla di rilevante documentato.';

@@ -24,7 +24,7 @@ export interface PipelineWarningDisplay {
   /** Frase COSA+PERCHÉ per il perito. */
   title: string;
   /** Tipo di azione consigliata dal chiamante (non è un URL). */
-  action?: 'view-documents' | 'goto-section' | 'reprocess' | 'goto-docsanitaria';
+  action?: 'view-documents' | 'goto-section' | 'reprocess' | 'goto-docsanitaria' | 'goto-report';
   /** Warning grezzi che questa voce aggrega (per il dialog di dettaglio). */
   sources: RawPipelineWarning[];
 }
@@ -108,6 +108,19 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
       title: `${n} ${n === 1 ? 'citazione della Documentazione Sanitaria non corrisponde esattamente' : 'citazioni della Documentazione Sanitaria non corrispondono esattamente'} al testo dei documenti — confrontarle con l'originale prima della consegna.`,
       action: 'goto-docsanitaria',
       sources: quoteFidelity,
+    });
+  }
+
+  // 4ter. Date nelle sezioni narrative senza riscontro fra le date dei documenti
+  // (2026-09-06): drillabile, l'elenco delle date è il controllo che il medico fa.
+  const dateFidelity = warnings.filter((w) => w.step === 'date-verification');
+  if (dateFidelity.length > 0) {
+    const n = dateFidelity.reduce((s, w) => s + (w.failedCount ?? count(w)), 0);
+    out.push({
+      severity: 'warning',
+      title: `${n} ${n === 1 ? 'data nel testo (Fatto, Anamnesi o Epicrisi) non trova riscontro' : 'date nel testo (Fatto, Anamnesi o Epicrisi) non trovano riscontro'} fra le date dei documenti — verificarle sugli originali prima della consegna.`,
+      action: 'goto-report',
+      sources: dateFidelity,
     });
   }
 

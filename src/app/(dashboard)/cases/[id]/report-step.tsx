@@ -826,17 +826,17 @@ export function ReportStep({
                     <span className="text-sm">{wd.title}</span>
                     {/* Fedeltà citazioni: il warning è drillabile QUI — l'elenco
                         delle «...» da confrontare con l'originale, non solo il conteggio. */}
-                    {wd.sources.some((s) => s.step === 'quote-verification' && (s.failedItems?.length ?? 0) > 0) && (
+                    {wd.sources.some((s) => (s.step === 'quote-verification' || s.step === 'date-verification') && (s.failedItems?.length ?? 0) > 0) && (
                       <details className="mt-1">
                         <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                          Vedi le citazioni da confrontare
+                          {wd.sources.some((s) => s.step === 'date-verification') ? 'Vedi le date da verificare' : 'Vedi le citazioni da confrontare'}
                         </summary>
                         <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
                           {wd.sources
-                            .filter((s) => s.step === 'quote-verification')
-                            .flatMap((s) => s.failedItems ?? [])
-                            .map((q, qi) => (
-                              <li key={qi} className="border-l-2 border-amber-300 pl-2">«{q}»</li>
+                            .filter((s) => s.step === 'quote-verification' || s.step === 'date-verification')
+                            .flatMap((s) => (s.failedItems ?? []).map((item) => ({ item, isQuote: s.step === 'quote-verification' })))
+                            .map(({ item, isQuote }, qi) => (
+                              <li key={qi} className="border-l-2 border-amber-300 pl-2">{isQuote ? `«${item}»` : item}</li>
                             ))}
                         </ul>
                       </details>

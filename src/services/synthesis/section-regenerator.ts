@@ -51,6 +51,8 @@ interface RegenerateSectionParams {
   onQuoteCheck?: (info: { ungroundedQuotes: string[]; quoteTotal: number }) => void;
   /** Rete anti-omissione della doc-sanitaria: eventi T1 non riscontrati / verificati. */
   onCoverageCheck?: (info: { missing: number; total: number }) => void;
+  /** Sezioni narrative: date nel testo senza riscontro (anche lista vuota = 'nessuna'). */
+  onNarrativeCheck?: (info: { unattestedDates: string[] }) => void;
   /** On-demand "selective (AI)" variant of documentazione_sanitaria: a
    * chronological narrative that quotes significant findings verbatim and
    * paraphrases routine content. Verbatim quotes are hard-verified against the
@@ -184,6 +186,9 @@ export async function regenerateSection(params: RegenerateSectionParams): Promis
   //   2. omission net: every clinically-significant (T1) event must appear in
   //      the narrative, else a "possibile omissione" banner is prepended.
   let finalContent = generated.content;
+  if (generated.unattestedDates !== undefined || ['il_fatto_e_storia_clinica', 'anamnesi', 'epicrisi'].includes(sectionId)) {
+    params.onNarrativeCheck?.({ unattestedDates: generated.unattestedDates ?? [] });
+  }
   // GDPR hardening (audit 2026-06-09): una doc-sanitaria AI materializzata non deve
   // contenere heading H2 (## ) interni. Un sotto-titolo che collide con un pattern
   // canonico (es. "## Complicanze", "## Nesso Causale") chiuderebbe la sezione nel

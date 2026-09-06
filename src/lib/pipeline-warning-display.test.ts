@@ -107,3 +107,15 @@ describe('groupPipelineWarnings — copy calmo e gravità corretta per il perito
     expect(out[0].title).toContain('30 citazioni');
   });
 });
+
+describe('date-verification (2026-09-06)', () => {
+  it('una voce drillabile con il conteggio vero e le date come sorgenti', () => {
+    const out = groupPipelineWarnings([
+      { step: 'date-verification', severity: 'warning', message: '2 date …', failedCount: 2, failedItems: ['Epicrisi: 07.01.2025', 'Il Fatto e la Storia Clinica: 12.09.2024'] },
+    ] as never);
+    const d = out.find((g) => g.sources.some((s) => s.step === 'date-verification'));
+    expect(d).toBeDefined();
+    expect(d!.title).toContain('2 date');
+    expect(d!.sources[0]!.failedItems).toHaveLength(2);
+  });
+});
