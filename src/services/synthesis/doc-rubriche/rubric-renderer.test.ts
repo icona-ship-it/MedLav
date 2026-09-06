@@ -447,3 +447,17 @@ describe('giro avversariale — campi di modulo a una cella con valore lungo', (
     expect(out.markdown).not.toContain('Codice di uscita');
   });
 });
+
+describe('ordine a parità di data: referti prima del fascicolo, indipendente dall\'ordine di lettura', () => {
+  it('lo stesso giorno l\'RX ha il suo blocco e il fascicolo lo segna come già riprodotto, in qualunque ordine arrivino', () => {
+    const pages = (n: number, text: string) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, ocrText: i === 0 ? text : `DIARIO\ndecorso regolare giorno ${i + 1}` }));
+    const fasc: RubricDocument = { documentId: 'zz-fasc', documentType: 'cartella_clinica', header: '**Cartella clinica, in data 16.07.2023:**', sortDate: '2023-07-16', pages: pages(12, 'CARTELLA CLINICA\nRX FEMORE SN\nFrattura pluriframmentata del terzo prossimale della diafisi femorale.') };
+    const rx: RubricDocument = { documentId: 'aa-rx', documentType: 'esame_strumentale', header: '**Referto RX, in data 16.07.2023:**', sortDate: '2023-07-16', pages: [{ pageNumber: 1, ocrText: 'RX FEMORE SN\nFrattura pluriframmentata del terzo prossimale della diafisi femorale.' }] };
+    const lettera: RubricDocument = { documentId: 'let', documentType: 'lettera_dimissione', header: '**Lettera, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura trattata.' }] };
+    const a = renderRubricDocSanitaria([fasc, rx, lettera], DEFAULT_RUBRIC_POLICY).markdown;
+    const b = renderRubricDocSanitaria([lettera, rx, fasc], DEFAULT_RUBRIC_POLICY).markdown;
+    expect(a).toBe(b);
+    expect(a.indexOf('**Referto RX')).toBeLessThan(a.indexOf('**Cartella clinica'));
+    expect(a.match(/Frattura pluriframmentata del terzo prossimale/g)).toHaveLength(1);
+  });
+});

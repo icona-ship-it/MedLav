@@ -297,7 +297,8 @@ function selectSegments(segments: ReadonlyArray<RubricSegment>, policy: RubricTy
  * tabella (I/II/III, classi di dose), nessuna lettera. Mai una «…» vuota. */
 function isEmptyBody(body: string): boolean {
   // Via le righe-residuo (numeri romani delle classi di dose, righe senza lettere).
-  const lines = body.split('\n').map((l) => l.trim()).filter((l) => l && !/^[IVX]{1,4}$/.test(l) && /\p{L}/u.test(l));
+  const lines = body.split('\n').map((l) => l.trim())
+    .filter((l) => l && !/^[IVX]{1,4}$/.test(l) && /\p{L}/u.test(l.replace(/\[ILLEGGIBILE\]/gi, '')));
   if (lines.length === 0) return true;
   // "RX TORACE:" / "RX TORACE: I" (titolo + classe di dose): niente da citare.
   return lines.length === 1 && /^[^\n]{1,50}:\s*(?:[IVX]{1,4})?$/.test(lines[0]!);
@@ -357,13 +358,22 @@ function effectivePolicy(doc: RubricDocument, policy: RubricPolicy, hasLetteraDi
   return { tp: { ...tp, mode: 'passaggi', copia: ['anamnesi_prossima', 'intervento', 'diagnosi', 'dimissione', 'prognosi'] }, rimando: null };
 }
 
+const SAME_DAY_RANK: Readonly<Record<string, number>> = { esame_strumentale: 0, referto_specialistico: 0, altro: 1, cartella_clinica: 2, certificato: 3, lettera_dimissione: 4 };
+function sameDayRank(doc: RubricDocument): number { return SAME_DAY_RANK[doc.documentType ?? ''] ?? 1; }
+
 export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument>, policy: RubricPolicy): RubricRenderResult {
   const seen = new Set<string>();
   const stats = { dedup: 0 };
   let omitted = 0; let fallbackDocs = 0; let illegibleDocs = 0;
   const blocks: string[] = [];
   const certificates: RubricDocument[] = [];
-  const ordered = [...documents].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+  // Ordine cronologico; a parità di data prima i referti (esame/visita col loro
+  // titolo), poi i documenti generici, poi i fascicoli (rimando + referti in
+  // degenza, che così risultano «già riprodotti» dai referti propri), poi
+  // certificati e lettera; infine l'id: l'output non deve dipendere dall'ordine
+  // di lettura dal DB.
+  const ordered = [...documents].sort((a, b) =>
+    a.sortDate.localeCompare(b.sortDate) || sameDayRank(a) - sameDayRank(b) || a.documentId.localeCompare(b.documentId));
   const hasLetteraDimissione = documents.some((d) => d.documentType === 'lettera_dimissione' && d.pages.some((p) => p.ocrText.trim().length > 0));
 
   for (const doc of ordered) {
