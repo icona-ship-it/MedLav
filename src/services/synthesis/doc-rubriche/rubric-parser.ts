@@ -37,7 +37,9 @@ const VOCABULARY: ReadonlyArray<{ key: string; re: RegExp; keepLabel?: boolean }
   { key: 'intervento', re: /^(intervento( chirurgico| eseguito)?|descrizione (dell'?)?intervento|verbale operatorio|atto operatorio|tecnica operatoria|procedura( eseguita)?|trattamento adottato|(1|2|3|i|ii|iii)[°º]? tempo chirurgico)$/ },
   { key: 'diario', re: /^(diario( clinico| medico| infermieristico)?|decorso( clinico| post ?operatorio| della degenza)?)$/ },
   { key: 'consulenza', re: /^(consulenza( [a-z]+){0,3}|risposta( del(lo)? specialista| consulente)?|parere( specialistico)?)$/ },
-  { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|esami visionati|visionat[io]|esiti di [a-z ]+)$/ },
+  // "Esiti di RX/TC…" apre un referto; "Esiti di frattura del femore" è una DIAGNOSI
+  // (contenuto), non un titolo: con /esiti di [a-z ]+/ spariva (giro 8).
+  { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|esami visionati|visionat[io]|esiti di (rx|rm|rmn|tc|tac|eco|ecografia|esami|indagini|accertamenti)( [a-z ]+)?)$/ },
   // Titoli di esame dentro una cartella ("RX gomito sn", "ECO ginocchio dx"): aprono un referto interno.
   { key: 'referto', re: /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)( [a-z'.-]+){0,4}$/, keepLabel: true },
   { key: 'terapia', re: /^(terapia( consigliata| domiciliare| in atto| prescritta| farmacologica| medica| effettuata| praticata)?( in corso)?|terapia e comportamento domiciliare|comportamento domiciliare|prescrizion[ei]|farmaci( ad uso abituale| abituali)?|trattamento)$/ },

@@ -135,3 +135,12 @@ describe('parseRubriche — "Prognosi …" con testo sulla stessa riga è conten
     expect(d.map((s) => s.label)).toEqual(['anamnesi_remota']);
   });
 });
+
+describe('parseRubriche — "Esiti di frattura…" è contenuto della diagnosi, "Esiti di RX" apre un referto', () => {
+  it('la diagnosi "Esiti di frattura del femore." non sparisce come titolo', () => {
+    const segs = parseRubriche([{ pageNumber: 1, ocrText: 'DIAGNOSI\nEsiti di frattura.\nINDICAZIONI\nControllo tra 6 mesi.' }]);
+    expect(segs.find((s) => s.label === 'diagnosi')?.text).toBe('Esiti di frattura.');
+    const rx = parseRubriche([{ pageNumber: 1, ocrText: 'ANAMNESI\nCaduta.\nESITI DI RX\nFrattura composta.' }]);
+    expect(rx.map((s) => s.label)).toEqual(['anamnesi', 'referto']);
+  });
+});
