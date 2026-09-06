@@ -570,3 +570,44 @@ describe('collectSsnCosts — stessa notifica in documenti diversi = una voce', 
     expect(r.items).toHaveLength(2);
   });
 });
+
+// Panel giro 8 (2026-09-06): B P0 — la «spesa sanitaria stimata per il percorso
+// di cura» della lettera di dimissione tabellata come spesa del danneggiato;
+// A P1 — «Pagamento totale fattura» 120 € + «Acquisto tutore» 100 € dello stesso
+// documento contati entrambi (430 € invece di 330 €).
+describe('giro 8 — costo SSR stimato e righe interne di una fattura', () => {
+  const ev = (o: Record<string, unknown>) => ({
+    event_type: 'spesa_medica', title: '', description: '', event_date: '2025-09-13',
+    facility: null, source_type: 'spese_mediche', ...o,
+  });
+  it('"Spesa sanitaria stimata per il percorso di cura: euro 24272,60" è un costo SSR, non una spesa', () => {
+    expect(isSsrCostNotification('Spesa sanitaria stimata per il percorso di cura: euro 24272,60', 'Costo stimato del ricovero')).toBe(true);
+    const r = analyzeExpenses([ev({ title: 'Spesa sanitaria stimata per il percorso di cura: euro 24272,60' })]);
+    expect(r.items).toHaveLength(0);
+    expect(r.totalAmount).toBeNull();
+  });
+  it('totale fattura + voce interna + IVA dello stesso documento e giorno = una spesa da 120 €', () => {
+    const r = analyzeExpenses([
+      ev({ title: 'Pagamento totale fattura n. 0295-0008', description: 'Importo euro 120,00', document_id: 'fatt' }),
+      ev({ title: 'Acquisto tutore articolato', description: 'euro 100,00', document_id: 'fatt' }),
+      ev({ title: 'IVA 20% su tutore articolato (stimata)', description: 'euro 20,00', document_id: 'fatt' }),
+      ev({ title: 'RM gomito destro - prestazione diagnostica', description: 'euro 210,00', document_id: 'rm' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+    expect(r.totalAmount).toBeCloseTo(330, 2);
+  });
+  it('senza document_id le due voci restano distinte (nessuna fusione alla cieca)', () => {
+    const r = analyzeExpenses([
+      ev({ title: 'Pagamento totale fattura n. 1', description: 'euro 120,00' }),
+      ev({ title: 'Acquisto tutore', description: 'euro 100,00' }),
+    ]);
+    expect(r.items).toHaveLength(2);
+  });
+  it('il totale di un documento non assorbe una voce di un ALTRO documento lo stesso giorno', () => {
+    const r = analyzeExpenses([
+      ev({ title: 'Pagamento totale fattura n. 1', description: 'euro 120,00', document_id: 'a' }),
+      ev({ title: 'Visita ortopedica', description: 'euro 100,00', document_id: 'b' }),
+    ]);
+    expect(r.totalAmount).toBeCloseTo(220, 2);
+  });
+});

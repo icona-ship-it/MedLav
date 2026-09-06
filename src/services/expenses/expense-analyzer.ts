@@ -27,6 +27,8 @@ export interface ExpenseItem {
   /** Numero ricevuta/fattura estratto dal testo (best-effort, benchmark spese
    * 2026-06-10: colonna "N. Ricevuta/Fattura"). Null se non riconoscibile. */
   receiptRef?: string | null;
+  /** Documento di origine (per riconoscere le righe interne di una stessa fattura). */
+  documentId?: string | null;
 }
 
 export interface CategoryTotal {
@@ -329,8 +331,19 @@ export function isSsrCostNotification(title: string, description?: string | null
   return (
     serviceVerb.test(t) ||
     invertedVerb.test(t) ||
-    /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t)
+    /a carico del (ssn|s\.s\.n|servizio sanitario|sistema sanitario)|onere a carico del (ssn|servizio sanitario)|costo a carico del (ssn|servizio sanitario)|rimborsat[oa] dal (ssn|servizio sanitario)|in regime (di )?ssn/.test(t) ||
+    // Lettere di dimissione venete: "spesa sanitaria stimata per il percorso di
+    // cura: euro 24.272,60" è il costo del ricovero per il SSR, non una spesa del
+    // danneggiato (panel giro 8, caso B: tabellata come spesa con riga Totale).
+    /spesa sanitaria (stimata|complessiva|sostenuta|presunta|per (il |l')?(percorso|episodio|ricovero|esame|procedura|prestazione))|costo (stimato|complessivo|presunto) (del|per il|dell')/.test(t)
   );
+}
+
+/** Voce che è il TOTALE di una fattura/ricevuta ("Pagamento totale fattura n. …",
+ * "Totale ricevuta"): le altre voci dello stesso documento nello stesso giorno
+ * sono le sue righe interne (prestazione + IVA), non spese in più. */
+export function isInvoiceTotalItem(title: string): boolean {
+  return /(pagamento )?totale (fattura|ricevuta|documento|nota)|(fattura|ricevuta) .*\btotale\b|importo totale|saldo (della )?fattura/i.test(title);
 }
 
 /**
@@ -459,6 +472,7 @@ export function analyzeExpenses(
       facility: ev.facility ?? null,
       documentSource: ev.source_type ?? 'altro',
       receiptRef: extractReceiptRef(ev.title, ev.description),
+      documentId: ev.document_id ?? null,
     });
   }
 
@@ -492,8 +506,16 @@ export function analyzeExpenses(
   const withoutPaymentDupes = dedupedItems.filter((i) =>
     !(i.amount != null && isPaymentTransactionRecord(i.description) && serviceAmountKeys.has(`${i.date}|${i.amount}`)),
   );
+  // Panel giro 8 (caso A): "Pagamento totale fattura" 120 € + "Acquisto tutore"
+  // 100 € dello STESSO documento nello stesso giorno = una fattura sola (100 +
+  // IVA), non 220 €. Se un documento porta il suo totale, le altre voci di quel
+  // documento in quella data con importo ≤ totale sono righe interne.
+  const invoiceTotals = withoutPaymentDupes.filter((i) => i.amount != null && i.documentId && isInvoiceTotalItem(i.description));
+  const withoutInvoiceLines = withoutPaymentDupes.filter((i) =>
+    !(i.amount != null && i.documentId && !isInvoiceTotalItem(i.description) &&
+      invoiceTotals.some((t) => t.documentId === i.documentId && t.date === i.date && (t.amount ?? 0) >= (i.amount ?? 0))));
   items.length = 0;
-  items.push(...withoutPaymentDupes);
+  items.push(...withoutInvoiceLines);
 
   // Calculate totals per category
   const allCategories: ExpenseCategory[] = [

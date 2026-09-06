@@ -108,6 +108,7 @@ export function formatEpicrisiFactsBlock(events: DeterministicTableEvent[], inci
         facility: e.facility ?? null,
         source_type: e.source_type ?? 'altro',
         source_text: e.source_text ?? null,
+        document_id: e.document_id ?? null,
       })),
     );
     if (totalAmount !== null && totalAmount > 0) {
@@ -132,6 +133,7 @@ export function formatExpenseTable(events: DeterministicTableEvent[]): string {
       // Fallback importo: l'ancora verbatim OCR spesso contiene la cifra anche
       // quando titolo/descrizione non la riportano (casi reali 2026-07-14).
       source_text: e.source_text ?? null,
+      document_id: e.document_id ?? null,
     })),
   );
   if (items.length === 0) return '';
