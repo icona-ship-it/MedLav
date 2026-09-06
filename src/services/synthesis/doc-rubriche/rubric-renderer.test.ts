@@ -190,3 +190,161 @@ describe('maschere di modulo e codici (panel giro 4)', () => {
     expect(out.markdown).toContain('«Frattura composta.»');
   });
 });
+
+// Panel giro 7 (2026-09-06), caso C — reperti sul renderer. Fixture interamente fittizie.
+describe('renderRubricDocSanitaria — rumore macchina, manoscritti, certificati (giro 7)', () => {
+  const ECG = [
+    '01-gen-1970 (55 anni)', 'Femmina Ignoto', 'Camera:', 'Ubic:64',
+    'Frequenza ventricolare 101 BPM', 'Intervallo PR 146 ms',
+    'Tachicardia sinusale', 'Anormalità aspecifiche onda T', 'Non sono disponibili ECG precedenti',
+    'Confermato da DEMPROVA, ANNA (68) il 13/09/2025 21:58:26', 'Tecnico: INF PS',
+    'Indicazioni:"trauma "', 'Med.:', 'Confermato da: ANNA DEMPROVA',
+    '25mm/s 10mm/mV 150Hz 10.2.3 12SL 241 CID: 1',
+    'EID: 68 EDT: 21:58 13-set-2025 ORDINE: H0000001 CONTO: DMPMRA70A41C890X VISITA: S6YG0P', 'Pagina 1 di 1',
+  ].join('\n');
+
+  it('ECG: il referto clinico (prima delle rubriche) entra nell\'integrale; header macchina, codice fiscale e data di nascita no', () => {
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ecg', documentType: 'esame_strumentale', text: ECG })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Tachicardia sinusale');
+    expect(out.markdown).toContain('Anormalità aspecifiche onda T');
+    expect(out.markdown).not.toContain('DMPMRA70A41C890X');
+    expect(out.markdown).not.toContain('CONTO');
+    expect(out.markdown).not.toContain('mm/s');
+    expect(out.markdown).not.toContain('55 anni');
+    expect(out.markdown).not.toContain('Confermato da');
+    expect(out.markdown).not.toContain('Ubic');
+  });
+
+  it('esame strumentale con rubrica "Referto": il preambolo (carta intestata) NON entra quando il referto c\'è', () => {
+    const RX = ['OSPEDALE CIVILE DI CITTÀDEMO', 'U.O. Radiologia', 'Esame: RX polso destro', 'REFERTO', 'Frattura composta del radio distale. Ulna integra.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rx', documentType: 'esame_strumentale', text: RX })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Frattura composta del radio distale');
+    expect(out.markdown).not.toContain('OSPEDALE CIVILE');
+    expect(out.markdown).not.toContain('U.O. Radiologia');
+  });
+
+  it('manoscritto in larga parte illeggibile: riga di rimando, MAI garble tra virgolette', () => {
+    const MANO = ['[ILLEGGIBILE] Nella', '13/9/2025', '[ILLEGGIBILE] me.', 'Cansello.[ILLEGGIBILE] odierne le', 'ottime [ILLEGGIBILE]', '[ILLEGGIBILE]', 'Dott. DEMPROVA MARIO', 'Medico Chirurgo'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'mano', text: MANO })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toMatch(/non leggibile|illeggibile/i);
+    expect(out.markdown).toContain('originale');
+    expect(out.markdown).not.toContain('«');
+    expect(out.illegibleDocs).toBe(1);
+  });
+
+  it('un solo [ILLEGGIBILE] in un referto leggibile resta inline nella citazione', () => {
+    const REF = ['DIAGNOSI', 'Frattura composta del radio distale destro, [ILLEGGIBILE] scomposizione.', 'PROGNOSI', 'Giorni 30.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ref', text: REF })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Diagnosi: «Frattura composta del radio distale destro, [ILLEGGIBILE] scomposizione.»');
+    expect(out.illegibleDocs).toBe(0);
+  });
+
+  it('certificati: gli attestati di malattia si aggregano; gli altri certificati (psicologa, INPS, idoneità) hanno il loro blocco', () => {
+    const ATTESTATO = (a: string, b: string) => ['Attestato di malattia telematico', 'DATI PROGNOSI', `Inizio malattia ${a}`, `Fine prognosi ${b}`, 'PUC 1234'].join('\n');
+    const PSICO = [
+      'Dott.ssa Demprova Anna', 'Psicologa Psicoterapeuta', 'Via degli Esempi 1, Cittàdemo P. IVA 00000000000',
+      'certifico che la Sig.ra Demprova Maria, nata a Cittàdemo il 01/01/1970, ha effettuato 10 sedute di psicoterapia.',
+      'L\'obiettivo del lavoro svolto è stato di sostegno per uno stato ansioso reattivo.', 'Il percorso è tutt\'ora in corso.', 'In fede',
+    ].join('\n');
+    const out = renderRubricDocSanitaria([
+      doc({ documentId: 'a1', documentType: 'certificato', text: ATTESTATO('25/11/2024', '08/01/2025'), sortDate: '2024-11-25' }),
+      doc({ documentId: 'a2', documentType: 'certificato', text: ATTESTATO('09/01/2025', '14/02/2025'), sortDate: '2025-01-09' }),
+      doc({ documentId: 'psi', documentType: 'certificato', header: '**Certificato medico, Dott.ssa Demprova Anna, in data 30.03.2026:**', text: PSICO, sortDate: '2026-03-30' }),
+    ], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('**Certificati medici (2), dal 25.11.2024 al 09.01.2025:**');
+    expect(out.markdown).toContain('**Certificato medico, Dott.ssa Demprova Anna, in data 30.03.2026:**');
+    expect(out.markdown).toContain('L\'obiettivo del lavoro svolto è stato di sostegno per uno stato ansioso reattivo.');
+    expect(out.markdown).not.toContain('nata a');
+    expect(out.markdown).not.toContain('P. IVA');
+  });
+});
+
+describe('renderRubricDocSanitaria — giro avversariale sul rumore (mai perdere testo clinico)', () => {
+  it('terapia domiciliare, EO con etichette corte e "Femmina di 47 anni giunge…" restano; l\'anagrafica no', () => {
+    const REF = [
+      'ANAMNESI', 'Femmina di 47 anni, giunge per caduta accidentale.', 'Nata a Cittàdemo il 01/01/1970, residente in via degli Esempi 1.',
+      'ESAME OBIETTIVO', 'Cute: integra', 'Lato: dx', 'Polso: presente',
+      'TERAPIA', 'Proseguire terapia domiciliare con eparina; dimissione al domicilio.',
+    ].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'r', text: REF })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Femmina di 47 anni, giunge per caduta accidentale.');
+    expect(out.markdown).toContain('Cute: integra');
+    expect(out.markdown).toContain('Lato: dx');
+    expect(out.markdown).toContain('Proseguire terapia domiciliare con eparina; dimissione al domicilio.');
+    expect(out.markdown).not.toContain('Nata a');
+    expect(out.markdown).not.toContain('01/01/1970');
+  });
+  it('referto dattiloscritto con 3 parole incerte su 12 righe resta citato per intero', () => {
+    const lines = ['REFERTO', ...Array.from({ length: 12 }, (_, i) => `Riga clinica numero ${i + 1} del referto${i < 3 ? ' [ILLEGGIBILE]' : ''}.`)];
+    const out = renderRubricDocSanitaria([doc({ documentId: 'r', documentType: 'esame_strumentale', text: lines.join('\n') })], DEFAULT_RUBRIC_POLICY);
+    expect(out.illegibleDocs).toBe(0);
+    expect(out.markdown).toContain('Riga clinica numero 12');
+  });
+});
+
+describe('renderRubricDocSanitaria — certificati INPS/idoneità: via la modulistica, resta il giudizio', () => {
+  it('artefatti OCR, protocollo, etichette orfane, luogo-data e boilerplate di ricorso non entrano', () => {
+    const INPS = ['^{}[]', 'Esito di Visita medica di Controllo', 'Protocollo: INPS.9000.19/06/2025.0000000', 'Il Lavoratore:', 'Il Medico:',
+      'Cittàdemo, 24 giugno 2025', 'Giudizio: idoneo con limitazioni al carico per 30 giorni.', 'Avverso il giudizio è ammesso ricorso entro trenta giorni.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'inps', documentType: 'certificato', text: INPS })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Conclusioni: «idoneo con limitazioni al carico per 30 giorni.»');
+    expect(out.markdown).toContain('Esito di Visita medica di Controllo');
+    expect(out.markdown).not.toContain('^{}');
+    expect(out.markdown).not.toContain('Protocollo');
+    expect(out.markdown).not.toContain('Il Medico:');
+    expect(out.markdown).not.toContain('24 giugno 2025');
+    expect(out.markdown).not.toContain('ricorso');
+  });
+});
+
+describe('renderRubricDocSanitaria — tetto di blocco: la rubrica che non entra viene accorciata, non persa', () => {
+  it('dopo un\'anamnesi lunga l\'esame obiettivo resta (accorciato su frase) invece di sparire dietro "[...]"', () => {
+    const anamnesi = Array.from({ length: 14 }, (_, i) => `Frase di anamnesi numero ${i + 1} con dieci parole di riempimento qui dentro.`).join(' ');
+    const eo = 'Non dolore a riposo al ginocchio, presente dolore durante la deambulazione in discesa (8/10 NRS). ' + Array.from({ length: 8 }, (_, i) => `Altra frase di esame obiettivo numero ${i + 1} con riempimento.`).join(' ');
+    const referto = Array.from({ length: 6 }, (_, i) => `Riga di referto numero ${i + 1} con dieci parole di riempimento qui dentro.`).join(' ');
+    const text = ['REFERTO', referto, 'ANAMNESI PROSSIMA', anamnesi, 'ESAME OBIETTIVO', eo, 'DIAGNOSI', 'Esiti di frattura.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'fis', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('(8/10 NRS)');
+    expect(out.markdown).toMatch(/Esame obiettivo: «Non dolore a riposo[\s\S]*\[\.\.\.\]»/);
+    const words = out.markdown.split(/\s+/).length;
+    expect(words).toBeLessThan(340);
+  });
+});
+
+describe('renderRubricDocSanitaria — giro avversariale 2: titoli d\'esame restano, firme ed equipe no', () => {
+  it('cartella: "RX FEMORE SN:" resta come titolo del referto interno; "Equipe Medica:" e l\'elenco dei medici no', () => {
+    const text = ['CARTELLA CLINICA', 'REFERTO', 'RX FEMORE SN:', 'Frattura diafisaria.', 'Equipe Medica:', 'Dr. Mario Demprova', 'Dr.ssa Anna Demprova', 'Il Medico Radiologo Dott.ssa Anna Demprova', 'Referto Firmato Digitalmente', 'Data referto 16/07/2023 12:31'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'cc', documentType: 'lettera_dimissione', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('RX FEMORE SN:');
+    expect(out.markdown).toContain('Frattura diafisaria.');
+    expect(out.markdown).not.toContain('Equipe Medica');
+    expect(out.markdown).not.toContain('Dr. Mario');
+    expect(out.markdown).not.toContain('Radiologo');
+    expect(out.markdown).not.toContain('Firmato');
+  });
+  it('verbale INPS a tabella: NOME/COGNOME/DENOMINAZIONE fuori', () => {
+    const text = ['VERBALE DI VISITA MEDICA DI CONTROLLO', 'DENOMINAZIONE: COMUNE DI CITTÀDEMO | RAGIONE SOCIALE:', 'NOME: MARIA | COGNOME: DEMPROVA', 'Prognosi confermata fino al 30/06/2025.'].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'v', documentType: 'certificato', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Prognosi: «confermata fino al 30/06/2025.»');
+    expect(out.markdown).not.toContain('COGNOME');
+    expect(out.markdown).not.toContain('DENOMINAZIONE');
+  });
+});
+
+describe('renderRubricDocSanitaria — piè di pagina dello studio radiologico fuori dal referto integrale', () => {
+  it('referto sottile con testo nel preambolo: entra il referto, non orari/prenotazioni/consulenti; il titolo d\'esame resta', () => {
+    const text = [
+      'OSPEDALE CIVILE DI CITTÀDEMO', 'U.O.C. Radiologia', 'Demprova Maria', 'Campi polmonari ipoespansi, con affastellamento delle strutture broncovasali basali.',
+      'Consul. Radiol. Interventistica', 'orario (lun-ven) 7.00-19.00', '(sabato) 8.00-12.30', 'Prenotazione TC/RM: 045000000', 'Prenotazione Rx, Ecografia,', 'Mammografia, Densitometria:',
+      'RX TORACE:', 'I',
+    ].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'rxt', documentType: 'esame_strumentale', text })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Campi polmonari ipoespansi');
+    expect(out.markdown).toContain('RX TORACE:');
+    expect(out.markdown).not.toContain('orario');
+    expect(out.markdown).not.toContain('Prenotazione');
+    expect(out.markdown).not.toContain('Densitometria');
+    expect(out.markdown).not.toContain('Consul.');
+    expect(out.markdown).not.toContain('OSPEDALE CIVILE');
+  });
+});

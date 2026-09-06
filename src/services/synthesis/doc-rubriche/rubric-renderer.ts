@@ -33,6 +33,8 @@ export interface RubricRenderResult {
   dedupSkipped: number;
   /** Documenti resi col fallback (nessuna rubrica prevista trovata). */
   fallbackDocs: number;
+  /** Documenti in larga parte illeggibili all'OCR (manoscritti): riga di rimando, nessuna citazione. */
+  illegibleDocs: number;
 }
 
 const RUBRIC_TITLES: Readonly<Record<string, string>> = {
@@ -46,8 +48,27 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
 const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicili|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
-const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d)/i;
+const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.)/i;
+/** Titolo d'esame ("RX FEMORE SN:", "TAC ANCA SN SMDC:"): testo del medico, mai rumore. */
+const EXAM_TITLE_RE = /^(rx|rm|rmn|tc|tac|eco|ecografia|ecg|eeg|emg|pet|moc|doppler|ecocolordoppler)\b/i;
+/** Etichetta corta orfana ("Mammografia, Densitometria:", "In particolare:"): ≤4 parole, niente cifre, due punti finali. */
+const SHORT_ORPHAN_LABEL_RE = /^[^\d:]{1,40}:$/;
+/** Riga senza lettere (artefatti OCR "^{}[]"), etichetta di modulo orfana ("Il Medico:",
+ * "Equipe Medica:") o luogo-data ("Cittàdemo, 30 marzo 2026"). I titoli d'esame
+ * ("RX FEMORE SN:") sono testo del medico e restano. */
+const ORPHAN_LINE_RE = /^(?:[^\p{L}]*|(?:il |la |del |dell[ao] |per il |per la )?(?:lavoratore|medico|paziente|assistito|datore|firma|timbro|equipe medica|responsabile|refertante|richiedente|reparto|data|ora|luogo|note|esito)\s*:|[\p{L}' ]{2,30},\s*\d{1,2}\s+\p{L}+\s+\d{4})$/iu;
+/** Firma o elenco di sanitari ("Dr. Mario Demprova", "Il Medico Radiologo Dott.ssa …"): non è referto. */
+const SIGNATURE_LINE_RE = /^(?:il medico (?:radiologo|refertante|specialista|chirurgo|di reparto)\b.*|(?:dr|dott|prof)\.?(?:\.?ssa)?\s+[\p{L}' .-]{2,40})$/iu;
+/** Header di macchina (ECG/monitor) e identificativi: velocità carta, codici
+ * ordine/conto/visita, "Confermato da", tecnico, sesso, data di nascita "(NN anni)". */
+const MACHINE_HEADER_RE = /(\bmm\/s\b|\bmm\/mv\b|\b(cid|eid|edt|ordine|conto|ubic|camera)\s*:|\bconfermato da\b|\btecnico\s*:|\d{1,2}[-/.](?:[a-z]{3}|\d{1,2})[-/.]\d{2,4}\s*\(\d{1,3} anni\)|^(maschio|femmina|sesso\s*:\s*[mf])(\s+\S+){0,2}$)/i;
+/** Codice fiscale italiano: mai nel depositabile (né in riga né inline). */
+const CODICE_FISCALE_RE = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/g;
+/** Etichetta di modulo/macchina con al più un codice ("Camera:", "Ubic:64", "Med.:"). */
+const MACHINE_LABEL_LINE_RE = /^(camera|ubic|ubicazione|med|tecnico|letto|stanza|cod|ord|rif|prot|n|nr|num)\.?\s*:\s*\S{0,10}$/i;
 const LONG_CODE_RE = /\d{8,}/;
+const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data di nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione)\s*:)/i;
+const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i;
 
 function isAdminNoiseLine(line: string): boolean {
   const t = line.trim();
@@ -56,13 +77,23 @@ function isAdminNoiseLine(line: string): boolean {
   if ((t.match(/ \| /g) ?? []).length >= 2) return true;
   if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
   if (FORM_NOISE_RE.test(t)) return true;
-  return ADMIN_NOISE_RE.test(t) && !/(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto)/i.test(t);
+  if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
+  if (SHORT_ORPHAN_LABEL_RE.test(t) && t.split(/\s+/).length <= 4 && !EXAM_TITLE_RE.test(t) && !CLINICAL_LINE_RE.test(t)) return true;
+  // Anagrafica (nascita, residenza, CF) fuori anche se la riga prosegue con testo
+  // clinico ("nata a X il Y, ha effettuato 10 sedute di psicoterapia"): l'identità
+  // non entra nel depositabile; la diagnosi esplicita vince.
+  if (IDENTITY_RE.test(t) && !/diagnosi/i.test(t)) return true;
+  if (CLINICAL_LINE_RE.test(t)) return false;
+  if (MACHINE_HEADER_RE.test(t) || new RegExp(CODICE_FISCALE_RE.source).test(t)) return true;
+  if (MACHINE_LABEL_LINE_RE.test(t)) return true;
+  return ADMIN_NOISE_RE.test(t);
 }
 
-/** Su una riga clinica tenuta, via il codice lungo e l'eventuale nome del richiedente che lo segue. */
+/** Su una riga clinica tenuta, via il codice lungo (e l'eventuale nome del richiedente che lo segue) e il codice fiscale. */
 function scrubInlineCodes(line: string): string {
   return line
     .replace(/\s*\b\d{8,}\b(?:\s+[A-ZÀ-Ü][\wà-ù'’-]+){0,3}(?:\s+richiedente)?/g, '')
+    .replace(CODICE_FISCALE_RE, '[omissis]')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -71,13 +102,80 @@ function stripAdminNoise(text: string): string {
   return text.split('\n').filter((l) => !isAdminNoiseLine(l)).map(scrubInlineCodes).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** Tetto di blocco per RIGHE intere (mai a metà di una «...»): oltre, resta "[...]" fuori dalle virgolette. */
+/** Carta intestata nel preambolo di un referto (struttura, reparto, titolo d'esame):
+ * via quando il preambolo entra nell'integrale perché il referto vero è sottile. */
+const LETTERHEAD_RE = /^(azienda|ospedale|presidio|casa di cura|policlinico|istituto|fondazione|u\.?\s?o\.?\s?c?\.?\b|s\.?\s?c\.?\b|unit[àa] operativa|dipartimento|struttura (complessa|semplice|sanitaria|ospedaliera|privata)|reparto|ambulatorio|servizio di|laboratorio|esame\s*:|prestazione\s*:)/i;
+/** Nome di ente/struttura in qualunque posizione (riga di carta intestata). */
+const ORGANIZATION_RE = /(ospedal|aziend|presidio|clinic|policlinic|dipartiment|radiolog|laborator|ambulator|\basl\b|\bulss\b|\bats\b|\baou|\birccs\b|\bu\.?\s?o\.?\s?c?\b|\bs\.?\s?c\.?\b)/i;
+
+function stripLetterhead(text: string): string {
+  return text.split('\n').filter((l) => {
+    const t = l.trim();
+    if (!t || CLINICAL_LINE_RE.test(t)) return true;
+    if (LETTERHEAD_RE.test(t)) return false;
+    // Riga tutta maiuscola con nome di ente: intestazione, non referto.
+    return !(t === t.toUpperCase() && /[A-ZÀ-Ü]/.test(t) && ORGANIZATION_RE.test(t));
+  }).join('\n');
+}
+
+/** Documento in larga parte illeggibile (manoscritto): almeno 4 marker
+ * [ILLEGGIBILE] e in numero pari ad almeno il 40% delle righe non vuote (un
+ * referto dattiloscritto con qualche parola incerta resta citato per intero). */
+const ILLEGIBLE_MIN_MARKERS = 4;
+const ILLEGIBLE_MIN_SHARE = 0.4;
+
+function illegibleStats(pages: ReadonlyArray<RubricPage>): { markers: number; lines: number } {
+  let markers = 0; let lines = 0;
+  for (const p of pages) {
+    for (const raw of (p.ocrText ?? '').split('\n')) {
+      const t = raw.trim();
+      if (!t) continue;
+      lines++;
+      markers += (t.match(/\[ILLEGGIBILE\]/gi) ?? []).length;
+    }
+  }
+  return { markers, lines };
+}
+
+function isMostlyIllegible(pages: ReadonlyArray<RubricPage>): { markers: number; lines: number } | null {
+  const s = illegibleStats(pages);
+  return s.markers >= ILLEGIBLE_MIN_MARKERS && s.markers >= ILLEGIBLE_MIN_SHARE * s.lines ? s : null;
+}
+
+/** Attestato di malattia telematico (INPS): si aggrega in una riga coi suoi
+ * simili. Gli altri certificati (idoneità, visita di controllo, psicologa) sono
+ * documenti a sé, con il loro blocco. */
+const SICK_LEAVE_ATTESTATION_RE = /(attestat[oi] di malattia|certificat[oi] (medic[oi] )?(telematic[oi] )?di malattia|certificato telematico|dati (della )?prognosi|inizio malattia|\bpuc\b)/i;
+
+function isSickLeaveAttestation(doc: RubricDocument): boolean {
+  return SICK_LEAVE_ATTESTATION_RE.test(doc.pages.map((p) => p.ocrText).join('\n'));
+}
+
+/** Sotto questo residuo la rubrica che non entra nel tetto di blocco non viene
+ * accorciata ma segnalata con "[...]". */
+const MIN_TAIL_WORDS = 25;
+
+/** Accorcia una rubrica già resa ("Titolo: «corpo»") al tetto, su confine di frase, dentro le virgolette. */
+function trimRenderedLine(line: string, maxWords: number): string {
+  const m = /^([\s\S]*?«)([\s\S]*)»$/.exec(line);
+  if (!m) return capAtSentence(line, maxWords);
+  return `${m[1]}${capAtSentence(m[2]!, maxWords)}»`;
+}
+
+/** Tetto di blocco per RIGHE intere (mai a metà di una «...»): la rubrica che non
+ * entra viene accorciata al residuo (se ≥ 25 parole: l'esame obiettivo con l'NRS
+ * non deve sparire dietro un'anamnesi lunga — panel giro 7), altrimenti resta
+ * "[...]" fuori dalle virgolette. */
 function capBlockLines(lines: ReadonlyArray<string>, maxWords: number): string[] {
   if (maxWords <= 0) return [...lines];
   const out: string[] = []; let used = 0;
   for (const l of lines) {
     const w = countWords(l);
-    if (out.length > 0 && used + w > maxWords) { out.push('[...]'); break; }
+    if (out.length > 0 && used + w > maxWords) {
+      const remaining = maxWords - used;
+      out.push(remaining >= MIN_TAIL_WORDS ? trimRenderedLine(l, remaining) : '[...]');
+      break;
+    }
     out.push(l); used += w;
   }
   return out;
@@ -106,10 +204,21 @@ export function capAtSentence(text: string, maxWords: number): string {
   return `${kept.trim()} [...]`;
 }
 
+/** Sotto questo numero di parole (rubriche riconosciute, ripulite) un referto
+ * integrale è "sottile" e il preambolo entra. */
+const INTEGRALE_THIN_WORDS = 5;
+
 function selectSegments(segments: ReadonlyArray<RubricSegment>, policy: RubricTypePolicy): { chosen: RubricSegment[]; fallback: boolean } {
   if (policy.mode === 'integrale') {
-    const all = segments.filter((s) => s.label !== 'preambolo' || segments.length === 1);
-    return { chosen: all.length > 0 ? all : [...segments], fallback: false };
+    // Il preambolo (carta intestata) resta fuori — salvo quando il resto è sottile:
+    // in un tracciato ECG il referto ("Tachicardia sinusale…") precede l'unica
+    // rubrica riconosciuta ("Indicazioni: trauma") e senza preambolo si perdeva
+    // (panel giro 7, caso C). In quel caso entra ripulito dalla carta intestata.
+    const others = segments.filter((s) => s.label !== 'preambolo');
+    const othersWords = others.reduce((n, s) => n + countWords(stripAdminNoise(s.text)), 0);
+    if (others.length > 0 && othersWords >= INTEGRALE_THIN_WORDS) return { chosen: others, fallback: false };
+    const withPreambolo = segments.map((s) => (s.label === 'preambolo' ? { ...s, text: stripLetterhead(s.text) } : s));
+    return { chosen: withPreambolo, fallback: false };
   }
   const wanted = new Set(policy.copia);
   // Ordine del DOCUMENTO (come lo legge il medico). UNA voce per rubrica: in una
@@ -166,7 +275,7 @@ function effectivePolicy(doc: RubricDocument, policy: RubricPolicy, hasLetteraDi
 export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument>, policy: RubricPolicy): RubricRenderResult {
   const seen = new Set<string>();
   const stats = { dedup: 0 };
-  let omitted = 0; let fallbackDocs = 0;
+  let omitted = 0; let fallbackDocs = 0; let illegibleDocs = 0;
   const blocks: string[] = [];
   const certificates: RubricDocument[] = [];
   const ordered = [...documents].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
@@ -174,9 +283,16 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
 
   for (const doc of ordered) {
     if (RUBRIC_EXCLUDED_DOC_TYPES.has(doc.documentType ?? '')) { omitted++; continue; }
-    const { tp, rimando } = effectivePolicy(doc, policy, hasLetteraDimissione);
+    const effective = effectivePolicy(doc, policy, hasLetteraDimissione);
+    const rimando = effective.rimando;
+    let tp = effective.tp;
     if (tp.mode === 'ometti') { omitted++; continue; }
-    if (tp.mode === 'una_riga') { certificates.push(doc); continue; }
+    if (tp.mode === 'una_riga') {
+      if (isSickLeaveAttestation(doc)) { certificates.push(doc); continue; }
+      // Certificato "vero" (idoneità, visita di controllo, relazione psicologica):
+      // un documento a sé, coi suoi passaggi-chiave (o il corpo, se senza rubriche).
+      tp = { ...tp, mode: 'passaggi', copia: [...tp.copia, 'conclusioni', 'esame_obiettivo', 'corpo', 'preambolo'], fallbackCorpo: true };
+    }
     if (rimando) {
       // Fascicolo contenitore: resta il rimando + i referti d'esame eseguiti in
       // degenza (RX/TC/ECO dentro la cartella), che il gold riporta a parte.
@@ -189,6 +305,14 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
       continue;
     }
+    // Manoscritto in larga parte illeggibile: copiare il garble tra «…» non è
+    // fedeltà, è rumore depositato. Resta il documento (intestazione) e il rimando.
+    const illegible = isMostlyIllegible(doc.pages);
+    if (illegible) {
+      blocks.push(`${doc.header}\nDocumento in larga parte non leggibile dall'OCR (${illegible.markers} passaggi illeggibili su ${illegible.lines} righe, verosimilmente manoscritto): consultare l'originale agli atti.`);
+      illegibleDocs++;
+      continue;
+    }
     const segments = parseRubriche(doc.pages);
     if (segments.length === 0) { blocks.push(`${doc.header}\nDocumento senza testo leggibile: consultare l'originale agli atti.`); fallbackDocs++; continue; }
     const { chosen, fallback } = selectSegments(segments, tp);
@@ -197,7 +321,8 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     // da un'anamnesi lunga) e tetto di blocco (la lunghezza tipica del gold).
     const perRubric = tp.maxParole > 0 ? Math.ceil(tp.maxParole / 2) : 0;
     // Referto integrale (esami strumentali): il testo del medico com'è, senza etichette di rubrica.
-    const lines = chosen.map((s) => renderSegment(s, seen, stats, perRubric, tp.mode !== 'integrale')).filter((l): l is string => l !== null);
+    // Il corpo intero di un documento senza rubriche ha il tetto di blocco, non quello di rubrica.
+    const lines = chosen.map((s) => renderSegment(s, seen, stats, s.label === 'corpo' || s.label === 'preambolo' ? tp.maxParole : perRubric, tp.mode !== 'integrale')).filter((l): l is string => l !== null);
     if (lines.length === 0) {
       blocks.push(`${doc.header}\n${chosen.length > 0 ? 'Contenuto già riprodotto nel documento precedente.' : 'Documento agli atti; nessuna rubrica clinica riprodotta.'}`);
       continue;
@@ -212,5 +337,5 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
     blocks.push(`**Certificati medici (${certificates.length}), ${range}:**\nCertificati e attestati in atti, con i periodi di prognosi come da documenti.`);
   }
 
-  return { markdown: blocks.join('\n\n'), blocks: blocks.length, omitted, dedupSkipped: stats.dedup, fallbackDocs };
+  return { markdown: blocks.join('\n\n'), blocks: blocks.length, omitted, dedupSkipped: stats.dedup, fallbackDocs, illegibleDocs };
 }
