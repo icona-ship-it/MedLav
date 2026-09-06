@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import { sourceLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import { formatSourcePagesLabel } from '@/lib/source-pages';
 import { normalizeTemporalScope, TEMPORAL_SCOPE_LABELS } from '@/lib/temporal-scope';
 
 interface CsvEvent {
@@ -18,6 +19,8 @@ interface CsvEvent {
   requires_verification: boolean;
   /** Ambito temporale (migration 0034). */
   temporal_scope?: string | null;
+  /** Pagine di origine (array o JSON) → colonna "Pagine". */
+  source_pages?: number[] | string | null;
 }
 
 /**
@@ -47,6 +50,7 @@ export function generateCsvExport(events: CsvEvent[]): string {
       'Bassa Confidenza': e.confidence < 60 ? 'Si' : 'No',
       'Richiede Verifica': e.requires_verification ? 'Si' : 'No',
       'Ambito temporale': TEMPORAL_SCOPE_LABELS[normalizeTemporalScope(e.temporal_scope)],
+      Pagine: formatSourcePagesLabel(e.source_pages) ?? '',
     }));
 
   const csv = Papa.unparse(rows, {

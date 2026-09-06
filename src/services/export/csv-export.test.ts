@@ -51,3 +51,11 @@ describe('generateCsvExport — colonna Ambito temporale (0034)', () => {
     expect(csv).toContain('Programmato / previsto');
   });
 });
+
+describe('colonna Pagine (2026-09-06)', () => {
+  it('riporta le pagine di origine dell\'evento', () => {
+    const csv = generateCsvExport([{ order_number: 1, event_date: '2026-02-10', date_precision: 'giorno', event_type: 'visita', title: 'Accesso PS', description: 'x', source_type: 'cartella_clinica', diagnosis: null, doctor: null, facility: null, confidence: 90, requires_verification: false, temporal_scope: 'corrente', source_pages: '[3]' }]);
+    expect(csv).toContain('Pagine');
+    expect(csv).toContain('pag. 3');
+  });
+});
