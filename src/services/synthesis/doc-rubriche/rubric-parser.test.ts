@@ -94,3 +94,44 @@ describe('parseRubriche — segmentazione del testo OCR per rubriche del medico'
     expect(parseRubriche([{ pageNumber: 1, ocrText: '' }, { pageNumber: 2, ocrText: '   ' }])).toEqual([]);
   });
 });
+
+// Panel giro 7 (2026-09-06), caso C: il fisiatra CITA la visita ortopedica tra
+// virgolette nell'anamnesi ("… Si consiglia - proseguire FKT …") e il parser
+// apriva una rubrica Indicazioni con le indicazioni di un ALTRO medico.
+describe('parseRubriche — nessun cambio di rubrica dentro una citazione aperta', () => {
+  it('"Si consiglia" dentro le virgolette dell\'anamnesi resta nell\'anamnesi; le indicazioni vere restano rubrica', () => {
+    const text = [
+      'ANAMNESI PROSSIMA',
+      'In data 20/02 valutazione ortopedica: "Clinicamente cicatrici in ordine.',
+      'Si consiglia - proseguire FKT; graduale dismissione delle stampelle"',
+      'E.O.: Non dolore a riposo.',
+      'Si consiglia idrokinesiterapia e controllo tra 2 mesi.',
+    ].join('\n');
+    const segs = parseRubriche([{ pageNumber: 1, ocrText: text }]);
+    expect(segs.map((s) => s.label)).toEqual(['anamnesi_prossima', 'esame_obiettivo', 'indicazioni']);
+    expect(segs[0]!.text).toContain('Si consiglia - proseguire FKT');
+    expect(segs[2]!.text).toBe('Si consiglia idrokinesiterapia e controllo tra 2 mesi.');
+  });
+
+  it('una virgoletta orfana dell\'OCR non spegne le rubriche oltre poche righe', () => {
+    const text = [
+      'ANAMNESI', 'Riferisce dolore da 5" circa al polso.', 'riga 2', 'riga 3', 'riga 4', 'riga 5',
+      'DIAGNOSI', 'Frattura del radio.',
+    ].join('\n');
+    const segs = parseRubriche([{ pageNumber: 1, ocrText: text }]);
+    expect(segs.map((s) => s.label)).toEqual(['anamnesi', 'diagnosi']);
+  });
+});
+
+describe('parseRubriche — "Prognosi …" con testo sulla stessa riga è contenuto, non solo titolo', () => {
+  it('"Prognosi confermata fino al 30/06/2025." e "Prognosi riservata." restano; "PROGNOSI" da solo è titolo', () => {
+    const a = parseRubriche([{ pageNumber: 1, ocrText: 'DIAGNOSI\nFrattura.\nPrognosi confermata fino al 30/06/2025.' }]);
+    expect(a.find((s) => s.label === 'prognosi')?.text).toBe('confermata fino al 30/06/2025.');
+    const b = parseRubriche([{ pageNumber: 1, ocrText: 'DIAGNOSI\nFrattura.\nPrognosi riservata.' }]);
+    expect(b.find((s) => s.label === 'prognosi')?.text).toBe('riservata.');
+    const c = parseRubriche([{ pageNumber: 1, ocrText: 'DIAGNOSI\nFrattura.\nPROGNOSI\nGiorni 30.' }]);
+    expect(c.find((s) => s.label === 'prognosi')?.text).toBe('Giorni 30.');
+    const d = parseRubriche([{ pageNumber: 1, ocrText: 'ANAMNESI PATOLOGICA REMOTA\nNulla di rilevante.' }]);
+    expect(d.map((s) => s.label)).toEqual(['anamnesi_remota']);
+  });
+});

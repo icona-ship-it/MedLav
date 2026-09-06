@@ -113,9 +113,30 @@ function detectHeading(line: string): HeadingHit | null {
     if (hit) return withLabelIfKept(hit, inline[1]!.trim(), inline[2]!.trim());
   }
   const whole = matchVocabulary(line);
-  if (whole && line.length <= 60) return withLabelIfKept(whole, line.replace(/[\s:]+$/, ''), '');
+  if (whole && line.length <= 60) {
+    // "Prognosi confermata fino al 30/06/2025." / "Prognosi riservata." sono CONTENUTO
+    // sotto la rubrica della prima parola, non un titolo: senza questo il testo spariva.
+    const split = /^(\S+)\s+(.+)$/.exec(line);
+    const firstWordKey = split ? matchVocabulary(split[1]!)?.key : undefined;
+    if (split && firstWordKey === whole.key && (/\d/.test(split[2]!) || /[.;]$/.test(split[2]!))) {
+      return withLabelIfKept(whole, split[1]!, split[2]!);
+    }
+    return withLabelIfKept(whole, line.replace(/[\s:]+$/, ''), '');
+  }
   if (SI_CONSIGLIA_RE.test(line)) return { key: 'indicazioni', rawLabel: 'Si consiglia', inlineText: line };
   return null;
+}
+
+/** Finestra (righe) entro cui una virgoletta aperta sospende le rubriche: oltre,
+ * una virgoletta orfana dell'OCR (5") non deve spegnere il parser. */
+const OPEN_QUOTE_WINDOW_LINES = 4;
+
+function hasOpenQuote(lines: ReadonlyArray<string>): boolean {
+  const recent = lines.slice(-OPEN_QUOTE_WINDOW_LINES).join('\n');
+  const count = (re: RegExp): number => (recent.match(re) ?? []).length;
+  if (count(/"/g) % 2 === 1) return true;
+  if (count(/“/g) !== count(/”/g)) return true;
+  return count(/«/g) !== count(/»/g);
 }
 
 export function parseRubriche(pages: ReadonlyArray<RubricPage>): RubricSegment[] {
@@ -141,7 +162,10 @@ export function parseRubriche(pages: ReadonlyArray<RubricPage>): RubricSegment[]
     for (const rawLine of page.ocrText.split('\n')) {
       const line = cleanOcrLine(rawLine);
       if (!line) { if (current) current.lines.push(''); continue; }
-      const hit = detectHeading(line);
+      // Dentro una citazione aperta ("… Si consiglia …" riportato da un altro
+      // medico) nessuna riga apre una rubrica: le indicazioni citate resterebbero
+      // attribuite al documento sbagliato (panel giro 7, caso C).
+      const hit: HeadingHit | null = current && hasOpenQuote(current.lines) ? null : detectHeading(line);
       if (hit) {
         flush();
         sawHeading = true;
