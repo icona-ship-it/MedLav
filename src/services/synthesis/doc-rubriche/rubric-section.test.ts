@@ -39,3 +39,27 @@ describe('intestazione: qualificatore esame, struttura dalla carta intestata, me
     expect(out.markdown).toContain('**Referto specialistico, Dott.ssa Fittizi Marta, in data 04.03.2026:**');
   });
 });
+
+// Panel giro 8 (2026-09-06), caso C: «strutture erogatrici sostituite da nomi di
+// persona, indirizzi o garble» nelle intestazioni.
+describe('intestazione: la struttura non è un indirizzo né un nome di persona', () => {
+  const pages = [{ pageNumber: 1, ocrText: 'ECG\nTachicardia sinusale.' }];
+  it('facility dagli eventi che è un indirizzo → omessa; che è un nome di persona → "Dott. …"', () => {
+    const a = formatDocumentazioneSanitariaRubriche(
+      [{ documentId: 'ecg', documentType: 'esame_strumentale', pages }],
+      [{ event_date: '2025-09-13', document_id: 'ecg', facility: 'Via degli Esempi, 17 - 00000 CITTÀDEMO', temporal_scope: 'corrente' }],
+    );
+    expect(a.markdown).not.toContain('Via degli Esempi');
+    const b = formatDocumentazioneSanitariaRubriche(
+      [{ documentId: 'ecg', documentType: 'esame_strumentale', pages }],
+      [{ event_date: '2025-09-13', document_id: 'ecg', facility: 'ANNA DEMPROVA', temporal_scope: 'corrente' }],
+    );
+    expect(b.markdown).toContain('Dott. Anna Demprova');
+    expect(b.markdown).not.toContain('ANNA DEMPROVA,');
+    const c = formatDocumentazioneSanitariaRubriche(
+      [{ documentId: 'ecg', documentType: 'esame_strumentale', pages }],
+      [{ event_date: '2025-09-13', document_id: 'ecg', facility: 'Studio Radiologico Demprova', temporal_scope: 'corrente' }],
+    );
+    expect(c.markdown).toContain('Studio Radiologico Demprova');
+  });
+});

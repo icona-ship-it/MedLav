@@ -103,7 +103,7 @@ export const INCONTRO_PERITALE_PENALE_PLACEHOLDER = `*[Inserire qui i dati dell'
  * scheletro numerato con le formule valutative dei depositati. Appeso in coda
  * alla directive dell'epicrisi — i giudizi restano del perito.
  */
-export const EPICRISI_COMPLETAMENTO_GUIDE = `*[Il perito completerà l'epicrisi con, nell'ordine (formule dei benchmark depositati):*
+export const EPICRISI_COMPLETAMENTO_GUIDE = `*[Il perito completerà l'epicrisi con, nell'ordine (formule delle perizie depositate):*
 *1) NESSO CAUSALE — "Le lesioni riportate sono compatibili con il meccanismo del trauma e il quadro anatomo-patologico soddisfa i criteri topografico, di modalità, temporale, di efficienza lesiva e di conseguenza fenomenologica, tali che non vi sono dubbi sulla diretta conseguenza fra trauma patito e lesioni riportate." Se preesistenze/concause: "Tale condizione integra esclusivamente una situazione di maggiore suscettibilità individuale, priva di autonoma efficienza causale, non sussistendo presupposti medico-legali per l'applicazione di criteri riduzionistici o differenziali."*
 *2) ATTRIBUZIONE — "In considerazione delle evidenze clinico-radiologiche e di quanto rilevato in sede di visita clinica appare corretto attribuire per i postumi stabilizzati di [DIAGNOSI IN MAIUSCOLO]:"*
 *3) INABILITÀ TEMPORANEA GRADUATA, una riga per periodo (solo i livelli effettivi): "un periodo di INABILITÀ TEMPORANEA AL 100% di gg. [N]" / "AL 75% di gg. [N]" / "AL 50% di gg. [N]" / "AL 25% di gg. [N]"*

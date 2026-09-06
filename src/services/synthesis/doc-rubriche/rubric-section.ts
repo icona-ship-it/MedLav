@@ -29,6 +29,27 @@ export interface RubricSectionEvent {
 const LETTERHEAD_RE = /^(?:[A-ZÀ-Ü][A-ZÀ-Ü.'’\-]*\s+){0,4}(OSPEDALE|AZIENDA|A\.?U\.?L\.?S\.?S\.?|ULSS|ASL|ASST|AOU|IRCCS|CENTRO|STUDIO|POLIAMBULATORIO|POLICLINICO|RADIOLOGIA|DIAGNOSTICA|ISTITUTO|CLINICA|CASA DI CURA|LABORATORIO|FONDAZIONE|PRESIDIO)\b[^\n|]{0,60}$/;
 const EXAM_TITLE_RE = /^(RX|RM|RMN|TC|TAC|ECO|ECOGRAFIA|ECOCOLORDOPPLER|PET|MOC|DOPPLER)\b[^\n:|]{2,50}/im;
 
+/** Indirizzo (via/piazza + numero o CAP): non è una struttura. */
+const ADDRESS_RE = /(\b(via|viale|piazza|piazzale|corso|largo|strada|vicolo|contrada)\b[^\n]*\d|\b\d{5}\b)/i;
+/** Ente/struttura riconoscibile (parola-chiave organizzativa). */
+const ORGANIZATION_WORD_RE = /(ospedal|aziend|asl|ulss|ats|aou|irccs|centro|studio|poliambulator|policlinic|radiolog|diagnostic|istituto|clinic|casa di cura|laborator|fondazione|presidio|u\.?\s?o\.?|unit[àa]|dipartiment|reparto|ambulator|servizio|inps|inail|comune|regione|s\.?r\.?l|s\.?p\.?a|s\.?n\.?c|medic|fisioterap|riabilit|ortoped|new life|srl|spa|&)/i;
+
+/** La struttura dell'intestazione non è un indirizzo né un nome di persona
+ * (panel giro 8, caso C: "Via …, 17 - 37129 …" e "NOME COGNOME" al posto
+ * della struttura). Indirizzo → omessa; nome di persona → "Dott. Nome Cognome". */
+export function sanitizeFacility(facility: string | null): string | null {
+  if (!facility) return null;
+  const f = facility.replace(/\s+/g, ' ').trim();
+  if (!f) return null;
+  if (ADDRESS_RE.test(f)) return null;
+  const words = f.split(' ');
+  const personLike = words.length >= 2 && words.length <= 3 && !/\d|,|\(/.test(f) && !ORGANIZATION_WORD_RE.test(f) &&
+    words.every((w) => /^[\p{Lu}][\p{L}'’.-]*$/u.test(w));
+  if (!personLike) return f;
+  const name = words.map((w) => (w === w.toUpperCase() ? w.charAt(0) + w.slice(1).toLowerCase() : w)).join(' ');
+  return /^(dott|dr|prof)/i.test(name) ? name : `Dott. ${name}`;
+}
+
 /** Struttura dalla carta intestata (prime righe) quando gli eventi non la portano. */
 export function facilityFromLetterhead(head: string): string | null {
   for (const raw of head.split('\n').slice(0, 12)) {
@@ -95,7 +116,7 @@ export function formatDocumentazioneSanitariaRubriche(
     const label = exam ? `${baseLabel} – ${exam}` : baseLabel;
     // Struttura: dagli eventi correnti; altrimenti dalla carta intestata; altrimenti il medico.
     const doctor = docEvents.find((e) => e.doctor && e.temporal_scope !== 'retrospettivo' && e.temporal_scope !== 'programmato')?.doctor ?? null;
-    const facility = dating.facility ?? facilityFromLetterhead(head) ?? doctor;
+    const facility = sanitizeFacility(dating.facility ?? facilityFromLetterhead(head)) ?? (doctor ? sanitizeFacility(doctor) : null);
     const range = d.documentType === 'lettera_dimissione' || d.documentType === 'cartella_clinica' ? admissionRangeFromText(head) : null;
     const discharge = d.documentType === 'lettera_dimissione' ? (range?.end ?? dischargeDateFromText(head)) : null;
     // "Ricoverato dal X al Y" nel testo batte la datazione dagli eventi (un evento
