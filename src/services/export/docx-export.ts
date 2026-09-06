@@ -14,6 +14,7 @@ import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { anonymizeEventsForExport, anonymizeDocsForExport, anonymizePmForExport } from './anonymize-export';
 import type { PeriziaMetadata } from '@/types';
 import { getAiActDisclosureDocxParagraphs, getAiActDocxMetadata } from './ai-act-disclosure';
+import { formatSourcePagesLabel } from '@/lib/source-pages';
 import { buildExpenseDocxSection, type ExpenseDocxItem } from './expense-docx';
 import { RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
 import { groupEventsByDocument } from './event-grouping';
@@ -39,6 +40,8 @@ interface DocxEvent {
   facility: string | null;
   confidence: number;
   requires_verification: boolean;
+  /** Pagine di origine (array o JSON) → "(pag. N)" accanto alla riga. */
+  source_pages?: number[] | string | null;
   expert_notes: string | null;
   /** Ambito temporale (migration 0034): corrente | retrospettivo | programmato. */
   temporal_scope?: string | null;
@@ -552,6 +555,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
           new TextRun({ text: `[${source}]`, bold: true, color: '1E40AF' }),
           event.requires_verification ? new TextRun({ text: ' ⚠ DA VERIFICARE', color: 'DC2626', bold: true }) : new TextRun({ text: '' }),
           confidenceTag,
+          formatSourcePagesLabel(event.source_pages) ? new TextRun({ text: ` (${formatSourcePagesLabel(event.source_pages)})`, color: '6B7280' }) : new TextRun({ text: '' }),
         ],
         spacing: { before: 200 },
       }),
@@ -1412,6 +1416,7 @@ export async function generateProfessionalDocxReport(params: ProfessionalDocxExp
       description: e.description,
       source_type: e.source_type,
       source_text: (e as unknown as Record<string, unknown>).source_text as string | null ?? null,
+      source_pages: ((e as unknown as Record<string, unknown>).source_pages as number[] | string | null | undefined) ?? null,
       diagnosis: e.diagnosis ?? null,
       doctor: e.doctor ?? null,
       facility: e.facility ?? null,

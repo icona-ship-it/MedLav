@@ -1,4 +1,5 @@
 import { formatEventDateByPrecision } from '@/lib/format';
+import { formatSourcePagesLabel } from '@/lib/source-pages';
 import { groupEventsByDocument, RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
 import { markdownToHtml } from './markdown-to-html';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
@@ -127,9 +128,13 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
         ? `<p class="event-diag"><strong>Diagnosi:</strong> ${escapeHtml(ev.diagnosis)}</p>`
         : '';
       const dateLabel = formatEventDateByPrecision(ev.event_date, ev.date_precision ?? undefined);
+      // Pagina di origine (verifica 2026-09-06): il medico deve poter andare alla
+      // pagina del documento da ogni riga, anche nel file esportato.
+      const pagesLabel = formatSourcePagesLabel((ev as { source_pages?: unknown }).source_pages);
+      const pagesHtml = pagesLabel ? ` <span class="event-pages">(${escapeHtml(pagesLabel)})</span>` : '';
       const head = ev.title
-        ? `${escapeHtml(dateLabel)} &mdash; ${escapeHtml(ev.title)}${scopeInline(ev)}`
-        : `${escapeHtml(dateLabel)}${scopeInline(ev)}`;
+        ? `${escapeHtml(dateLabel)} &mdash; ${escapeHtml(ev.title)}${scopeInline(ev)}${pagesHtml}`
+        : `${escapeHtml(dateLabel)}${scopeInline(ev)}${pagesHtml}`;
       // Documento professionale: nessun flag interno di lavoro (DA VERIFICARE).
       return `<div class="event-block">
       <p class="event-head">${head}</p>
@@ -251,7 +256,8 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
   .event-title { font-weight: 600; margin-bottom: 2px; }
   .event-desc { font-size: 14px; color: #374151; white-space: pre-wrap; margin-bottom: 2px; }
   .event-diag { font-size: 14px; margin-bottom: 2px; }
-  .event-meta { font-size: 12px; color: #777; font-style: italic; margin-top: 2px; }
+  .event-pages { color: #6b7280; font-weight: normal; font-size: 0.85em; }
+    .event-meta { font-size: 12px; color: #777; font-style: italic; margin-top: 2px; }
   .footer {
     margin-top: 30px;
     padding-top: 15px;

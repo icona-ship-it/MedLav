@@ -27,7 +27,7 @@ const OCR_PROMPT = 'Trascrivi INTEGRALMENTE il testo di questo documento, pagina
 async function mistralOcr(bytes: Buffer, mime: string): Promise<string> {
   const isImage = mime.startsWith('image/');
   const body = {
-    model: 'mistral-ocr-latest',
+    model: process.env.BAKEOFF_MISTRAL_OCR_MODEL ?? 'mistral-ocr-2512',
     document: isImage
       ? { type: 'image_url', image_url: `data:${mime};base64,${bytes.toString('base64')}` }
       : { type: 'document_url', document_url: `data:${mime};base64,${bytes.toString('base64')}` },

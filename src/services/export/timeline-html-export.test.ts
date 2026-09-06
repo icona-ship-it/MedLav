@@ -218,3 +218,15 @@ describe('generateTimelineHtml — trascrizione per documento e appendice di ver
     expect(without).not.toContain('Appendice di verifica');
   });
 });
+
+describe('pagina di origine negli export (verifica 2026-09-06)', () => {
+  it('ogni evento con source_pages mostra "(pag. N)" nella riga', async () => {
+    const mod = await import('./timeline-html-export');
+    const html = mod.generateTimelineHtml({
+      caseCode: 'DEMO-2026-001', caseType: 'ortopedica', patientInitials: 'M.D.',
+      events: [{ id: 'e1', order_number: 1, event_date: '2026-02-10', date_precision: 'giorno', event_type: 'visita', title: 'Accesso PS', description: 'x', source_type: 'cartella_clinica', diagnosis: null, doctor: null, facility: null, confidence: 90, requires_verification: false, source_pages: '[1,2]', temporal_scope: 'corrente', is_relevant_for_chronology: true, document_id: 'd1' }] as never,
+      documents: [] as never,
+    } as never);
+    expect(html).toContain('(pagg. 1-2)');
+  });
+});

@@ -88,9 +88,11 @@ const VERIFY_SCHEMA = {
 
 const RECTIFY_SCHEMA = {
   type: 'object',
-  required: ['score', 'categorie', 'motivazione', 'findingsConfermati'],
+  required: ['score', 'scoreMedianaGrezza', 'rettifica', 'categorie', 'motivazione', 'findingsConfermati'],
   properties: {
     score: { type: 'number', description: '0-100 finale rettificato' },
+    scoreMedianaGrezza: { type: 'number', description: 'somma delle mediane per categoria dei 3 giudici, PRIMA di ogni rettifica' },
+    rettifica: { type: 'number', description: 'score - scoreMedianaGrezza (positiva o negativa)' },
     categorie: {
       type: 'object',
       required: ['fedelta_fatti', 'completezza', 'selettivita', 'struttura', 'pulizia_depositabile', 'verbatim'],
@@ -154,7 +156,7 @@ const judged = await pipeline(
   (acc, c) => agent(
     `Sei il rettificatore del panel RC. Caso "${c.slug}" (fascia ${c.fascia}, gate ${c.gate}).\n` +
     `${RUBRIC}\n\nHai: (1) i punteggi/findings di 3 giudici con lenti diverse, (2) la verifica avversariale dei findings.\n` +
-    `Produci il punteggio FINALE rettificato: parti dalla mediana per categoria, correggi al ribasso/rialzo SOLO in base ai findings CONFERMATI (ignora i RIFIUTATI, pesa a meta i RIDIMENSIONATI). Riporta i findings confermati ordinati per gravita.\n${GDPR}\n\n` +
+    `Produci il punteggio FINALE rettificato: parti dalla mediana per categoria, correggi al ribasso/rialzo SOLO in base ai findings CONFERMATI (ignora i RIFIUTATI, pesa a meta i RIDIMENSIONATI). Riporta SEMPRE anche scoreMedianaGrezza (somma delle mediane, prima di ogni correzione) e rettifica (differenza): il numero non deve poter essere gonfiato in silenzio (verifica 2026-09-06). Riporta i findings confermati ordinati per gravita.\n${GDPR}\n\n` +
     `GIUDICI:\n${JSON.stringify(acc.judgments)}\n\nVERIFICA:\n${JSON.stringify(acc.verify)}`,
     { label: `rettifica:${c.slug.split('-')[0]}`, phase: 'Sintesi', schema: RECTIFY_SCHEMA, effort: 'high' }
   ).then((r) => ({ slug: c.slug, fascia: c.fascia, gate: c.gate, ...r }))
@@ -175,7 +177,7 @@ const WRITE_SCHEMA = {
 const written = await agent(
   `Scrivi i risultati del panel RC su disco (SOLO questi due file, niente altro):\n` +
   `1. "${REPO}/benchmark/scores/rc-panel-scores.json" (SOVRASCRIVI) con: { "generatedAt": "<ora ISO corrente, usa il comando date>", "rubricVersion": "${RUBRIC_VERSION}", "scores": { "<slug>": <score> per ognuno dei ${results.length} casi }, "categorie": { "<slug>": {...} }, "antiCopiaLeaks": { "<slug>": N } }.\n` +
-  `2. "${REPO}/benchmark/scores/rc-panel-findings-<YYYY-MM-DD-HHmm>.md" con, per caso: score, punteggi per categoria, motivazione, findings confermati per gravita.\n` +
+  `2. "${REPO}/benchmark/scores/rc-panel-findings-<YYYY-MM-DD-HHmm>.md" con, per caso: score FINALE, mediana grezza e rettifica (sempre entrambe, separate), punteggi per categoria, motivazione, findings confermati per gravita; in testa una tabella Caso | Mediana grezza | Rettifica | Score | Gate.\n` +
   `${GDPR}\n\nRISULTATI:\n` + JSON.stringify(results),
   { label: 'scrivi:scores', phase: 'Sintesi', schema: WRITE_SCHEMA, effort: 'low' }
 )
@@ -183,6 +185,8 @@ const written = await agent(
 return {
   rubricVersion: RUBRIC_VERSION,
   scores: Object.fromEntries(results.map((r) => [r.slug, r.score])),
+  medianeGrezze: Object.fromEntries(results.map((r) => [r.slug, r.scoreMedianaGrezza])),
+  rettifiche: Object.fromEntries(results.map((r) => [r.slug, r.rettifica])),
   gates: Object.fromEntries(results.map((r) => [r.slug, r.score >= r.gate ? 'PASS' : 'FAIL'])),
   antiCopia: Object.fromEntries(results.map((r) => [r.slug, r.antiCopiaLeaks])),
   files: written,

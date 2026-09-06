@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BUILD_SHA, BUILD_TIME } from '@/lib/build-info';
+import { MISTRAL_SERVER_URL } from '@/lib/mistral/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
@@ -38,11 +39,25 @@ export async function GET(request: NextRequest) {
     checks.database = { status: 'error', error: 'unreachable' };
   }
 
-  // Check Mistral API key is configured (presenza chiave, non connettività live:
-  // un probe reale a ogni poll costerebbe latenza + token).
-  checks.mistral = process.env.MISTRAL_API_KEY
-    ? { status: 'ok' }
-    : { status: 'error', error: 'not_configured' };
+  // Mistral: chiave presente E endpoint raggiungibile (GET /v1/models, senza token,
+  // 3 s di timeout). Verifica 2026-09-06: prima controllava solo la presenza della
+  // chiave e non provava che l'endpoint regionale UE rispondesse.
+  if (!process.env.MISTRAL_API_KEY) {
+    checks.mistral = { status: 'error', error: 'not_configured' };
+  } else {
+    const mistralStart = Date.now();
+    try {
+      const res = await fetch(`${MISTRAL_SERVER_URL}/v1/models`, {
+        headers: { Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
+        signal: AbortSignal.timeout(3000),
+      });
+      checks.mistral = res.ok
+        ? { status: 'ok', latencyMs: Date.now() - mistralStart }
+        : { status: 'error', error: `http_${res.status}` };
+    } catch {
+      checks.mistral = { status: 'error', error: 'unreachable' };
+    }
+  }
 
   // Check Inngest keys are configured
   checks.inngest = process.env.INNGEST_EVENT_KEY || process.env.INNGEST_SIGNING_KEY
@@ -58,6 +73,7 @@ export async function GET(request: NextRequest) {
     version: process.env.npm_package_version ?? '0.1.0',
     // Versione visibile: quale build risponde (sha corto + data di build).
     build: { sha: BUILD_SHA?.slice(0, 7) ?? null, builtAt: BUILD_TIME ?? null },
+    mistralServerUrl: MISTRAL_SERVER_URL,
     latencyMs: totalLatencyMs,
     checks,
   }, { status: allOk ? 200 : 503 });
