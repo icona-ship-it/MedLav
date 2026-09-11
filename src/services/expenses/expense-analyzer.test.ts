@@ -426,13 +426,14 @@ describe('analyzeExpenses — componenti fiscali non sono voci di spesa (gold: s
     expect(result.totalAmount).toBe(120);
   });
 
-  it('esclude l\'imposta di bollo come voce autonoma', () => {
+  it('l\'imposta di bollo non è una voce autonoma: si somma alla prestazione della stessa fattura con nota (importo lordo, direttiva 2026-08-19)', () => {
     const result = analyzeExpenses([
       { ...base, title: 'RM gomito destro', description: 'Importo: 160,00 EUR. Fattura n. 23102/2025/D.' },
       { ...base, title: 'Imposta di bollo', description: 'Imposta di bollo di 2,00 EUR applicata sulla fattura n. 23102/2025/D.' },
     ]);
     expect(result.items).toHaveLength(1);
-    expect(result.totalAmount).toBe(160);
+    expect(result.items[0].description).toContain('comprende');
+    expect(result.totalAmount).toBe(162);
   });
 
   it('NON esclude una prestazione vera che cita l\'IVA nella descrizione', () => {

@@ -63,25 +63,26 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
 // Amount extraction
 // ---------------------------------------------------------------------------
 
+// Numero in formato italiano: migliaia con punto O SPAZIO («10 231,75», forma
+// tipica di pagoPA/bonifici) e decimali con virgola; oppure tutto-punti degradato
+// dall'OCR («10.231.75» = virgola letta come punto). Prima «10 231,75 €» dava
+// 231,75 e «euro 10 231,75» dava 10 (audit 2026-09-10, invariante I6).
+const NUM_IT = String.raw`\d{1,3}(?:[ .]\d{3})+(?:[.,]\d{2})?|\d+(?:[.,]\d{1,2})?`;
+const NUM_IT_DEC = String.raw`\d{1,3}(?:[ .]\d{3})+[.,]\d{2}|\d+[.,]\d{2}`;
+const CUR_BEFORE = String.raw`(?:€|[Ee]uro|EURO|EUR)`;
+// Dopo il numero: «€» senza confine di parola (non è \w), le parole con confine.
+const CUR_AFTER = String.raw`(?:€|(?:[Ee]uro|EURO|EUR)\b)`;
 const AMOUNT_PATTERNS: RegExp[] = [
   // Formato anglosassone "euro 1,038.80" / "€ 12,345.67" (virgola-migliaia + punto-decimale)
   // — PRIMA dei pattern italiani, altrimenti "1,038.80" verrebbe letto come "1,03" (1.03).
-  /(?:€|[Ee]uro|EUR)\s?(\d{1,3}(?:,\d{3})+\.\d{2})/,
-  /(\d{1,3}(?:,\d{3})+\.\d{2})\s?(?:€|[Ee]uro)/,
-  // "€ 150,00" or "€150,00" or "€ 1.500,00"
-  /€\s?([\d.]+,\d{2})/,
-  // "Euro 150,00" or "euro 150"
-  /[Ee]uro\s?([\d.]+(?:,\d{1,2})?)/,
-  // "150,00 euro" or "1.500 euro"
-  /([\d.]+,\d{2})\s?[Ee]uro/,
-  // "150,00 €" or "1.500,00€"
-  /([\d.]+,\d{2})\s?€/,
-  // "50,00 EUR" — codice ISO DOPO il numero (documenti commerciali/fatture reali;
-  // bug Antoniazzi 2026-07-05: [Ee]uro non matcha "EUR", il pattern EUR-prefisso
-  // esisteva solo prima della cifra → tutta la tabella spese usciva con "—")
-  /([\d.]+,\d{2})\s?EUR\b/,
-  // "EUR 150,00"
-  /EUR\s?([\d.]+(?:,\d{1,2})?)/i,
+  /(?:€|[Ee]uro|EURO|EUR)\s?(\d{1,3}(?:,\d{3})+\.\d{2})/,
+  /(\d{1,3}(?:,\d{3})+\.\d{2})\s?(?:€|[Ee]uro|EURO|EUR)/,
+  // "€ 150,00", "€ 1.500,00", "€ 10 231,75", "euro 1.234.56"
+  new RegExp(String.raw`${CUR_BEFORE}\s?(${NUM_IT_DEC})(?!\d)`),
+  // "150,00 euro", "10 231,75 €", "50,00 EUR"
+  new RegExp(String.raw`(?<!\d)(${NUM_IT_DEC})\s?${CUR_AFTER}`),
+  // "euro 150" / "EUR 1.500" (senza decimali)
+  new RegExp(String.raw`${CUR_BEFORE}\s?(${NUM_IT})(?![\d,])`),
 ];
 
 // Il TOTALE dichiarato vince sugli importi parziali: su una ricevuta con
@@ -92,8 +93,8 @@ const AMOUNT_PATTERNS: RegExp[] = [
 // "total": senza, "capacità polmonare totale 5,90 litri" vinceva sull'importo
 // vero ("euro 36,15") e falsava la tabella di un atto depositabile.
 const TOTAL_AMOUNT_PATTERNS: RegExp[] = [
-  /\btotal[ei][^\d\n]{0,12}(?:€|euro|eur)\s?([\d.]+,\d{2})/i,      // "totale: € 120,00"
-  /\btotal[ei][^\d\n]{0,12}([\d.]+,\d{2})\s?(?:€|euro|eur)\b/i,    // "totale 120,00 EUR"
+  new RegExp(String.raw`\btotal[ei][^\d\n]{0,12}(?:€|euro|eur)\s?(${NUM_IT_DEC})(?!\d)`, 'i'),      // "totale: € 120,00"
+  new RegExp(String.raw`\btotal[ei][^\d\n]{0,12}(?<!\d)(${NUM_IT_DEC})\s?(?:€|(?:euro|eur)\b)`, 'i'),    // "totale 120,00 EUR"
 ];
 
 /**
@@ -125,11 +126,17 @@ export function extractAmount(text: string): number | null {
  * ("euro 1,038.80"), che col vecchio parser italiano dava cifre sbagliate (gonfiava
  * il totale). Regola: l'ULTIMO separatore è il decimale.
  */
-function parseItalianNumber(raw: string): number | null {
+function parseItalianNumber(input: string): number | null {
+  // Spazio come separatore delle migliaia («10 231,75»): via (I6).
+  const raw = input.replace(/\s+/g, '');
   const lastComma = raw.lastIndexOf(',');
   const lastDot = raw.lastIndexOf('.');
   let normalized: string;
-  if (lastComma > lastDot) {
+  if (lastComma === -1 && (raw.match(/\./g) ?? []).length >= 2 && /\.\d{2}$/.test(raw)) {
+    // Tutto-punti con 2 cifre finali («10.231.75»): virgola decimale letta come
+    // punto dall'OCR → l'ultimo punto è il decimale, gli altri le migliaia (I6).
+    normalized = raw.slice(0, lastDot).replace(/\./g, '') + '.' + raw.slice(lastDot + 1);
+  } else if (lastComma > lastDot) {
     // virgola decimale (italiano): i punti sono migliaia
     normalized = raw.replace(/\./g, '').replace(',', '.');
   } else if (lastDot > lastComma) {
@@ -446,6 +453,7 @@ export function analyzeExpenses(
   }
 
   const items: ExpenseItem[] = [];
+  const fiscalComponents: Array<{ documentId: string | null; date: string; title: string; description: string; amount: number | null }> = [];
 
   for (const ev of events) {
     // Skip non-string/invalid inputs gracefully
@@ -456,8 +464,15 @@ export function analyzeExpenses(
     // il quantum con costi che il danneggiato non ha sostenuto.
     if (isSsrCostNotification(ev.title, ev.description, ev.source_text)) continue;
 
-    // Le componenti fiscali (IVA scorporata, bollo) non sono voci di spesa autonome.
-    if (isFiscalComponentItem(ev.title)) continue;
+    // Le componenti fiscali (IVA scorporata, bollo) non sono voci di spesa autonome:
+    // si SOMMANO alla riga ospite dello stesso documento con una nota (importo lordo
+    // per documento fiscale, direttiva medici 2026-08-19); prima venivano scartate in
+    // silenzio e il totale usciva al netto (audit 2026-09-10, R8/I6).
+    if (isFiscalComponentItem(ev.title)) {
+      const fiscalAmount = extractAmount(ev.title) ?? extractAmount(ev.description) ?? (ev.source_text ? extractAmount(ev.source_text) : null);
+      fiscalComponents.push({ documentId: ev.document_id ?? null, date: ev.event_date ?? '', title: ev.title, description: ev.description ?? '', amount: fiscalAmount });
+      continue;
+    }
 
     const category = inferCategory(ev.event_type, ev.title, ev.description);
     // Importo: titolo → descrizione → sourceText verbatim (l'ancora OCR spesso
@@ -485,13 +500,21 @@ export function analyzeExpenses(
   // gonfiando il totale. Dedup deterministica: stessa data + stesso importo +
   // stesso numero ricevuta (quando presente) o stessa descrizione normalizzata
   // → è la STESSA spesa, conta una volta sola (anche fattura vs quietanza).
-  const seenExpense = new Set<string>();
+  // Stessa chiave in DUE documenti diversi = la stessa ricevuta letta due volte
+  // (dedup); nello STESSO documento = due prestazioni distinte (due ticket da
+  // 27,90 € lo stesso giorno) e restano entrambe (audit 2026-09-10, I13).
+  const seenExpense = new Map<string, string | null>();
   const dedupedItems = items.filter((item) => {
     const refOrDesc = item.receiptRef?.trim()
       || item.description.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
     const key = `${item.date}|${item.amount ?? 'null'}|${refOrDesc}`;
-    if (seenExpense.has(key)) return false;
-    seenExpense.add(key);
+    const docId = item.documentId ?? null;
+    if (seenExpense.has(key)) {
+      const firstDoc = seenExpense.get(key) ?? null;
+      if (firstDoc !== null && docId !== null && firstDoc === docId) return true;
+      return false;
+    }
+    seenExpense.set(key, docId);
     return true;
   });
 
@@ -518,6 +541,33 @@ export function analyzeExpenses(
       invoiceTotals.some((t) => t.documentId === i.documentId && t.date === i.date && (t.amount ?? 0) >= (i.amount ?? 0))));
   items.length = 0;
   items.push(...withoutInvoiceLines);
+
+  // Componenti fiscali → riga ospite (stesso documento; a parità la data uguale,
+  // poi l'importo maggiore). Se l'ospite è già il TOTALE dichiarato della fattura
+  // (lordo), la componente è una riga interna e non si somma di nuovo. Senza
+  // ospite la componente resta una riga propria: mai un importo perso in silenzio.
+  for (const fc of fiscalComponents) {
+    // Ospite: stesso documento; senza document_id, l'UNICA prestazione della stessa
+    // data (con più candidate non si indovina: la componente resta riga propria).
+    const sameDoc = fc.documentId !== null
+      ? items.filter((i) => i.amount !== null && i.documentId === fc.documentId && !isFiscalComponentItem(i.description))
+      : [];
+    const sameDate = fc.documentId === null
+      ? items.filter((i) => i.amount !== null && i.date === fc.date && !isFiscalComponentItem(i.description))
+      : [];
+    const candidates = sameDoc.length > 0 ? sameDoc : sameDate.length === 1 ? sameDate : [];
+    const host = candidates.sort((a, b) => Number(b.date === fc.date) - Number(a.date === fc.date) || (b.amount ?? 0) - (a.amount ?? 0))[0];
+    if (!host) {
+      if (fc.amount !== null) items.push({ date: fc.date, description: fc.title, category: 'altro', amount: fc.amount, facility: null, documentSource: 'altro', receiptRef: null, documentId: fc.documentId });
+      continue;
+    }
+    // Già dentro il totale dell'ospite (totale dichiarato della fattura, o componente
+    // che si dichiara «inclusa/compresa nel totale»): riga interna, non si somma.
+    if (fc.amount === null || isInvoiceTotalItem(host.description) || /\b(inclus[aoie]|compres[aoie])\b/i.test(fc.description)) continue;
+    host.amount = Math.round(((host.amount ?? 0) + fc.amount) * 100) / 100;
+    host.description = `${host.description} (comprende ${fc.title.toLowerCase().replace(/\s+/g, ' ').trim()}: ${fc.amount.toFixed(2).replace('.', ',')} €)`;
+  }
+  items.sort((a, b) => a.date.localeCompare(b.date));
 
   // Calculate totals per category
   const allCategories: ExpenseCategory[] = [
