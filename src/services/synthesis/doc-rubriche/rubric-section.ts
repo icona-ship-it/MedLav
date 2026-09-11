@@ -100,6 +100,59 @@ export function dischargeDateFromText(text: string): string | null {
   return dim ? iso(dim[1]!, dim[2]!, dim[3]!) : null;
 }
 
+const PAGE_DATE_RE = /\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/;
+
+function isoFromParts(d: string, m: string, y: string): string | null {
+  const mm = Number(m); const dd = Number(d);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
+/** Documento con data imposta dal testo (PDF multi-referto spacchettato). */
+export interface RubricSectionDocSplit extends RubricSectionDoc {
+  forcedDate?: string;
+  sourceDocumentId?: string;
+}
+
+/**
+ * Un PDF di esami strumentali che contiene PIÙ referti (uno per pagina, ciascuno
+ * col suo titolo d'esame e la sua data) diventa un blocco per referto, datato
+ * con la data letta sulla pagina — non un unico blocco «dal … al …» troncato a
+ * 200 parole (spec Lavini §c «spacchetta per data»; Fase 1 audit 2026-09-10, B).
+ * Una pagina apre un nuovo referto solo se porta un titolo d'esame E una data
+ * diversa: una pagina di continuazione (o una data di stampa) non spezza. Pura.
+ */
+export function splitExamDocumentByDate(doc: RubricSectionDoc): RubricSectionDocSplit[] {
+  if (doc.documentType !== 'esame_strumentale' || doc.pages.length < 2) return [doc];
+  const info = doc.pages.map((page) => {
+    const lines = (page.ocrText ?? '').split('\n').slice(0, 25).map(cleanOcrLine);
+    const title = lines.find((l) => EXAM_TITLE_RE.test(l)) ?? null;
+    let date: string | null = null;
+    for (const l of lines.slice(0, 15)) {
+      const m = PAGE_DATE_RE.exec(l);
+      if (m) { date = isoFromParts(m[1]!, m[2]!, m[3]!); if (date) break; }
+    }
+    return { page, title, date };
+  });
+  const groups: Array<{ date: string | null; pages: Array<{ pageNumber: number; ocrText: string }> }> = [];
+  for (const i of info) {
+    const cur = groups[groups.length - 1];
+    const opensNew = cur !== undefined && i.title !== null && i.date !== null && i.date !== cur.date;
+    if (!cur || opensNew) { groups.push({ date: i.date, pages: [i.page] }); continue; }
+    cur.pages.push(i.page);
+    if (!cur.date && i.date) cur.date = i.date;
+  }
+  const distinct = new Set(groups.map((g) => g.date).filter((d): d is string => d !== null));
+  if (groups.length < 2 || distinct.size < 2) return [doc];
+  return groups.map((g, k) => ({
+    ...doc,
+    documentId: `${doc.documentId}#${k + 1}`,
+    sourceDocumentId: doc.documentId,
+    pages: g.pages,
+    forcedDate: g.date ?? undefined,
+  }));
+}
+
 export function formatDocumentazioneSanitariaRubriche(
   docs: ReadonlyArray<RubricSectionDoc>,
   events: ReadonlyArray<RubricSectionEvent>,
@@ -110,8 +163,13 @@ export function formatDocumentazioneSanitariaRubriche(
     if (!e.document_id) continue;
     byDoc.set(e.document_id, [...(byDoc.get(e.document_id) ?? []), e]);
   }
-  const rdocs: RubricDocument[] = docs.map((d) => {
-    const docEvents = byDoc.get(d.documentId) ?? [];
+  const expanded = docs.flatMap((d) => splitExamDocumentByDate(d));
+  const rdocs: RubricDocument[] = expanded.map((d) => {
+    const allDocEvents = byDoc.get(d.sourceDocumentId ?? d.documentId) ?? [];
+    // Per un referto spacchettato, solo gli eventi della sua data (±1 giorno) contano per struttura/medico.
+    const docEvents = d.forcedDate
+      ? allDocEvents.filter((e) => e.event_date && Math.abs(Date.parse(e.event_date.slice(0, 10)) - Date.parse(d.forcedDate!)) <= 86_400_000)
+      : allDocEvents;
     const evs = docEvents.map((e) => ({
       eventDate: e.event_date, datePrecision: e.date_precision ?? null, facility: e.facility ?? null, temporalScope: e.temporal_scope ?? null,
     }));
@@ -128,12 +186,12 @@ export function formatDocumentazioneSanitariaRubriche(
     const discharge = d.documentType === 'lettera_dimissione' ? (range?.end ?? dischargeDateFromText(head)) : null;
     // "Ricoverato dal X al Y" nel testo batte la datazione dagli eventi (un evento
     // con data sbagliata non sposta più l'intestazione di un ricovero).
-    const dateLabel = range ? `dal ${it(range.start)} al ${it(range.end)}` : dating.dateLabel;
+    const dateLabel = d.forcedDate ? it(d.forcedDate) : range ? `dal ${it(range.start)} al ${it(range.end)}` : dating.dateLabel;
     return {
       documentId: d.documentId,
       documentType: d.documentType,
       header: buildBlockHeader(label, facility, dateLabel),
-      sortDate: discharge ?? range?.start ?? dating.sortIso,
+      sortDate: d.forcedDate ?? discharge ?? range?.start ?? dating.sortIso,
       // Stessa pulizia dell'integrale (tabelle → testo, marker e immagini via).
       pages: d.pages.map((p) => ({ pageNumber: p.pageNumber, ocrText: sanitizeVerbatimOcr(p.ocrText ?? '') })),
     };

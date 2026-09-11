@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDocumentazioneSanitariaRubriche, dischargeDateFromText, examTitleFromText } from './rubric-section';
+import { formatDocumentazioneSanitariaRubriche, dischargeDateFromText, examTitleFromText, splitExamDocumentByDate } from './rubric-section';
 
 describe('formatDocumentazioneSanitariaRubriche — dal DB al blocco', () => {
   it('intestazione dagli eventi correnti; la lettera di dimissione sta alla data di dimissione', () => {
@@ -83,5 +83,33 @@ describe('examTitleFromText — titolo d\'esame dall\'OCR markdown (Fase 1 audit
     expect(examTitleFromText('OSPEDALE CIVILE DI CITTÀDEMO\n# RM POLSO DX\nNotizie cliniche: caduta.')).toBe('RM POLSO DX');
     expect(examTitleFromText('**RX CAVIGLIA SX**\nNon lesioni ossee.')).toBe('RX CAVIGLIA SX');
     expect(examTitleFromText('Nessun titolo qui.')).toBeNull();
+  });
+});
+
+describe('splitExamDocumentByDate — PDF multi-referto spacchettato per data d\'esame (Fase 1 audit 2026-09-10, B)', () => {
+  const page = (n: number, text: string) => ({ pageNumber: n, ocrText: text });
+  it('tre referti con titolo e data propria → tre blocchi datati, ognuno col suo titolo', () => {
+    const doc = { documentId: 'rx', documentType: 'esame_strumentale', pages: [
+      page(1, 'OSPEDALE CIVILE DI CITTÀDEMO\nRX POLSO DX\nData esame: 16/07/2023\nFrattura composta del radio distale dx.'),
+      page(2, 'OSPEDALE CIVILE DI CITTÀDEMO\nRX BACINO\nData esame: 17/08/2023\nNon lesioni ossee di natura traumatica.'),
+      page(3, 'OSPEDALE CIVILE DI CITTÀDEMO\nTC POLSO DX\nData esame: 22/08/2023\nCallo osseo in formazione.'),
+    ] };
+    const parts = splitExamDocumentByDate(doc);
+    expect(parts.map((p) => p.forcedDate)).toEqual(['2023-07-16', '2023-08-17', '2023-08-22']);
+    const md = formatDocumentazioneSanitariaRubriche([doc], []).markdown;
+    expect(md).toContain('in data 16.07.2023');
+    expect(md).toContain('in data 17.08.2023');
+    expect(md).toContain('in data 22.08.2023');
+    expect(md).not.toContain('dal 16.07.2023 al 22.08.2023');
+    expect(md).toContain('Callo osseo');
+    expect(md).toContain('RX BACINO');
+  });
+  it('referto su due pagine (continuazione senza titolo) e pagina con sola data di stampa: nessuno spacchettamento', () => {
+    const doc = { documentId: 'rm', documentType: 'esame_strumentale', pages: [
+      page(1, 'RM GINOCCHIO SX\nData esame: 10/02/2026\nMenisco mediale: lesione del corno posteriore.'),
+      page(2, 'Stampato il 12/02/2026\nVersamento articolare modesto. Conclusioni: lesione meniscale.'),
+    ] };
+    expect(splitExamDocumentByDate(doc)).toHaveLength(1);
+    expect(formatDocumentazioneSanitariaRubriche([doc], []).markdown).toContain('lesione meniscale');
   });
 });
