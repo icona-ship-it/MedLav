@@ -12,6 +12,7 @@
  */
 
 import { parseRubriche, type RubricPage, type RubricSegment } from './rubric-parser';
+import { detectSides, uniqueSide } from '@/lib/laterality';
 import { policyForType, RUBRIC_EXCLUDED_DOC_TYPES, PS_MAX_PAGES, PS_MARKERS_RE, type RubricPolicy, type RubricTypePolicy } from './rubric-policy';
 
 export interface RubricDocument {
@@ -99,7 +100,8 @@ function isAdminNoiseLine(line: string): boolean {
   if (LONG_CODE_RE.test(t) && !/(diagnosi|frattura|lesion|prognosi)/i.test(t)) return true;
   if (FORM_NOISE_RE.test(t) || SCALE_GUIDELINE_RE.test(t)) return true;
   if ((ORPHAN_LINE_RE.test(t) || SIGNATURE_LINE_RE.test(t) || CITY_DATE_LINE_RE.test(t)) && !CLINICAL_LINE_RE.test(t)) return true;
-  if (SHORT_ORPHAN_LABEL_RE.test(t) && t.split(/\s+/).length <= 4 && !EXAM_TITLE_RE.test(t) && !CLINICAL_LINE_RE.test(t)) return true;
+  // Un'etichetta di lato («Ginocchio dx:», «DX:», «SX:») non è orfana: attribuisce i reperti che seguono (I4).
+  if (SHORT_ORPHAN_LABEL_RE.test(t) && t.split(/\s+/).length <= 4 && !EXAM_TITLE_RE.test(t) && !CLINICAL_LINE_RE.test(t) && detectSides(t).size === 0) return true;
   // Anagrafica (nascita, residenza, CF) fuori anche se la riga prosegue con testo
   // clinico ("nata a X il Y, ha effettuato 10 sedute di psicoterapia"): l'identità
   // non entra nel depositabile; la diagnosi esplicita vince.
@@ -113,7 +115,9 @@ function isAdminNoiseLine(line: string): boolean {
 /** Su una riga clinica tenuta, via il codice lungo (e l'eventuale nome del richiedente che lo segue) e il codice fiscale. */
 function scrubInlineCodes(line: string): string {
   return line
-    .replace(/\s*\b\d{8,}\b(?:\s+[A-ZÀ-Ü][\wà-ù'’-]+){0,3}(?:\s+richiedente)?/g, '')
+    // Dopo un codice lungo si toglie solo un NOME (parole Capitalizzate), mai un
+    // titolo d'esame in maiuscolo con il lato («RX POLSO DX») (I4).
+    .replace(/\s*\b\d{8,}\b(?:\s+[A-ZÀ-Ü][a-zà-ù'’-]+){0,3}(?:\s+richiedente)?/g, '')
     .replace(CODICE_FISCALE_RE, '[omissis]')
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -244,7 +248,12 @@ const DEDUP_PREFIX_WORDS = 40;
 const DEDUP_MIN_WORDS = 15;
 function dedupPrefixKey(cleaned: string): string | null {
   const words = normalizeForDedup(cleaned).split(' ').filter(Boolean);
-  return words.length >= DEDUP_MIN_WORDS ? words.slice(0, DEDUP_PREFIX_WORDS).join(' ') : null;
+  if (words.length < DEDUP_MIN_WORDS) return null;
+  // Il LATO del testo intero entra nella chiave: due referti con lo stesso
+  // boilerplate nelle prime 40 parole ma lati diversi (RX polso dx / RX polso sx)
+  // sono DUE referti, mai «contenuto identico» (audit 2026-09-10, invariante I4).
+  const side = uniqueSide(cleaned);
+  return `${words.slice(0, DEDUP_PREFIX_WORDS).join(' ')}${side ? ` |lato:${side}` : ''}`;
 }
 
 function countWords(text: string): number {
