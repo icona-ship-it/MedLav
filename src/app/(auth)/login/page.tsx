@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { signIn, verifyMfa, signOut } from '../actions';
+import { ImplicitSessionCatcher } from './implicit-session-catcher';
 
 function MfaChallengeForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -161,6 +162,7 @@ function LoginPageInner() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/50 px-4">
+      <ImplicitSessionCatcher />
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
@@ -180,10 +182,7 @@ function LoginPageInner() {
         <CardContent>
           {callbackFailed && !isMfaStep && (
             <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-              Il link che hai usato non è più valido o è già stato utilizzato.
-              Se hai già confermato l&apos;email, accedi qui sotto con le tue credenziali;
-              se non riesci ad accedere, usa &quot;Password dimenticata&quot; per ricevere un nuovo link.
-            </div>
+              {"Il link non ha funzionato: può essere scaduto o già usato, oppure l'hai aperto in un browser o dispositivo diverso da quello in cui hai chiesto l'email. Riprova aprendo il link dallo stesso dispositivo, oppure accedi qui sotto con le tue credenziali o chiedi un nuovo link con «Password dimenticata»."}</div>
           )}
           {isMfaStep ? (
             <MfaChallengeForm />

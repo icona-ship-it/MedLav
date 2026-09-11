@@ -32,3 +32,14 @@ git push origin rc-mvp:main     # Vercel builda main → produzione (founder)
 
 Rollback = `git push origin <sha-precedente>:main` (mai force push su main). Le migration sono
 idempotenti e additive: non vanno mai ritirate in un rollback.
+
+## Una tantum dopo il rilascio del 2026-09-11 (callback `token_hash`)
+
+I link nelle email di Supabase Auth devono usare il **token hash**, non `{{ .ConfirmationURL }}` (PKCE): altrimenti chi apre l'email su un altro dispositivo vede «link non valido». Dashboard Supabase → Authentication → Email Templates:
+
+- Confirm signup: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/`
+- Magic link: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink&next=/`
+- Reset password: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`
+- Change email: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email_change&next=/`
+
+Verifica: registrazione dal PC e conferma dal telefono → si entra; reset password aperto da un altro browser → form nuova password.
