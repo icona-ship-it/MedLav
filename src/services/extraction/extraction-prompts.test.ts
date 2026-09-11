@@ -34,3 +34,20 @@ describe('extraction prompts — esempi PS solo dall\'universo fittizio (securit
     expect(prompt).toMatch(/es\. \(FITTIZIO\) "Episodio/);
   });
 });
+
+describe('spese_mediche hint — una voce per documento fiscale, importo lordo (direttiva perito 2026-08-19; audit 2026-09-10 R8)', () => {
+  it('should ask for ONE event per fiscal document with the gross total and forbid separate IVA/bollo events', () => {
+    const hint = getDocumentTypeHint('spese_mediche');
+    expect(hint).toContain('UNA SOLA VOCE PER DOCUMENTO FISCALE');
+    expect(hint).toContain('COMPRENSIVO di IVA');
+    expect(hint).toContain('MAI creare eventi separati per IVA, bollo');
+    expect(hint).not.toContain('crea un evento per voce');
+    expect(hint).not.toContain('Crea un evento "spesa_medica" SEPARATO per il bollo');
+  });
+
+  it('should keep the date cascade (never drop an expense for a missing date)', () => {
+    const hint = getDocumentTypeHint('spese_mediche');
+    expect(hint).toContain('NON SCARTARE MAI una voce di spesa per assenza di data');
+    expect(hint).toContain('datePrecision="sconosciuta"');
+  });
+});

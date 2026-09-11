@@ -376,24 +376,23 @@ CAMPI CRITICI: Tipo certificato (medico, INAIL, invalidità, malattia, idoneità
 ERRORI COMUNI: Non distinguere tra certificato iniziale e di continuazione INAIL, perdere le date di prognosi.`,
 
   spese_mediche: `ISTRUZIONI SPECIFICHE PER SPESE MEDICHE:
-CAMPI CRITICI: Per OGNI voce di spesa crea un evento "spesa_medica" separato con: data prestazione/fattura, descrizione prestazione, importo ESATTO (€), struttura erogatrice, codice prestazione se presente.
-Se una fattura contiene più voci con importi separati, crea un evento per voce.
-Se più fatture hanno la stessa data, crea eventi separati per ciascuna.
+REGOLA CRITICA: UNA SOLA VOCE PER DOCUMENTO FISCALE, IMPORTO LORDO (direttiva del perito 2026-08-19 — SOSTITUISCE ogni precedente regola di scorporo):
+- Per OGNI documento fiscale (fattura, ricevuta, scontrino, avviso di pagamento, bonifico) crea UN SOLO evento "spesa_medica" con: data (vedi cascata sotto), descrizione della prestazione/bene, importo = TOTALE PAGATO documentato COMPRENSIVO di IVA, imposta di bollo, oneri accessori e contributi previdenziali, struttura erogatrice, numero del documento se presente.
+- MAI creare eventi separati per IVA, bollo, oneri, contributi o singoli capitoli/righe della stessa fattura: la composizione va nella description (es. "totale 366,00: prestazione 300,00 + IVA 22% 66,00").
+- Scontrino di farmacia con più prodotti → UN evento con il totale dello scontrino; i prodotti nella description.
+- Se il documento espone un TOTALE ("totale", "totale fattura", "da pagare", "importo pagato"), l'importo è QUEL numero: non ricalcolare mai la somma da solo.
+- Più documenti fiscali con la stessa data → un evento per ciascun documento.
+- NON dedurre importi non scritti (es. bollo "implicito"): se non è nel testo, non esiste.
+- Un deposito cauzionale/acconto e la fattura a saldo che lo assorbe sono DUE documenti: emetti entrambi gli eventi con i rispettivi importi documentati (la deduplicazione la fa il sistema in modo dichiarato), riportando nella description la dicitura "acconto già versato" se presente.
 
 REGOLA CRITICA SULLA DATA (segnalata dal perito 2026-05-11):
 - NON SCARTARE MAI una voce di spesa per assenza di data. L'importo e' il dato vincolante, la data e' opzionale.
 - Se la data di pagamento NON e' leggibile, usa la data della fattura.
 - Se NEMMENO la data fattura e' leggibile, usa la data della prestazione clinica correlata.
 - Se NESSUNA data e' presente, lascia eventDate=null e datePrecision="sconosciuta" — la voce sara' COMUNQUE conservata in tabella spese.
-- Esempi di voci tipicamente senza data: imposta di bollo (2 EUR su fatture > 77,47 EUR), riepiloghi totali, righe di sintesi, contanti senza ricevuta.
+- Esempi di voci tipicamente senza data: ricevute manoscritte, scontrini con stampa termica sbiadita, contanti senza ricevuta.
 
-REGOLA CRITICA SU IMPOSTA DI BOLLO E ONERI ACCESSORI (segnalata dal perito 2026-05-11):
-- L'imposta di bollo (2 EUR sulle fatture > 77,47 EUR, ai sensi DPR 642/1972) NON va sommata all'importo della prestazione: e' un onere fiscale separato.
-- Crea un evento "spesa_medica" SEPARATO per il bollo, con: title="Imposta di bollo", importo=2.00, description="Bollo ex DPR 642/1972 su fattura n.X del...".
-- Stesso trattamento per: marca da bollo, oneri amministrativi, spese postali, contributi ENPAM/cassa previdenziale, IVA esposta separatamente.
-- Cosi il perito vede la composizione completa della fattura: prestazione + bollo + altri oneri = totale fatturato.
-
-ERRORI COMUNI: Aggregare piu voci perdendo dettaglio importi, inventare importi non leggibili, scartare voci senza data, sommare il bollo all'importo della prestazione.`,
+ERRORI COMUNI: scorporare IVA/bollo in eventi separati, esplodere una fattura in una riga per prestazione, ricalcolare il totale invece di copiarlo, inventare importi non leggibili, scartare voci senza data.`,
 
   memoria_difensiva: `ISTRUZIONI SPECIFICHE PER MEMORIA DIFENSIVA:
 AMBITO TEMPORALE: i fatti clinici che l'atto CITA (visite, interventi, ricoveri già avvenuti) sono "retrospettivo" (il documento li riporta, non li attesta: la fonte primaria è la cartella/il referto); l'atto stesso e ciò che avviene in esso (deposito, visita peritale, udienza) è "corrente".
