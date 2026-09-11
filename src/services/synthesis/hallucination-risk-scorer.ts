@@ -44,7 +44,7 @@ const PENALTY_BY_TYPE: Record<ReportIssue['type'], number> = {
 
   // Wave 2.2 — header coherence and fabrication signatures
   header_mismatch:           50, // perizia metadata field doesn't match the rendered header
-  header_fabrication_signature: 80, // Regnoto-style fabrication detected (multi-pattern match)
+  header_fabrication_signature: 80, // CASO-2026-147-style fabrication detected (multi-pattern match)
 };
 
 /**

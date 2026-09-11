@@ -26,7 +26,7 @@ describe('isValidCodiceFiscale', () => {
     expect(isValidCodiceFiscale('abcabc80a01a001e')).toBe(true);
   });
 
-  it('rejects the Regnoto fabrication signature CF', () => {
+  it('rejects the CASO-2026-147 fabrication signature CF', () => {
     expect(isValidCodiceFiscale('BNCMRA78C15F205Z')).toBe(false);
   });
 });

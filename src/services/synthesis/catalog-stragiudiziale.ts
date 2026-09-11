@@ -84,7 +84,7 @@ ${ANTI_DISTORSIONE_RULE}`,
     dataSources: ['events-medical'],
     contextMaxChars: 400,
     needsOcr: false,
-    // Formato gold (Antoniazzi/Regnoto): scheda a righe telegrafiche etichettate,
+    // Formato gold (Antoniazzi/CASO-2026-147): scheda a righe telegrafiche etichettate,
     // non prosa. Dominanza e negazioni esplicite solo se documentate.
     promptDirective: `Genera i dati anamnestici del periziando come SCHEDA a righe brevi etichettate (formato dei benchmark depositati), NON in prosa:
 "Paziente [destrimane/mancino/ambidestro]" (solo se documentato)
@@ -175,7 +175,7 @@ ${ANTI_DISTORSIONE_RULE}`,
     promptDirective: '',
   },
   {
-    // Ordine benchmark gold 2026-06-10 (Antoniazzi/Regnoto): la visita segue
+    // Ordine benchmark gold 2026-06-10 (Antoniazzi/CASO-2026-147): la visita segue
     // direttamente la documentazione; le spese stanno in coda, prima
     // dell'Epicrisi che ne valuta la congruità (scheletro punto 7).
     id: 'spese_mediche',

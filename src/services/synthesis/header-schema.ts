@@ -2,8 +2,8 @@
  * Schema strutturato per l'intestazione del report medico-legale.
  *
  * **Why**: la generazione in prosa libera ha permesso al LLM di inventare un
- * intero paziente ("Mario Bianchi") al posto di quello reale ("Regnoto
- * Valeria") quando i metadati perizia erano vuoti. Forzando l'output in JSON
+ * intero paziente ("Mario Bianchi") al posto di quello reale (caso gold
+ * giudiziale del 2026-05) quando i metadati perizia erano vuoti. Forzando l'output in JSON
  * strutturato e validando con Zod, il modello non può creare campi che non
  * sono nei dati di input — al massimo li lascia null/omessi, che il template
  * traduce in "[da compilare dal perito]".
@@ -60,7 +60,7 @@ export const HeaderDataSchema = z.object({
     eventoIndice: z.string().nullable(), // "Caduta accidentale" / "Sinistro stradale"
     dataEvento: z.string().nullable(), // DD/MM/YYYY
     lesione: z.string().nullable(), // "Frattura del collo femorale sinistro"
-    struttura: z.string().nullable(), // "Ospedale Borgo Trento"
+    struttura: z.string().nullable(), // es. FITTIZIO "Ospedale Civile di Cittàdemo"
     ambito: z
       .enum([
         'rc_civile',
@@ -166,8 +166,8 @@ export const HEADER_JSON_SCHEMA_DESCRIPTION = `Genera un oggetto JSON con questa
 \`\`\`
 
 REGOLE:
-1. Per il "paziente": cerca il nome nei metadati. Se assente, leggilo dalle intestazioni dei documenti sanitari forniti negli eventi (es. "REGNOTO VALERIA"). Se ancora assente, \`null\`.
-2. Per "oggetto": l'eventoIndice, dataEvento, lesione e struttura DEVONO provenire dagli eventi clinici (es. "frattura collo femore sx" del 13/12/2025 a "Borgo Trento"). MAI inventare lesioni o circostanze.
+1. Per il "paziente": cerca il nome nei metadati. Se assente, leggilo dalle intestazioni dei documenti sanitari forniti negli eventi (es. "DEMPROVA GIULIA" — esempio FITTIZIO). Se ancora assente, \`null\`.
+2. Per "oggetto": l'eventoIndice, dataEvento, lesione e struttura DEVONO provenire dagli eventi clinici (es. FITTIZIO: "frattura collo femore sx" del 03/03/2026 a "Ospedale Civile di Cittàdemo"). MAI inventare lesioni o circostanze.
 3. Per "perito": SOLO se nei metadati perizia. Se mancanti, l'intero oggetto \`perito\` deve essere \`null\`.
 4. Per "giudiziale": SOLO per CTU/CTP. Per stragiudiziale o pareri privati, \`null\`.
 5. Date: formato preferito DD/MM/YYYY. Se non presente, \`null\`.

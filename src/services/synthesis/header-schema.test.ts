@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { collectAttestedDays, discardUnattestedEventDate, emptyHeaderData, HEADER_JSON_SCHEMA, HeaderDataSchema } from './header-schema';
+import { collectAttestedDays, discardUnattestedEventDate, emptyHeaderData, HEADER_JSON_SCHEMA, HeaderDataSchema, HEADER_JSON_SCHEMA_DESCRIPTION } from './header-schema';
 describe('discardUnattestedEventDate — data dell\'evento solo se attestata (gate gold 2026-09-04)', () => {
   const base = (dataEvento: string | null) => ({
     ...emptyHeaderData(),
@@ -41,5 +41,13 @@ describe('HEADER_JSON_SCHEMA — rigido e coerente con lo zod', () => {
       giudiziale: null,
     };
     expect(HeaderDataSchema.safeParse(sample).success).toBe(true);
+  });
+});
+
+describe('HEADER_JSON_SCHEMA_DESCRIPTION — esempi solo dall\'universo fittizio (security.md, bonifica 2026-09-11)', () => {
+  it('gli esempi delle regole citano Demprova/Cittàdemo e sono dichiarati fittizi', () => {
+    expect(HEADER_JSON_SCHEMA_DESCRIPTION).toContain('DEMPROVA GIULIA');
+    expect(HEADER_JSON_SCHEMA_DESCRIPTION).toContain('Ospedale Civile di Cittàdemo');
+    expect((HEADER_JSON_SCHEMA_DESCRIPTION.match(/FITTIZIO/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });

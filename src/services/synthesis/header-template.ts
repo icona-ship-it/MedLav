@@ -5,7 +5,7 @@
  * arrivano nel report. Se il LLM omette un campo (null), il template lo
  * sostituisce con il marker `[da compilare dal perito]` o lo nasconde,
  * SENZA ricorrere a fallback inventati. Questo è il fix strutturale che
- * impedisce hallucinazioni come quella del caso Regnoto.
+ * impedisce hallucinazioni come quella del caso gold giudiziale del 2026-05.
  *
  * rc-mvp fase 7: restano SOLO la variante stragiudiziale (carta intestata
  * stile MOTTA/Antoniazzi, decisioni Lavini 2026-06-23). Le varianti
@@ -61,7 +61,7 @@ export function renderHeaderMarkdown(data: HeaderData): string {
 
 /**
  * Intestazione stragiudiziale in stile carta intestata (benchmark Antoniazzi /
- * Regnoto, gold 2026-06-10): nome del perito in grassetto + specializzazioni in
+ * CASO-2026-147, gold 2026-06-10): nome del perito in grassetto + specializzazioni in
  * corsivo una per riga, riga "In data X ho sottoposto ad accertamenti clinici e
  * valutazione medico legale, con il suo consenso", dati del periziando riga per
  * riga, riga-scopo "Al fine di valutare le lesioni patite...". NESSUN

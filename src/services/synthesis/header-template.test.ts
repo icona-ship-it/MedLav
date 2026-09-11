@@ -13,7 +13,7 @@ function emptyHeader(): HeaderData {
   };
 }
 
-describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniazzi/Regnoto)', () => {
+describe('renderHeaderMarkdown — stragiudiziale carta intestata (gold Antoniazzi/CASO-2026-147)', () => {
   // Nomi FITTIZI (GDPR).
   function stragHeader(): HeaderData {
     return {

@@ -778,7 +778,7 @@ describe('partitionBlockingIssues — manual unlock whitelist (Sprint 2.4-A2)', 
 
   it('should NEVER allow overriding header_fabrication_signature (GDPR/fabrication leak)', () => {
     const validation = validationWith([
-      { type: 'header_fabrication_signature', severity: 'error', message: 'Regnoto regression' },
+      { type: 'header_fabrication_signature', severity: 'error', message: 'CASO-2026-147 regression' },
       { type: 'low_event_coverage', severity: 'error', message: 'coverage 5%' },
     ]);
     const { overridable, nonOverridable } = partitionBlockingIssues(validation);

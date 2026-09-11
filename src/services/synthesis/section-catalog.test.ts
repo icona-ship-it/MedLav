@@ -203,7 +203,7 @@ describe('section-catalog', () => {
     });
 
     it('intestazione must have anti-fabrication rule and access to events', () => {
-      // Regression: case Regnoto → report invented "Mario Bianchi", "Dott. Marco Rossi",
+      // Regression: case CASO-2026-147 → report invented "Mario Bianchi", "Dott. Marco Rossi",
       // wrong fracture, wrong hospital, fake CF. Root cause: the prompt did not forbid
       // fabrication and the section had no access to events to read the real patient name.
       const spec = STRAGIUDIZIALE_SECTIONS.find((s) => s.id === 'intestazione_stragiudiziale');

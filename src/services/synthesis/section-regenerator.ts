@@ -73,7 +73,7 @@ const PREVIOUS_CONTEXT_CHARS = 600;
  * generateSingleSection). That guarantees regeneration inherits EVERY defense of
  * the first pass — CONSTITUTIONAL_PREAMBLE, ANTI_FABRICATION_RULE, REFUSAL_RULE,
  * doc-sanitaria neutrality, ABSOLUTE_RULES, and the JSON-mode deterministic
- * routing for `intestazione*` (anti-Regnoto). Previously it used a separate,
+ * routing for `intestazione*` (anti-CASO-2026-147). Previously it used a separate,
  * much weaker system prompt, silently dropping those guards on a routine action.
  */
 export async function regenerateSection(params: RegenerateSectionParams): Promise<string> {

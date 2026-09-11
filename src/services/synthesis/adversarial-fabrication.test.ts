@@ -1,14 +1,14 @@
 /**
  * Adversarial regression suite.
  *
- * **Goal**: catch the specific failure modes that produced the Regnoto
+ * **Goal**: catch the specific failure modes that produced the CASO-2026-147
  * incident (CASO-2026-147) and make sure they cannot recur silently. Each
  * test simulates a high-risk input shape and asserts that either the
  * generated artifact is safe (no fabrication) or the validator blocks it.
  *
  * Tests target three layers:
  * 1. Header schema/template (deterministic) — pure functions, always exercised.
- * 2. Header coherence + fabrication-signature validators — reject Regnoto-style outputs.
+ * 2. Header coherence + fabrication-signature validators — reject CASO-2026-147-style outputs.
  * 3. Citation hard enforcement — rejects bulk-fabricated quotes.
  */
 
@@ -20,7 +20,7 @@ import { validateReport, getBlockingIssues } from './report-validator';
 // ── Header schema / template — deterministic anti-fabrication ───────
 
 describe('adversarial: header schema + template', () => {
-  it('1) Regnoto regression — schema accepts patient name, all other fields null', () => {
+  it('1) CASO-2026-147 regression — schema accepts patient name, all other fields null', () => {
     // The exact input shape that triggered the original bug: empty perizia
     // metadata except for patient name extracted from events. The schema +
     // template MUST render the real name with [da compilare] placeholders
@@ -39,7 +39,7 @@ describe('adversarial: header schema + template', () => {
         eventoIndice: 'caduta accidentale',
         dataEvento: '13/12/2025',
         lesione: 'frattura del collo femorale sinistro',
-        struttura: 'Ospedale Borgo Trento',
+        struttura: 'Ospedale Civile di Cittàdemo',
         ambito: 'rc_civile',
       },
       dataVisitaMedicoLegale: null,
@@ -161,7 +161,7 @@ describe('adversarial: report validator — header checks', () => {
     return `${headerBlock}${docSan}${epicrisi}\n\n${body}`;
   }
 
-  it('7) Regnoto fabrication signature is detected and blocks save', () => {
+  it('7) CASO-2026-147 fabrication signature is detected and blocks save', () => {
     const fabricatedHeader = `## VALUTAZIONE MEDICO-LEGALE STRAGIUDIZIALE
 
 ### Dati del professionista incaricato

@@ -149,8 +149,8 @@ Se lo stesso fatto è attestato anche da un altro documento (es. verbale PS dell
 
 ### REGOLE PRONTO SOCCORSO
 Quando il documento è verbale o cartella di Pronto Soccorso (PS), includi SEMPRE nella description dell'evento "ricovero" o "visita" PS:
-- **N. Episodio** (etichette possibili: "N. Episodio", "Episodio N.", "Cartella PS n.", "Episodio:") — es. "Episodio n. 2025066445"
-- **Unità operativa + Ente erogante** — es. "MDA Pronto Soccorso Pediatrico BT, AOUI Verona"
+- **N. Episodio** (etichette possibili: "N. Episodio", "Episodio N.", "Cartella PS n.", "Episodio:") — es. (FITTIZIO) "Episodio n. 2026000123"
+- **Unità operativa + Ente erogante** — es. (FITTIZIO) "Pronto Soccorso Pediatrico, Ospedale Civile di Cittàdemo"
 - **Data e ora di accettazione** se distinte dalla data evento
 
 Questi dati sono critici per identificare univocamente il documento e devono comparire nella description (non solo nel facility).

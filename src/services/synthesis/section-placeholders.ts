@@ -99,7 +99,7 @@ export const INCONTRO_PERITALE_PENALE_PLACEHOLDER = `*[Inserire qui i dati dell'
 *DOCUMENTI E RELAZIONI PERVENUTI dopo l'incontro (elenco con date di ricezione)]*`;
 
 /**
- * Guida di completamento dell'Epicrisi stragiudiziale (gold Antoniazzi/Regnoto):
+ * Guida di completamento dell'Epicrisi stragiudiziale (gold Antoniazzi/CASO-2026-147):
  * scheletro numerato con le formule valutative dei depositati. Appeso in coda
  * alla directive dell'epicrisi — i giudizi restano del perito.
  */

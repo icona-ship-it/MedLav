@@ -38,14 +38,14 @@ const CHECKSUM_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
  *
  * Returns false for: empty/null, wrong length, wrong format, bad checksum,
  * or known sentinel CFs from the LLM negative few-shot example (e.g.
- * BNCMRA78C15F205Z — used in the Regnoto fabrication signature).
+ * BNCMRA78C15F205Z — used in the CASO-2026-147 fabrication signature).
  */
 export function isValidCodiceFiscale(cf: string | null | undefined): boolean {
   if (!cf || typeof cf !== 'string') return false;
   const upper = cf.trim().toUpperCase();
   if (!CF_REGEX.test(upper)) return false;
 
-  // Reject the specific fabricated CF used in the Regnoto negative few-shot
+  // Reject the specific fabricated CF used in the CASO-2026-147 negative few-shot
   if (upper === 'BNCMRA78C15F205Z') return false;
 
   // Compute checksum

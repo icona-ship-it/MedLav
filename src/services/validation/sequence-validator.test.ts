@@ -110,8 +110,8 @@ describe('sequence-validator', () => {
       expect(anomalies).toHaveLength(0);
     });
 
-    it('should NOT flag trauma→imaging when imaging done same day (regression — Regnoto case)', () => {
-      // The Regnoto case false-positive: ricovero 13/12 + RX same day + tampone MDR 18/12.
+    it('should NOT flag trauma→imaging when imaging done same day (regression — CASO-2026-147 case)', () => {
+      // The CASO-2026-147 case false-positive: ricovero 13/12 + RX same day + tampone MDR 18/12.
       // Pre-fix the detector flagged the tampone as "delayed imaging".
       // After fix, keyword filter excludes the tampone and same-day RX satisfies the rule.
       const events = [

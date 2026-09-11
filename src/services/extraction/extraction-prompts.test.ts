@@ -25,3 +25,12 @@ describe('extraction prompts — A1 clinical diary routine', () => {
     expect(hint).not.toMatch(/Diario medico:\s*SOLO complicanze/);
   });
 });
+
+describe('extraction prompts — esempi PS solo dall\'universo fittizio (security.md, bonifica 2026-09-11)', () => {
+  it('le REGOLE PRONTO SOCCORSO usano struttura ed episodio fittizi e dichiarati tali', () => {
+    const prompt = buildExtractionSystemPrompt('ortopedica');
+    expect(prompt).toContain('Episodio n. 2026000123');
+    expect(prompt).toContain('Pronto Soccorso Pediatrico, Ospedale Civile di Cittàdemo');
+    expect(prompt).toMatch(/es\. \(FITTIZIO\) "Episodio/);
+  });
+});

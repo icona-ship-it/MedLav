@@ -118,7 +118,7 @@ Ti verra fornito il testo OCR dei documenti originali pertinenti. Usalo come FON
   //   - REFUSAL_RULE: always — every LLM section must know how to refuse gracefully
   //   - ANTI_FABRICATION_RULE: always — short reinforcement of the constitutional rule
   //   - NEGATIVE_FEW_SHOT_INTESTAZIONE: only for intestazione sections, where the
-  //     Regnoto incident showed fabrication is highest-stakes and most likely
+  //     CASO-2026-147 incident showed fabrication is highest-stakes and most likely
   const isIntestazione = spec.id.startsWith('intestazione');
   const negativeShot = isIntestazione ? `\n\n${NEGATIVE_FEW_SHOT_INTESTAZIONE}` : '';
 
@@ -367,7 +367,7 @@ export async function generateSingleSection(params: {
   }
 
   // Header sections use a structured JSON-mode generation pipeline to make
-  // fabrication structurally impossible (Wave 2.1, fix Regnoto-style hallucination).
+  // fabrication structurally impossible (Wave 2.1, fix CASO-2026-147-style hallucination).
   if (spec.id.startsWith('intestazione')) {
     return generateHeaderSection({ spec, synthesisParams, attempt });
   }
@@ -1163,7 +1163,7 @@ export { EXCLUDED_FROM_MEDICAL as _EXCLUDED_FROM_MEDICAL_test };
 //
 // The intestazione is the highest-stakes section for fabrication: when the
 // perizia metadata is empty, the LLM previously invented entire patient
-// identities (Regnoto incident → "Mario Bianchi"). To make fabrication
+// identities (CASO-2026-147 incident → "Mario Bianchi"). To make fabrication
 // structurally impossible, we generate the header in two stages:
 //   1. LLM produces a JSON object that conforms to HeaderDataSchema. Missing
 //      fields MUST be `null` (the prompt and schema both enforce this).

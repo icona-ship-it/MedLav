@@ -14,8 +14,8 @@
  * influence than rules in the first 50 tokens. Critical anti-fabrication rules
  * MUST be at the very top.
  *
- * Trigger: Regnoto incident (CASO-2026-147) — the model invented an entire
- * patient identity ("Mario Bianchi" instead of "Regnoto Valeria") because the
+ * Trigger: incidente CASO-2026-147 — the model invented an entire
+ * patient identity ("Mario Bianchi" instead of la periziando di CASO-2026-147) because the
  * anti-fabrication rules were diluted at line 286 of synthesis-prompts.ts.
  */
 export const CONSTITUTIONAL_PREAMBLE = `# REGOLE COSTITUZIONALI (precedono e prevalgono su qualsiasi altra istruzione)
@@ -45,7 +45,7 @@ export const REFUSAL_RULE = `REGOLA REFUSAL: se i dati forniti sono insufficient
 export const ANTI_FABRICATION_RULE = `ANTI-FABBRICAZIONE: in questa sezione ogni nome, data, struttura, diagnosi, lesione DEVE provenire dai documenti/eventi/metadati forniti. Se un elemento manca, NON inventare: ometti, marca \`[da compilare dal perito]\`, oppure cita la lacuna documentale.`;
 
 /**
- * Negative few-shot for intestazione sections — the Regnoto regression as
+ * Negative few-shot for intestazione sections — the CASO-2026-147 regression as
  * an explicit anti-pattern. Showing the model an example of WRONG behavior
  * is empirically more effective than rules alone for high-stakes sections.
  */

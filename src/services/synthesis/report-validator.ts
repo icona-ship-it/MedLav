@@ -753,7 +753,7 @@ function checkHeaderCoherence(
 
 // ── Wave 2.2: Anti-fabrication signature ─────────────────────────────
 //
-// Detects the specific fabrication signature from the Regnoto incident.
+// Detects the specific fabrication signature from the CASO-2026-147 incident.
 // We blocked-list multiple distinct invented strings (full name + CF + address
 // + fake hospital + fake INAIL certs) and flag if 2+ appear together — a
 // single match would false-positive on real cases (e.g. a real "Mario Bianchi"
@@ -767,7 +767,7 @@ const FABRICATION_SIGNATURE_PATTERNS: Array<{ pattern: RegExp; label: string }> 
   { pattern: /\bVia\s+Roma\s+10[,\s]*20121\s+Milano\b/i, label: 'indirizzo fittizio Via Roma 10 Milano' },
   // Two separate patterns instead of "/.../is" (dotall) for ES2017 compatibility.
   // We rely on the joint-match logic at >=2 to catch the combination.
-  { pattern: /\bOspedale\s+Niguarda\b/i, label: 'Niguarda (struttura fittizia)' },
+  { pattern: /\bOspedale\s+Niguarda\b/i, label: 'Niguarda (esempio del few-shot negativo)' },
   { pattern: /\b5\s+maggio\s+2023\b/i, label: '5 maggio 2023 (data fittizia)' },
   { pattern: /\b333\s*1234567\b/, label: 'telefono fittizio 333 1234567' },
 ];
@@ -781,7 +781,7 @@ function checkHeaderFabricationSignature(synthesis: string): ReportIssue[] {
     return [{
       type: 'header_fabrication_signature',
       severity: 'error',
-      message: `Rilevata signature di fabbricazione (Regnoto regression): ${matched.join(', ')}. Il modello sta riproducendo i dati del negative-few-shot anziché estrarre quelli reali. Report bloccato.`,
+      message: `Rilevata signature di fabbricazione (regressione al few-shot negativo): ${matched.join(', ')}. Il modello sta riproducendo i dati del negative-few-shot anziché estrarre quelli reali. Report bloccato.`,
     }];
   }
 
@@ -846,7 +846,7 @@ export function formatIssuesForLog(issues: ReportIssue[]): string {
 // case (every retry reproduces the same blocked report). The manual unlock lets
 // the perito regenerate ignoring QUALITY findings — but GDPR/fabrication leaks
 // must NEVER be overridable: a report that copies few-shot names or reproduces
-// the Regnoto fabrication signature cannot be saved under any circumstance.
+// the CASO-2026-147 fabrication signature cannot be saved under any circumstance.
 
 /**
  * Explicit whitelist of issue types that remain blocking even when the perito
