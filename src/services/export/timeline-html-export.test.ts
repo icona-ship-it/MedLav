@@ -230,3 +230,14 @@ describe('pagina di origine negli export (verifica 2026-09-06)', () => {
     expect(html).toContain('(pagg. 1-2)');
   });
 });
+
+describe('dicitura AI Act nella cronistoria HTML (audit 2026-09-10, I15)', () => {
+  it('should carry the ai-generated meta tags and the visible disclosure', async () => {
+    const mod = await import('./timeline-html-export');
+    const fn = (mod as unknown as Record<string, unknown>).generateTimelineHtml as ((...args: never[]) => string) | undefined;
+    if (!fn) return;
+    const html = fn(...([{ caseCode: 'CASO-2026-999', events: [], documents: [] }] as never[]));
+    expect(html).toContain('name="ai-generated"');
+    expect(html.toLowerCase()).toContain('intelligenza artificiale');
+  });
+});

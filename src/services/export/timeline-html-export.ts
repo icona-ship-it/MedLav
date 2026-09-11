@@ -4,6 +4,7 @@ import { groupEventsByDocument, RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_L
 import { markdownToHtml } from './markdown-to-html';
 import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
+import { getAiActDisclosureHtml, getAiActHtmlMetaTags } from './ai-act-disclosure';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -279,6 +280,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     .footer { page-break-before: avoid; }
   }
 </style>
+${getAiActHtmlMetaTags()}
 </head>
 <body>
 <div class="watermark-wrapper">
@@ -288,6 +290,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
 ${transcriptionHtml}
 ${appendixHtml}
 
+${getAiActDisclosureHtml()}
 <div class="footer">
   Generato con LegMed &mdash; ${escapeHtml(caseCode)} &mdash; ${now}
 </div>
