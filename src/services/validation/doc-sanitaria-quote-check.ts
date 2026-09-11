@@ -11,6 +11,7 @@
 
 import type { DocumentOcrContext } from '@/inngest/steps/types';
 import { verifyGeneratedQuotes, type GeneratedQuotesResult, type VerifyQuotesOptions } from './generated-quote-verifier';
+import { DOC_BOUNDARY } from './quote-snapper';
 
 /**
  * Concatenate all OCR page text across documents into a single grounding corpus.
@@ -18,10 +19,14 @@ import { verifyGeneratedQuotes, type GeneratedQuotesResult, type VerifyQuotesOpt
  */
 export function concatOcrText(documentsOcrText: DocumentOcrContext[] | undefined): string {
   if (!documentsOcrText || documentsOcrText.length === 0) return '';
+  // Pagine di uno stesso documento separate da una riga vuota; DOCUMENTI diversi
+  // separati anche dal marcatore DOC_BOUNDARY, così né lo snapper né il
+  // verificatore possono accettare una citazione «ponte» fra due referti
+  // (audit 2026-09-10, I2).
   return documentsOcrText
-    .flatMap((doc) => doc.pages.map((page) => page.ocrText))
-    .filter((text) => text && text.trim().length > 0)
-    .join('\n\n');
+    .map((doc) => doc.pages.map((page) => page.ocrText).filter((text) => text && text.trim().length > 0).join('\n\n'))
+    .filter((text) => text.length > 0)
+    .join(`\n\n${DOC_BOUNDARY}\n\n`);
 }
 
 /**

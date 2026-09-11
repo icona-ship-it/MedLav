@@ -72,11 +72,26 @@ const NEGATION_WORDS = new Set([
 /** Lateralità: invertire dx/sx in una perizia è un errore grave. */
 const LATERALITY_WORDS = new Set([
   'dx', 'sx', 'ds', 'sn',
+  // Abbreviazioni latine e lettere singole dei referti («arto sup. dex.», «ginocchio D»):
+  // aggiungerle può solo BLOCCARE uno snap, mai abilitarne uno sbagliato (audit 2026-09-10, I2).
+  'dex', 'dext', 'sin', 'd', 's',
   'destro', 'destra', 'destri', 'destre',
   'sinistro', 'sinistra', 'sinistri', 'sinistre',
   'bilaterale', 'bilaterali', 'bilateralmente',
   'controlaterale', 'controlaterali', 'omolaterale', 'omolaterali',
 ]);
+/** Numerali in lettere corti («due proiezioni» vs «tre proiezioni»): nessuna cifra
+ * per la guardia numerica e meno di 5 caratteri per la copertura di contenuto —
+ * portanti come i numeri (audit 2026-09-10, I2). */
+const NUMERAL_WORDS = new Set([
+  'uno', 'una', 'due', 'tre', 'quattro', 'cinque', 'sei', 'sette', 'otto', 'nove', 'dieci',
+  'undici', 'dodici', 'quindici', 'venti', 'trenta', 'quaranta', 'cinquanta', 'sessanta', 'novanta', 'cento',
+]);
+/** Separatore fra DOCUMENTI nel corpus concatenato: una citazione non può mai
+ * essere un «ponte» fra la coda di un referto e la testa del successivo. Lo
+ * inserisce concatOcrText; normalizeWord non lo tocca. */
+export const DOC_BOUNDARY = '⟦DOC⟧';
+const DOC_BOUNDARY_WORD = DOC_BOUNDARY.toLowerCase();
 /** Prefissi privativi/negativi: un fuzzy-match char-level non deve MAI equiparare
  * una parola alla sua variante con questo prefisso (composta/scomposta,
  * tipico/atipico) — è un cambio di polarità clinica, non un refuso. */
@@ -160,6 +175,7 @@ function loadBearingSignatures(rawWords: string[]): { sigs: string[]; norms: Set
     norms.add(norm);
     if (NEGATION_WORDS.has(norm)) sigs.push('!' + norm);
     else if (LATERALITY_WORDS.has(norm)) sigs.push('@' + norm);
+    else if (NUMERAL_WORDS.has(norm)) sigs.push('#w:' + norm);
   }
   return { sigs, norms };
 }
@@ -369,6 +385,10 @@ export function snapQuoteToSource(
     return { outcome: 'unmatched', similarity: best?.ratio };
   }
   const spanTokens = best.last - best.first + 1;
+  // Mai uno span a cavallo di due documenti (I2).
+  for (let k = best.first; k <= best.last; k++) {
+    if (corpus.tokens[k].word === DOC_BOUNDARY_WORD) return { outcome: 'unmatched', similarity: best.ratio };
+  }
   if (spanTokens > qWords.length * MAX_SPAN_FACTOR) {
     return { outcome: 'unmatched', similarity: best.ratio };
   }
