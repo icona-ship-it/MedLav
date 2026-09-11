@@ -3,6 +3,7 @@
  * Handles: tables (pipe), bold, italic, headings, lists, horizontal rules.
  * No external dependencies.
  */
+import { escapeClinicalComparisons } from '@/lib/markdown-clinical';
 
 /** Escaping HTML condiviso (testo E attributi: &<>" coperti). Esportato per
  * riuso — il codebase ne aveva già 4 copie locali (review 2026-07-04). */
@@ -77,9 +78,12 @@ function convertInlineFormatting(text: string): string {
   // Bold: **text** or __text__
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
-  // Italic: *text* or _text_
+  // Italic: *text* or _text_ — gli underscore INTRAPAROLA (RM_GINOCCHIO_SX,
+  // referto_2026_03.pdf) non sono enfasi, come in CommonMark (audit 2026-09-10, I7).
   result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  result = result.replace(/_(.+?)_/g, '<em>$1</em>');
+  result = result.replace(/(?<![\p{L}\p{N}])_(.+?)_(?![\p{L}\p{N}])/gu, '<em>$1</em>');
+  // «\>» = segno «>» letterale (escape CommonMark, vedi protectClinicalMarkdown).
+  result = result.replace(/\\&gt;/g, '&gt;');
   return result;
 }
 
@@ -88,7 +92,8 @@ function convertInlineFormatting(text: string): string {
  * Handles headings, bold/italic, pipe tables, lists, and horizontal rules.
  */
 export function markdownToHtml(markdown: string): string {
-  const lines = markdown.split('\n');
+  // Confronti clinici a inizio riga («> 38 °C») protetti dal blockquote (I7).
+  const lines = escapeClinicalComparisons(markdown).split('\n');
   const output: string[] = [];
   let i = 0;
   let inList = false;
@@ -153,7 +158,9 @@ export function markdownToHtml(markdown: string): string {
     if (olMatch) {
       if (!inList || listType !== 'ol') {
         closeList();
-        output.push('<ol>');
+        // Il numero del medico resta (elenco che parte da 3 → start="3"), come nel viewer (I7).
+        const start = Number(olMatch[1]);
+        output.push(start > 1 ? `<ol start="${start}">` : '<ol>');
         inList = true;
         listType = 'ol';
       }

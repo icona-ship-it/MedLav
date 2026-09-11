@@ -3,6 +3,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import { protectClinicalMarkdown } from '@/lib/markdown-clinical';
 
 /** Block dangerous URL protocols (XSS prevention). */
 export function isSafeUrl(url: string | undefined): boolean {
@@ -57,10 +58,13 @@ export function MarkdownPreview({ content, caseId }: { content: string; caseId?:
     );
   }
 
+  // Stesse righe dell'export: a-capo singoli come interruzioni di riga e «> 38 °C»
+  // non trattato come citazione (audit 2026-09-10, I7/I10).
+  const protectedContent = protectClinicalMarkdown(resolvedContent);
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-        {resolvedContent}
+        {protectedContent}
       </ReactMarkdown>
     </div>
   );
