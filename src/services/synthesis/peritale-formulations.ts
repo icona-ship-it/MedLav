@@ -85,7 +85,7 @@ export const EPICRISI_FORMULATIONS = `
 FORMULAZIONI STANDARD PER L'EPICRISI:
 - "Dalla disamina complessiva della documentazione in atti emerge che il paziente..."
 - "Il quadro documentale evidenzia un iter clinico caratterizzato da..."
-- "Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data], e' caratterizzato da..."
+- "Lo stato attuale, per come risulta dagli accertamenti più recenti (ciascuno con la propria data), e' caratterizzato da..."
 - "Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato..."
 - "La documentazione consente di ricostruire la seguente sequenza cronologica:..."
 
@@ -147,13 +147,13 @@ Di seguito la struttura attesa. NON copiare il contenuto — genera basandoti SO
 
 ---
 
-Dalla disamina complessiva della documentazione in atti emerge che il sig. [iniziali paziente], nato il [data nascita], in data [data evento indice] subiva [descrizione evento indice come risulta dalla documentazione].
+Dalla disamina complessiva della documentazione in atti emerge che il sig. [iniziali paziente], in data [data evento indice] subiva [descrizione evento indice come risulta dalla documentazione].
 
 Il quadro documentale evidenzia il seguente decorso clinico successivo al primo soccorso: [DECORSO in sintesi cronologica — la parte sostanziale della sezione: visite e controlli specialistici (data + specialista), interventi e terapie principali (data + tipo), evoluzione clinica fino alla stabilizzazione — con date e fonti in prosa].
 
 Il decorso post-operatorio, quale risulta dalla documentazione in atti, ha evidenziato [complicanze/evoluzione con date e fonti].
 
-Lo stato attuale del paziente, come documentato nell'ultimo accertamento del [data ultimo controllo], e' caratterizzato da [situazione clinica attuale — solo fatti documentati].
+Lo stato attuale, per come risulta dagli accertamenti più recenti (ognuno citato con la propria data), e' caratterizzato da [situazione clinica attuale — solo fatti documentati].
 
 ---
 

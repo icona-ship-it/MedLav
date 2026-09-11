@@ -154,9 +154,9 @@ export function formatEventsForPrompt(events: ConsolidatedEvent[]): string {
     // (anamnesi) o solo PREVISTO — altrimenti l'epicrisi narra come avvenuto
     // un esame programmato che i calcoli escludono (giro avversariale 2026-09-04).
     const scopeTag = e.temporalScope === 'retrospettivo'
-      ? ' [RIFERITO IN ANAMNESI: non è un atto di questo documento]'
+      ? ' [RIFERITO IN ANAMNESI dal periziando o da chi lo accompagna: scrivilo come riferito, senza commentare se è documentato]'
       : e.temporalScope === 'programmato'
-        ? ' [PROGRAMMATO: previsto, NON documentato come eseguito]'
+        ? ' [PROGRAMMATO: previsto, NON documentato come eseguito — non scriverlo come avvenuto]'
         : '';
     const sourceLabel = SOURCE_TYPE_LABELS[e.sourceType] ?? e.sourceType;
     const reliabilityScore = getSourceReliabilityScore(e.sourceType);

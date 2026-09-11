@@ -92,7 +92,9 @@ ${ANTI_DISTORSIONE_RULE}`,
 "Peso: Kg [N]" / "Altezza: [N]" (solo se documentati)
 "Terapia cronica: [farmaci]" / "Terapia attuale: [farmaci]" (solo se documentate come terapia IN CORSO abituale — lettera del curante, elenco farmaci domiciliari, anamnesi farmacologica; una prescrizione acuta del Pronto Soccorso o della dimissione, es. antidolorifico "al bisogno" o antibiotico per pochi giorni, NON è terapia attuale e va omessa qui)
 "Anamnesi familiare: [solo se pertinente e documentata]"
+"Attività lavorativa: [solo se documentata]" / "Allergie: [solo se documentate]"
 Una voce per riga; ometti le righe senza dato documentato. Riporta SOLO fatti documentati.
+MASSIMO 100 PAROLE. I farmaci in UN'UNICA riga separati da virgola. NESSUNA clausola di fonte per voce («come da cartella del…»): il software aggiunge una riga «Fonti». Se due documenti riportano dosaggi o forme diverse per lo stesso farmaco, DUE righe distinte, ciascuna con la propria fonte tra parentesi. MAI la dominanza manuale dedotta dalla sede della lesione: solo se un documento la scrive.
 ${NO_EVN_RULE}
 ${REGISTRO_ANAGRAFICO_RULE}
 ${ANTI_DISTORSIONE_RULE}`,
@@ -118,7 +120,9 @@ L'esempio sopra è INVENTATO e serve SOLO a illustrare il REGISTRO LINGUISTICO (
 
 CONTENUTO (solo questo, in ordine cronologico):
 - Data e circostanze dell'evento indice (luogo, ora, dinamica, modalità)
-- Passaggio in Pronto Soccorso / primo accesso medico CONDENSATO alle cose importanti: la diagnosi principale e i provvedimenti-chiave. NON elencare ogni singolo accertamento, parametro o esame del PS — solo l'essenziale.
+- Il primo accesso medico in UNA riga (struttura e data, al massimo la diagnosi in tre parole): NIENTE esame obiettivo, esami strumentali, provvedimenti, terapie, orari — sono nella Documentazione Medica e nell'Epicrisi.
+- MAI dedurre il ruolo del periziando (conducente, trasportato, pedone), né orari, luoghi o mezzi non scritti negli eventi: se non risultano, non scriverli.
+- Date sempre in cifre (gg.mm.aaaa), mai in lettere.
 
 Stile narrativo in terza persona ("la paziente / il paziente"), ricostruzione fedele, dettagli concreti dell'evento (luoghi, ore, persone presenti se documentate). Imperfetto/passato remoto.
 
@@ -221,7 +225,7 @@ ${DETERMINISTIC_MARKERS.SPESE}`,
     // aggrava il rischio di troncamento su macrodanno; un lab T1 load-bearing
     // resta comunque). Il decorso è fatto di visite/interventi/terapie, non di lab.
     excludeLabTests: true,
-    promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi). MASSIMO 500 PAROLE. NESSUNA citazione tra «...»: degli esami riporta l'ESITO in poche parole (es. "RM del 13.09.2025: lesione meniscale mediale"), mai il testo del referto, già riprodotto nella Documentazione. Ogni data che scrivi deve essere una data degli eventi forniti: se non la trovi lì, non scriverla.
+    promptDirective: `Epicrisi come SINTESI CONCLUSIVA della vicenda clinica. È la sezione finale del parere stragiudiziale (allineato al benchmark Antoniazzi). MASSIMO 220 PAROLE (decorsi pluriennali con più ricoveri: 350). Una frase per tappa (data + atto + esito in poche parole). Ogni reperto dello stato attuale con la SUA data e la SUA fonte: mai fondere visite diverse sotto una sola data. Niente aggettivi di rilevanza o gravità non scritti dai sanitari. Niente data di nascita (sta nell'Intestazione). Date sempre in cifre. NESSUNA citazione tra «...»: degli esami riporta l'ESITO in poche parole (es. "RM del 13.09.2025: lesione meniscale mediale"), mai il testo del referto, già riprodotto nella Documentazione. Ogni data che scrivi deve essere una data degli eventi forniti: se non la trovi lì, non scriverla.
 
 Includi:
 1. Breve richiamo dei fatti principali (1 paragrafo compatto) — SENZA ri-narrare la dinamica dell'evento in dettaglio (è ne "Il Fatto e la Storia Clinica").

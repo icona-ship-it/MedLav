@@ -167,7 +167,7 @@ export const HEADER_JSON_SCHEMA_DESCRIPTION = `Genera un oggetto JSON con questa
 
 REGOLE:
 1. Per il "paziente": cerca il nome nei metadati. Se assente, leggilo dalle intestazioni dei documenti sanitari forniti negli eventi (es. "DEMPROVA GIULIA" — esempio FITTIZIO). Se ancora assente, \`null\`.
-2. Per "oggetto": l'eventoIndice, dataEvento, lesione e struttura DEVONO provenire dagli eventi clinici (es. FITTIZIO: "frattura collo femore sx" del 03/03/2026 a "Ospedale Civile di Cittàdemo"). MAI inventare lesioni o circostanze.
+2. Per "oggetto": eventoIndice = SOLO la dinamica in 2-5 parole (es. FITTIZIO: "caduta accidentale", "sinistro stradale"), MAI la lesione, MAI anni o frasi tra virgolette; la lesione va SOLO nel campo "lesione"; dataEvento, lesione e struttura DEVONO provenire dagli eventi clinici (es. FITTIZIO: "frattura collo femore sx" del 03/03/2026 a "Ospedale Civile di Cittàdemo"). MAI inventare lesioni o circostanze.
 3. Per "perito": SOLO se nei metadati perizia. Se mancanti, l'intero oggetto \`perito\` deve essere \`null\`.
 4. Per "giudiziale": SOLO per CTU/CTP. Per stragiudiziale o pareri privati, \`null\`.
 5. Date: formato preferito DD/MM/YYYY. Se non presente, \`null\`.
