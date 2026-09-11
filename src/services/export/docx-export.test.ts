@@ -160,7 +160,7 @@ describe('docx-export — isPlaceholderBlockStart', () => {
 describe('docx-export — validateAnonymizedExport (guard GDPR 2026-07-17)', () => {
   it('BLOCCA l\'export anonimizzato senza nome paziente (anonimizzazione inaffidabile)', () => {
     const err = validateAnonymizedExport({ patientFullName: null }, true);
-    expect(err).toContain('Dati perizia'); // la CTA in UI si aggancia a questa stringa
+    expect(err).toContain('Info Perizia'); // la CTA in UI si aggancia a questa stringa
     expect(validateAnonymizedExport(undefined, true)).not.toBeNull();
     expect(validateAnonymizedExport({ patientFullName: '   ' }, true)).not.toBeNull();
   });

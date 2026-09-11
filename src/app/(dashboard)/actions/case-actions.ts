@@ -544,7 +544,18 @@ export async function getLastPeritoDefaults(): Promise<{ defaults: PeritoDefault
   }
 
   const metadata = (data?.perizia_metadata ?? null) as Record<string, unknown> | null;
-  if (!metadata) return { defaults: null };
+  if (!metadata) {
+    // Primo caso dell'utente: il nome del perito viene dal profilo (raccolto
+    // alla registrazione), così l'export non si blocca su un campo che il
+    // medico ha già dato (audit 2026-09-10, R5).
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    const fullName = typeof profile?.full_name === 'string' ? profile.full_name.trim() : '';
+    return { defaults: fullName ? { ctuName: fullName.slice(0, 200) } : null };
+  }
 
   // Whitelist default-deny: only the 6 professional fields, strings only.
   const defaults: PeritoDefaults = {};

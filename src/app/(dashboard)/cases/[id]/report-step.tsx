@@ -104,6 +104,8 @@ interface ReportStepProps {
   /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
   lastError?: string;
   lastErrorUser?: string;
+  /** Nome del perito assente nei metadati: l'export della perizia è bloccato finché manca (R5). */
+  peritoNameMissing?: boolean;
   /** Esito di una rigenerazione asincrona (fallita o no-op) — perizia_metadata.lastRegenerateError. */
   regenerateNote?: string | null;
   /** Data sinistro (periziaMetadata.dataSinistro): esclude le preesistenze dai
@@ -144,6 +146,7 @@ export function ReportStep({
   pipelineWarnings = [],
   lastError,
   lastErrorUser,
+  peritoNameMissing = false,
   regenerateNote,
   incidentDate,
   docSanitariaMode,
@@ -330,6 +333,7 @@ export function ReportStep({
   // vedere quante cose sono, in che ordine farle e quando ha finito.
   const panelSteps = (() => {
     let n = 0;
+    const perito = peritoNameMissing ? ++n : 0;
     const claims = claimErrors.length > 0 ? ++n : 0;
     const events = eventsToVerifyCount > 0 ? ++n : 0;
     const anomalies = actionableCount > 0 ? ++n : 0;
@@ -337,7 +341,7 @@ export function ReportStep({
     const warningsBase = n;
     n += warningDisplays.length;
     const stale = staleForPanel.length > 0 ? ++n : 0;
-    return { claims, events, anomalies, missing, warningsBase, stale, total: n };
+    return { perito, claims, events, anomalies, missing, warningsBase, stale, total: n };
   })();
 
   const handleSectionRegenerated = useCallback((sectionId?: string) => {
@@ -698,7 +702,7 @@ export function ReportStep({
           dei banner impilati — problemi di lettura + anomalie/doc mancanti + sezioni da
           aggiornare, ognuno con la sua azione. Il banner di rigenerazione (transitorio)
           resta separato sopra. */}
-      {(missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0 || actionableCount > 0) && (
+      {(peritoNameMissing || missingDocsCount > 0 || pipelineWarnings.length > 0 || staleForPanel.length > 0 || claimFindings.length > 0 || autoRepairedCount > 0 || eventsToVerifyCount > 0 || actionableCount > 0) && (
         <div className="mb-4 rounded-lg border bg-card px-4 py-3">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <p className="text-sm font-semibold">Da controllare prima della consegna</p>
@@ -709,6 +713,20 @@ export function ReportStep({
             )}
           </div>
           <div className="space-y-2.5">
+            {/* PASSO: nome del perito — obbligatorio per esportare la perizia, prima lo si
+                scopriva solo al click su «Scarica Word» (audit 2026-09-10, R5). */}
+            {peritoNameMissing && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 p-2.5 dark:border-amber-700/50 dark:bg-amber-900/20">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex-1 text-sm">
+                  <p className="font-medium">{panelSteps.perito}. Inserisci il nome del perito per poter esportare la perizia</p>
+                  <p className="text-xs text-muted-foreground">Senza il nome del perito i file Word e HTML non vengono generati. Si compila in «Info Perizia».</p>
+                </div>
+                <Button variant="ghost" size="sm" className="shrink-0" onClick={() => onNavigateToStep(2)}>
+                  Compila Info Perizia
+                </Button>
+              </div>
+            )}
             {/* PASSO: errori veri dell'AI — titolo-azione compatto, motivo in
                 chiaro, citazione integrale COLLASSATA (prima occupava mezzo
                 pannello e affogava tutto il resto — founder 2026-07-17). */}

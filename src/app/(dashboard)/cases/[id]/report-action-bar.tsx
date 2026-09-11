@@ -152,10 +152,10 @@ export function ReportActionBar({
             const body = await res.json();
             if (body?.error) msg = body.error as string;
           } catch { /* corpo non-JSON */ }
-          if (onOpenPeriziaForm && /nome del perito|dati perizia/i.test(msg)) {
+          if (onOpenPeriziaForm && /nome del perito|dati perizia|info perizia/i.test(msg)) {
             toast.error(msg, {
               duration: 12_000,
-              action: { label: 'Compila Dati perizia', onClick: onOpenPeriziaForm },
+              action: { label: 'Compila Info Perizia', onClick: onOpenPeriziaForm },
             });
           } else {
             toast.error(msg);
@@ -184,10 +184,10 @@ export function ReportActionBar({
             if (body?.error) msg = body.error as string;
           } catch { /* corpo non-JSON: tieni il default */ }
           // Errore "dati perito mancanti" → CTA diretta al form (niente vicolo cieco).
-          if (onOpenPeriziaForm && /nome del perito|dati perizia/i.test(msg)) {
+          if (onOpenPeriziaForm && /nome del perito|dati perizia|info perizia/i.test(msg)) {
             toast.error(msg, {
               duration: 12_000,
-              action: { label: 'Compila Dati perizia', onClick: onOpenPeriziaForm },
+              action: { label: 'Compila Info Perizia', onClick: onOpenPeriziaForm },
             });
           } else {
             toast.error(msg);

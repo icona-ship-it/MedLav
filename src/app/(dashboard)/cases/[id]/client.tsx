@@ -17,6 +17,7 @@ import type {
 } from './types';
 import type { DocumentPage } from '../../actions';
 import { findStepNumber, PROCESSING_STEP_LABEL } from '@/lib/wizard-steps';
+import { hasPeritoName } from '@/lib/perizia-metadata';
 
 // --- Types ---
 
@@ -48,7 +49,7 @@ const POLL_INTERVAL_MS = 5000;
 
 const FULL_WIZARD_STEPS = [
   { number: 1, label: 'Documenti', hint: 'Carica i documenti clinici del caso' },
-  { number: 2, label: 'Info Perizia', hint: 'Compila i dati della perizia (facoltativo)' },
+  { number: 2, label: 'Info Perizia', hint: 'Nome del perito (serve per esportare) e dati del caso' },
   { number: 3, label: 'Elaborazione', hint: 'Avvia l\'analisi AI dei documenti' },
   { number: 4, label: 'Perizia', hint: 'La bozza di perizia è pronta da rivedere' },
 ] as const;
@@ -367,7 +368,7 @@ export function CaseDetailClient({
                     : processingStage === 'completato' ? 'Completata' : 'Pronto')
                 : hasEvents ? `${events.length} eventi estratti` : processingStage === 'completato' ? 'Nessun evento trovato' : 'In attesa')
             : (step.number === 1 ? (localDocuments.length === 0 ? 'Carica documenti' : `${localDocuments.length} ${localDocuments.length === 1 ? 'documento' : 'documenti'}`)
-            : step.number === 2 ? (infoPeriziaCompilata ? 'Compilata' : 'Facoltativa')
+            : step.number === 2 ? (infoPeriziaCompilata ? 'Compilata' : 'Serve per l\'export')
             : step.number === 3 ? (
                 hasProcessingDocs || processingStage === 'elaborazione'
                 ? (processingProgress?.phase === 'extraction'
@@ -640,6 +641,7 @@ export function CaseDetailClient({
           {activeStep === 4 && (
             <div key="step-4" className="animate-step-in">
               <ReportStep
+                peritoNameMissing={!hasPeritoName(caseData.perizia_metadata as Record<string, unknown> | null)}
                 caseId={caseId}
                 report={report}
                 events={events}

@@ -131,7 +131,7 @@ function EditCaseDialogInner({
             />
             <p className="mt-1 text-xs text-muted-foreground">
               Identificano il caso in elenchi e ricerche. Nel report va il nome
-              inserito nei Dati perizia.
+              inserito in «Info Perizia».
             </p>
           </div>
           <div>

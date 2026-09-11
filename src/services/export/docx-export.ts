@@ -291,10 +291,10 @@ export function validateDepositableExport(
 ): string | null {
   if (exportMode !== 'depositabile') return null;
   if (!pm?.ctuName?.trim()) {
-    return 'Per esportare la perizia compila almeno il Nome del perito nei "Dati perizia" del caso.';
+    return 'Per esportare la perizia compila almeno il Nome del perito nel passo «Info Perizia» del caso.';
   }
   if ((caseRole === 'ctu' || caseRole === 'ctp') && (!pm.tribunale?.trim() || !pm.rgNumber?.trim())) {
-    return 'Per una perizia giudiziaria depositabile servono anche il Tribunale e il numero di Ruolo Generale (RG) nei "Dati perizia".';
+    return 'Per una perizia giudiziaria depositabile servono anche il Tribunale e il numero di Ruolo Generale (RG) nel passo «Info Perizia».';
   }
   return null;
 }
@@ -314,7 +314,7 @@ export function validateAnonymizedExport(
 ): string | null {
   if (!anonymize) return null;
   if (!pm?.patientFullName?.trim()) {
-    return 'Per esportare la versione anonimizzata compila prima nome e cognome del paziente nei "Dati perizia": servono a redigerli ovunque compaiano nel testo, anche dentro le citazioni dai documenti.';
+    return 'Per esportare la versione anonimizzata compila prima nome e cognome del paziente nel passo «Info Perizia»: servono a redigerli ovunque compaiano nel testo, anche dentro le citazioni dai documenti.';
   }
   return null;
 }

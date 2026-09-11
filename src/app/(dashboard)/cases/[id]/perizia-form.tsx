@@ -335,7 +335,7 @@ export function PeriziaMetadataForm({
         }
         // 1.2: salvataggio riuscito → la bozza locale non serve più.
         markSaved();
-        toast.success('Dati perizia salvati');
+        toast.success('Info Perizia salvate');
         onSaved();
       }
 
