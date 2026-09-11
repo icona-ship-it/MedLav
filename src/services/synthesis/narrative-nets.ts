@@ -139,3 +139,87 @@ export function collectCurrentDays(events: ReadonlyArray<{ eventDate?: string | 
   }
   return days;
 }
+
+// ── Reti aggiuntive (Fase 1 audit 2026-09-10: Anamnesi A/B/C, Fatto/Epicrisi B/C) ──
+
+const DOMINANCE_RE = /\b(destriman[oaie]|mancin[oaie]|ambidestr[oaie])\b/i;
+const DOMINANCE_PLACEHOLDER = '[destrimane/mancino: da rilevare in visita]';
+
+/** La dominanza manuale resta SOLO se un documento la scrive (titolo, descrizione,
+ * sourceText degli eventi); altrimenti la riga «Paziente destrimane…» diventa un
+ * segnaposto: dedurla dalla sede della lesione era il P1 di fedeltà del caso A. */
+export function sanitizeAnamnesiDominance(
+  text: string,
+  events: ReadonlyArray<{ title?: string | null; description?: string | null; sourceText?: string | null }>,
+): { text: string; replaced: boolean } {
+  const attested = events.some((e) => DOMINANCE_RE.test(`${e.title ?? ''} ${e.description ?? ''} ${e.sourceText ?? ''}`));
+  if (attested) return { text, replaced: false };
+  let replaced = false;
+  const out = text.split('\n').map((line) => {
+    if (!/^\s*(?:[-*•]\s*)?(?:\*\*)?paziente\b/i.test(line) || !DOMINANCE_RE.test(line)) return line;
+    replaced = true;
+    const label = /^\s*(?:[-*•]\s*)?(?:\*\*)?paziente(?:\*\*)?\s*:?/i.exec(line)?.[0] ?? 'Paziente:';
+    return `${label.trimEnd().replace(/:?$/, ':')} ${DOMINANCE_PLACEHOLDER}`;
+  }).join('\n');
+  return { text: out, replaced };
+}
+
+const LABELED_LINE_RE = /^\s*(?:[-*•]\s*)?(?:\*\*)?(terapia (?:cronica|attuale|in corso)|anamnesi familiare|anamnesi lavorativa|attivit[àa] lavorativa|allergie|peso|altezza|abitudini)(?:\*\*)?\s*:\s*(.*)$/i;
+const UNDOCUMENTED_RE = /^(?:\(?\s*)?(?:non (?:documentat[aoie]|risulta(?:no)?|riferit[aoie]|not[aoie]|disponibile)|nulla di (?:rilevante |)documentato|nessun[oa]? (?:dato|documentato|documentata|terapia|allergia)|n\.?d\.?|\[da compilare dal perito\])/i;
+
+/** Toglie le righe etichettate il cui valore dice solo «non documentato» (con o
+ * senza parentetica esplicativa): la scheda del gold elenca i dati, non le assenze. */
+export function stripUndocumentedAnamnesiLines(text: string): { text: string; removed: number } {
+  let removed = 0;
+  const out = text.split('\n').filter((line) => {
+    const m = LABELED_LINE_RE.exec(line);
+    if (!m) return true;
+    const value = m[2]!.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (UNDOCUMENTED_RE.test(value)) { removed++; return false; }
+    return true;
+  }).join('\n');
+  return { text: out.replace(/\n{3,}/g, '\n\n'), removed };
+}
+
+const SOURCE_CLAUSE_STRICT_RE = /,?\s*\b(?:come (?:da|riferit[oa] (?:in|nel|nella)|documentat[oa] (?:in|nel|nella))|riferit[oa] in anamnesi(?: (?:patologica )?remota)?(?: (?:dalla|nella|da|dal))?|documentat[oa] (?:in|nella|nel|dal|dalla))\b((?:[^,;.\n]|\.(?=\d))*)/gi;
+
+/** Le clausole di fonte per riga («come da cartella clinica del 16.07.2023») escono
+ * dalle voci e vengono raccolte, uniche, in una riga finale «Fonti: …». */
+export function compactSourceClauses(text: string): { text: string; sources: string[] } {
+  const sources: string[] = [];
+  const seen = new Set<string>();
+  const lines = text.split('\n').map((line) => line.replace(SOURCE_CLAUSE_STRICT_RE, (m: string) => {
+    const src = m.replace(/^,?\s*/, '').replace(/^(?:come (?:da|riferit[oa] (?:in|nel|nella)|documentat[oa] (?:in|nel|nella))|riferit[oa] in anamnesi(?: (?:patologica )?remota)?(?: (?:dalla|nella|da|dal))?|documentat[oa] (?:in|nella|nel|dal|dalla))\s*/i, '').trim();
+    if (src) { const key = src.toLowerCase(); if (!seen.has(key)) { seen.add(key); sources.push(src); } }
+    return '';
+  }).replace(/\s+([.;,])/g, '$1').replace(/\(\s*\)/g, '').replace(/[ \t]{2,}/g, ' ').trimEnd());
+  if (sources.length === 0) return { text, sources };
+  return { text: `${lines.join('\n').trimEnd()}\n\nFonti: ${sources.join('; ')}.`, sources };
+}
+
+const DOB_FRAGMENT_RE = /,?\s*\bnat[oa]\s+(?:(?:a|in)\s+[\p{L}'’ .-]{2,40}?\s+)?(?:il\s+)?\d{1,2}[./-]\d{1,2}[./-]\d{4}/giu;
+
+/** La data di nascita sta nell'Intestazione: nelle sezioni narrative viene tolta
+ * (il template dell'Epicrisi la faceva ripetere: panel C, GDPR). */
+export function stripNarrativeDob(text: string): string {
+  return text.replace(DOB_FRAGMENT_RE, '').replace(/\s+,/g, ',').replace(/[ \t]{2,}/g, ' ');
+}
+
+const EVALUATIVE_RE = /\b(verosimilmente|compatibil[ei] con|correlat[oaie] a[l]?|nesso (?:di )?causal|ai fini del danno|si ritiene|appare (?:corretto|congruo|verosimile)|riconducibil[ei]|da attribuir[es]i|sussiste)\b/i;
+
+/** Una frase con lessico VALUTATIVO scritta dal modello nell'Epicrisi/Fatto non
+ * è un fatto: resta visibile ma come segnaposto del perito, che la conferma o la
+ * cancella (mai cancellata in silenzio, mai depositabile così com'è). */
+export function flagEvaluativeSentences(text: string): { text: string; flagged: number } {
+  let flagged = 0;
+  const out = text.split('\n').map((line) => {
+    if (!line.trim() || /^\s*[*\[|#-]/.test(line)) return line;
+    return line.replace(/[^.;!?]+[.;!?]?/g, (sentence) => {
+      if (!EVALUATIVE_RE.test(sentence) || /\[Da valutare dal perito/.test(sentence)) return sentence;
+      flagged++;
+      const s = sentence.trim();
+      return ` *[Da valutare dal perito — giudizio scritto dal modello, non un fatto documentato: «${s}»]*`;
+    }).replace(/^\s+/, '');
+  }).join('\n');
+  return { text: out, flagged };
+}

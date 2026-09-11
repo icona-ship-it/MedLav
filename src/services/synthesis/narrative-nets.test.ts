@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions } from './narrative-nets';
+import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions, sanitizeAnamnesiDominance, stripUndocumentedAnamnesiLines, compactSourceClauses, stripNarrativeDob, flagEvaluativeSentences } from './narrative-nets';
 import { collectAttestedDays } from './header-schema';
 
 describe('findUnattestedDates — date nel testo senza riscontro', () => {
@@ -87,5 +87,55 @@ describe('sanitizeAnamnesiPast — clausola di fonte ed elenco puntato', () => {
   it('senza elenco sotto, la riga svuotata dice «nulla di rilevante documentato»', () => {
     const out = sanitizeAnamnesiPast('In passato: frattura del femore del 16.07.2023.\n\nPeso: 70 kg', days, ['frattura del femore']);
     expect(out.text).toContain('In passato: nulla di rilevante documentato.');
+  });
+});
+
+describe('reti aggiuntive Anamnesi/Fatto/Epicrisi (Fase 1 audit 2026-09-10)', () => {
+  it('sanitizeAnamnesiDominance: dominanza non attestata → segnaposto; attestata → invariata', () => {
+    const text = 'Paziente: la perizianda, destrimane (come da cartella clinica del 13.09.2025).\nIn passato: nulla di rilevante documentato.';
+    const out = sanitizeAnamnesiDominance(text, [{ title: 'Accesso in PS', description: 'trauma gomito destro', sourceText: 'gomito dx' }]);
+    expect(out.replaced).toBe(true);
+    expect(out.text).toContain('[destrimane/mancino: da rilevare in visita]');
+    expect(out.text).not.toContain('destrimane (come da');
+    expect(out.text).toContain('In passato: nulla di rilevante documentato.');
+    const ok = sanitizeAnamnesiDominance(text, [{ title: 'Visita', description: 'Paziente destrimane', sourceText: null }]);
+    expect(ok.replaced).toBe(false);
+  });
+
+  it('stripUndocumentedAnamnesiLines: via le righe «non documentata» con parentetica; restano i dati', () => {
+    const text = 'Peso: [da compilare dal perito]\nTerapia cronica: non documentata.\nTerapia attuale: non documentata (la prescrizione di FANS per 4-5 giorni non è terapia cronica).\nAnamnesi familiare: non documentata.\nAltezza: 165 cm';
+    const out = stripUndocumentedAnamnesiLines(text);
+    expect(out.removed).toBe(4);
+    expect(out.text.trim()).toBe('Altezza: 165 cm');
+  });
+
+  it('compactSourceClauses: 15 «come da …» diventano una riga «Fonti: …» con le fonti uniche', () => {
+    const text = [
+      '- Lansoprazolo 30 mg (1 compressa al giorno), come da lettera del medico di medicina generale del 16.07.2023.',
+      '- Furosemide 25 mg (2 compresse al giorno), come da lettera del medico di medicina generale del 16.07.2023 e cartella clinica del 16.07.2023.',
+      '- Cardiopatia ischemica, riferita in anamnesi, come da cartella clinica del 16.07.2023.',
+    ].join('\n');
+    const out = compactSourceClauses(text);
+    expect(out.text).not.toContain('come da');
+    expect(out.text).toContain('- Lansoprazolo 30 mg (1 compressa al giorno).');
+    expect(out.text).toContain('- Furosemide 25 mg (2 compresse al giorno).');
+    expect(out.text).toMatch(/Fonti: .*lettera del medico di medicina generale del 16\.07\.2023/);
+    expect(out.sources.length).toBeGreaterThanOrEqual(2);
+    expect(out.sources.length).toBeLessThanOrEqual(3);
+  });
+
+  it('stripNarrativeDob: «nata il 24/02/1931» e «nato a Cittàdemo il 10.03.1990» via dalle narrative', () => {
+    expect(stripNarrativeDob('la sig.ra Demprova Maria, nata il 24/02/1931, in data 16/07/2023 veniva investita')).toBe('la sig.ra Demprova Maria, in data 16/07/2023 veniva investita');
+    expect(stripNarrativeDob('il sig. Carlo Demprova, nato a Cittàdemo il 10.03.1990, riferisce')).toBe('il sig. Carlo Demprova, riferisce');
+  });
+
+  it('flagEvaluativeSentences: la frase di nesso del modello diventa un segnaposto del perito, i fatti restano', () => {
+    const text = 'In data 22.08.2023 veniva ricoverata per deiscenza della ferita. Gli esiti includono la deiscenza, verosimilmente correlata al quadro clinico di base. Dimessa il 12.09.2023.';
+    const out = flagEvaluativeSentences(text);
+    expect(out.flagged).toBe(1);
+    expect(out.text).toContain('In data 22.08.2023 veniva ricoverata per deiscenza della ferita.');
+    expect(out.text).toContain('*[Da valutare dal perito — giudizio scritto dal modello, non un fatto documentato: «Gli esiti includono la deiscenza, verosimilmente correlata al quadro clinico di base.»]*');
+    expect(out.text).toContain('Dimessa il 12.09.2023.');
+    expect(flagEvaluativeSentences(out.text).flagged).toBe(0);
   });
 });

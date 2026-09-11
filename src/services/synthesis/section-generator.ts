@@ -55,7 +55,7 @@ import type { DocumentOcrContext } from '@/inngest/steps/types';
 import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { scrubContactDetails } from './contact-scrub';
 import { stripPromptArtifacts, stripItalicMetaParagraphs } from './prompt-artifacts';
-import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions } from './narrative-nets';
+import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions, sanitizeAnamnesiDominance, stripUndocumentedAnamnesiLines, compactSourceClauses, stripNarrativeDob, flagEvaluativeSentences } from './narrative-nets';
 import { applyPeriziaMetadataToHeader } from './header-overlay';
 
 /** Sezioni narrative su cui girano le reti date/citazioni. */
@@ -212,7 +212,9 @@ export function buildSectionUserPrompt(params: {
       // default gold-osservato): log-terapia, diario infermieristico, cartella
       // anestesiologica, scale di valutazione, trasfusioni. Mai i T1 load-bearing.
       // Le sezioni narrative (il_fatto/anamnesi) restano intatte: l'LLM lì ignora già il rumore.
-      if (spec.id === 'documentazione_sanitaria') {
+      // Anche le narrative (Fatto/Epicrisi): il diario di degenza (parametri, scale,
+      // alvo/catetere) finiva nell'Epicrisi di B a 3,6× il gold (Fase 1 audit 2026-09-10).
+      if (spec.id === 'documentazione_sanitaria' || spec.id === 'epicrisi' || spec.id === 'il_fatto_e_storia_clinica') {
         medical = medical.filter((e) => !isExcludableNoiseEvent(e) && !isExcludableByPolicy(e));
       }
       // I valori lab restano annegati negli eventi sopravvissuti su DUE campi riprodotti
@@ -531,6 +533,20 @@ export async function generateSingleSection(params: {
     const past = sanitizeAnamnesiPast(finalContent, collectCurrentDays(synthesisParams.events), collectCurrentLesions(synthesisParams.events));
     if (past.replaced) logger.warn('section-generator', 'Anamnesi: riga "In passato" con date dell\'evento indice sostituita');
     finalContent = past.text;
+    // Fase 1 audit 2026-09-10 (A/B/C): dominanza solo se attestata, niente righe
+    // «non documentata», clausole di fonte raccolte in una riga «Fonti».
+    const dom = sanitizeAnamnesiDominance(finalContent, synthesisParams.events);
+    if (dom.replaced) logger.warn('section-generator', 'Anamnesi: dominanza manuale non attestata → segnaposto');
+    finalContent = stripUndocumentedAnamnesiLines(dom.text).text;
+    finalContent = compactSourceClauses(finalContent).text;
+  }
+  if (spec.id === 'epicrisi' || spec.id === 'il_fatto_e_storia_clinica') {
+    // Data di nascita fuori dalle narrative; frasi valutative del modello marcate
+    // come segnaposto del perito (Fase 1 audit 2026-09-10, B/C).
+    finalContent = stripNarrativeDob(finalContent);
+    const ev = flagEvaluativeSentences(finalContent);
+    if (ev.flagged > 0) logger.info('section-generator', `${spec.id}: ${ev.flagged} frasi valutative del modello marcate per il perito`);
+    finalContent = ev.text;
   }
   if (NARRATIVE_SECTION_IDS.has(spec.id)) {
     const dates = findUnattestedDates(finalContent, collectAttestedDays(synthesisParams.events, synthesisParams.periziaMetadata));
@@ -843,14 +859,37 @@ const NARRATIVE_EVENT_BUDGET_DEFAULT = 300;
 export function capEventsForNarrativeSection<T extends {
   eventType: string; eventDate: string; diagnosis?: string | null;
   sourceType?: string | null; discrepancyNote?: string | null;
+  temporalScope?: string | null; title?: string | null;
 }>(events: T[], sectionId: string): { events: T[]; capped: boolean } {
   const budget = NARRATIVE_EVENT_BUDGET[sectionId] ?? NARRATIVE_EVENT_BUDGET_DEFAULT;
   if (events.length <= budget) return { events, capped: false };
 
   const keep = new Set<number>();
-  // 1. Estremi cronologici garantiti (events è già in ordine cronologico).
-  for (let i = 0; i < Math.min(10, events.length); i++) keep.add(i);
-  for (let i = Math.max(0, events.length - 10); i < events.length; i++) keep.add(i);
+  // 0. Dedup delle MENZIONI ripetute dello stesso fatto (37 «intervento» del 15.11
+  //    da 21 documenti nel gold C): stessa data+tipo+titolo normalizzato → una sola,
+  //    così non consumano il budget (Fase 1 audit 2026-09-10).
+  const seenKey = new Set<string>();
+  const eligible = new Set<number>();
+  events.forEach((e, i) => {
+    const titleKey = (e.title ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 60);
+    // Solo eventi con un titolo vero si deduplicano: senza titolo non si può dire che siano lo stesso fatto.
+    const key = titleKey.length >= 3 ? `${e.eventDate}|${e.eventType}|${titleKey}` : `#${i}`;
+    if (seenKey.has(key)) return;
+    seenKey.add(key);
+    eligible.add(i);
+  });
+  const isDated = (e: T): boolean => Boolean(e.eventDate) && !e.eventDate.startsWith('1900-01-01');
+  const isCurrent = (e: T): boolean => e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato';
+  // 1. Estremi cronologici garantiti SOLO fra eventi datati e correnti (mai sentinelle
+  //    1900, anamnesi remota o esami programmati in testa/coda).
+  const anchors = events.map((e, i) => i).filter((i) => eligible.has(i) && isDated(events[i]!) && isCurrent(events[i]!));
+  for (const i of anchors.slice(0, 10)) keep.add(i);
+  for (const i of anchors.slice(-10)) keep.add(i);
+  // 1b. Anamnesi: TUTTI i pregressi (retrospettivi) entrano prima di ogni altra cosa —
+  //     il cap li escludeva e il modello inventava la dominanza e ometteva interventi remoti.
+  if (sectionId === 'anamnesi') {
+    for (const i of eligible) if (events[i]!.temporalScope === 'retrospettivo') keep.add(i);
+  }
   // 2-3. Tier: T1 poi T2 poi T3, in ordine cronologico, fino al budget.
   const byTier: Record<'T1' | 'T2' | 'T3', number[]> = { T1: [], T2: [], T3: [] };
   events.forEach((e, i) => {
@@ -863,7 +902,7 @@ export function capEventsForNarrativeSection<T extends {
   for (const tier of ['T1', 'T2', 'T3'] as const) {
     for (const i of byTier[tier]) {
       if (keep.size >= budget) break;
-      keep.add(i);
+      if (eligible.has(i)) keep.add(i);
     }
     if (keep.size >= budget) break;
   }
@@ -1079,9 +1118,18 @@ const NON_MEDICAL_EVENT_TYPES = new Set([
   'certificato',
 ]);
 
+/** Un «certificato» con contenuto clinico (diagnosi, prognosi, malattia, idoneità,
+ * relazione psicologica) è un fatto del decorso: entra nel prompt delle narrative
+ * (gold C: INPS, idoneità, psicoterapia — Fase 1 audit 2026-09-10). */
+const CLINICAL_CERTIFICATE_RE = /prognosi|malattia|inabilit|idoneit|psicolog|psicoterap|stress|diagnosi|guarigion|postumi/i;
+
+function isClinicalCertificate(e: ConsolidatedEvent): boolean {
+  return e.eventType === 'certificato' && (Boolean(e.diagnosis) || CLINICAL_CERTIFICATE_RE.test(`${e.title ?? ''} ${e.description ?? ''}`));
+}
+
 function filterMedicalEvents(events: ConsolidatedEvent[]): ConsolidatedEvent[] {
   return events.filter((e) =>
-    !NON_MEDICAL_EVENT_TYPES.has(e.eventType) && e.eventType !== 'spesa_medica',
+    (!NON_MEDICAL_EVENT_TYPES.has(e.eventType) || isClinicalCertificate(e)) && e.eventType !== 'spesa_medica',
   );
 }
 

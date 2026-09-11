@@ -108,7 +108,7 @@ export const EPICRISI_COMPLETAMENTO_GUIDE = `*[Il perito completerà l'epicrisi 
 *2) ATTRIBUZIONE — "In considerazione delle evidenze clinico-radiologiche e di quanto rilevato in sede di visita clinica appare corretto attribuire per i postumi stabilizzati di [DIAGNOSI IN MAIUSCOLO]:"*
 *3) INABILITÀ TEMPORANEA GRADUATA, una riga per periodo (solo i livelli effettivi): "un periodo di INABILITÀ TEMPORANEA AL 100% di gg. [N]" / "AL 75% di gg. [N]" / "AL 50% di gg. [N]" / "AL 25% di gg. [N]"*
 *4) "UN DANNO BIOLOGICO non inferiore ai [N] punti percentuali"*
-*5) FORMULA TABELLARE — "Tale valutazione si basa sulle tabelle elaborate dalle Linee Guida per la valutazione medico-legale del danno in ambito civilistico elaborate da SIMLA e pubblicate nel 2016, in quanto è possibile riferire a [classe/voce] la condizione funzionale del periziando." (per polizza infortuni: tabelle ANIA-INAIL)*
+*5) FORMULA TABELLARE — "Tale valutazione si basa sulle tabelle elaborate dalle Linee Guida per la valutazione medico-legale del danno in ambito civilistico elaborate da SIMLA e pubblicate nel 2016, in quanto è possibile riferire a [classe/voce] la condizione funzionale del periziando."*
 *6) GRADO DI SOFFERENZA — "In relazione al grado di sofferenza subita, che va intesa come fenomeno descrittivo di carattere intrinseco, parametro aggiuntivo, si può considerare un grado [lieve/medio/elevato], in relazione ad aspetti ascrivibili a [condizione]."*
 *7) SPESE — "Vengono esibite n. [N] ricevute/fatture per un totale di euro [X], spese che appaiono giustificate e congrue, a cui potranno essere aggiunte le eventuali ulteriori spese documentate." (rinvio alla tabella della sezione Spese Mediche)]*`;
 
