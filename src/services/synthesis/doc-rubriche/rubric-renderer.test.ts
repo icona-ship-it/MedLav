@@ -48,7 +48,7 @@ describe('renderRubricDocSanitaria — un documento = un blocco, rubriche copiat
     expect(out.dedupSkipped).toBe(1);
     expect(out.markdown.match(/Frattura composta dell'epifisi distale del radio destro\./g)).toHaveLength(1);
     expect(out.markdown).toContain('Decorso: «Regolare, apparecchio gessato ben tollerato.»');
-    expect(out.markdown).toContain('Dimissione: «Paracetamolo 1000 mg al bisogno.»');
+    expect(out.markdown).toMatch(/(?:Dimissione|Terapia alla dimissione): «Paracetamolo 1000 mg al bisogno\.»/);
   });
 
   it('esame strumentale senza rubriche: referto per intero (integrale); spese e laboratorio esclusi; certificati in una riga', () => {
@@ -118,15 +118,15 @@ describe('spec Lavini 2026-09-04 — fascicolo contenitore, PS riclassificato', 
     const out = renderRubricDocSanitaria([fascicolo(), lettera()], DEFAULT_RUBRIC_POLICY);
     expect(out.markdown).toContain('Fascicolo di ricovero agli atti (12 pagine): si riporta la lettera di dimissione.');
     expect(out.markdown).not.toContain('decorso regolare giorno');
-    expect(out.markdown).toContain('Intervento: «Osteosintesi con chiodo.»');
-    expect(out.markdown).toContain('Terapia: «Eparina per 30 giorni.»');
-    expect(out.markdown).toContain('Dimissione: «Frattura del femore sinistro trattata.»');
+    expect(out.markdown).toMatch(/(?:Intervento|Trattamento adottato): «Osteosintesi con chiodo\.»/);
+    expect(out.markdown).toMatch(/(?:Terapia|Terapia e comportamento domiciliare): «Eparina per 30 giorni\.»/);
+    expect(out.markdown).toMatch(/(?:Dimissione|Diagnosi di dimissione): «Frattura del femore sinistro trattata\.»/);
   });
 
   it('senza lettera il fascicolo cede i soli passaggi-chiave (diagnosi, intervento), mai il diario', () => {
     const out = renderRubricDocSanitaria([fascicolo()], DEFAULT_RUBRIC_POLICY);
     expect(out.markdown).toContain('Diagnosi: «Frattura del femore sinistro.»');
-    expect(out.markdown).toContain('Intervento: «Osteosintesi con chiodo.»');
+    expect(out.markdown).toMatch(/(?:Intervento|Trattamento adottato): «Osteosintesi con chiodo\.»/);
     expect(out.markdown).not.toContain('decorso regolare');
   });
 
@@ -287,7 +287,7 @@ describe('renderRubricDocSanitaria — certificati INPS/idoneità: via la moduli
     const INPS = ['^{}[]', 'Esito di Visita medica di Controllo', 'Protocollo: INPS.9000.19/06/2025.0000000', 'Il Lavoratore:', 'Il Medico:',
       'Cittàdemo, 24 giugno 2025', 'Giudizio: idoneo con limitazioni al carico per 30 giorni.', 'Avverso il giudizio è ammesso ricorso entro trenta giorni.'].join('\n');
     const out = renderRubricDocSanitaria([doc({ documentId: 'inps', documentType: 'certificato', text: INPS })], DEFAULT_RUBRIC_POLICY);
-    expect(out.markdown).toContain('Conclusioni: «idoneo con limitazioni al carico per 30 giorni.»');
+    expect(out.markdown).toMatch(/(?:Conclusioni|Giudizio): «idoneo con limitazioni al carico per 30 giorni\.»/);
     expect(out.markdown).toContain('Esito di Visita medica di Controllo');
     expect(out.markdown).not.toContain('^{}');
     expect(out.markdown).not.toContain('Protocollo');

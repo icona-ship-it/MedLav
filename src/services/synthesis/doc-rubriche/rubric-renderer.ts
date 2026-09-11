@@ -342,7 +342,13 @@ function cutAtClosingFormula(text: string): string {
 function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number, withTitle = true): string | null {
   const key = normalizeForDedup(seg.text);
   if (key.length >= 40 && seen.has(key)) { stats.dedup++; return null; }
-  const title = withTitle ? (RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
+  // Etichetta del MEDICO (spec Lavini: «Motivo del ricovero», «Diagnosi di dimissione»,
+  // «Trattamento adottato») al posto della chiave normalizzata, quando è pulita e non
+  // è già l'incipit del testo (titolo d'esame) — Fase 1 audit 2026-09-10, B.
+  const doctorLabel = seg.rawLabel && /^[\p{L}\s.'’\/-]{2,40}$/u.test(seg.rawLabel) && !seg.text.toLowerCase().startsWith(seg.rawLabel.toLowerCase())
+    ? seg.rawLabel.charAt(0).toUpperCase() + seg.rawLabel.slice(1).toLowerCase()
+    : null;
+  const title = withTitle ? (doctorLabel ?? RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
   const cleaned = cutAtClosingFormula(stripAdminNoise(seg.text));
   if (!cleaned || isEmptyBody(cleaned)) return null;
   const prefix = dedupPrefixKey(cleaned);
