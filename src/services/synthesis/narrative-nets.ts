@@ -11,11 +11,34 @@
  */
 
 const DATE_RE = /\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/g;
+// Date in lettere («7 gennaio 2025»): il modello le scrive spesso così e la rete
+// non le vedeva (audit 2026-09-10, I11).
+const MONTHS_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+const DATE_TEXT_RE = new RegExp(`\\b(\\d{1,2})\\s+(${MONTHS_IT.join('|')})\\s+(\\d{4})\\b`, 'gi');
 const PLACEHOLDER_RE = /\[[^\]]*\]/g;
 
+interface FoundDate { d: number; m: number; y: number; key: string }
+
+/** Tutte le date del testo, numeriche e in lettere, con chiave GG.MM.AAAA. */
+function extractDates(text: string): FoundDate[] {
+  const out: FoundDate[] = [];
+  for (const m of text.matchAll(DATE_RE)) {
+    out.push({ d: Number(m[1]), m: Number(m[2]), y: Number(m[3]), key: `${m[1]!.padStart(2, '0')}.${m[2]!.padStart(2, '0')}.${m[3]}` });
+  }
+  for (const m of text.matchAll(DATE_TEXT_RE)) {
+    const month = MONTHS_IT.indexOf(m[2]!.toLowerCase()) + 1;
+    out.push({ d: Number(m[1]), m: month, y: Number(m[3]), key: `${m[1]!.padStart(2, '0')}.${String(month).padStart(2, '0')}.${m[3]}` });
+  }
+  return out;
+}
+
+/** Numero del giorno; null se la data non esiste nel calendario (mese 13, 31 febbraio, giorno 0). */
 function dayNumber(d: number, m: number, y: number): number | null {
   if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
+  const t = Date.UTC(y, m - 1, d);
+  const dt = new Date(t);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return Math.round(t / 86_400_000);
 }
 
 /** Date DD.MM.AAAA / DD/MM/AAAA del testo NON presenti fra i giorni attestati (dedup, in ordine). */
@@ -23,11 +46,12 @@ export function findUnattestedDates(text: string, attestedDays: ReadonlySet<numb
   if (!text || attestedDays.size === 0) return [];
   const clean = text.replace(PLACEHOLDER_RE, ' ');
   const out: string[] = []; const seen = new Set<string>();
-  for (const m of clean.matchAll(DATE_RE)) {
-    const n = dayNumber(Number(m[1]), Number(m[2]), Number(m[3]));
-    if (n === null || attestedDays.has(n)) continue;
-    const key = `${m[1]!.padStart(2, '0')}.${m[2]!.padStart(2, '0')}.${m[3]}`;
-    if (!seen.has(key)) { seen.add(key); out.push(key); }
+  for (const f of extractDates(clean)) {
+    const n = dayNumber(f.d, f.m, f.y);
+    // Una data impossibile (mese 13, 31 febbraio) non è «attestata»: va segnalata,
+    // mai saltata in silenzio (I11).
+    if (n !== null && attestedDays.has(n)) continue;
+    if (!seen.has(f.key)) { seen.add(f.key); out.push(f.key); }
   }
   return out;
 }
@@ -40,8 +64,8 @@ export function unwrapGuillemets(text: string): string {
 const PAST_LINE_RE = /^(\s*(?:[-*•]\s*)?(?:\*\*)?(?:In passato|Patologie pregresse|Anamnesi (?:patologica )?remota|Pregressi|A\.?P\.?R\.?)\s*:?\s*(?:\*\*)?\s*:?)(.*)$/im;
 
 function hasCurrentDate(part: string, currentDays: ReadonlySet<number>): boolean {
-  for (const d of part.matchAll(DATE_RE)) {
-    const n = dayNumber(Number(d[1]), Number(d[2]), Number(d[3]));
+  for (const f of extractDates(part)) {
+    const n = dayNumber(f.d, f.m, f.y);
     if (n !== null && currentDays.has(n)) return true;
   }
   return false;
