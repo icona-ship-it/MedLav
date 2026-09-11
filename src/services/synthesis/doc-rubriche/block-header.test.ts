@@ -16,6 +16,13 @@ describe('describeDocumentBlock — data e struttura del blocco dai soli eventi 
     expect(range.dateLabel).toBe('dal 10.02.2026 al 17.02.2026');
     expect(range.sortIso).toBe('2026-02-10');
   });
+  it('due giornate con ≥2 atti correnti ciascuna → intervallo, anche se una domina (R10)', () => {
+    const d = describeDocumentBlock([
+      { eventDate: '2026-02-10' }, { eventDate: '2026-02-10' }, { eventDate: '2026-02-10' },
+      { eventDate: '2026-02-17' }, { eventDate: '2026-02-17' },
+    ]);
+    expect(d.dateLabel).toBe('dal 10.02.2026 al 17.02.2026');
+  });
   it('solo menzioni: prima menzione; senza date: s.d.; precisione anno', () => {
     expect(describeDocumentBlock([{ eventDate: '2020-05-01', temporalScope: 'retrospettivo' }]).dateLabel).toBe('01.05.2020');
     expect(describeDocumentBlock([{ eventDate: '1900-01-01', datePrecision: 'sconosciuta' }]).dateLabel).toBe('s.d.');

@@ -46,7 +46,11 @@ export function describeDocumentBlock(events: ReadonlyArray<BlockDatingEvent>): 
   for (const d of datedIso) counts.set(d, (counts.get(d) ?? 0) + 1);
   const dominant = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
   if (dayIso.length === 1) return { sortIso: dayIso[0]!, dateLabel: formatEventDateByPrecision(dayIso[0]!, 'giorno'), facility: rep?.facility ?? null };
-  if (dayIso.length > 1 && dominant && dominant[1] / datedIso.length >= 0.6) {
+  // Due o più giornate con almeno 2 atti correnti ciascuna = due documenti veri
+  // uniti per sbaglio (o una serie): l'intestazione dice l'intervallo, come la
+  // cronistoria, invece di nascondere il secondo dietro la data dominante (R10).
+  const busyDays = Array.from(counts.values()).filter((c) => c >= 2).length;
+  if (dayIso.length > 1 && dominant && dominant[1] / datedIso.length >= 0.6 && busyDays < 2) {
     return { sortIso: dominant[0], dateLabel: formatEventDateByPrecision(dominant[0], 'giorno'), facility: rep?.facility ?? null };
   }
   if (dayIso.length > 1) {
