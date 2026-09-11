@@ -9,6 +9,7 @@ import { renderRubricDocSanitaria, type RubricDocument, type RubricRenderResult 
 import { DEFAULT_RUBRIC_POLICY, type RubricPolicy } from './rubric-policy';
 import { DOCUMENT_TYPE_BLOCK_LABELS } from '../synthesis-prompts';
 import { sanitizeVerbatimOcr } from '@/services/calculations/verbatim-sanitizer';
+import { cleanOcrLine } from './rubric-parser';
 import { scrubContactDetails } from '../contact-scrub';
 
 export interface RubricSectionDoc {
@@ -64,10 +65,16 @@ export function facilityFromLetterhead(head: string): string | null {
 
 /** Titolo dell'esame ("RX polso destro") come qualificatore dell'intestazione. */
 export function examTitleFromText(head: string): string | null {
-  const m = EXAM_TITLE_RE.exec(head);
-  if (!m) return null;
-  const t = m[0].replace(/\s+/g, ' ').trim().replace(/[.,;:\-]+$/, '');
-  return t.length <= 50 ? t : null;
+  // Riga per riga, dopo cleanOcrLine: il titolo «# RM POLSO DX» o «**RX CAVIGLIA SX**»
+  // dell'OCR markdown non era visto dalla regex ancorata al testo grezzo (Fase 1, A).
+  for (const raw of head.split('\n').slice(0, 25)) {
+    const line = cleanOcrLine(raw);
+    const m = EXAM_TITLE_RE.exec(line);
+    if (!m) continue;
+    const t = m[0].replace(/\s+/g, ' ').trim().replace(/[.,;:\-]+$/, '');
+    return t.length <= 50 ? t : null;
+  }
+  return null;
 }
 
 const RICOVERO_RANGE_RE = /dal\s+(\d{1,2})[./](\d{1,2})[./](\d{4})\s+al\s+(\d{1,2})[./](\d{1,2})[./](\d{4})/i;

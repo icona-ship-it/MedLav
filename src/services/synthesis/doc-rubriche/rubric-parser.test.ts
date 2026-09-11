@@ -144,3 +144,28 @@ describe('parseRubriche — "Esiti di frattura…" è contenuto della diagnosi, 
     expect(rx.map((s) => s.label)).toEqual(['anamnesi', 'referto']);
   });
 });
+
+describe('parseRubriche — campi di modulo del PS e consulenza integra (Fase 1 audit 2026-09-10)', () => {
+  it('Dinamica/Località/Medico rich./Visita richiesta/Classe di dose diventano rubrica «modulo»; «RISPOSTA CONSULENZA» è consulenza', () => {
+    const segs = parseRubriche([{ pageNumber: 1, ocrText: [
+      'DINAMICA EVENTO', 'Caduta accidentale in bicicletta.', 'LOCALITÀ', 'Cittàdemo, via degli Esempi', 'MEDICO RICH.', 'Dott. Mario Esempi',
+      'VISITA RICHIESTA', 'ortopedica', 'RISPOSTA CONSULENZA', 'Frattura composta del radio distale.', 'CONSIGLIO', 'Tutore per 30 giorni.', 'PROGNOSI 30 GG',
+      'DIAGNOSI', 'Frattura composta del radio distale dx.', 'ESAME/CLASSE DI DOSE', 'RX polso: I',
+    ].join('\n') }]);
+    const byLabel = Object.fromEntries(segs.map((s) => [`${s.label}:${s.rawLabel}`, s.text]));
+    // «ESAME/CLASSE DI DOSE» resta un'etichetta senza corpo (la riga seguente è un titolo d'esame) e sparisce.
+    expect(segs.filter((s) => s.label === 'modulo').map((s) => s.rawLabel)).toEqual(['DINAMICA EVENTO', 'LOCALITÀ', 'MEDICO RICH.', 'VISITA RICHIESTA']);
+    const consulenza = segs.find((s) => s.label === 'consulenza');
+    expect(consulenza?.text).toContain('Frattura composta del radio distale.');
+    expect(consulenza?.text).toContain('CONSIGLIO');
+    expect(consulenza?.text).toContain('Tutore per 30 giorni.');
+    expect(consulenza?.text).toContain('PROGNOSI 30 GG');
+    expect(segs.find((s) => s.label === 'diagnosi')?.text).toContain('radio distale dx');
+    expect(byLabel['indicazioni:CONSIGLIO']).toBeUndefined();
+  });
+
+  it('fuori da una consulenza, CONSIGLIO e PROGNOSI aprono ancora le loro rubriche', () => {
+    const segs = parseRubriche([{ pageNumber: 1, ocrText: 'DIAGNOSI\nDistorsione caviglia dx.\nCONSIGLIO\nGhiaccio e riposo.\nPROGNOSI 10 GG' }]);
+    expect(segs.map((s) => s.label)).toEqual(['diagnosi', 'indicazioni', 'prognosi']);
+  });
+});

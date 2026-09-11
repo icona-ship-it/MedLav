@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDocumentazioneSanitariaRubriche, dischargeDateFromText } from './rubric-section';
+import { formatDocumentazioneSanitariaRubriche, dischargeDateFromText, examTitleFromText } from './rubric-section';
 
 describe('formatDocumentazioneSanitariaRubriche — dal DB al blocco', () => {
   it('intestazione dagli eventi correnti; la lettera di dimissione sta alla data di dimissione', () => {
@@ -75,5 +75,13 @@ describe('sanitizeFacility — nomi di strutture a due parole non sono persone',
       expect(out.markdown).toContain(`, ${name}, in data`);
       expect(out.markdown).not.toContain(`Dott. ${name}`);
     }
+  });
+});
+
+describe('examTitleFromText — titolo d\'esame dall\'OCR markdown (Fase 1 audit 2026-09-10)', () => {
+  it('should read «# RM POLSO DX» and «**RX CAVIGLIA SX**» after cleaning the line', () => {
+    expect(examTitleFromText('OSPEDALE CIVILE DI CITTÀDEMO\n# RM POLSO DX\nNotizie cliniche: caduta.')).toBe('RM POLSO DX');
+    expect(examTitleFromText('**RX CAVIGLIA SX**\nNon lesioni ossee.')).toBe('RX CAVIGLIA SX');
+    expect(examTitleFromText('Nessun titolo qui.')).toBeNull();
   });
 });

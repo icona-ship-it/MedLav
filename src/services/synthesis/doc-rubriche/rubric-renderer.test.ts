@@ -501,3 +501,26 @@ describe('dedup sull\'incipit anche per referti brevi (≥15 parole); saluto del
     expect(out).not.toContain('Gentile Signore');
   });
 });
+
+describe('renderer — modulistica e formule di chiusura fuori dalle «…» (Fase 1 audit 2026-09-10)', () => {
+  const doc = (id: string, type: string, text: string): RubricDocument => ({
+    documentId: id, documentType: type, header: `**Doc ${id}, in data 10.02.2026:**`, sortDate: '2026-02-10', pages: [{ pageNumber: 1, ocrText: text }],
+  });
+  it('verbale PS: Dinamica/Località/Medico rich. non compaiono; diagnosi e consulenza integra sì', () => {
+    const out = renderRubricDocSanitaria([doc('ps', 'cartella_clinica', [
+      'VERBALE DI PRONTO SOCCORSO — codice verde', 'DINAMICA EVENTO', 'Caduta accidentale in bicicletta.', 'LOCALITÀ', 'Cittàdemo', 'MEDICO RICH.', 'Dott. Mario Esempi',
+      'RISPOSTA CONSULENZA', 'Frattura composta del radio distale dx.', 'CONSIGLIO', 'Tutore per 30 giorni.', 'PROGNOSI 30 GG',
+      'DIAGNOSI', 'Frattura composta del radio distale dx.',
+    ].join('\n'))], DEFAULT_RUBRIC_POLICY).markdown;
+    expect(out).not.toContain('Caduta accidentale in bicicletta');
+    expect(out).not.toContain('Mario Esempi');
+    expect(out).toContain('Tutore per 30 giorni.');
+    expect(out).toContain('PROGNOSI 30 GG');
+  });
+  it('lettera: dopo «Cordiali saluti» nulla entra nella citazione', () => {
+    const out = renderRubricDocSanitaria([doc('l', 'lettera_dimissione', 'DIAGNOSI DI DIMISSIONE\nFrattura composta del radio distale dx.\nCordiali saluti\nIl medico curante potrà modificare la terapia.\nConservare questo documento.')], DEFAULT_RUBRIC_POLICY).markdown;
+    expect(out).toContain('Frattura composta');
+    expect(out).not.toContain('Cordiali saluti');
+    expect(out).not.toContain('Conservare questo documento');
+  });
+});

@@ -36,7 +36,11 @@ const VOCABULARY: ReadonlyArray<{ key: string; re: RegExp; keepLabel?: boolean }
   { key: 'anamnesi', re: /^anamnesi\b.*$/ },
   { key: 'intervento', re: /^(intervento( chirurgico| eseguito)?|descrizione (dell'?)?intervento|verbale operatorio|atto operatorio|tecnica operatoria|procedura( eseguita)?|trattamento adottato|(1|2|3|i|ii|iii)[°º]? tempo chirurgico)$/ },
   { key: 'diario', re: /^(diario( clinico| medico| infermieristico)?|decorso( clinico| post ?operatorio| della degenza)?)$/ },
-  { key: 'consulenza', re: /^(consulenza( [a-z]+){0,3}|risposta( del(lo)? specialista| consulente)?|parere( specialistico)?)$/ },
+  { key: 'consulenza', re: /^(consulenza( [a-z]+){0,3}|risposta( (della |del(lo)? )?(consulenza|specialista|consulente))?|parere( specialistico)?)$/ },
+  // Campi di MODULO del verbale di PS / carta intestata (spec Lavini §b «si omette»):
+  // riconosciuti come rubrica propria 'modulo', che nessuna policy copia — prima
+  // finivano come corpo della rubrica precedente e dentro le «…» (audit 2026-09-10, Fase 1 A/C).
+  { key: 'modulo', re: /^(dinamica( dell'?evento| evento)?|localit[aà]( dell'?evento)?|circostanze|luogo( dell'?evento)?|prestazioni (effettuate|erogate|refertate)|medico rich(iedente|\.)?|richiedente|visita richiesta|data( e ora)?( di)? (richiesta|accettazione|arrivo|uscita|presa in carico|dimissione)|ora( di)? (arrivo|accettazione|uscita|dimissione)|modalit[aà]( di)? (arrivo|invio|accesso)|mezzo( di)? (arrivo|trasporto)|inviato da|codice( di)? uscita|classe di dose|dose efficace|esame\/classe di dose|accession( number)?|n\.? ?(episodio|pratica|nosografico|cartella)|episodio( n\.?)?|reparto( di)? (invio|destinazione)|destinazione|guaribile in giorni|i dati (in|di) questa sezione.*)$/ },
   // "Esiti di RX/TC…" apre un referto; "Esiti di frattura del femore" è una DIAGNOSI
   // (contenuto), non un titolo: con /esiti di [a-z ]+/ spariva (giro 8).
   { key: 'referto', re: /^(referto|descrizione( clinica)?|reperti?|risultat[oi]|esam[ei]( eseguit[oi])?|tecnica( di esame)?|metodica|esami visionati|visionat[io]|esiti di (rx|rm|rmn|tc|tac|eco|ecografia|esami|indagini|accertamenti)( [a-z ]+)?)$/ },
@@ -141,6 +145,8 @@ function hasOpenQuote(lines: ReadonlyArray<string>): boolean {
   return count(/«/g) !== count(/»/g);
 }
 
+const CONSULENZA_SOFT_KEYS: ReadonlySet<string> = new Set(['indicazioni', 'prognosi', 'terapia', 'note']);
+
 export function parseRubriche(pages: ReadonlyArray<RubricPage>): RubricSegment[] {
   const segments: RubricSegment[] = [];
   let current: { label: string; rawLabel: string | null; lines: string[]; pageNumber: number } | null = null;
@@ -167,7 +173,11 @@ export function parseRubriche(pages: ReadonlyArray<RubricPage>): RubricSegment[]
       // Dentro una citazione aperta ("… Si consiglia …" riportato da un altro
       // medico) nessuna riga apre una rubrica: le indicazioni citate resterebbero
       // attribuite al documento sbagliato (panel giro 7, caso C).
-      const hit: HeadingHit | null = current && hasOpenQuote(current.lines) ? null : detectHeading(line);
+      let hit: HeadingHit | null = current && hasOpenQuote(current.lines) ? null : detectHeading(line);
+      // Consulenza INTEGRA (spec: «Risposta + Consiglio + Prognosi 100 %»): dentro una
+      // consulenza le righe CONSIGLIO / PROGNOSI / TERAPIA / NOTE restano corpo; solo
+      // una rubrica forte (diagnosi, dimissione, EO, anamnesi, referto, intervento) la chiude.
+      if (hit && current?.label === 'consulenza' && CONSULENZA_SOFT_KEYS.has(hit.key)) hit = null;
       if (hit) {
         flush();
         sawHeading = true;

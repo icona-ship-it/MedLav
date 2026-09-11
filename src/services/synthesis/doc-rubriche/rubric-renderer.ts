@@ -329,11 +329,21 @@ function isEmptyBody(body: string): boolean {
   return lines.length === 1 && /^[^\n]{1,50}:\s*(?:[IVX]{1,4})?$/.test(lines[0]!);
 }
 
+/** Formula di chiusura di una lettera (saluti, note per il curante, avvisi di
+ * conservazione): chiude il passaggio, tutto ciò che segue non è testo clinico (Fase 1, B). */
+const CLOSING_FORMULA_RE = /^(cordiali saluti|distinti saluti|cordialit[àa]|con osservanza|in fede|il medico curante potr[àa]|conservare (questo|il presente) documento|si prega di conservare|si raccomanda di conservare|ringraziando per la (cortese )?collaborazione)/i;
+
+function cutAtClosingFormula(text: string): string {
+  const lines = text.split('\n');
+  const idx = lines.findIndex((l) => CLOSING_FORMULA_RE.test(l.trim()));
+  return idx === -1 ? text : lines.slice(0, idx).join('\n').trim();
+}
+
 function renderSegment(seg: RubricSegment, seen: Set<string>, stats: { dedup: number }, maxWords: number, withTitle = true): string | null {
   const key = normalizeForDedup(seg.text);
   if (key.length >= 40 && seen.has(key)) { stats.dedup++; return null; }
   const title = withTitle ? (RUBRIC_TITLES[seg.label] ?? (seg.rawLabel ?? '')) : '';
-  const cleaned = stripAdminNoise(seg.text);
+  const cleaned = cutAtClosingFormula(stripAdminNoise(seg.text));
   if (!cleaned || isEmptyBody(cleaned)) return null;
   const prefix = dedupPrefixKey(cleaned);
   if (prefix && seen.has(prefix)) { stats.dedup++; return null; }

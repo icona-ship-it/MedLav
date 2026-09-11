@@ -125,7 +125,9 @@ export const ANTI_REPETITION_AND_LENGTH_RULES = `REGOLE ANTI-RIPETIZIONE (vincol
  * construction. The "elaborated (AI)" variant remains available on demand
  * (buildDocSanitariaLlmSpec) — it re-enables the LLM directive kept on the spec.
  */
-export const DOC_SANITARIA_PLACEHOLDER = `Di seguito la documentazione sanitaria in atti, riprodotta integralmente e fedelmente dai documenti acquisiti, in ordine cronologico.
+// Cappello NEUTRO (Fase 1, A/B: «riprodotta integralmente e fedelmente» era falso per
+// costruzione in modalità rubriche e il panel lo contava come meta-commento).
+export const DOC_SANITARIA_PLACEHOLDER = `Si riporta di seguito, in ordine cronologico, la documentazione sanitaria in atti.
 
 ${DETERMINISTIC_MARKERS.DOC_SANITARIA}`;
 
