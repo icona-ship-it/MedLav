@@ -860,7 +860,7 @@ export function ReportStep({
                 )}
                 {wd.action === 'reprocess' && (
                   <Button variant="ghost" size="sm" className="shrink-0" onClick={() => onNavigateToStep(3)}>
-                    Rielabora
+                    Riavvia l&apos;analisi
                   </Button>
                 )}
               </div>

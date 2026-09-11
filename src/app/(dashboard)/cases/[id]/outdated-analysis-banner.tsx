@@ -15,7 +15,7 @@ import { PIPELINE_CHANGED_AT, isAnalysisOlderThanBuild } from '@/lib/build-info'
 interface OutdatedAnalysisBannerProps {
   processingStage: string;
   processingStartedAt?: string | null;
-  /** Porta al passaggio Elaborazione, dove sta "Riavvia analisi". */
+  /** Porta al passaggio Elaborazione (cercato per etichetta), dove sta «Riavvia l'analisi». */
   onGoToProcessing: () => void;
 }
 
@@ -44,7 +44,7 @@ export function OutdatedAnalysisBanner({ processingStage, processingStartedAt, o
       </p>
       <Button type="button" size="sm" variant="outline" onClick={onGoToProcessing} className="shrink-0">
         <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-        Vai a Riavvia analisi
+        Vai a «Riavvia l&apos;analisi»
       </Button>
     </div>
   );

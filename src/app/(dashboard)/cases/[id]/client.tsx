@@ -16,6 +16,7 @@ import type {
   CaseData, Document, EventRow, AnomalyRow, MissingDocRow, ReportRow,
 } from './types';
 import type { DocumentPage } from '../../actions';
+import { findStepNumber, PROCESSING_STEP_LABEL } from '@/lib/wizard-steps';
 
 // --- Types ---
 
@@ -178,6 +179,8 @@ export function CaseDetailClient({
       : isExtractionOnly
         ? EXTRACTION_WIZARD_STEPS
         : FULL_WIZARD_STEPS;
+  // Passo «Elaborazione» cercato per etichetta: nel wizard RC è il 3, negli altri il 2.
+  const processingStepNumber = findStepNumber(WIZARD_STEPS, PROCESSING_STEP_LABEL, 3);
 
   // Sync with server data on refresh
   useEffect(() => {
@@ -335,7 +338,7 @@ export function CaseDetailClient({
       <OutdatedAnalysisBanner
         processingStage={processingStage}
         processingStartedAt={processingStartedAt}
-        onGoToProcessing={() => handleSetStep(2)}
+        onGoToProcessing={() => handleSetStep(processingStepNumber)}
       />
 
       {/* Wizard Step Bar */}

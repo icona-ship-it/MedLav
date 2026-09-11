@@ -734,6 +734,16 @@ export function ProcessingSection({
                       {pipelineMode === 'full' ? 'Vai alla Perizia' : 'Vai ai risultati'}
                     </Button>
                   )}
+                  {/* Riavvio di un caso completato (audit 2026-09-10, R2): prima non esisteva
+                      alcun pulsante qui — il banner «versione precedente» e «Riavvia l'analisi»
+                      dal passo Perizia arrivavano in un vicolo cieco. Stessa conferma e stesso
+                      costo dell'avvio da capo. */}
+                  {processingStage === 'completato' && (
+                    <Button variant="ghost" size="sm" onClick={() => setShowReprocessDialog(true)} disabled={isStartingProcessing}>
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      Riavvia l&apos;analisi ({creditCost} crediti)
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
