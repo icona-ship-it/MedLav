@@ -56,6 +56,7 @@ import type { ConsolidatedEvent } from '../consolidation/event-consolidator';
 import { scrubContactDetails } from './contact-scrub';
 import { stripPromptArtifacts, stripItalicMetaParagraphs } from './prompt-artifacts';
 import { findUnattestedDates, unwrapGuillemets, sanitizeAnamnesiPast, collectCurrentDays, collectCurrentLesions } from './narrative-nets';
+import { applyPeriziaMetadataToHeader } from './header-overlay';
 
 /** Sezioni narrative su cui girano le reti date/citazioni. */
 const NARRATIVE_SECTION_IDS: ReadonlySet<string> = new Set(['il_fatto_e_storia_clinica', 'anamnesi', 'epicrisi']);
@@ -1247,6 +1248,10 @@ async function generateHeaderSection(params: {
     );
   }
 
+  // I dati scritti dal perito nel form (data sinistro, carta intestata, anagrafica)
+  // arrivano sulla carta tali e quali, anche se il modello li ha omessi o se il
+  // JSON non è valido (audit 2026-09-10, I8).
+  headerData = applyPeriziaMetadataToHeader(headerData, synthesisParams.periziaMetadata, synthesisParams.caseType);
   const markdown = renderHeaderMarkdown(headerData);
   const wordCount = markdown.split(/\s+/).filter((w) => w.length > 0).length;
 
