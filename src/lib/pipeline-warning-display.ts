@@ -68,15 +68,25 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
     });
   }
 
-  // 3. Documenti non letti per intero — WARNING drillabile (ocr + estrazione con failedItems).
-  const unread = warnings.filter(
-    (w) => (w.step === 'ocr' || w.step === 'extraction') && (w.failedItems?.length ?? 0) > 0,
-  );
+  // 3a. Documenti NON letti (OCR fallito) — CRITICO: la perizia non ne cita nulla
+  // (audit 2026-09-10, R14: prima stavano in ambra con «non letto per intero»).
+  const ocrFailed = warnings.filter((w) => w.step === 'ocr' && (w.failedItems?.length ?? 0) > 0);
+  if (ocrFailed.length > 0) {
+    const n = ocrFailed.reduce((s, w) => s + count(w), 0);
+    out.push({
+      severity: 'critical',
+      title: `${n} ${n === 1 ? 'documento non è stato letto' : 'documenti non sono stati letti'} (errore di lettura): la perizia non ne cita nulla. ${n === 1 ? 'Controllalo' : 'Controllali'} dal passo Documenti (se serve ricarica un PDF leggibile) e riavvia l'elaborazione.`,
+      action: 'view-documents',
+      sources: ocrFailed,
+    });
+  }
+  // 3b. Documenti letti ma non analizzati per intero — WARNING drillabile.
+  const unread = warnings.filter((w) => w.step === 'extraction' && (w.failedItems?.length ?? 0) > 0);
   if (unread.length > 0) {
     const n = unread.reduce((s, w) => s + count(w), 0);
     out.push({
       severity: 'warning',
-      title: `${n} ${n === 1 ? 'documento non è stato letto' : 'documenti non sono stati letti'} per intero — il report potrebbe non citarne alcune parti.`,
+      title: `${n} ${n === 1 ? 'documento è stato letto ma non analizzato' : 'documenti sono stati letti ma non analizzati'} per intero — il report potrebbe non citarne alcune parti.`,
       action: 'view-documents',
       sources: unread,
     });
@@ -148,7 +158,9 @@ export function groupPipelineWarnings(warnings: RawPipelineWarning[]): PipelineW
   }
 
   // 7. Qualunque altro warning non categorizzato — non perderlo mai.
-  const known = new Set([...sectionFailed, ...calc, ...unread, ...coverage, ...quoteFidelity, ...dedup, ...lang]);
+  // dateFidelity mancava dall'elenco: le date da verificare comparivano DUE volte
+  // (tradotte e grezze) — audit 2026-09-10, lente numeri.
+  const known = new Set([...sectionFailed, ...calc, ...ocrFailed, ...unread, ...coverage, ...quoteFidelity, ...dateFidelity, ...dedup, ...lang]);
   const rest = warnings.filter((w) => !known.has(w));
   for (const w of rest) {
     out.push({

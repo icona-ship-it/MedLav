@@ -21,16 +21,19 @@ describe('groupPipelineWarnings — copy calmo e gravità corretta per il perito
     expect(out[0].title).not.toContain('non sono stati letti');
   });
 
-  it('documenti troncati → WARNING drillabile con conteggio aggregato', () => {
+  it('OCR fallito → CRITICAL «non letti»; estrazione troncata → WARNING «non analizzati per intero» (audit 2026-09-10, R14)', () => {
     const out = groupPipelineWarnings([
       w({ step: 'extraction', message: 'troncato pp 145-154', failedItems: ['doc1.pdf'] }),
       w({ step: 'ocr', message: 'ocr fallito', failedItems: ['doc2.pdf', 'doc3.pdf'] }),
     ]);
-    expect(out).toHaveLength(1);
-    expect(out[0].severity).toBe('warning');
-    expect(out[0].title).toContain('3 documenti');
-    expect(out[0].action).toBe('view-documents');
-    expect(out[0].sources).toHaveLength(2);
+    expect(out).toHaveLength(2);
+    const critical = out.find((o) => o.severity === 'critical');
+    const warning = out.find((o) => o.severity === 'warning');
+    expect(critical?.title).toContain('2 documenti non sono stati letti');
+    expect(critical?.title).toContain('riavvia');
+    expect(critical?.action).toBe('view-documents');
+    expect(warning?.title).toContain('1 documento è stato letto ma non analizzato');
+    expect(warning?.sources).toHaveLength(1);
   });
 
   it('dedup → INFO (rassicurazione, non allarme)', () => {
@@ -117,5 +120,13 @@ describe('date-verification (2026-09-06)', () => {
     expect(d).toBeDefined();
     expect(d!.title).toContain('2 date');
     expect(d!.sources[0]!.failedItems).toHaveLength(2);
+  });
+});
+
+describe('nessun warning categorizzato compare due volte (audit 2026-09-10)', () => {
+  it('date-verification → UNA voce tradotta, non anche quella grezza', () => {
+    const out = groupPipelineWarnings([{ step: 'date-verification', severity: 'warning', message: 'raw', failedItems: ['07.01.2025'] } as never]);
+    expect(out).toHaveLength(1);
+    expect(out[0].title).not.toBe('raw');
   });
 });
