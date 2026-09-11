@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHeaderMarkdown, genderFromCodiceFiscale, normalizeAccompagnatore, isHeaderSectionId } from './header-template';
+import { renderHeaderMarkdown, genderFromCodiceFiscale, normalizeAccompagnatore, isHeaderSectionId, cleanEventoIndice } from './header-template';
 import type { HeaderData } from './header-schema';
 
 function emptyHeader(): HeaderData {
@@ -171,5 +171,17 @@ describe('renderHeaderMarkdown — una riga per dato anche nel visualizzatore', 
     expect(md).toMatch(/Dott\. Mario Demprova {2}\nMedicina legale/);
     // le righe vuote restano tali (separano i blocchi)
     expect(md).toContain('\n\n');
+  });
+});
+
+describe('cleanEventoIndice — solo la dinamica, mai diagnosi, anni o frasi attribuite (Fase 1 audit 2026-09-10)', () => {
+  it('should cut lesions, dates and attributions and keep at most 6 words', () => {
+    expect(cleanEventoIndice('trauma da investimento pedone con frattura olecrano destro')).toBe('trauma da investimento pedone');
+    expect(cleanEventoIndice('incidente stradale avvenuto nel 2024, indicato come causa scatenante del malessere «come da referti del 2024»')).toBe('incidente stradale');
+    expect(cleanEventoIndice('trauma stradale da investimento con frattura pluriframmentaria dell\'olecrano')).toBe('trauma stradale da investimento');
+    expect(cleanEventoIndice('caduta accidentale in bicicletta lungo la pista ciclabile di Cittàdemo')).toBe('caduta accidentale in bicicletta lungo la');
+    expect(cleanEventoIndice('«sinistro stradale» occorso in data 13/11/2024')).toBe('sinistro stradale');
+    expect(cleanEventoIndice('')).toBeNull();
+    expect(cleanEventoIndice('2024')).toBeNull();
   });
 });

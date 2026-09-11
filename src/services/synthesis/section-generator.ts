@@ -1339,7 +1339,13 @@ function buildHeaderUserPrompt(params: SynthesisParams): string {
   // Medical events — these are the primary source for patient name, lesion,
   // event date, structure when metadata is empty. Truncate to keep the prompt
   // focused; the header only needs the first ~30 events to extract identity.
-  const eventsToInclude = params.events.slice(0, 30);
+  // Primi 30 eventi CORRENTI a data reale (Fase 1 audit 2026-09-10, gold C): con lo
+  // slice cieco arrivavano anamnesi remota e sentinelle 1900 e l'oggetto usciva
+  // «nel 2024» con un virgolettato inesistente. Se sono meno di 30, si completa con gli altri.
+  const isCurrentDated = (e: { eventDate?: string | null; temporalScope?: string | null }): boolean =>
+    Boolean(e.eventDate) && !String(e.eventDate).startsWith('1900-01-01') && e.temporalScope !== 'retrospettivo' && e.temporalScope !== 'programmato';
+  const currentFirst = [...params.events.filter(isCurrentDated), ...params.events.filter((e) => !isCurrentDated(e))];
+  const eventsToInclude = currentFirst.slice(0, 30);
   if (eventsToInclude.length > 0) {
     parts.push('## EVENTI CLINICI (primi 30 per estrazione dati identificativi e dell\'evento indice)');
     parts.push(formatEventsForPrompt(eventsToInclude));

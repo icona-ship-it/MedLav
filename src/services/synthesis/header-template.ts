@@ -123,7 +123,7 @@ function renderStragiudizialeHeader(data: HeaderData): string {
   const o = data.oggetto;
   const eventoParts: string[] = [];
   // Niente virgolettati nell'oggetto: sarebbero frasi attribuite che nessun documento riporta.
-  const eventoIndice = o.eventoIndice ? o.eventoIndice.replace(/[«»"“”]/g, '').replace(/\s+/g, ' ').trim() : null;
+  const eventoIndice = cleanEventoIndice(o.eventoIndice);
   if (eventoIndice) eventoParts.push(`in occasione di ${eventoIndice.toLowerCase()}`);
   if (o.dataEvento) eventoParts.push(`occorso in data ${o.dataEvento}`);
   const eventoStr = eventoParts.length > 0 ? ` ${eventoParts.join(' ')}` : ` in occasione di ${TBD}`;
@@ -143,6 +143,22 @@ function withHardBreaks(lines: ReadonlyArray<string>): string {
   return lines
     .map((line, i) => (line.trim() && (lines[i + 1] ?? '').trim() ? `${line}  ` : line))
     .join('\n');
+}
+
+/**
+ * L'evento indice è la DINAMICA in poche parole («trauma stradale», «caduta
+ * accidentale»): niente diagnosi, date, anni o frasi attribuite (Fase 1 audit
+ * 2026-09-10, A/B/C: «trauma da investimento pedone con frattura olecrano destro»,
+ * «incidente stradale avvenuto nel 2024, indicato come causa…»). Puro.
+ */
+export function cleanEventoIndice(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = raw.replace(/[«»"“”]/g, '').replace(/\s+/g, ' ').trim();
+  s = s.split(/,|;|\b(?:avvenut\w*|occors\w*|verificat\w*si|riportand\w*|con conseguente|con frattur\w*|con lesion\w*|con trauma|indicat\w*|come da|in data|del|nel)\b/i)[0] ?? '';
+  s = s.replace(/\b(?:19|20)\d{2}\b/g, '').replace(/\d+[./-]\d+[./-]\d+/g, '').replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
+  const words = s.split(' ').filter(Boolean);
+  if (words.length === 0) return null;
+  return words.slice(0, 6).join(' ');
 }
 
 function ambitoToText(ambito: HeaderData['oggetto']['ambito']): string | null {
