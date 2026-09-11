@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 
 export interface RegenerablePanelSection {
   canonicalId: string;
@@ -150,7 +151,7 @@ export function RegeneratePanelDialog({
           <Button onClick={handleRun} disabled={isRunning || selected.size === 0}>
             {isRunning
               ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />{progress ?? 'Rigenerazione…'}</>
-              : <><RefreshCw className="mr-1.5 h-4 w-4" />Rigenera selezionate ({selected.size})</>}
+              : <><RefreshCw className="mr-1.5 h-4 w-4" />Rigenera selezionate ({selected.size}) — {selected.size * CREDIT_COSTS.rigenerazione_sezione} crediti</>}
           </Button>
         </DialogFooter>
       </DialogContent>

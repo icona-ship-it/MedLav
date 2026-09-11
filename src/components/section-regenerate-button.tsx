@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 
 interface SectionRegenerateButtonProps {
   caseId: string;
@@ -156,7 +157,7 @@ export function SectionRegenerateButton({
               {isRegenerating ? (
                 <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Rigenerazione...</>
               ) : (
-                <><RefreshCw className="mr-1 h-3 w-3" />Rigenera sezione</>
+                <><RefreshCw className="mr-1 h-3 w-3" />Rigenera sezione ({CREDIT_COSTS.rigenerazione_sezione} crediti)</>
               )}
             </Button>
           </div>

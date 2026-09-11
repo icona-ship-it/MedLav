@@ -23,6 +23,7 @@ import { updateReportStatus, getCaseReportVersions, getLastExport, attestAndAppr
 import { QualityGateDialog } from './quality-gate-dialog';
 import { getRequiredAttestationSections } from '@/lib/attestation-shared';
 import type { ReportRow } from './types';
+import { CREDIT_COSTS } from '@/services/credits/credit-costs';
 
 // --- Helpers ---
 
@@ -389,7 +390,7 @@ export function ReportActionBar({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Riscrivi tutto il report</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Sei sicuro? Il report verr&agrave; rigenerato da capo. <strong>Le modifiche manuali andranno perse.</strong>
+                        Sei sicuro? Il report verr&agrave; rigenerato da capo. <strong>Le modifiche manuali andranno perse.</strong> Costa {CREDIT_COSTS.rigenerazione_report} crediti.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
