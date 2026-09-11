@@ -524,3 +524,16 @@ describe('renderer — modulistica e formule di chiusura fuori dalle «…» (Fa
     expect(out).not.toContain('Conservare questo documento');
   });
 });
+
+describe('renderer — un solo contenitore per ricovero (Fase 1 audit 2026-09-10, B)', () => {
+  it('due fascicoli dello stesso «dal … al …» → una sola riga di rimando', () => {
+    const mk = (id: string): RubricDocument => ({
+      documentId: id, documentType: 'cartella_clinica', header: `**Cartella clinica, Ospedale Civile di Cittàdemo, dal 16.07.2023 al 25.07.2023:**`, sortDate: '2023-07-16',
+      pages: Array.from({ length: 12 }, (_, i) => ({ pageNumber: i + 1, ocrText: `DIARIO\nGiornata ${i + 1} regolare.` })),
+    });
+    const lettera: RubricDocument = { documentId: 'l', documentType: 'lettera_dimissione', header: '**Lettera di dimissione, in data 25.07.2023:**', sortDate: '2023-07-25', pages: [{ pageNumber: 1, ocrText: 'DIAGNOSI DI DIMISSIONE\nFrattura femore sx.' }] };
+    const md = renderRubricDocSanitaria([mk('a'), mk('b'), lettera], DEFAULT_RUBRIC_POLICY).markdown;
+    expect((md.match(/Fascicolo di ricovero agli atti/g) ?? []).length).toBe(1);
+    expect((md.match(/dal 16\.07\.2023 al 25\.07\.2023/g) ?? []).length).toBe(1);
+  });
+});

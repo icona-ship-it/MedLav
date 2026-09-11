@@ -403,6 +403,7 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
   const seen = new Set<string>();
   const standaloneRefertoPrefixes = new Set<string>();
   const stats = { dedup: 0 };
+  const seenContainers = new Set<string>();
   let omitted = 0; let fallbackDocs = 0; let illegibleDocs = 0;
   const blocks: string[] = [];
   const certificates: RubricDocument[] = [];
@@ -437,6 +438,11 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
       tp = { ...tp, mode: 'passaggi', copia: [...tp.copia, 'conclusioni', 'esame_obiettivo', 'corpo', 'preambolo'], fallbackCorpo: true };
     }
     if (rimando) {
+      // Un solo contenitore per ricovero (Fase 1 audit 2026-09-10, B): due fascicoli
+      // dello stesso ricovero (stesso «dal … al …») non producono due righe di rimando.
+      const rangeKey = /dal \S+ al \S+/.exec(doc.header)?.[0] ?? null;
+      const duplicateContainer = rangeKey !== null && seenContainers.has(rangeKey);
+      if (rangeKey) seenContainers.add(rangeKey);
       // Fascicolo contenitore: resta il rimando + i referti d'esame eseguiti in
       // degenza (RX/TC/ECO dentro la cartella), che il gold riporta a parte.
       // Spec Lavini: si scartano RX torace / ECG / screening pre-operatori (routine di degenza).
@@ -446,6 +452,11 @@ export function renderRubricDocSanitaria(documents: ReadonlyArray<RubricDocument
         .filter((s) => { const k = dedupPrefixKey(stripAdminNoise(s.text)); return !(k && standaloneRefertoPrefixes.has(k)); })
         .map((s) => renderSegment(s, seen, stats, Math.ceil(tp.maxParole / 2)))
         .filter((l): l is string => l !== null);
+      if (duplicateContainer) {
+        if (embedded.length > 0) blocks.push(`${doc.header}\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}`);
+        else stats.dedup++;
+        continue;
+      }
       blocks.push(`${doc.header}\n${rimando}${embedded.length > 0 ? `\nReferti eseguiti in degenza:\n${capBlockLines(embedded, tp.maxParole).join('\n')}` : ''}`);
       continue;
     }
