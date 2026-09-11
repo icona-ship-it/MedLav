@@ -12,6 +12,14 @@
 
 const TABLE_BLOCK_RE = /\[TABLE_HTML_START\]([\s\S]*?)\[TABLE_HTML_END\]/g;
 const RAW_TABLE_RE = /<table[^>]*>[\s\S]*?<\/table>/gi;
+/**
+ * Un tag HTML VERO: `<` seguito da un nome di tag (lettera), attributi senza
+ * `<`/`>`/a-capo, chiusura sulla STESSA riga. Un `<` clinico («ROM dx<sx»,
+ * «PA <90», «NRS <5») non apre mai un tag: prima `/<[^>]+>/` mangiava tutto
+ * fino al primo `>` anche righe dopo, diagnosi con lateralità compresa
+ * (audit 2026-09-10, invariante I1).
+ */
+const HTML_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>\n]*)?\/?>/g;
 const MD_IMAGE_RE = /!\[[^\]]*\]\([^)]*\.(?:jpe?g|png|webp|gif|tiff?)\)/gi;
 
 /** Convert an HTML <table> fragment to readable pipe-table text. Returns null
@@ -49,7 +57,7 @@ function decodeEntities(s: string): string {
 }
 
 function stripTagsAndEntities(s: string): string {
-  return decodeEntities(s.replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]+>/g, ''));
+  return decodeEntities(s.replace(/<br\s*\/?\s*>/gi, '\n').replace(HTML_TAG_RE, ''));
 }
 
 /**

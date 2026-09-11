@@ -77,3 +77,30 @@ Conclusioni: nella norma.`;
     });
   });
 });
+
+describe('un "<" clinico non apre mai un tag (audit 2026-09-10, invariante I1)', () => {
+  const SIDE_RE = /\b(dx|sx|sn|ds|destr[oaie]|sinistr[oaie])\b/gi;
+
+  it('"ROM dx<sx" + "NRS >5" + &nbsp; nella pagina: la diagnosi con lato resta e i lati sono nell\'ordine originale', () => {
+    const input = 'ESAME OBIETTIVO\nROM dx<sx, dolore alla pressione.\nDIAGNOSI\nFrattura polso sx.\nDolore NRS >5.\nPROGNOSI&nbsp;Giorni 30.';
+    const out = sanitizeVerbatimOcr(input);
+    expect(out).toContain('Frattura polso sx.');
+    expect(out).toContain('ROM dx<sx');
+    expect(out).toContain('NRS >5');
+    expect((out.match(SIDE_RE) ?? []).map((w) => w.toLowerCase())).toEqual(['dx', 'sx', 'sx']);
+  });
+
+  it('"ROM dx<sx" + <span> a valle: il tag sparisce, la diagnosi con lato resta', () => {
+    const out = sanitizeVerbatimOcr('ESAME OBIETTIVO\nROM dx<sx, dolore alla pressione.\nDIAGNOSI\nFrattura polso sx.\n<span>Prognosi</span> giorni 30.');
+    expect(out).toContain('Frattura polso sx.');
+    expect(out).toContain('Prognosi giorni 30.');
+    expect(out).not.toContain('<span>');
+  });
+
+  it('un tag vero con attributi sulla stessa riga viene tolto; «PA <90 mmHg» e «T <38» restano', () => {
+    const out = sanitizeVerbatimOcr('<p class="x">PA <90 mmHg, T <38.</p><br/>Frattura polso sx.');
+    expect(out).toContain('PA <90 mmHg, T <38.');
+    expect(out).toContain('Frattura polso sx.');
+    expect(out).not.toMatch(/<p|<\/p>/);
+  });
+});
