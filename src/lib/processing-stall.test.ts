@@ -22,3 +22,16 @@ describe('stallNotice — pause di estrazione spiegate (CASO-2026-235)', () => {
     expect(n.text).toContain('rimborsati');
   });
 });
+
+describe('stallNotice — fase OCR (0 eventi): l\'avviso esiste anche prima del primo evento', () => {
+  it('should word the notice on document reading when no event exists yet', () => {
+    const n = stallNotice(5, 'ocr');
+    expect(n.tone).toBe('info');
+    expect(n.text).toContain('Nessun avanzamento nella lettura dei documenti da 5 minuti');
+    expect(stallNotice(16, 'ocr').tone).toBe('warn');
+  });
+
+  it('should keep the extraction wording by default', () => {
+    expect(stallNotice(5).text).toContain('Nessun nuovo evento da 5 minuti');
+  });
+});

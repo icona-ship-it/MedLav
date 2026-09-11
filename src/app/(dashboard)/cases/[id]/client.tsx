@@ -458,6 +458,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                lastErrorUser={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastErrorUser as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 initialDocSanitariaMode={docSanitariaMode}
@@ -540,6 +541,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                lastErrorUser={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastErrorUser as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 initialDocSanitariaMode={docSanitariaMode}
@@ -622,6 +624,7 @@ export function CaseDetailClient({
                 hasUploadedDocs={hasUploadedDocs}
                 processingStage={processingStage}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                lastErrorUser={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastErrorUser as string | undefined}
                 pipelineMode={pipelineMode}
                 initialExcludedSections={reportSectionExclusions}
                 initialDocSanitariaMode={docSanitariaMode}
@@ -653,6 +656,7 @@ export function CaseDetailClient({
                 incidentDate={incidentDate}
                 docSanitariaMode={docSanitariaMode}
                 lastError={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastError as string | undefined}
+                lastErrorUser={(caseData.perizia_metadata as Record<string, unknown> | null)?.lastErrorUser as string | undefined}
               />
             </div>
           )}

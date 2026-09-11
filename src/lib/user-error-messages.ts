@@ -34,9 +34,36 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
     pattern: /Report non valido/i,
     message: 'Il report generato non ha superato i controlli di qualità automatici ed è stato bloccato per proteggerti da un report difettoso. Puoi riavviare l\'elaborazione oppure, se ritieni si tratti di un falso allarme, rigenerare ignorando i controlli di qualità.',
   },
+  // Audit 2026-09-10 (reperti R7): messaggi REALI della pipeline che finivano nel
+  // fallback generico o su un consiglio sbagliato. I pattern specifici stanno
+  // PRIMA di quelli generici (500, not found, auth, extraction).
   {
-    pattern: /All documents failed OCR/i,
-    message: 'Impossibile leggere i documenti. Verifica che i file siano PDF, immagini (JPG, PNG) o Word validi e non corrotti.',
+    pattern: /\[INPUT_TOO_LARGE\]/,
+    message: 'Il caso supera il limite di 5000 pagine. Suddividi la documentazione in più casi (per esempio per periodo o per struttura) e riavvia l\'elaborazione.',
+  },
+  {
+    pattern: /hanno fallito l.OCR|OCR fallito su|All documents failed OCR/i,
+    message: 'Impossibile leggere i documenti, o la maggior parte di essi. Verifica che i file siano PDF, immagini (JPG, PNG) o Word leggibili e non corrotti, rimuovi quelli illeggibili dal passo Documenti e riavvia l\'elaborazione.',
+  },
+  {
+    pattern: /^Pipeline fallita$|Elaborazione interrotta \(timeout\)/i,
+    message: 'Questo documento non è stato elaborato perché l\'analisi del caso si è interrotta: il motivo è nel passo Elaborazione, da dove puoi riavviarla.',
+  },
+  {
+    pattern: /Estrazione fallita: 0 eventi|JSON LLM irrecuperabile|batch falliti/i,
+    message: 'La lettura dei documenti è riuscita, ma l\'analisi clinica non ha prodotto risultati per un errore del servizio AI, non dei tuoi file. Riavvia l\'elaborazione tra qualche minuto.',
+  },
+  {
+    pattern: /Pages not found|Case not found/i,
+    message: 'Durante l\'analisi non sono stati trovati i dati del caso (documento o caso rimosso nel frattempo). Riavvia l\'elaborazione; se si ripete, scrivici indicando il codice del caso.',
+  },
+  {
+    pattern: /mistral.*(?:401|unauthorized)|(?:401|unauthorized).*mistral/i,
+    message: 'Il servizio AI ha rifiutato la richiesta per un problema di configurazione del servizio, non dei tuoi documenti o del tuo account: non serve uscire e rientrare, scrivici indicando il codice del caso.',
+  },
+  {
+    pattern: /unauthorized access to case/i,
+    message: 'Non hai accesso a questo caso.',
   },
   {
     // AUDIT 2026-07-16: PDF protetto da password → prima "errore imprevisto".
@@ -92,8 +119,9 @@ const ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
     message: 'Il servizio è temporaneamente non disponibile. Riprova tra qualche minuto.',
   },
   {
-    pattern: /500|internal.*error|errore interno/i,
-    message: 'Si è verificato un errore. Se il problema persiste, contatta il supporto.',
+    // \b500\b: «limite 5000 pagine» e «50000 chars» NON sono un HTTP 500 (audit 2026-09-10).
+    pattern: /\b500\b|internal.*error|errore interno/i,
+    message: 'Si è verificato un errore del servizio. Riprova tra qualche minuto; se il problema persiste, scrivici indicando il codice del caso.',
   },
 ];
 
@@ -112,9 +140,21 @@ const PASS_THROUGH: RegExp[] = [
   /troppi tentativi/i,
   /ricarica la pagina e riprova/i,
   /nessun credito è stato addebitato/i,
+  // Messaggi già user-facing scritti dalla pipeline (stuck-case-monitor, onFailure)
+  /crediti ti sono stati rimborsati/i,
+  /si è interrotta durante la fase/i,
 ];
 
-export function toUserMessage(error: string | Error | unknown): string {
+export interface ToUserMessageOptions {
+  /** 'pipeline': l'errore viene dall'analisi di un caso → il fallback dice di
+   * riavviare dal passo Elaborazione, non «riprova tra qualche istante». */
+  context?: 'pipeline';
+}
+
+export const PIPELINE_FALLBACK_MESSAGE =
+  'L\'analisi si è interrotta per un errore del servizio, non dei tuoi documenti. Riavvia l\'elaborazione dal passo Elaborazione; se si ripete, scrivici indicando il codice del caso.';
+
+export function toUserMessage(error: string | Error | unknown, opts?: ToUserMessageOptions): string {
   const msg = error instanceof Error ? error.message : String(error ?? '');
 
   if (PASS_THROUGH.some((p) => p.test(msg))) return msg;
@@ -123,5 +163,6 @@ export function toUserMessage(error: string | Error | unknown): string {
     if (pattern.test(msg)) return message;
   }
 
+  if (opts?.context === 'pipeline') return PIPELINE_FALLBACK_MESSAGE;
   return 'Si è verificato un errore imprevisto. Riprova tra qualche istante.';
 }

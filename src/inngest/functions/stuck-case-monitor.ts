@@ -105,6 +105,9 @@ export const stuckCaseMonitor = inngest.createFunction(
                 ...meta,
                 stuckAlertedAt: new Date().toISOString(),
                 lastError: `L'elaborazione si è interrotta durante la fase "${row.processing_stage}" dopo ${stuckMinutes} minuti senza avanzamento. I crediti ti sono stati rimborsati: puoi riavviarla dalla pagina del caso.`,
+                // Stesso testo anche come messaggio per il medico: la UI preferisce lastErrorUser
+                // e non deve mostrare quello di un fallimento precedente (audit 2026-09-10, R7).
+                lastErrorUser: `L'elaborazione si è interrotta durante la fase "${row.processing_stage}" dopo ${stuckMinutes} minuti senza avanzamento. I crediti ti sono stati rimborsati: puoi riavviarla dalla pagina del caso.`,
               },
             })
             .eq('id', row.id)

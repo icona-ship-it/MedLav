@@ -38,6 +38,8 @@ interface ProcessingSectionProps {
   hasUploadedDocs: boolean;
   processingStage?: string;
   lastError?: string;
+  /** Messaggio già user-facing scritto dal server (onFailure, con esito del rimborso). */
+  lastErrorUser?: string;
   pipelineMode?: string;
   initialExcludedSections?: string[];
   /** perizia_metadata.docSanitariaMode (selettiva | rubriche | integrale). */
@@ -85,6 +87,7 @@ export function ProcessingSection({
   hasUploadedDocs,
   processingStage,
   lastError,
+  lastErrorUser,
   pipelineMode = 'full',
   initialExcludedSections = [],
   initialDocSanitariaMode = null,
@@ -117,20 +120,24 @@ export function ProcessingSection({
   // rate-limit di 15-20 min → sembrava bloccato → annullato a 2/3): traccia
   // l'ultimo cambio del contatore eventi e un tick da 30s tiene aggiornato il
   // "minuti fa" anche senza nuovi poll.
-  const lastEventChangeRef = useRef<{ count: number; at: number }>({ count: extractedEventsCount, at: Date.now() });
+  // Segnale di progresso = eventi estratti O documenti che hanno finito l'OCR: così
+  // l'avviso di stallo esiste anche prima del primo evento (audit 2026-09-10, R6).
+  // Qualsiasi cambio di stato di un documento (in coda → OCR → estrazione → completato) conta.
+  const docsStatusSignature = documents.map((d) => d.processing_status).join(',');
+  const lastEventChangeRef = useRef<{ count: number; docs: string; at: number }>({ count: extractedEventsCount, docs: docsStatusSignature, at: Date.now() });
   const [, setStallTick] = useState(0);
   useEffect(() => {
-    if (extractedEventsCount !== lastEventChangeRef.current.count) {
-      lastEventChangeRef.current = { count: extractedEventsCount, at: Date.now() };
+    if (extractedEventsCount !== lastEventChangeRef.current.count || docsStatusSignature !== lastEventChangeRef.current.docs) {
+      lastEventChangeRef.current = { count: extractedEventsCount, docs: docsStatusSignature, at: Date.now() };
     }
-  }, [extractedEventsCount]);
+  }, [extractedEventsCount, docsStatusSignature]);
   useEffect(() => {
     if (!hasProcessingDocs) return;
     const id = setInterval(() => setStallTick((t) => t + 1), 30_000);
     return () => clearInterval(id);
   }, [hasProcessingDocs]);
   const stallMinutes = Math.floor((Date.now() - lastEventChangeRef.current.at) / 60_000);
-  const stall = stallNotice(stallMinutes);
+  const stall = stallNotice(stallMinutes, extractedEventsCount > 0 ? 'extraction' : 'ocr');
   // Diagnostica viva: se negli ultimi 15 min il registro ha visto rate-limit,
   // il rallentamento ha un NOME — il banner lo dice invece di lasciar dedurre
   // un blocco (il "perché" del CASO-2026-235, ora visibile in tempo reale).
@@ -408,7 +415,7 @@ export function ProcessingSection({
                         riprende da sola, non serve annullare.
                       </div>
                     )}
-                    {extractedEventsCount > 0 && stall.tone !== 'none' && (
+                    {stall.tone !== 'none' && (
                       <div className={`mx-auto max-w-xl rounded-lg border p-3 text-sm ${
                         stall.tone === 'warn'
                           ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
@@ -655,7 +662,7 @@ export function ProcessingSection({
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-destructive">Elaborazione non riuscita</p>
                           <p className="text-sm text-muted-foreground">
-                            {lastError ? toUserMessage(lastError) : 'Si è verificato un errore durante l\'elaborazione. Riprova.'}
+                            {lastErrorUser ?? (lastError ? toUserMessage(lastError, { context: 'pipeline' }) : 'Si è verificato un errore durante l\'elaborazione. Riprova.')}
                           </p>
                           <p className="text-xs text-muted-foreground mt-2">
                             Se il problema persiste, prova a rimuovere eventuali documenti corrotti o protetti da password e riavvia l&apos;analisi.

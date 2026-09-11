@@ -19,17 +19,22 @@ export const STALL_INFO_MINUTES = 4;
 /** Minuti oltre i quali si offre anche la via d'uscita. */
 export const STALL_WARN_MINUTES = 15;
 
-export function stallNotice(minutesSinceLastProgress: number): StallNotice {
+/** 'extraction' = eventi in crescita; 'ocr' = nessun evento ancora (lettura dei documenti,
+ * audit 2026-09-10 R6: prima a 0 eventi non compariva alcun avviso per 60 minuti). */
+export type StallPhase = 'extraction' | 'ocr';
+
+export function stallNotice(minutesSinceLastProgress: number, phase: StallPhase = 'extraction'): StallNotice {
+  const what = phase === 'ocr' ? 'Nessun avanzamento nella lettura dei documenti' : 'Nessun nuovo evento';
   if (minutesSinceLastProgress >= STALL_WARN_MINUTES) {
     return {
       tone: 'warn',
-      text: `Nessun nuovo evento da ${minutesSinceLastProgress} minuti. Le pause lunghe possono capitare sui fascicoli voluminosi (il servizio AI lavora a intervalli) e l'analisi riparte da sola. Se resta ferma ancora a lungo puoi annullare in fondo alla pagina e riavviare: i documenti restano e i crediti dell'elaborazione ti vengono rimborsati.`,
+      text: `${what} da ${minutesSinceLastProgress} minuti. Le pause lunghe possono capitare sui fascicoli voluminosi (il servizio AI lavora a intervalli) e l'analisi riparte da sola. Se resta ferma ancora a lungo puoi annullare in fondo alla pagina e riavviare: i documenti restano e i crediti dell'elaborazione ti vengono rimborsati.`,
     };
   }
   if (minutesSinceLastProgress >= STALL_INFO_MINUTES) {
     return {
       tone: 'info',
-      text: `Nessun nuovo evento da ${minutesSinceLastProgress} minuti: è una pausa normale — il servizio AI impone attese tra un blocco e l'altro, soprattutto sui fascicoli grandi. L'analisi riprende da sola, non serve fare nulla.`,
+      text: `${what} da ${minutesSinceLastProgress} minuti: è una pausa normale — il servizio AI impone attese tra un blocco e l'altro, soprattutto sui fascicoli grandi. L'analisi riprende da sola, non serve fare nulla.`,
     };
   }
   return { tone: 'none' };

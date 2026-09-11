@@ -103,6 +103,7 @@ interface ReportStepProps {
   pipelineWarnings?: PipelineWarningItem[];
   /** Last pipeline error (perizia_metadata.lastError) — shown user-friendly on stage 'errore'. */
   lastError?: string;
+  lastErrorUser?: string;
   /** Esito di una rigenerazione asincrona (fallita o no-op) — perizia_metadata.lastRegenerateError. */
   regenerateNote?: string | null;
   /** Data sinistro (periziaMetadata.dataSinistro): esclude le preesistenze dai
@@ -142,6 +143,7 @@ export function ReportStep({
   generationProgress,
   pipelineWarnings = [],
   lastError,
+  lastErrorUser,
   regenerateNote,
   incidentDate,
   docSanitariaMode,
@@ -554,7 +556,7 @@ export function ReportStep({
                   L&apos;elaborazione non è andata a buon fine
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {lastError ? toUserMessage(lastError) : 'Si è verificato un errore durante l\'elaborazione.'}
+                  {lastErrorUser ?? (lastError ? toUserMessage(lastError, { context: 'pipeline' }) : 'Si è verificato un errore durante l\'elaborazione.')}
                 </p>
                 {events.length > 0 && (
                   <p className="text-sm text-muted-foreground">

@@ -73,6 +73,8 @@ export function buildReportReadyEmail(params: ReportReadyEmailParams): EmailCont
 }
 
 interface PipelineFailureEmailParams {
+  /** Frase sull'esito del rimborso, già scritta per l'utente (testo fisso, niente dati). */
+  refundNote?: string;
   caseCode: string;
   caseId: string;
   stage: string;
@@ -94,6 +96,7 @@ export function buildPipelineFailureEmail(params: PipelineFailureEmailParams): E
   const { caseCode, caseId, stage } = params;
   const caseUrl = `${SITE_URL}/cases/${caseId}`;
   const stageLabel = STAGE_LABELS[stage] ?? 'analisi';
+  const refundNote = params.refundNote ? `${params.refundNote} ` : '';
 
   return {
     subject: `Errore elaborazione caso ${caseCode}`,
@@ -120,7 +123,7 @@ export function buildPipelineFailureEmail(params: PipelineFailureEmailParams): E
                 L'elaborazione del caso <strong>${caseCode}</strong> si è interrotta durante la fase di <em>${stageLabel}</em>.
               </p>
               <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6;">
-                Puoi riprovare l'elaborazione dalla pagina del caso. Se il problema persiste, contatta il supporto tecnico.
+                ${refundNote}Puoi riavviare l'elaborazione dalla pagina del caso. Se il problema persiste, scrivici indicando il codice del caso.
               </p>
               <table role="presentation" style="margin: 0 auto;">
                 <tr>

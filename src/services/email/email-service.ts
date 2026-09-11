@@ -76,6 +76,7 @@ export async function sendPipelineFailureEmail(
   caseCode: string,
   caseId: string,
   stage: string,
+  refundNote?: string,
 ): Promise<void> {
   try {
     const supabase = createAdminClient();
@@ -101,7 +102,7 @@ export async function sendPipelineFailureEmail(
       return;
     }
 
-    const { subject, html } = buildPipelineFailureEmail({ caseCode, caseId, stage });
+    const { subject, html } = buildPipelineFailureEmail({ refundNote, caseCode, caseId, stage });
 
     const resend = getResendClient();
     const { error: sendError } = await resend.emails.send({

@@ -47,6 +47,7 @@ import { PIPELINE_LIMITS } from '@/lib/pipeline-limits';
 import type { OcrResult, ExtractionResult, CaseMetadata } from '../steps/types';
 import type { CaseType, CaseRole, PeriziaMetadata } from '@/types';
 import type { PipelineMode } from '@/types/modules';
+import { composePipelineFailureUserMessage, refundSentence, type RefundOutcome } from '@/lib/pipeline-failure-message';
 
 // ─── onFailure handler ──────────────────────────────────────────────
 
@@ -84,12 +85,13 @@ async function handlePipelineFailure(event: { data: unknown }) {
     const existingMetadata = (caseRow?.perizia_metadata ?? {}) as Record<string, unknown>;
 
     // Mark case as 'errore' — retry once if DB write fails (prevents stuck 'elaborazione' state)
+    const failedAt = new Date().toISOString();
     for (let attempt = 0; attempt < 2; attempt++) {
       const { error: updateError } = await supabase
         .from('cases')
         .update({
           processing_stage: 'errore',
-          perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: new Date().toISOString() },
+          perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: failedAt },
           updated_at: new Date().toISOString(),
         })
         .eq('id', caseId);
@@ -111,7 +113,11 @@ async function handlePipelineFailure(event: { data: unknown }) {
 
     logger.error('pipeline', `Pipeline failed permanently for case ${caseId}: ${errorMessage}`);
 
-    // Refund credits for failed pipeline
+    // Refund credits for failed pipeline. L'esito finisce nel messaggio per il medico
+    // (lastErrorUser, audit 2026-09-10 R7): il box «Elaborazione non riuscita» deve dire
+    // se i crediti sono tornati, non «errore imprevisto».
+    let refundOutcome: RefundOutcome = 'none';
+    let refundedAmount = 0;
     try {
       const { data: caseForRefund } = await supabase
         .from('cases')
@@ -154,8 +160,10 @@ async function handlePipelineFailure(event: { data: unknown }) {
 
         if (isInputTooLarge) {
           logger.warn('pipeline', `Not refunding case ${caseId} — oversized input (OCR cost already incurred)`);
+          refundOutcome = 'not_refundable';
         } else if (consumptionCount > 0 && refundCount >= consumptionCount) {
           logger.info('pipeline', `Skipping refund for case ${caseId} — already refunded (${refundCount} refunds >= ${consumptionCount} consumptions)`);
+          refundOutcome = 'already_refunded';
         } else if (consumptionCount > 0) {
           const refundAmount = Math.abs(transactions![0].amount as number);
           const { refundCredits } = await import('@/services/credits/credit-service');
@@ -167,9 +175,12 @@ async function handlePipelineFailure(event: { data: unknown }) {
             { reason: 'pipeline_failed', error: errorMessage.slice(0, 200) },
           );
           logger.info('pipeline', `Refunded ${refundAmount} credits for failed case ${caseId}`);
+          refundOutcome = 'refunded';
+          refundedAmount = refundAmount;
         }
       }
     } catch (refundErr) {
+      refundOutcome = 'failed';
       Sentry.captureMessage('Rimborso post-fallimento pipeline FALLITO', 'error');
       await recordDiagnostic({ caseId, step: 'refund', code: 'refund_failed', detail: { reason: 'pipeline_failed' } });
       logger.error('pipeline', 'Failed to refund credits after pipeline failure', {
@@ -177,6 +188,15 @@ async function handlePipelineFailure(event: { data: unknown }) {
         error: refundErr instanceof Error ? refundErr.message : 'unknown',
       });
     }
+
+    // Messaggio per il medico scritto QUI, dove l'esito del rimborso è noto (best-effort).
+    const lastErrorUser = composePipelineFailureUserMessage(errorMessage, refundOutcome, refundedAmount);
+    const { error: userMsgError } = await supabase
+      .from('cases')
+      .update({ perizia_metadata: { ...existingMetadata, lastError: errorMessage, lastErrorAt: failedAt, lastErrorUser } })
+      .eq('id', caseId)
+      .eq('processing_stage', 'errore');
+    if (userMsgError) logger.warn('pipeline', `onFailure: lastErrorUser not saved for case ${caseId}: ${userMsgError.message}`);
 
     // Report to Sentry with safe context (no patient data)
     Sentry.captureException(
@@ -202,6 +222,7 @@ async function handlePipelineFailure(event: { data: unknown }) {
           (caseForNotif.code as string) ?? caseId,
           caseId,
           stage,
+          refundSentence(refundOutcome, refundedAmount),
         );
       }
     } catch (notifErr) {

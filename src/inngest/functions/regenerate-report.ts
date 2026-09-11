@@ -30,6 +30,7 @@ import { buildFailedSectionFallback } from '../steps/section-fallback';
 import { abortIfStaleRun, isStaleRunAbort } from '../steps/stale-run-guard';
 import { checkSelectiveCoverage, buildOmissionBanner } from '@/services/validation/selective-coverage';
 import { DETERMINISTIC_MARKERS } from '@/services/calculations/deterministic-tables';
+import { composeRegenerationFailureUserMessage } from '@/lib/pipeline-failure-message';
 
 /**
  * Full report regeneration via the SECTIONAL deterministic pipeline (same path
@@ -75,7 +76,8 @@ async function restoreCompletatoOnFailure(event: { data: unknown }): Promise<voi
       .from('cases')
       .update({
         processing_stage: 'completato',
-        perizia_metadata: { ...cleaned, lastRegenerateError: `Rigenerazione fallita: ${errMsg}. Il report precedente è invariato.` },
+        // Testo per il medico, mai l'errore tecnico grezzo (audit 2026-09-10, R7).
+        perizia_metadata: { ...cleaned, lastRegenerateError: composeRegenerationFailureUserMessage(errMsg) },
         updated_at: new Date().toISOString(),
       })
       .eq('id', caseId)
