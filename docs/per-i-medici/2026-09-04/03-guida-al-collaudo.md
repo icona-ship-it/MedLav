@@ -14,7 +14,7 @@ Nella pagina iniziale c'è il bottone **"Apri il caso dimostrativo"**: crea un c
 
 - **Spese**: apra il caso e usi "Rielabora". Una sola tabella per ente, una riga per fattura con l'importo lordo, acconto non sommato due volte. Controlli il totale contro i giustificativi: deve tornare al centesimo.
 - **Foto di un referto in più pagine**: rifaccia il caso caricando le foto, accetti "Unisci in un documento", categorizzi e avvii. Il referto deve uscire come una sola voce con la sua data.
-- **Perizia RC**: nello step Elaborazione trova il selettore **"Documentazione medica: come riprodurre i documenti?"**. Provi "Passaggi-chiave per rubrica" e ci dica se è la forma che userebbe.
+- **Perizia RC**: nello step Elaborazione trova il selettore **"Documentazione medica: come riprodurre i documenti?"**. Dal rilascio del 14/09 "Passaggi-chiave per rubrica" è la modalità preimpostata: ci dica se è la forma che userebbe, e provi le altre due se vuole confrontarle.
 
 ## 3. Cosa guardare con occhio severo
 

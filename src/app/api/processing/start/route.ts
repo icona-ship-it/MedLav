@@ -9,6 +9,7 @@ import { getBalance, deductCredits, refundCredits } from '@/services/credits/cre
 import { getElaborationCost } from '@/services/credits/credit-costs';
 import { processingPausedResponse } from '@/lib/processing-guard';
 import { logger } from '@/lib/logger';
+import { resolveDocSanitariaModeForStart } from '@/lib/doc-sanitaria-mode';
 
 export const maxDuration = 30;
 
@@ -141,11 +142,19 @@ export async function POST(request: NextRequest) {
     // avvio così una rielaborazione riparte da zero.
     const allowedStages = ['idle', 'completato', 'errore'];
     const existingMeta = (caseData.perizia_metadata ?? {}) as Record<string, unknown>;
+    // Modalità doc-sanitaria resa ESPLICITA all'avvio (ADR-027): default 'rubriche'
+    // per i nuovi casi RC; la scelta del perito, se c'è, resta. Così generazione,
+    // rigenerazione, viewer ed export leggono lo stesso valore.
+    const docSanitariaMode = resolveDocSanitariaModeForStart(existingMeta, (caseData.pipeline_mode as string | null) ?? 'full');
     const { data: lockResult, error: lockError } = await supabase
       .from('cases')
       .update({
         processing_stage: 'elaborazione',
-        perizia_metadata: { ...existingMeta, processingStartedAt: new Date().toISOString() },
+        perizia_metadata: {
+          ...existingMeta,
+          processingStartedAt: new Date().toISOString(),
+          ...(docSanitariaMode ? { docSanitariaMode } : {}),
+        },
         updated_at: new Date().toISOString(),
       })
       .eq('id', caseId)

@@ -27,6 +27,7 @@ import { stallNotice } from '@/lib/processing-stall';
 import { DIAGNOSTIC_CODE_LABELS, type DiagnosticCode } from '@/lib/pipeline-diagnostics';
 import { ReportSectionsPicker, type ReportSectionOption } from './report-sections-picker';
 import type { Document } from './types';
+import { DEFAULT_DOC_SANITARIA_MODE } from '@/lib/doc-sanitaria-mode';
 
 // --- Types ---
 
@@ -154,7 +155,9 @@ export function ProcessingSection({
   // (passaggi-chiave copiati dal codice), 'integrale' (verbatim completo).
   type DocSanitariaMode = 'selettiva' | 'rubriche' | 'integrale';
   const isDocMode = (v: string | null | undefined): v is DocSanitariaMode => v === 'selettiva' || v === 'rubriche' || v === 'integrale';
-  const [docSanitariaMode, setDocSanitariaMode] = useState<DocSanitariaMode>(isDocMode(initialDocSanitariaMode) ? initialDocSanitariaMode : 'selettiva');
+  // Default 'rubriche' (ADR-027, 2026-09-11): è la modalità misurata dal gate; all'avvio
+  // il server la rende esplicita nei metadati con lo stesso default.
+  const [docSanitariaMode, setDocSanitariaMode] = useState<DocSanitariaMode>(isDocMode(initialDocSanitariaMode) ? initialDocSanitariaMode : DEFAULT_DOC_SANITARIA_MODE);
   const handleDocSanitariaMode = (value: string) => {
     if (!isDocMode(value)) return;
     setDocSanitariaMode(value);
