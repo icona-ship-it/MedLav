@@ -502,13 +502,21 @@ const NUMERICAL_PATTERNS = [
   { label: /invalidità\s+temporanea\s+parziale[:\s]+(\d+)\s*giorn/i, key: 'ITP' },
   { label: /giorni\s+(?:di\s+)?ricovero[:\s]+(\d+)/i, key: 'Giorni ricovero' },
   { label: /ricovero[:\s]+(\d+)\s*giorn/i, key: 'Giorni ricovero' },
+  // Forme in prosa del modello (audit 2026-09-10, I9): «invalidità temporanea
+  // totale di 40 giorni», «pari a 40 (quaranta) giorni», «al 100% di gg. 40»,
+  // «ricovero di 40 giorni», «40 giorni di ricovero/degenza», «degenza di 40 giorni».
+  { label: /(?:invalidit[àa]|inabilit[àa])\s+temporanea\s+(?:totale|assoluta)(?:\s+al\s+100\s*%)?[^\d\n]{0,25}?(\d+)\s*(?:\([^)]{1,30}\)\s*)?(?:giorn|gg\b)/i, key: 'ITT' },
+  { label: /(?:invalidit[àa]|inabilit[àa])\s+temporanea\s+(?:totale|assoluta)(?:\s+al\s+100\s*%)?[^\d\n]{0,25}?gg\.?\s*(\d+)/i, key: 'ITT' },
+  { label: /(?:invalidit[àa]|inabilit[àa])\s+temporanea\s+parziale(?:\s+al\s+\d{1,2}\s*%)?[^\d\n]{0,25}?(\d+)\s*(?:\([^)]{1,30}\)\s*)?(?:giorn|gg\b)/i, key: 'ITP' },
+  { label: /(?:ricovero|degenza)\s+(?:ospedalier[oa]\s+)?(?:di|per|durat[oa])\s+(\d+)\s*(?:\([^)]{1,30}\)\s*)?giorn/i, key: 'Giorni ricovero' },
+  { label: /(\d+)\s*(?:\([^)]{1,30}\)\s*)?giorni\s+di\s+(?:ricovero|degenza)/i, key: 'Giorni ricovero' },
 ];
 
 /**
  * Check that ITT/ITP/days values mentioned in the report match calculated values.
  * Only flags when there's a clear discrepancy (tolerance: ±2 days).
  */
-function checkNumericalMismatch(
+export function checkNumericalMismatch(
   synthesis: string,
   context: ReportValidationContext,
 ): ReportIssue[] {
@@ -529,21 +537,26 @@ function checkNumericalMismatch(
 
   if (calcMap.size === 0) return [];
 
+  // Tutte le occorrenze, non solo la prima: un numero sbagliato può stare
+  // dopo uno giusto (audit 2026-09-10, I9). Una sola segnalazione per valore.
+  const reported = new Set<string>();
   for (const np of NUMERICAL_PATTERNS) {
-    const match = np.label.exec(synthesis);
-    if (!match) continue;
-
-    const reportValue = parseInt(match[1], 10);
-    const calcValue = calcMap.get(np.key);
-    if (calcValue === undefined) continue;
-
-    // Tolerance: ±2 days
-    if (Math.abs(reportValue - calcValue) > 2) {
-      issues.push({
-        type: 'numerical_mismatch',
-        severity: 'warning',
-        message: `${np.key} in report: ${reportValue} days, calculated: ${calcValue} days`,
-      });
+    const all = synthesis.matchAll(new RegExp(np.label.source, np.label.flags.includes('g') ? np.label.flags : `${np.label.flags}g`));
+    for (const match of all) {
+      const reportValue = parseInt(match[1], 10);
+      const calcValue = calcMap.get(np.key);
+      if (calcValue === undefined || Number.isNaN(reportValue)) continue;
+      // Tolerance: ±2 days
+      if (Math.abs(reportValue - calcValue) > 2) {
+        const key = `${np.key}:${reportValue}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+        issues.push({
+          type: 'numerical_mismatch',
+          severity: 'warning',
+          message: `${np.key} in report: ${reportValue} days, calculated: ${calcValue} days`,
+        });
+      }
     }
   }
 
