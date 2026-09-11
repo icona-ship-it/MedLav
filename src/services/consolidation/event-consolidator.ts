@@ -2,6 +2,7 @@ import type { ExtractedEvent } from '../extraction/extraction-schemas';
 import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance';
 import { logger } from '@/lib/logger';
 import { temporalScopeRank } from '@/lib/temporal-scope';
+import { haveOppositeSides, mixOppositeSides } from '@/lib/laterality';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -194,6 +195,11 @@ export function consolidateEvents(
  * Keeps the event with the highest confidence. Stable order: original order
  * is preserved among non-duplicates.
  */
+/** Testo su cui leggere il lato di un evento (titolo + diagnosi). */
+function sideText(e: Pick<ExtractedEvent, 'title' | 'diagnosis'>): string {
+  return `${e.title ?? ''} ${e.diagnosis ?? ''}`;
+}
+
 function dedupWithinSameDocument(
   events: Array<ExtractedEvent & { documentId: string }>,
 ): Array<ExtractedEvent & { documentId: string }> {
@@ -216,6 +222,11 @@ function dedupWithinSameDocument(
       if (b.eventDate !== a.eventDate || b.eventType !== a.eventType) break;
       if (b.documentId !== a.documentId) continue;
       if (!isSimilarEvent(a, b)) continue;
+      // Lati opposti (dx vs sx) = due atti clinici distinti (trauma bilaterale):
+      // il tokenizer scarta «dx»/«sx» (≤3 char) e «destro»/«sinistro» pesano una
+      // parola sola in un titolo lungo → similarità > 0,7 → fusione con perdita
+      // di un lato (audit 2026-09-10, invariante I3). Mai fondere.
+      if (haveOppositeSides(sideText(a), sideText(b))) continue;
       // Sopravvive il gemello con ambito temporale più forte (corrente <
       // programmato < retrospettivo: un atto avvenuto nel documento batte la
       // sua menzione anamnestica anche se il LLM le ha dato più confidence —
@@ -298,6 +309,8 @@ function aggregateIdenticalEventsPerDay(
     const groupTitles = indices.map((i) => events[i].title ?? '');
     if (sampleType !== 'esame_ematochimico') {
       if (!titlesShareKeywords(groupTitles, 0.5)) continue;
+      // Mai aggregare esami di lati opposti in una voce sola (I3).
+      if (mixOppositeSides(groupTitles)) continue;
     }
 
     // Build aggregated event. Preserve safety-critical fields from ALL members
@@ -485,6 +498,12 @@ function findDiscrepancyInGroup(
         // patologia diversa).
         const diagnosisConflict = !!(event.diagnosis && other.diagnosis && !isDiagnosisSubset(event.diagnosis, other.diagnosis));
         const doctorConflict = !!(event.doctor && other.doctor && event.doctor !== other.doctor);
+        const lateralityConflict = haveOppositeSides(sideText(event), sideText(other));
+        if (lateralityConflict) {
+          discrepancies.push(
+            `⚠ LATERALITÀ DISCORDANTE fra menzione e fonte primaria — richiede verifica del perito: "${event.title}" vs "${other.title}". Verificare sul documento originale.`,
+          );
+        }
         if (diagnosisConflict) {
           discrepancies.push(
             `⚠ DIAGNOSI DISCORDANTE fra menzione e fonte primaria — richiede verifica del perito: "${event.diagnosis}" vs "${other.diagnosis}". Verificare sul documento originale.`,
@@ -493,10 +512,10 @@ function findDiscrepancyInGroup(
         if (doctorConflict) {
           discrepancies.push(`⚠ MEDICO DISCORDANTE fra menzione e fonte primaria — richiede verifica: "${event.doctor}" vs "${other.doctor}".`);
         }
-        if (eventIsMention && (diagnosisConflict || doctorConflict)) {
+        if (eventIsMention && (diagnosisConflict || doctorConflict || lateralityConflict)) {
           requiresVerification = true;
         }
-        if (!diagnosisConflict && !doctorConflict) {
+        if (!diagnosisConflict && !doctorConflict && !lateralityConflict) {
           discrepancies.push(eventIsMention
             ? 'Menzione (anamnesi/previsione): il fatto è documentato da fonte primaria in un altro documento'
             : 'Riferito anche come menzione (anamnesi/previsione) in un altro documento');
@@ -504,6 +523,14 @@ function findDiscrepancyInGroup(
         continue;
       }
       // Check for specific discrepancies — NEVER auto-resolve, always escalate
+      // Lati opposti in due documenti: due esami veri (trauma bilaterale) o un lato
+      // sbagliato in uno dei due — mai «fonti concordi», sempre da verificare (I3).
+      if (haveOppositeSides(sideText(event), sideText(other))) {
+        discrepancies.push(
+          `⚠ LATERALITÀ DISCORDANTE — richiede verifica del perito: Fonte 1 (${event.sourceType}): "${event.title}" vs Fonte 2 (${other.sourceType}): "${other.title}". Verificare sul documento originale.`,
+        );
+        requiresVerification = true;
+      }
       if (event.diagnosis && other.diagnosis && event.diagnosis !== other.diagnosis) {
         discrepancies.push(
           `⚠ DIAGNOSI DISCORDANTE — richiede verifica del perito: Fonte 1 (${event.sourceType}): "${event.diagnosis}" vs Fonte 2 (${other.sourceType}): "${other.diagnosis}". Verificare sul documento originale quale diagnosi sia corretta.`,
@@ -706,7 +733,8 @@ export function isDuplicateOfExisting(
   return existingEvents.some((existing) =>
     existing.eventDate === newEvent.eventDate &&
     existing.eventType === newEvent.eventType &&
-    isSimilarEvent(newEvent, existing),
+    isSimilarEvent(newEvent, existing) &&
+    !haveOppositeSides(sideText(newEvent), sideText(existing)),
   );
 }
 
