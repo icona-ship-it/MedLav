@@ -156,3 +156,12 @@ describe('checkEventSourceConsistency — INVARIANTE', () => {
     }
   });
 });
+
+describe('lateralità con abbreviazioni latine (audit 2026-09-10, I12)', () => {
+  it('evento "dex", fonte "sin" → flag; "sin da" preposizione non è un lato', () => {
+    const flagged = checkEventSourceConsistency({ title: 'RX polso dex', description: '', source_text: 'RX POLSO SIN. Non lesioni ossee.' } as never);
+    expect(flagged.flagged).toBe(true);
+    const notFlagged = checkEventSourceConsistency({ title: 'RX polso dx', description: '', source_text: 'Dolore presente sin dalla caduta, polso dx dolente.' } as never);
+    expect(notFlagged.flagged).toBe(false);
+  });
+});

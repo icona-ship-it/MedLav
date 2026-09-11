@@ -22,6 +22,7 @@
  */
 
 import { isAntonymPrefixFlip, isClinicalAntonym, normalizeWord } from './quote-snapper';
+import { detectSides } from '@/lib/laterality';
 
 /**
  * Privativi CLINICI curati — per il confronto NON allineato di Rete A (evento×fonte,
@@ -62,24 +63,14 @@ export interface ConsistencyResult {
 
 type Side = 'dx' | 'sx' | 'bilat';
 
-/** Lateralità CON il lato (LATERALITY_WORDS dello snapper è lato-agnostico). */
-const LATERALITY_SIDE: Readonly<Record<string, Side>> = {
-  dx: 'dx', ds: 'dx', destro: 'dx', destra: 'dx', destri: 'dx', destre: 'dx',
-  sx: 'sx', sn: 'sx', sinistro: 'sx', sinistra: 'sx', sinistri: 'sx', sinistre: 'sx',
-  bilaterale: 'bilat', bilaterali: 'bilat', bilateralmente: 'bilat',
-};
-
 function toWords(text: string): string[] {
   return text.split(/\s+/).map(normalizeWord).filter((w) => w.length > 0);
 }
 
-function sidesOf(words: string[]): Set<Side> {
-  const s = new Set<Side>();
-  for (const w of words) {
-    const side = LATERALITY_SIDE[w];
-    if (side) s.add(side);
-  }
-  return s;
+/** Lati nel testo grezzo: helper condiviso (dx/ds/dex/destr*, sx/sn/sin/sinistr*, bilaterale) —
+ * prima le abbreviazioni latine dex/sin non erano riconosciute (audit 2026-09-10, I12). */
+function sidesOf(text: string): Set<Side> {
+  return detectSides(text);
 }
 
 /** Contraddizione di lateralità solo se UNIVOCA da entrambi i lati. */
@@ -111,7 +102,7 @@ export function checkEventSourceConsistency(event: ConsistencyEvent): Consistenc
   if (structuredWords.length === 0) return { flagged: false };
 
   // 1. Lateralità invertita (l'errore clinico-legale più grave).
-  const lat = lateralityContradiction(sidesOf(structuredWords), sidesOf(sourceWords));
+  const lat = lateralityContradiction(sidesOf(`${event.title ?? ''} ${event.description ?? ''}`), sidesOf(source));
   if (lat) return { flagged: true, reason: lat };
 
   // 2. Opposto clinico (composta↔scomposta, iper↔ipo, abduttore↔adduttore, ...):
