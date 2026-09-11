@@ -56,7 +56,7 @@ function getPlans(isYearly: boolean): PlanDisplay[] {
         'Tutto del Trial, più:',
         'Categorizzazione AI documenti',
         'Rigenerazione sezioni report',
-        'Confronto automatico con le linee guida cliniche pertinenti',
+        'Riferimenti alle linee guida cliniche pertinenti nelle sezioni della perizia',
         'Calcoli medico-legali (ITT/ITP)',
         'Anonimizzazione report',
         'Notifiche email',

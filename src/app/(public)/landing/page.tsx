@@ -22,7 +22,7 @@ const steps = [
     number: 3,
     icon: FileCheck,
     title: 'Il report è pronto',
-    description: 'Cronistoria strutturata, anomalie evidenziate, documenti mancanti segnalati. Esporta in DOCX, PDF, CSV o HTML.',
+    description: 'Bozza di perizia con pannello «Da controllare» (date, citazioni e documenti mancanti). Esporta in Word (DOCX) o HTML; la cronistoria anche in CSV.',
   },
 ];
 
@@ -35,12 +35,12 @@ const features = [
   {
     icon: FileText,
     title: 'Lettura Intelligente',
-    description: 'Legge anche documenti scritti a mano, timbri e scansioni di bassa qualità. Nessun dato viene perso.',
+    description: 'Legge anche scansioni di bassa qualità e, con limiti, il manoscritto: ciò che non riesce a leggere viene marcato [ILLEGGIBILE] e segnalato, mai inventato.',
   },
   {
     icon: AlertTriangle,
     title: 'Anomalie e Lacune',
-    description: 'Rileva ritardi diagnostici, gap documentali e incongruenze. Segnala i documenti mancanti.',
+    description: 'Segnala i documenti attesi ma mancanti, le date non attestate e le citazioni da confrontare con l\'originale, prima della consegna.',
   },
   {
     icon: Shield,
@@ -160,7 +160,7 @@ export default function LandingPage() {
                 </div>
                 <div className="mt-3 flex items-center gap-2 rounded bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-700 dark:text-yellow-400">
                   <AlertTriangle className="h-3 w-3 shrink-0" />
-                  <span>1 anomalia rilevata: gap documentale post-operatorio</span>
+                  <span>1 dato da verificare: data non attestata dai documenti</span>
                 </div>
               </div>
             </div>

@@ -35,7 +35,7 @@ const FAQ_ITEMS = [
     question: 'Posso modificare il report generato?',
     answer:
       'S\u00ec, il report generato \u00e8 una bozza che puoi modificare liberamente. Puoi editare il testo direttamente nell\'app, ' +
-      'rigenerare singole sezioni, e poi esportare il risultato finale in formato HTML, DOCX, CSV o PDF. ' +
+      'rigenerare singole sezioni, e poi esportare il risultato finale in Word (DOCX) o HTML — la cronistoria anche in CSV. ' +
       'Il report \u00e8 pensato come punto di partenza per il tuo lavoro peritale.',
   },
   {
@@ -70,7 +70,7 @@ const GUIDE_STEPS = [
   {
     step: 5,
     title: 'Scarica report',
-    description: 'Una volta completata l\'elaborazione, rivedi il report, apporta eventuali modifiche, e scaricalo nel formato preferito (HTML, DOCX, CSV, PDF).',
+    description: 'Una volta completata l\'elaborazione, rivedi il report, apporta eventuali modifiche, e scaricalo nel formato preferito (Word o HTML; CSV per la cronistoria).',
   },
 ];
 

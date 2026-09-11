@@ -7,7 +7,7 @@ Web app per medici legali: upload documentazione clinica → report medico-legal
 - **Runtime**: Node.js 22 LTS, Next.js 15 (App Router), React 19, TypeScript 5.9 strict
 - **Database**: Supabase PostgreSQL EU (Frankfurt) + pgvector per RAG
 - **Auth**: Supabase Auth (email/password, email verification, password reset)
-- **AI**: Mistral API EU — Vision (`pixtral-large-latest`), OCR (`mistral-ocr-latest`), Estrazione/Classificazione/Sintesi (`mistral-large-latest`), Embedding (`mistral-embed`)
+- **AI**: Mistral API EU (`api.eu.mistral.ai`) — OCR (`mistral-ocr-2512`), Estrazione/Sintesi/Analisi immagini (`mistral-large-2512`), Classificazione e verifica citazioni (`mistral-medium-latest`), Embedding (`mistral-embed`). Fonte di verità: `src/lib/mistral/client.ts` (allineato 2026-09-11)
 - **Jobs**: Inngest (pipeline long-running su Vercel)
 - **Payments**: Stripe | **Email**: Resend | **Rate Limiting**: Upstash Redis | **Monitoring**: Sentry
 - **ORM**: Drizzle ORM | **UI**: shadcn/ui + Tailwind v4 | **Validazione**: Zod

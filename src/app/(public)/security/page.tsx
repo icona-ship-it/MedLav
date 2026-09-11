@@ -36,7 +36,7 @@ const securityFeatures = [
   {
     icon: FileCheck,
     title: 'Audit Trail',
-    description: 'Ogni azione rilevante è registrata in un log di audit immutabile: elaborazioni, accessi, modifiche, anche dettature vocali (solo metadata: durata/lingua/costo, mai il contenuto audio o testo).',
+    description: 'Ogni azione rilevante è registrata in un log di audit immutabile: elaborazioni, accessi, modifiche.',
   },
 ];
 
