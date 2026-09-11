@@ -102,18 +102,18 @@ const DATE_TEXT_REGEX = new RegExp(
 // (leak Art.9 riaperto dalla versione solo-maiuscolo). La disambiguazione con
 // "in corso di valutazione" la fa il nome MAIUSCOLO richiesto subito dopo: una
 // via reale \u00E8 capitalizzata, "corso di valutazione" (minuscolo) non matcha.
-const ADDRESS_REGEX = /\b(?:[Vv]ia|[Vv]iale|V\.le|[Pp]iazz(?:a|ale|etta)|P\.?zza|[Cc]orso|C\.so|[Ll]argo|[Vv]icolo|[Vv]ico|[Bb]orgo|[Ss]alita|[Tt]raversa|[Ss]trada|[Ll]ocalit\u00E0|[Ff]razione|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?/g;
+const ADDRESS_REGEX = /\b(?:[Vv]ia|[Vv]iale|V\.le|[Pp]iazz(?:a|ale|etta)|P\.?zza|[Cc]orso|C\.so|[Ll]argo|[Vv]icolo|[Vv]ico|[Bb]orgo|[Ss]alita|[Tt]raversa|[Ss]trada|[Ll]ocalit\u00E0|[Ff]razione(?!\s+di\s+[Ee]iezione)|[Ll]ungotevere|[Ll]ungomare)\s+(?:(?:degli|della|dello|dei|delle|del|dell'|di|da|lo|la|le|l')\s+)*[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019]+)*(?:\s*[,]?\s*(?:n\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?)?(?:\s*,?\s*\d{5}\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019-]+(?:\s+[A-Z\u00C0-\u00DC][a-z\u00E0-\u00FC'\u2019-]+)?)?/g;
 
 /** Indirizzi in MAIUSCOLO (anagrafiche di intestazione): richiede il numero
  * civico per NON scambiare termini clinici tutti-maiuscoli (es. "VIA AEREA")
  * per un indirizzo. Copre "VIA ROMA 12", "CORSO ITALIA 5" (3\u00B0 giro avversariale). */
-const ADDRESS_CAPS_REGEX = /\b(?:VIA|VIALE|V\.LE|PIAZZ(?:A|ALE|ETTA)|P\.?ZZA|CORSO|C\.SO|LARGO|VICOLO|VICO|BORGO|SALITA|TRAVERSA|STRADA|LOCALIT\u00C0|FRAZIONE|LUNGOTEVERE|LUNGOMARE)\s+(?:(?:DEGLI|DELLA|DELLO|DEI|DELLE|DEL|DI|DA|LO|LA|LE)\s+)*[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+)*\s*,?\s*(?:N\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?/g;
+const ADDRESS_CAPS_REGEX = /\b(?:VIA|VIALE|V\.LE|PIAZZ(?:A|ALE|ETTA)|P\.?ZZA|CORSO|C\.SO|LARGO|VICOLO|VICO|BORGO|SALITA|TRAVERSA|STRADA|LOCALIT\u00C0|FRAZIONE(?!\s+DI\s+EIEZIONE)|LUNGOTEVERE|LUNGOMARE)\s+(?:(?:DEGLI|DELLA|DELLO|DEI|DELLE|DEL|DI|DA|LO|LA|LE)\s+)*[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+(?:\s+[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019]+)*\s*,?\s*(?:N\.?\s*)?\d{1,5}(?:\s*[/][A-Za-z])?(?:\s*,?\s*\d{5}\s+[A-Z\u00C0-\u00DC][A-Z\u00C0-\u00DC'\u2019-]+)?/g;
 
 /**
  * Names preceded by context words (without professional titles).
  * Matches: "sig. Mario Rossi", "paziente Maria Bianchi", "figlio di Giuseppe Verdi"
  */
-const CONTEXT_NAME_REGEX = /(?:(?:sig\.?\s|signor[ae]?\s|paziente\s|periziando\s|perizianda\s|attore\s|attrice\s|ricorrente\s|convenuto\s|assistit[oa]\s|infortunat[oa]\s|parte\s|figlio di\s|figlia di\s|nat[oa]\s))([A-Z][a-z\u00E0-\u00FA]{1,}\s+[A-Z][a-z\u00E0-\u00FA]{1,}(?:\s+[A-Z][a-z\u00E0-\u00FA]{1,})?)/g;
+const CONTEXT_NAME_REGEX = /(?<![A-Za-z\u00C0-\u00FC])(?:(?:sig\.?\s|signor[ae]?\s|paziente\s|periziando\s|perizianda\s|attore\s|attrice\s|ricorrente\s|convenuto\s|assistit[oa]\s|infortunat[oa]\s|parte\s|figlio di\s|figlia di\s|nat[oa]\s))([A-Z][a-z\u00E0-\u00FA]{1,}\s+[A-Z][a-z\u00E0-\u00FA]{1,}(?:\s+[A-Z][a-z\u00E0-\u00FA]{1,})?)/g;
 
 /**
  * Token di nome proprio: Capitalizzato ("Testina") o TUTTO MAIUSCOLO ("DEMPROVA",
@@ -150,7 +150,16 @@ const NAME_BEFORE_NATO_REGEX = new RegExp(
 // strutture minori, prima invisibili). Solo con iniziale MAIUSCOLA seguita da
 // nome proprio: "centro del ginocchio" / "lo studio della lastra" non toccati;
 // "Studio RM/TC/RX ..." (sigla d'esame) è contenuto clinico, non una struttura.
-const HOSPITAL_REGEX = /(?:Ospedale|ASST|ASL|ATS|AOU|IRCCS|Policlinico|Clinica|Istituto|Casa di Cura|Presidio Ospedaliero|Fondazione|Studio(?!\s+(?:RM|RMN|RX|TC|TAC|PET|MOC|ECO|ECG|EEG|EMG|EGDS|TSA|US)\b)|Centro|Poliambulatorio|Laboratorio)\s+[A-Z][^\.,;:\n]{2,40}/g;
+// Il match copre SOLO il nome della struttura (parole Capitalizzate, con i
+// connettori di/del/della/San/S./e) e si ferma alla prima parola minuscola:
+// prima «\s+[A-Z][^.,;:\n]{2,40}» mangiava fino a 40 caratteri di testo clinico
+// («Ospedale Civile di Cittàdemo per frattura del femore sini…» → [STRUTTURA_1]re)
+// (audit 2026-09-10, invariante I5).
+const ORG_WORD = String.raw`[A-ZÀ-Ü][\p{L}'’-]*`;
+const HOSPITAL_REGEX = new RegExp(
+  String.raw`(?:Ospedale|ASST|ASL|ATS|AOU|IRCCS|Policlinico|Clinica|Istituto|Casa di Cura|Presidio Ospedaliero|Fondazione|Studio(?!\s+(?:RM|RMN|RX|TC|TAC|PET|MOC|ECO|ECG|EEG|EMG|EGDS|TSA|US)\b)|Centro|Poliambulatorio|Laboratorio)\s+${ORG_WORD}(?:\s+(?:di|del|della|dei|degli|delle|e|San|Santa|Sant'|S\.)\s+${ORG_WORD}|\s+${ORG_WORD})*`,
+  'gu',
+);
 
 /**
  * Court references (RG numbers).
@@ -209,6 +218,13 @@ class ReplacementTracker {
   getMapping(): Map<string, string> {
     return new Map(this.mapping);
   }
+
+  /** Placeholder fisso per un valore noto dai metadati (es. «[PAZIENTE]»), così ogni
+   * altra rilevazione dello stesso nome (titolo, contesto, propagazione) usa lo
+   * stesso segnaposto e non un [PERSONA_n] parallelo (I5). */
+  preset(original: string, placeholder: string): void {
+    this.mapping.set(original.toLowerCase(), placeholder);
+  }
 }
 
 // --- Detection (no replacement) ---
@@ -228,10 +244,16 @@ export function detectPii(params: {
   // 1. Names from perizia metadata
   if (periziaMetadata) {
     const nameEntries = buildNameReplacements(periziaMetadata);
-    for (const { name } of nameEntries) {
+    for (const { name, replacement: preset } of nameEntries) {
       if (name && name.length > 2) {
-        const escaped = escapeRegex(name);
-        const nameRegex = new RegExp(escaped, 'gi');
+        // Placeholder coerente: chiunque rilevi lo stesso nome (titolo, contesto,
+        // propagazione) riceve il segnaposto dei metadati, non un [PERSONA_n] (I5).
+        for (const v of nameOrderVariants(name)) tracker.preset(v, preset);
+        // Nome completo in QUALUNQUE forma (anche minuscolo e a ordine invertito) e
+        // tollerante alle varianti OCR di apostrofo (’) e trattino (D'Esempi / D’ESEMPI,
+        // Demprova-Esempi / DEMPROVA ESEMPI): due token adiacenti del periziando non
+        // sono mai testo clinico (I5).
+        const nameRegex = new RegExp(nameOrderVariants(name).map(namePatternSource).join('|'), 'giu');
         let match: RegExpExecArray | null;
         while ((match = nameRegex.exec(text)) !== null) {
           const replacement = tracker.getOrCreate(match[0], 'nome');
@@ -251,14 +273,16 @@ export function detectPii(params: {
     // "Mario Rossi" e' gia' noto). Solo token len>=4 con word-boundary per ridurre
     // l'over-redazione di parole comuni; i nomi metadata sono autoritativi.
     for (const { name, replacement } of nameEntries) {
-      for (const token of name.split(/\s+/).filter((t) => t.length >= 4)) {
+      for (const token of nameTokens(name).filter((t) => t.length >= 4)) {
         // Case-SENSITIVE: redige il token solo nelle forme da nome proprio
         // (Capitalizzato o MAIUSCOLO), MAI la parola minuscola — molti cognomi
         // italiani sono anche parole comuni/cliniche (Costa=costola, Verde, Bianchi):
         // redigere "costa" minuscolo corromperebbe il referto.
+        // Confini di parola Unicode: il `\b` di JS è ASCII-only e dopo «ò»/«è»
+        // (Nicolò, Demprovè) non vedeva un confine → token accentato mai redatto (I5).
         const cap = token.charAt(0).toUpperCase() + token.slice(1);
         const forms = cap === token.toUpperCase() ? [cap] : [cap, token.toUpperCase()];
-        const tokenRegex = new RegExp(`\\b(?:${forms.map(escapeRegex).join('|')})\\b`, 'g');
+        const tokenRegex = new RegExp(`(?<![\\p{L}])(?:${forms.map(tokenPatternSource).join('|')})(?![\\p{L}])`, 'gu');
         let tokenMatch: RegExpExecArray | null;
         while ((tokenMatch = tokenRegex.exec(text)) !== null) {
           matches.push({
@@ -270,6 +294,30 @@ export function detectPii(params: {
           });
         }
       }
+    }
+  }
+
+  // 1c. Data di nascita dei metadati in OGNI forma (15/05/85, 15.5.85, 15 mag 1985,
+  // 15 mag. 85, 15-5-85): i regex generici coprono solo gli anni a 4 cifre (I5).
+  if (periziaMetadata?.patientDateOfBirth) {
+    const dobRegex = dateOfBirthVariantsRegex(periziaMetadata.patientDateOfBirth);
+    if (dobRegex) collectRegexMatches(text, dobRegex, 'data', tracker, matches);
+  }
+  // 1d. Indirizzo dei metadati (via, CAP, comune) anche quando i regex generici
+  // lasciano CAP e comune in chiaro accanto alla via redatta (I5).
+  if (periziaMetadata?.patientAddress) {
+    for (const re of addressVariantsRegexes(periziaMetadata.patientAddress)) {
+      collectRegexMatches(text, re, 'indirizzo', tracker, matches);
+    }
+  }
+
+  // 1e. Codice fiscale dei metadati anche se l'OCR lo spezza con spazi
+  // («DMPTSN 85E55 H501X»): il regex generico vuole i 16 caratteri contigui (I5).
+  if (periziaMetadata?.patientFiscalCode) {
+    const cf = periziaMetadata.patientFiscalCode.replace(/\s+/g, '').toUpperCase();
+    if (cf.length === 16) {
+      const spaced = new RegExp(`(?<![A-Z0-9])${cf.split('').map(escapeRegex).join('\\s?')}(?![A-Z0-9])`, 'gi');
+      collectRegexMatches(text, spaced, 'codice_fiscale', tracker, matches);
     }
   }
 
@@ -607,6 +655,64 @@ function buildNameReplacements(metadata: PeriziaMetadata): Array<{ name: string;
 /**
  * Escape special regex characters in a string.
  */
+/** Token del nome: spazi E trattini separano («Demprova-Esempi» → Demprova, Esempi). */
+function nameTokens(name: string): string[] {
+  return name.split(/[\s-]+/).filter(Boolean);
+}
+
+/** Ordine dato e, per i nomi di 2 token, ordine invertito. */
+function nameOrderVariants(name: string): string[] {
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  const out = [tokens.join(' ')];
+  if (tokens.length === 2) out.push(`${tokens[1]} ${tokens[0]}`);
+  return out;
+}
+
+/** Pattern tollerante di un token: apostrofo ASCII/tipografico, trattino ↔ spazio/omesso. */
+function tokenPatternSource(token: string): string {
+  return escapeRegex(token)
+    .replace(/['’]/g, "['’]")
+    .replace(/\\-/g, '(?:\\s*-\\s*|\\s+)?');
+}
+
+/** Pattern di un nome completo: token separati da spazi, ciascuno tollerante. */
+function namePatternSource(name: string): string {
+  return `(?<![\\p{L}])${name.split(/\s+/).map(tokenPatternSource).join('\\s+')}(?![\\p{L}])`;
+}
+
+const MONTHS_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+
+/** Regex con tutte le forme della data di nascita ISO dei metadati, o null se malformata. */
+function dateOfBirthVariantsRegex(iso: string): RegExp | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return null;
+  const [, yyyy, mm, dd] = m;
+  const d = String(Number(dd));
+  const mo = String(Number(mm));
+  const yy = yyyy!.slice(2);
+  const month = MONTHS_IT[Number(mm) - 1] ?? '';
+  const sep = '[./-]';
+  const num = `(?:0?${d})${sep}(?:0?${mo})${sep}(?:${yyyy}|${yy})`;
+  const iso2 = `${yyyy}-${mm}-${dd}`;
+  const text = month ? `(?:0?${d})\\s+(?:${month}|${month.slice(0, 3)}\\.?)\\s+(?:${yyyy}|${yy})` : '';
+  const alt = [num, iso2, text].filter(Boolean).map((a) => `(?<![\\d])${a}(?![\\d])`).join('|');
+  return new RegExp(alt, 'giu');
+}
+
+/** Regex dell'indirizzo dei metadati (intero, con spazi/virgole tolleranti) e del solo CAP+comune. */
+function addressVariantsRegexes(address: string): RegExp[] {
+  const out: RegExp[] = [];
+  const tokens = address.split(/[\s,]+/).filter(Boolean);
+  if (tokens.length >= 2) {
+    out.push(new RegExp(`(?<![\\p{L}\\d])${tokens.map(escapeRegex).join('[\\s,]+')}(?![\\p{L}\\d])`, 'giu'));
+  }
+  const capCity = /\b(\d{5})\s+([^\d,]+?)\s*$/.exec(address.trim());
+  if (capCity) {
+    out.push(new RegExp(`(?<![\\d])${escapeRegex(capCity[1]!)}\\s+${escapeRegex(capCity[2]!.trim())}(?![\\p{L}])`, 'giu'));
+  }
+  return out;
+}
+
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
