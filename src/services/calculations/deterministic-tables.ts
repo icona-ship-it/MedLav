@@ -140,19 +140,33 @@ export function formatExpenseTable(events: DeterministicTableEvent[]): string {
 
   // Colonna "N. Ricevuta/Fattura" (benchmark spese 2026-06-10 + gold CTU):
   // best-effort dal testo dell'evento, '—' quando non riconoscibile.
-  const rows = items.map((it) =>
+  // Una voce senza importo E senza numero di documento non è una spesa documentata
+  // (es. una voce di magazzino letta come spesa): fuori dalla tabella, dichiarata
+  // in nota (Fase 1 audit 2026-09-10, C). Le fatture senza importo letto restano con «—».
+  const FISCAL_LEXICON_RE = /fattur|ricevut|scontrin|ticket|pagament|quietanz|bonific|acquist|spes|€|euro|\beur\b|import/i;
+  const isSpurious = (it: { amount: number | null; receiptRef?: string | null; description: string }): boolean =>
+    it.amount === null && !it.receiptRef && !FISCAL_LEXICON_RE.test(it.description);
+  const spurious = items.filter(isSpurious);
+  const tabular = items.filter((it) => !isSpurious(it));
+  if (tabular.length === 0 && spurious.length > 0) {
+    return `_Nessuna spesa con importo documentato. ${spurious.length === 1 ? 'Una voce' : `${spurious.length} voci`} senza importo né numero di documento non ${spurious.length === 1 ? 'è riportata' : 'sono riportate'}: ${spurious.map((it) => it.description.slice(0, 60)).join('; ')}._`;
+  }
+  const rows = tabular.map((it) =>
     `| ${displayDate(it.date)} | ${cell(it.description)} | ${cell(it.facility)} | ${cell(it.receiptRef ?? null)} | ${it.amount !== null ? formatEuro(it.amount) : '—'} |`,
   );
-  const someMissing = items.some((it) => it.amount === null);
+  const someMissing = tabular.some((it) => it.amount === null);
   const totalCell = totalAmount !== null ? `**${formatEuro(totalAmount)}**` : '—';
   const totalNote = someMissing ? ' *(alcuni importi non rilevati — inserirli alla fonte)*' : '';
+  const spuriousNote = spurious.length > 0
+    ? `\n\n_${spurious.length === 1 ? 'Una voce' : `${spurious.length} voci`} senza importo né numero di documento non ${spurious.length === 1 ? 'è riportata' : 'sono riportate'} in tabella: ${spurious.map((it) => it.description.slice(0, 60)).join('; ')}._`
+    : '';
 
   return [
     '| Data | Descrizione | Struttura | N. Ricevuta/Fattura | Importo |',
     '|---|---|---|---|---|',
     ...rows,
     `| **Totale** | | | | ${totalCell}${totalNote} |`,
-  ].join('\n');
+  ].join('\n') + spuriousNote;
 }
 
 /**
@@ -606,13 +620,11 @@ export function expandDeterministicBlocks(
   // Spese: tabella danneggiato + (se presenti) tabella SEPARATA costi a carico SSN.
   // Caso SSN-only (zero spese del danneggiato ma costi SSN presenti): fallback
   // dedicato — "Non risultano spese... seguito da una tabella di spese" era stonato.
+  // Decisione founder 2026-09-11 (audit, D3): la tabella dei costi a carico del SSN
+  // NON entra nella perizia depositabile (nessun gold la riporta): resta un dato di
+  // lavoro visibile nella cronistoria. Qui solo le spese del danneggiato.
   const speseTable = formatExpenseTable(events);
-  const speseSsn = formatSsnCostTable(events);
-  const speseDanneggiato = speseTable
-    || (speseSsn
-      ? '_Non risultano spese a carico del danneggiato; si riportano di seguito, per completezza, i costi sostenuti dal Servizio Sanitario._'
-      : EMPTY_FALLBACK.SPESE);
-  const speseBlock = speseSsn ? `${speseDanneggiato}\n\n${speseSsn}` : speseDanneggiato;
+  const speseBlock = speseTable || EMPTY_FALLBACK.SPESE;
 
   const replacements: Array<[string, string]> = [
     [DETERMINISTIC_MARKERS.ITT_ITP, formatITTITPTable(calculateITTITP(events, opts?.incidentDate)) || EMPTY_FALLBACK.ITT_ITP],

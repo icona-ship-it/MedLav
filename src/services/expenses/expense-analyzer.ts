@@ -536,9 +536,22 @@ export function analyzeExpenses(
   // IVA), non 220 €. Se un documento porta il suo totale, le altre voci di quel
   // documento in quella data con importo ≤ totale sono righe interne.
   const invoiceTotals = withoutPaymentDupes.filter((i) => i.amount != null && i.documentId && isInvoiceTotalItem(i.description));
-  const withoutInvoiceLines = withoutPaymentDupes.filter((i) =>
-    !(i.amount != null && i.documentId && !isInvoiceTotalItem(i.description) &&
-      invoiceTotals.some((t) => t.documentId === i.documentId && t.date === i.date && (t.amount ?? 0) >= (i.amount ?? 0))));
+  const isAbsorbed = (i: ExpenseItem): boolean =>
+    i.amount != null && !!i.documentId && !isInvoiceTotalItem(i.description) &&
+    invoiceTotals.some((t) => t.documentId === i.documentId && t.date === i.date && (t.amount ?? 0) >= (i.amount ?? 0));
+  const withoutInvoiceLines = withoutPaymentDupes.filter((i) => !isAbsorbed(i));
+  // Il totale eredita il BENE delle righe assorbite (gold A: «ricevuta di acquisto …
+  // per tutore articolato»): «Pagamento totale fattura n. X» da solo non dice cosa
+  // è stato comprato (panel giro 11, completezza) — Fase 1 audit 2026-09-10.
+  for (const total of invoiceTotals) {
+    const absorbed = withoutPaymentDupes
+      .filter((i) => isAbsorbed(i) && i.documentId === total.documentId && i.date === total.date && !isFiscalComponentItem(i.description))
+      .map((i) => i.description.replace(/\s+/g, ' ').trim())
+      .filter((d) => d.length > 0);
+    if (absorbed.length > 0 && !total.description.includes(absorbed[0]!)) {
+      total.description = `${total.description} (${absorbed.join('; ').slice(0, 80)})`;
+    }
+  }
   items.length = 0;
   items.push(...withoutInvoiceLines);
 
