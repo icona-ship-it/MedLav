@@ -274,6 +274,24 @@ describe('renderRubricDocSanitaria — giro avversariale sul rumore (mai perdere
     expect(out.markdown).not.toContain('Nata a');
     expect(out.markdown).not.toContain('01/01/1970');
   });
+  it('collaudo 2026-09-18 (P-12): «DIMISSIONE: data ora - Dimissione a domicilio con mezzo proprio» resta; la firma «Il Medico di PS» no', () => {
+    const REF = [
+      'PRONTO SOCCORSO', 'ANAMNESI', 'Caduta accidentale in bicicletta.',
+      'DIAGNOSI', 'Trauma distorsivo T-T dx.', 'PROGNOSI', '7 giorni.',
+      'DIMISSIONE: 18/04/2026 ore 20:57 - Dimissione a domicilio con mezzo proprio',
+      'Il Medico di PS: Dott.ssa Maria Esempi',
+    ].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'ps', documentType: 'cartella_clinica', text: REF })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('Dimissione a domicilio con mezzo proprio');
+    expect(out.markdown).not.toContain('Il Medico di PS');
+    expect(out.markdown).not.toContain('Maria Esempi');
+    // Avversariale: «il medico di turno» che DICE qualcosa non è una firma; «domicilio:» resta anagrafica.
+    const REF2 = ['PRONTO SOCCORSO', 'ANAMNESI', 'Il medico di turno consiglia riposo e ghiaccio.', 'Domicilio: via degli Esempi 1', 'DIAGNOSI', 'Contusione del ginocchio sinistro.', 'Dimesso al domicilio in buone condizioni.'].join('\n');
+    const out2 = renderRubricDocSanitaria([doc({ documentId: 'ps2', documentType: 'cartella_clinica', text: REF2 })], DEFAULT_RUBRIC_POLICY);
+    expect(out2.markdown).toContain('Il medico di turno consiglia riposo e ghiaccio.');
+    expect(out2.markdown).toContain('Dimesso al domicilio in buone condizioni.');
+    expect(out2.markdown).not.toContain('via degli Esempi');
+  });
   it('referto dattiloscritto con 3 parole incerte su 12 righe resta citato per intero', () => {
     const lines = ['REFERTO', ...Array.from({ length: 12 }, (_, i) => `Riga clinica numero ${i + 1} del referto${i < 3 ? ' [ILLEGGIBILE]' : ''}.`)];
     const out = renderRubricDocSanitaria([doc({ documentId: 'r', documentType: 'esame_strumentale', text: lines.join('\n') })], DEFAULT_RUBRIC_POLICY);
