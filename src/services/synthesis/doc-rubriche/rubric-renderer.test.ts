@@ -292,6 +292,33 @@ describe('renderRubricDocSanitaria — giro avversariale sul rumore (mai perdere
     expect(out2.markdown).toContain('Dimesso al domicilio in buone condizioni.');
     expect(out2.markdown).not.toContain('via degli Esempi');
   });
+  it('collaudo 2026-09-18 (P-10): la riga «Il Sig. X, nato a…, via…, in relazione all\'incidente… ha riportato trauma…» perde l\'anagrafica ma NON la diagnosi', () => {
+    const CERT = [
+      'STUDIO MEDICO DR. DEMPROVA - CERTIFICATO MEDICO',
+      'Cittàdemo, 20/04/2026',
+      "Il Sig. DEMPROVA CARLO, nato a Cittàdemo il 10.03.1990, via degli Esempi 1, in relazione all'incidente stradale occorsogli il 18/04/2026 ha riportato trauma distorsico tibio tarsica destra valutato presso PS Ospedale Civile di Cittàdemo il 18/04/2026.",
+      'Obiettivamente riscontro tumefazione, limitazione funzionale antalgica e dolorabilita alla mobilizzazione attiva e passiva.',
+      "Prognosi giorni s.c. 40 giorni (quaranta) dall'incidente.",
+      'Dott. Nicolò Demprova',
+    ].join('\n');
+    const out = renderRubricDocSanitaria([doc({ documentId: 'c', documentType: 'certificato', text: CERT })], DEFAULT_RUBRIC_POLICY);
+    expect(out.markdown).toContain('ha riportato trauma distorsico tibio tarsica destra');
+    expect(out.markdown).toContain('Obiettivamente riscontro tumefazione');
+    expect(out.markdown).not.toContain('DEMPROVA CARLO');
+    expect(out.markdown).not.toContain('10.03.1990');
+    expect(out.markdown).not.toContain('via degli Esempi');
+    // Una riga di SOLA anagrafica resta fuori per intero.
+    const REF = ['ANAMNESI', 'Nata a Cittàdemo il 01/01/1970, residente in via degli Esempi 1.', 'Caduta accidentale.', 'DIAGNOSI', 'Contusione.'].join('\n');
+    const out2 = renderRubricDocSanitaria([doc({ documentId: 'r', text: REF })], DEFAULT_RUBRIC_POLICY);
+    expect(out2.markdown).not.toContain('Nata a');
+    expect(out2.markdown).not.toContain('01/01/1970');
+    expect(out2.markdown).toContain('Caduta accidentale.');
+    // Avversariale: «nato a termine» è anamnesi fisiologica, non anagrafica; «Paziente:» è un'etichetta e non innesca il taglio.
+    const REF3 = ['ANAMNESI', 'Nato a termine, riferisce cefalea da tre giorni.', 'DIAGNOSI', 'Cefalea tensiva.'].join('\n');
+    const out3 = renderRubricDocSanitaria([doc({ documentId: 'r3', text: REF3 })], DEFAULT_RUBRIC_POLICY);
+    expect(out3.markdown).toContain('Nato a termine, riferisce cefalea da tre giorni.');
+    expect(out3.markdown).not.toContain('[...] riferisce');
+  });
   it('referto dattiloscritto con 3 parole incerte su 12 righe resta citato per intero', () => {
     const lines = ['REFERTO', ...Array.from({ length: 12 }, (_, i) => `Riga clinica numero ${i + 1} del referto${i < 3 ? ' [ILLEGGIBILE]' : ''}.`)];
     const out = renderRubricDocSanitaria([doc({ documentId: 'r', documentType: 'esame_strumentale', text: lines.join('\n') })], DEFAULT_RUBRIC_POLICY);

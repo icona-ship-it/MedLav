@@ -47,7 +47,7 @@ const RUBRIC_TITLES: Readonly<Record<string, string>> = {
 
 /** Righe amministrative che l'OCR mette dentro le rubriche cliniche (anagrafica, recapiti,
  * codici, firme, disclaimer, ticket): mai nel depositabile. Solo righe INTERE. */
-const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b|residen[tz]|domicilio\s*:|domiciliat[oa] (in|a)\b|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
+const ADMIN_NOISE_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|nosografic|n\.?\s*accettazione|accession|\btsrm\b|firmato digitalmente|firma (digitale|del medico)|copia (del documento|conforme)|pagina \d+ di \d+|\btel\.?\b|\bfax\b|e-?mail|@[a-z0-9-]+\.|p\.?\s*iva|partita iva|ticket|\bcassa\b|importo|€|euro\b|cod\.?\s*(prest|esenz)|esenzione|data di nascita|nat[oa] (il|a)\b(?!\s*(?:pre)?termine)|residen[tz]|domicilio\s*:|domiciliat[oa] (in|a)\b|via [a-z' ]+,? ?\d|direttore|coordinatore|segreteria|orari?o (di )?(apertura|visite)|stampat[oa] il|documento (generato|prodotto) (il|da)|barcode|identificativo|\bid\b\s*\d|informativa|privacy|consenso al trattamento|classe di dose|dose (efficace|erogata))/i;
 
 const FORM_NOISE_RE = /(rifiuto (delle )?prestazioni|\bfirma\b|\bdgr[v]?\b|codice (uscita|esito|triage)|dichiara di (essere stato|aver)|informat[oa] (sui|dei|circa)|medico richiedente|richiedente:|data richiesta|ora richiesta|prestazione richiesta|scheda n|pag\.? \d|protocollo|\bprot\.?\s*n|sorveglianza sanitaria|ammesso ricorso|trasmissione al (lavoratore|datore)|datore di lavoro|copia elettronica|sottoscritto con firma|^in fede\b|accertamento richiesto da|referto firmato|^data referto\b|^(io|lo|la) sottoscritt[oa]\b|^medico chirurgo\b|^psicolog[ao]\b|^spec(\.|ialista) in\b|\b[bo]\.?m\.?\s*[a-z]{2}\s*\d{3,}|\bpresso\s*:|\bdettagli\s*:|^consul\.|^orari?o\b|\(sabato\)|lun-ven|prenotazion[ei]|^dip\.|^resp\.|equipe medica|informazione relativa all'esposizione|esposizione (della procedura )?radiologica|euratom|decreto legislativo 31 luglio 2020|articolo 161|rappresentazione è conforme|conforme all'originale|validato da|linee guida$|^gentile (signor|sig\.)|^(barthel|indice di barthel|scala (di )?(braden|conley|morse|tinetti)|mmse|mini[- ]mental)\b|\bdata (ing|dim)\.|(^|\s)_(\s|$)|:\s*_)/i;
 /** Istruzioni di compilazione di una scala (Barthel, Braden…): righe numerate che
@@ -71,7 +71,7 @@ const CODICE_FISCALE_RE = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/g;
 /** Etichetta di modulo/macchina con al più un codice ("Camera:", "Ubic:64", "Med.:"). */
 const MACHINE_LABEL_LINE_RE = /^(camera|ubic|ubicazione|med|tecnico|letto|stanza|cod|ord|rif|prot|n|nr|num)\.?\s*:\s*\S{0,10}$/i;
 const LONG_CODE_RE = /\d{8,}/;
-const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione|paziente|et[àa])\s*:)/i;
+const IDENTITY_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b(?!\s*(?:pre)?termine)|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:|\b(nome|cognome|ragione sociale|denominazione|paziente|et[àa])\s*:)/i;
 /** "VERONA il 14/11/2024": luogo e data di stampa, non referto. */
 const CITY_DATE_LINE_RE = /^\p{Lu}[\p{L} ]{2,30},? il \d{1,2}[/.]\d{1,2}[/.]\d{2,4}$/u;
 const CLINICAL_LINE_RE = /(diagnosi|frattura|lesion|dolor|esame obiettivo|prognosi|terapia|conclusion|referto|guaribil)/i;
@@ -123,8 +123,28 @@ function scrubInlineCodes(line: string): string {
     .trim();
 }
 
+/** Verbo/locuzione con cui, dopo l'anagrafica, comincia il contenuto clinico
+ * («Il Sig. X, nato a…, via…, in relazione all'incidente… ha riportato…»). */
+const CLINICAL_CLAUSE_START_RE = /\b(in relazione|in riferimento|in seguito|a seguito|ha riportato|ha subit[oò]|riporta(?:va)?|riferisce|riferiva|lamenta(?:va)?|presenta(?:va)?|(?:è|risulta) affett[oa]|è stat[oa]|veniva|viene|giunge(?:va)?|si (?:è )?present[aò]|sottopost[oa]|ha (?:effettuato|eseguito|praticato)|necessita|affett[oa] da|diagnosi)\b/i;
+
+/** Riga con anagrafica (nome, nascita, residenza) seguita da testo clinico:
+ * via l'identità, resta la frase clinica preceduta da «[...]». Se non c'è una
+ * frase clinica dopo l'anagrafica la riga torna com'è (e il filtro la scarta).
+ * Collaudo 2026-09-18 (P-10): il certificato perdeva la diagnosi con il nome. */
+const IDENTITY_DATA_RE = /(codice fiscale|\bc\.?f\.?:|tessera sanitaria|data (di )?nascita|nat[oa] (il|a)\b(?!\s*(?:pre)?termine)|residente (in|a)\b|residenza\s*:|domiciliat[oa] (in|a)\b|domicilio\s*:)/i;
+
+function stripIdentityPrefix(line: string): string {
+  // Solo i DATI anagrafici (nascita, residenza, CF): «Paziente:» ed «Età:» sono etichette di modulo.
+  const id = IDENTITY_DATA_RE.exec(line);
+  if (!id) return line;
+  const after = line.slice(id.index + id[0].length);
+  const start = CLINICAL_CLAUSE_START_RE.exec(after);
+  if (!start) return line;
+  return `[...] ${after.slice(start.index).trim()}`;
+}
+
 function stripAdminNoise(text: string): string {
-  return text.split('\n').filter((l) => !isAdminNoiseLine(l)).map(scrubInlineCodes).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text.split('\n').map(stripIdentityPrefix).filter((l) => !isAdminNoiseLine(l)).map(scrubInlineCodes).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Carta intestata nel preambolo di un referto (struttura, reparto, titolo d'esame):
