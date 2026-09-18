@@ -130,3 +130,40 @@ describe('suggestDocumentMergeGroups — euristica foto sequenziali', () => {
     expect(suggestDocumentMergeGroups(files)).toHaveLength(0);
   });
 });
+
+describe('suggestDocumentMergeGroups — immagini caricate insieme (collaudo 2026-09-18: nomi generici)', () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 8, 18, 8, 32, s)).toISOString();
+  it('3 immagini con nomi generici caricate a pochi secondi → una proposta, in ordine naturale di nome', () => {
+    const files = [
+      { id: 'b', fileName: 'foto-2.jpg', uploadedAt: at(47) },
+      { id: 'c', fileName: 'foto-10.jpg', uploadedAt: at(48) },
+      { id: 'a', fileName: 'foto-1.jpg', uploadedAt: at(46) },
+    ];
+    const groups = suggestDocumentMergeGroups(files);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.documentIds).toEqual(['a', 'b', 'c']);
+    expect(groups[0]!.reason).toContain('caricate insieme');
+  });
+  it('stesse immagini caricate a 10 minuti di distanza → nessuna proposta; PDF caricati insieme → nessuna proposta', () => {
+    expect(suggestDocumentMergeGroups([
+      { id: 'a', fileName: 'foto-1.jpg', uploadedAt: at(0) },
+      { id: 'b', fileName: 'foto-2.jpg', uploadedAt: at(600) },
+    ])).toHaveLength(0);
+    expect(suggestDocumentMergeGroups([
+      { id: 'a', fileName: 'verbale.pdf', uploadedAt: at(0) },
+      { id: 'b', fileName: 'certificato.pdf', uploadedAt: at(1) },
+    ])).toHaveLength(0);
+  });
+  it('senza data di caricamento e senza numerazione non propone nulla; una raffica con timestamp nel nome non viene riproposta dalla regola del caricamento', () => {
+    expect(suggestDocumentMergeGroups([
+      { id: 'a', fileName: 'foto-1.jpg' },
+      { id: 'b', fileName: 'foto-2.jpg' },
+    ])).toHaveLength(0);
+    const groups = suggestDocumentMergeGroups([
+      { id: 'a', fileName: '20260818_180312.jpg', uploadedAt: at(0) },
+      { id: 'b', fileName: '20260818_180320.jpg', uploadedAt: at(1) },
+      { id: 'c', fileName: 'altro.jpg', uploadedAt: at(2) },
+    ]);
+    expect(groups.map((g) => g.documentIds)).toEqual([['a', 'b']]);
+  });
+});

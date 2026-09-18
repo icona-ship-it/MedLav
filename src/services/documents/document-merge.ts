@@ -102,6 +102,16 @@ interface SuggestInput {
   id: string;
   fileName: string;
   mergedIntoDocumentId?: string | null;
+  /** `created_at` del documento (ISO): immagini caricate nello stesso momento
+   * sono con ogni probabilità le pagine di un unico referto fotografato. */
+  uploadedAt?: string | null;
+}
+
+/** Immagini caricate entro questo intervallo l'una dall'altra = stesso caricamento. */
+const MAX_UPLOAD_GAP_SECONDS = 120;
+
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, 'it', { numeric: true, sensitivity: 'base' });
 }
 
 function timestampFromName(fileName: string): number | null {
@@ -164,6 +174,24 @@ export function suggestDocumentMergeGroups(files: SuggestInput[]): MergeSuggesti
     suggestions.push({
       documentIds: run.map((f) => f.id),
       reason: `${run.length} immagini con numerazione consecutiva`,
+    });
+    run.forEach((f) => used.add(f.id));
+  }
+
+  // 3) Nomi qualsiasi («foto-1.jpg», «image0.jpeg») ma caricate insieme
+  //    (collaudo 2026-09-18: le 3 foto di un referto non avevano né timestamp
+  //    né progressivo e la proposta non compariva). Ordine pagine = ordine
+  //    naturale del nome. Resta una PROPOSTA: il banner chiede conferma.
+  const uploaded = candidates
+    .filter((f) => !used.has(f.id))
+    .map((f) => ({ ...f, up: f.uploadedAt ? Date.parse(f.uploadedAt) / 1000 : Number.NaN }))
+    .filter((f) => Number.isFinite(f.up))
+    .sort((a, b) => a.up - b.up);
+  for (const run of groupRuns(uploaded, (a, b) => b.up - a.up <= MAX_UPLOAD_GAP_SECONDS)) {
+    const ordered = [...run].sort((a, b) => naturalCompare(a.fileName, b.fileName));
+    suggestions.push({
+      documentIds: ordered.map((f) => f.id),
+      reason: `${run.length} immagini caricate insieme — controlla che siano pagine dello stesso referto`,
     });
   }
 

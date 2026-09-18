@@ -35,6 +35,7 @@ export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: Me
         id: d.id,
         fileName: d.file_name,
         mergedIntoDocumentId: d.merged_into_document_id ?? null,
+        uploadedAt: d.created_at ?? null,
       })),
     );
   }, [documents]);
