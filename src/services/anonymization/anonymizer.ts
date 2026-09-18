@@ -157,7 +157,7 @@ const NAME_BEFORE_NATO_REGEX = new RegExp(
 // (audit 2026-09-10, invariante I5).
 const ORG_WORD = String.raw`[A-ZÀ-Ü][\p{L}'’-]*`;
 const HOSPITAL_REGEX = new RegExp(
-  String.raw`(?:Ospedale|ASST|ASL|ATS|AOU|IRCCS|Policlinico|Clinica|Istituto|Casa di Cura|Presidio Ospedaliero|Fondazione|Studio(?!\s+(?:RM|RMN|RX|TC|TAC|PET|MOC|ECO|ECG|EEG|EMG|EGDS|TSA|US)\b)|Centro|Poliambulatorio|Laboratorio)\s+${ORG_WORD}(?:\s+(?:di|del|della|dei|degli|delle|e|San|Santa|Sant'|S\.)\s+${ORG_WORD}|\s+${ORG_WORD})*`,
+  String.raw`(?:Ospedale|ASST|ASL|ATS|AOU|IRCCS|Policlinico|Clinica|Istituto|Casa di Cura|Presidio Ospedaliero|Fondazione|Studio(?![ \t]+(?:RM|RMN|RX|TC|TAC|PET|MOC|ECO|ECG|EEG|EMG|EGDS|TSA|US)\b)|Centro|Poliambulatorio|Laboratorio)[ \t]+${ORG_WORD}(?:[ \t]+(?:di|del|della|dei|degli|delle|e|San|Santa|Sant'|S\.)[ \t]+${ORG_WORD}|[ \t]+${ORG_WORD})*`,
   'gu',
 );
 

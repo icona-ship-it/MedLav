@@ -290,3 +290,15 @@ describe('invarianti anonimizzazione — coerenza e scala', () => {
     expect(out.split('Pag. ').length).toBe(401);
   });
 });
+
+describe('collaudo 2026-09-18 (P-14): un nome di struttura non attraversa il salto di riga', () => {
+  it('«Storia Clinica» a fine titolo + «Il paziente» a capo restano intatti; l’ospedale nel testo viene comunque sostituito', () => {
+    const text = '## Il Fatto e la Storia Clinica\n\nIl paziente, sig. Carlo Demprova, giungeva presso l’Ospedale Civile di Cittàdemo alle ore 17:56.';
+    const out = anonymizeText({ text, periziaMetadata: pm({ patientFullName: 'Demprova Carlo' }) }).anonymizedText;
+    expect(out).toContain('## Il Fatto e la Storia Clinica');
+    expect(out).toContain('Il paziente, sig.');
+    expect(out).not.toContain('Demprova');
+    expect(out).not.toContain('Ospedale Civile di Cittàdemo');
+    expect(out).toContain('alle ore 17:56');
+  });
+});
