@@ -4,7 +4,7 @@ import {
   Header, Footer, PageNumber, Table, TableRow, TableCell, WidthType, BorderStyle,
   TableLayoutType, ImageRun,
 } from 'docx';
-import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { sourceLabelsExport as sourceLabels, anomalyTypeLabels as anomalyLabels, isClinicalTimelineEvent } from '@/lib/constants';
 import { isPlaceholderBlockStart } from './markdown-to-html';
 import { formatDate } from '@/lib/format';
 import type { MedicoLegalCalculation } from '@/services/calculations/medico-legal-calc';
@@ -527,7 +527,7 @@ export async function generateDocxReport(params: DocxExportParams): Promise<Buff
   // Rispetta anche l'esclusione manuale del perito ("Fuori cronologia"), come
   // già fa la cronistoria HTML (giro avversariale 2026-09-04).
   const clinicalEvents = events.filter((e) =>
-    !NON_CLINICAL_EVENT_TYPES.has(e.event_type) && e.is_relevant_for_chronology !== false);
+    isClinicalTimelineEvent(e) && e.is_relevant_for_chronology !== false);
 
   // Un documento = UN blocco (feedback beta 2026-07-20): il verbale di PS
   // estratto in 6 eventi resta un blocco unico con le sue sotto-voci, invece

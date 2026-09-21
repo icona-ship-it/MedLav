@@ -9,7 +9,7 @@
  * extraction) and sortEventsChrono (the single chronological comparator).
  */
 import { formatDate, formatEuro } from '@/lib/format';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isClinicalTimelineEvent } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA } from '@/lib/document-type-labels';
 import { analyzeExpenses, collectSsnCosts } from '@/services/expenses/expense-analyzer';
@@ -220,7 +220,7 @@ export function formatSsnCostTable(events: DeterministicTableEvent[]): string {
  * single shared comparator (sortEventsChrono). Returns '' when empty.
  */
 export function formatChronologyIndex(events: DeterministicTableEvent[]): string {
-  const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+  const clinical = events.filter((e) => isClinicalTimelineEvent(e));
   if (clinical.length === 0) return '';
 
   // Niente colonna Tipo: dicitura interna dell'app che il perito elimina

@@ -16,7 +16,7 @@
  */
 import { formatEuro } from '@/lib/format';
 import type { CaseType } from '@/types';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isClinicalTimelineEvent } from '@/lib/constants';
 import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { estimateBiologicalDamage } from './damage-estimator';
 import type { DeterministicTableEvent } from './deterministic-tables';
@@ -97,7 +97,7 @@ export function formatStimaDannoBlock(
   // futuro INERTE in prod — trovato dal giro avversariale 2026-08-11.
   const today = todayIso ?? todayRomeIso();
   const clinical = events
-    .filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))
+    .filter((e) => isClinicalTimelineEvent(e))
     .filter((e) => !incidentIso || !ISO_DATE_RE.test(e.event_date) || e.event_date >= incidentIso)
     // Eventi FUTURI (es. intervento PROGRAMMATO) non entrano nella stima danno:
     // gonfiavano il range e innescavano la nota Balthazard, in disaccordo col

@@ -2,7 +2,7 @@ import { formatEventDateByPrecision } from '@/lib/format';
 import { formatSourcePagesLabel } from '@/lib/source-pages';
 import { groupEventsByDocument, RETROSPECTIVE_SUBLIST_LABEL, SCHEDULED_SUBLIST_LABEL } from './event-grouping';
 import { markdownToHtml } from './markdown-to-html';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isClinicalTimelineEvent } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 import { getAiActDisclosureHtml, getAiActHtmlMetaTags } from './ai-act-disclosure';
 
@@ -94,7 +94,7 @@ export function generateTimelineHtml(params: TimelineHtmlParams): string {
     allEvents.filter((ev) =>
       (ev.event_date !== SENTINEL_DATE || isSublistScope(ev)) &&
       ev.is_relevant_for_chronology !== false &&
-      !NON_CLINICAL_EVENT_TYPES.has(ev.event_type)),
+      isClinicalTimelineEvent(ev)),
   );
 
   const now = new Date().toLocaleDateString('it-IT', {

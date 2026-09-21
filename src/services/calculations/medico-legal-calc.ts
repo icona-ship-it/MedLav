@@ -1,6 +1,6 @@
 import { formatDate } from '@/lib/format';
 import type { CaseType } from '@/types';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { NON_CLINICAL_EVENT_TYPES, CLINICAL_CERTIFICATE_RE } from '@/lib/constants';
 import { normalizeItalianDateToIso } from '@/lib/validators/date-format';
 import { estimateBiologicalDamage } from './damage-estimator';
 import { numberToItalianWords } from '@/lib/number-to-words-it';
@@ -57,8 +57,6 @@ function todayRomeIso(): string {
  * originale del filtro (regressione Passaniti: notifiche tardive che
  * distorcevano i periodi) vale ancora per loro.
  */
-const CLINICAL_CERTIFICATE_RE = /prognosi|guarigion|postumi|inabilit|malattia|infortunio|lesion/i;
-
 function isClinicalCertificate(e: CalcEvent): boolean {
   return e.event_type === 'certificato' && CLINICAL_CERTIFICATE_RE.test(`${e.title} ${e.description}`);
 }

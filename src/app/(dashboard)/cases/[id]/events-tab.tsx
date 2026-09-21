@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { addManualEvent, bulkVerifyEvents, bulkDeleteVerificationEvents } from '../../actions';
-import { EVENT_TYPES, SOURCE_TYPES } from '@/lib/constants';
+import { EVENT_TYPES, SOURCE_TYPES, isClinicalTimelineEvent } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import { sortEventsChrono } from '@/lib/event-order';
 import { CheckCheck, Trash2 } from 'lucide-react';
@@ -172,7 +172,8 @@ function isVerificationEvent(e: EventRow): boolean {
 type VerificationSubFilter = 'all' | 'date' | 'data' | 'other';
 type EventViewTab = 'clinical' | 'admin' | 'all';
 
-const NON_CLINICAL_TYPES = new Set(['documento_amministrativo', 'spesa_medica', 'certificato']);
+// Certificati MEDICI (prognosi, guarigione…) stanno nella vista clinica (2026-09-21).
+const isClinicalRow = (e: { event_type: string; title?: string | null; description?: string | null }) => isClinicalTimelineEvent(e);
 
 function getVerificationType(e: EventRow): VerificationSubFilter {
   if (!e.event_date || e.event_date === '' || e.date_precision === 'sconosciuta') return 'date';
@@ -236,8 +237,8 @@ export function EventsTab({
   // Display the cronistoria in true chronological order (undated last), robust to
   // a misaligned persisted order_number (bug Lavini "ordine non cronologico").
   const altroEvents = sortEventsChrono(events.filter((e) => e.event_type === 'altro'));
-  const clinicalEvents = sortEventsChrono(events.filter((e) => !NON_CLINICAL_TYPES.has(e.event_type)));
-  const adminEvents = sortEventsChrono(events.filter((e) => NON_CLINICAL_TYPES.has(e.event_type)));
+  const clinicalEvents = sortEventsChrono(events.filter((e) => isClinicalRow(e)));
+  const adminEvents = sortEventsChrono(events.filter((e) => !isClinicalRow(e)));
 
   // Split events into verification group
   const verificationEvents = events.filter((e) => isVerificationEvent(e));

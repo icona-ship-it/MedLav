@@ -3,7 +3,7 @@ import {
   AlignmentType, Header, Footer, PageNumber,
 } from 'docx';
 import { formatDate } from '@/lib/format';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isClinicalTimelineEvent } from '@/lib/constants';
 import { sortEventsChrono } from '@/lib/event-order';
 
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ export async function generateTimelineDocx(params: TimelineDocxParams): Promise<
     allEvents.filter((ev) =>
       ev.event_date !== SENTINEL_DATE &&
       ev.is_relevant_for_chronology !== false &&
-      !NON_CLINICAL_EVENT_TYPES.has(ev.event_type)),
+      isClinicalTimelineEvent(ev)),
   );
 
   // Benchmark gold passaniti (2026-06-10): niente titolo grande né meta-block

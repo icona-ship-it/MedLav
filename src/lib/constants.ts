@@ -141,6 +141,19 @@ export const NON_CLINICAL_EVENT_TYPES: ReadonlySet<string> = new Set([
   'certificato',
 ]);
 
+/** Certificato MEDICO (prognosi, guarigione, postumi, inabilità): è un fatto
+ * clinico della cronistoria (decisione founder 2026-07-24 per i calcoli; esteso
+ * alla cronistoria il 2026-09-21: la prognosi sta nel certificato e non deve
+ * sparire dalla vista clinica). I certificati amministrativi restano fuori. */
+export const CLINICAL_CERTIFICATE_RE = /prognosi|guarigion|postumi|inabilit|malattia|infortunio|lesion/i;
+
+/** True se l'evento entra nella cronistoria CLINICA (vista, export, indici):
+ * tipi clinici, più i certificati medici a contenuto clinico. */
+export function isClinicalTimelineEvent(e: { event_type: string; title?: string | null; description?: string | null }): boolean {
+  if (!NON_CLINICAL_EVENT_TYPES.has(e.event_type)) return true;
+  return e.event_type === 'certificato' && CLINICAL_CERTIFICATE_RE.test(`${e.title ?? ''} ${e.description ?? ''}`);
+}
+
 /** Inverse helper: true when the event represents a clinical fact. */
 export function isClinicalEvent(eventType: string): boolean {
   return !NON_CLINICAL_EVENT_TYPES.has(eventType);

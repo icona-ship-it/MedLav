@@ -11,7 +11,7 @@ import { generateTimelineHtml } from '@/services/export/timeline-html-export';
 import { anonymizeText } from '@/services/anonymization/anonymizer';
 import { resolveOcrImages, replaceWithDataUris } from '@/services/export/image-resolver';
 import { expandDeterministicBlocks, toDeterministicEvents, toDeterministicDocs, formatDocumentazioneSanitaria, computeTranscriptionCoverage } from '@/services/calculations/deterministic-tables';
-import { NON_CLINICAL_EVENT_TYPES, moduleLabels } from '@/lib/constants';
+import { isClinicalTimelineEvent, moduleLabels } from '@/lib/constants';
 import { logAccess } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { checkDepositableAttestation } from '@/services/export/attestation';
@@ -117,7 +117,7 @@ export async function GET(
       });
 
       const timelineEvents = data.events
-        .filter((e: Record<string, unknown>) => !NON_CLINICAL_EVENT_TYPES.has((e.event_type as string) ?? ''))
+        .filter((e: Record<string, unknown>) => isClinicalTimelineEvent({ event_type: (e.event_type as string) ?? '', title: e.title as string | null, description: e.description as string | null }))
         .map((e: Record<string, unknown>) => ({
           order_number: (e.order_number as number) ?? 0,
           document_id: (e.document_id as string | null) ?? null,

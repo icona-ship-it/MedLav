@@ -72,3 +72,16 @@ describe('colonna Ordine (collaudo 2026-09-18, P-18)', () => {
     expect(ordini).toEqual(['1', '2', '3']);
   });
 });
+
+describe('certificati nel CSV (2026-09-21)', () => {
+  it('il certificato medico con prognosi è una riga; il certificato amministrativo no', () => {
+    const baseEvent = { order_number: 1, event_date: '2026-04-20', date_precision: 'giorno', event_type: 'certificato', description: 'd', source_type: 'altro', diagnosis: null, doctor: null, facility: null, confidence: 90, requires_verification: false };
+    const csv = generateCsvExport([
+      { ...baseEvent, title: 'Certificato medico', description: 'Prognosi giorni 40 s.c.' },
+      { ...baseEvent, title: 'Attestazione ISEE' },
+    ]);
+    const rows = csv.split('\n').slice(1).filter(Boolean);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain('Certificato medico');
+  });
+});

@@ -9,7 +9,7 @@
  */
 
 import { getDocumentTypeLabel, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA, EXCLUDED_FROM_DOCUMENTAZIONE_SANITARIA_REASONS } from '@/lib/document-type-labels';
-import { NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { isClinicalTimelineEvent } from '@/lib/constants';
 
 export interface AppendixDocument {
   id: string;
@@ -140,7 +140,7 @@ export function buildVerificationAppendix(params: VerificationAppendixParams): s
   lines.push('');
 
   if (mode === 'cronistoria') {
-    const clinical = events.filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type));
+    const clinical = events.filter((e) => isClinicalTimelineEvent(e));
     const relevant = clinical.filter((e) => e.is_relevant_for_chronology !== false);
     // Un evento 'corrente' senza data non ha posto in cronologia: va detto.
     const undated = relevant.filter((e) => e.event_date === SENTINEL_DATE && !isSublistScope(e));

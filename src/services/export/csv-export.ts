@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { sourceLabels, NON_CLINICAL_EVENT_TYPES } from '@/lib/constants';
+import { sourceLabels, isClinicalTimelineEvent } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import { formatSourcePagesLabel } from '@/lib/source-pages';
 import { normalizeTemporalScope, TEMPORAL_SCOPE_LABELS } from '@/lib/temporal-scope';
@@ -34,7 +34,7 @@ interface CsvEvent {
  */
 export function generateCsvExport(events: CsvEvent[]): string {
   const rows = events
-    .filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))
+    .filter(isClinicalTimelineEvent)
     // «Ordine» = posizione nella cronistoria esportata (1, 2, 3…): l'order_number
     // interno può ripetersi (doppioni uniti, eventi senza data) e confondeva Excel
     // (collaudo 2026-09-18, P-18).
