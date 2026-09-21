@@ -846,12 +846,22 @@ export function DocumentsSection({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unire le foto prima di proseguire?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingMerges.length === 1
-                ? `${pendingMerges[0]?.documentIds.length ?? 0} immagini sembrano pagine dello stesso referto.`
-                : `${pendingMerges.length} gruppi di immagini sembrano pagine dello stesso referto.`}
-              {' '}Se le lasci separate, la stessa visita può comparire più volte nella cronistoria.
-              Unirle è consigliato: l&apos;AI le leggerà come un unico documento.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  {pendingMerges.some((s) => /caricate insieme/.test(s.reason))
+                    ? 'Queste immagini sono state caricate insieme: controlla che siano davvero pagine dello stesso referto prima di unirle.'
+                    : 'Queste immagini sembrano pagine dello stesso referto (scatti in sequenza).'}
+                  {' '}Se pagine dello stesso referto restano separate, la stessa visita può comparire più volte nella cronistoria; se unisci documenti diversi, verranno letti come uno solo.
+                </p>
+                {pendingMerges.map((s) => (
+                  <ul key={mergeSuggestionKey(s)} className="rounded border px-3 py-2 text-xs list-disc list-inside">
+                    {s.documentIds.map((id, idx) => (
+                      <li key={id} className="truncate">pag. {idx + 1} — {documents.find((d) => d.id === id)?.file_name ?? id}</li>
+                    ))}
+                  </ul>
+                ))}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

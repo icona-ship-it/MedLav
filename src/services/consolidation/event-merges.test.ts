@@ -195,7 +195,13 @@ describe('reclassifyPricelessExpenseEvents — prestazioni senza importo non son
       ev({ documentId: 'st', rowId: 'a', eventType: 'spesa_medica', temporalScope: 'retrospettivo', title: 'Seduta riabilitazione fisiochinesiterapia 90 minuti', description: 'Seduta del 15/05/2026 alle 15:30 presso il Centro Fisioterapico Esempi S.R.L.', sourceText: '1. Seduta di riabilitazione fisiochinesiterapia (90 minuti) del 15/05/2026 15:30' }),
       ev({ documentId: 'st', rowId: 'b', eventType: 'spesa_medica', title: 'Visita di controllo ortopedica', description: 'Controllo del 03/06/2026.', sourceText: 'Visita di controllo 03/06/2026' }),
     ]);
-    expect(out.map((e) => [e.eventType, e.temporalScope, e.mutated])).toEqual([['terapia', 'corrente', true], ['visita', 'corrente', true]]);
+    expect(out.map((e) => [e.eventType, e.temporalScope, e.mutated])).toEqual([['terapia', 'retrospettivo', true], ['visita', 'corrente', true]]);
+    // Una seduta PROGRAMMATA resta programmata (non allunga il periodo di malattia).
+    const prog = reclassifyPricelessExpenseEvents([ev({ documentId: 'st', rowId: 'p', eventType: 'spesa_medica', temporalScope: 'programmato', eventDate: '2026-07-01', title: 'Seduta di fisioterapia programmata', description: 'Seduta prevista.', sourceText: 'seduta prevista' })]);
+    expect(prog[0].temporalScope).toBe('programmato');
+    // «Totale sedute: 7» non è un importo → riclassificata.
+    const tot = reclassifyPricelessExpenseEvents([ev({ documentId: 'st', rowId: 't', eventType: 'spesa_medica', title: 'Sedute di fisioterapia', description: 'Totale sedute: 7', sourceText: 'Totale sedute 7' })]);
+    expect(tot[0].eventType).toBe('terapia');
     expect(out[0].reliabilityNotes).toBe(RECLASSIFIED_EXPENSE_NOTE);
   });
   it('MAI riclassificare: importo presente, lessico fiscale presente, o nessun lessico di prestazione', () => {
@@ -203,7 +209,7 @@ describe('reclassifyPricelessExpenseEvents — prestazioni senza importo non son
       ev({ documentId: 'f', rowId: 'a', eventType: 'spesa_medica', title: 'Seduta fisioterapia', description: 'Ricevuta n. 12', sourceText: 'Seduta fisioterapia € 45,00' }),
       ev({ documentId: 'f', rowId: 'b', eventType: 'spesa_medica', title: 'Trattamento manuale', description: 'Fattura 3/2026 pagata', sourceText: 'Trattamento manuale — fattura' }),
       ev({ documentId: 'f', rowId: 'c', eventType: 'spesa_medica', title: 'Plantare su misura', description: 'Ordine plantare', sourceText: 'plantare su misura' }),
-      ev({ documentId: 'f', rowId: 'd', eventType: 'spesa_medica', title: 'Sedute fisioterapia', description: 'Totale 10 sedute', sourceText: 'Totale sedute 10' }),
+      ev({ documentId: 'f', rowId: 'd', eventType: 'spesa_medica', title: 'Sedute fisioterapia', description: 'Totale 250,00', sourceText: 'Totale 250,00' }),
     ]);
     expect(keep.every((e) => e.eventType === 'spesa_medica' && !e.mutated)).toBe(true);
   });

@@ -68,12 +68,15 @@ function buildEventBlock(ev: TimelineEvent): Paragraph[] {
     spacing: { before: 180, after: 40 },
   }));
 
-  // Descrizione
+  // Descrizione: i blocchi separati da riga vuota (voci unite: «Triage: …»,
+  // «Dimissione: …») restano paragrafi distinti anche in Word.
   if (ev.description) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: ev.description, size: 20, font: 'Calibri' })],
-      spacing: { after: 30 },
-    }));
+    for (const block of ev.description.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)) {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: block.replace(/\n/g, ' '), size: 20, font: 'Calibri' })],
+        spacing: { after: 30 },
+      }));
+    }
   }
 
   // Diagnosi

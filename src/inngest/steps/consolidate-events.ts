@@ -270,18 +270,24 @@ async function applyConsolidationPersistence(
   plan: ConsolidationPersistencePlan,
   batchSize: number,
 ): Promise<void> {
-  for (let i = 0; i < plan.deleteIds.length; i += batchSize) {
-    const batch = plan.deleteIds.slice(i, i + batchSize);
-    const { error } = await supabase.from('events').delete().in('id', batch);
-    if (error) logger.warn('pipeline', `consolidation: delete of ${batch.length} absorbed rows failed: ${error.message}`);
-  }
+  // PRIMA i sopravvissuti (che ora contengono ciò che era nelle righe assorbite),
+  // POI le cancellazioni: se un update fallisce si lancia e Inngest ritenta il
+  // passo con le righe ancora intere (il piano si ricalcola, idempotente). Mai
+  // cancellare prima di aver scritto (giro avversariale 2026-09-21).
   for (let i = 0; i < plan.updates.length; i += batchSize) {
     const batch = plan.updates.slice(i, i + batchSize);
     const results = await Promise.allSettled(
       batch.map((u) => supabase.from('events').update({ ...u.fields, updated_at: new Date().toISOString() }).eq('id', u.id)),
     );
     const failures = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)).length;
-    if (failures > 0) logger.warn('pipeline', `consolidation: ${failures}/${batch.length} survivor updates failed`);
+    if (failures > 0) {
+      throw new Error(`consolidation: ${failures}/${batch.length} survivor updates failed — absorbed rows NOT deleted, step will retry`);
+    }
+  }
+  for (let i = 0; i < plan.deleteIds.length; i += batchSize) {
+    const batch = plan.deleteIds.slice(i, i + batchSize);
+    const { error } = await supabase.from('events').delete().in('id', batch);
+    if (error) throw new Error(`consolidation: delete of ${batch.length} absorbed rows failed: ${error.message}`);
   }
   if (plan.deleteIds.length > 0 || plan.updates.length > 0) {
     logger.info('pipeline', ` Step 4: consolidation persisted — ${plan.deleteIds.length} absorbed rows deleted, ${plan.updates.length} survivors updated`);

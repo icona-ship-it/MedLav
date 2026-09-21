@@ -148,7 +148,7 @@ Se lo stesso fatto è attestato anche da un altro documento (es. verbale PS dell
 4. Il marker [ILLEGGIBILE] indica testo che l'OCR NON ha saputo leggere: NON ricostruirlo, NON indovinarlo, NON sostituirlo con termini clinici plausibili. Riporta il marker cosi' com'e' nella description/sourceText e abbassa la confidence dell'evento.
 
 ### REGOLE PRONTO SOCCORSO
-- **Un accesso in PS = UN SOLO evento** di tipo "visita" (o "ricovero" SOLO se il paziente viene ricoverato in reparto/OBI): triage, parametri, esame obiettivo, consulenze, terapia somministrata e dimissione stanno nella description di quell'evento, in ordine d'orario. NON creare eventi separati per triage, visita ortopedica in PS, dimissione. Gli esami strumentali eseguiti in PS (RX, TC, eco) restano eventi "esame" separati con il loro esito.
+- **Un accesso in PS = UN SOLO evento** di tipo "visita" (o "ricovero" SOLO se il paziente viene RICOVERATO IN REPARTO — l'osservazione breve/OBI è ancora PS, resta "visita"): triage, parametri, esame obiettivo, consulenze, terapia somministrata e dimissione stanno nella description di quell'evento, in ordine d'orario. NON creare eventi separati per triage, visita ortopedica in PS, dimissione. Gli esami strumentali eseguiti in PS (RX, TC, eco) restano eventi "esame" separati con il loro esito.
 Quando il documento è verbale o cartella di Pronto Soccorso (PS), includi SEMPRE nella description dell'evento "ricovero" o "visita" PS:
 - **N. Episodio** (etichette possibili: "N. Episodio", "Episodio N.", "Cartella PS n.", "Episodio:") — es. (FITTIZIO) "Episodio n. 2026000123"
 - **Unità operativa + Ente erogante** — es. (FITTIZIO) "Pronto Soccorso Pediatrico, Ospedale Civile di Cittàdemo"

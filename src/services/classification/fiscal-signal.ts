@@ -5,7 +5,9 @@
  * cronistoria clinica. Un documento senza alcun segnale fiscale non è un
  * giustificativo di spesa.
  */
-const FISCAL_SIGNAL_RE = /(€|\beuro\b|\beur\b|\bimporto\b|\btotale\b|\bfattur[ae]\b|\bricevut[ae]\b|\bscontrin[oi]\b|\bpagat[oa]\b|\bpagamento\b|\bp\.?\s?iva\b|\biva\b|\bbollo\b|\bnota spese\b|\bparcell[ae]\b|\bticket\b|\bquietanza\b|\bcorrispettiv|\bonorari[oi]\b|\d{1,3}(?:\.\d{3})*,\d{2}\b)/i;
+// «importo»/«totale» contano solo seguiti da una cifra («Totale sedute: 7» non è
+// fiscale; «Totale 120,00» sì); i decimali valgono con virgola o punto (120.00).
+const FISCAL_SIGNAL_RE = /(€|\beuro\b|\beur\b|\bchf\b|\bgbp\b|\b(importo|totale)\b[^\n\d]{0,20}\d+[.,]\d{2}|\bfattur[ae]\b|\bricevut[ae]\b|\bscontrin[oi]\b|\bpagat[oa]\b|\bpagamento\b|\bp\.?\s?iva\b|\biva\b|\bbollo\b|\bnota spese\b|\bparcell[ae]\b|\bticket\b|\bquietanza\b|\bcorrispettiv|\bonorari[oi]\b|\d{1,3}(?:\.\d{3})*,\d{2}\b|\d+\.\d{2}\b(?![./]\d))/i;
 
 export function hasFiscalSignal(text: string | null | undefined): boolean {
   return FISCAL_SIGNAL_RE.test(text ?? '');

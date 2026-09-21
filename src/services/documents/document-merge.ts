@@ -145,7 +145,9 @@ function groupRuns<T>(sorted: T[], isAdjacent: (a: T, b: T) => boolean): T[][] {
  * Solo una PROPOSTA: la conferma resta all'utente.
  */
 export function suggestDocumentMergeGroups(files: SuggestInput[]): MergeSuggestion[] {
-  const candidates = files.filter((f) => IMAGE_EXT_RE.test(f.fileName) && !f.mergedIntoDocumentId);
+  // Un documento già capofila di un'unione non viene riproposto (l'API rifiuterebbe).
+  const primaries = new Set(files.map((f) => f.mergedIntoDocumentId).filter((id): id is string => Boolean(id)));
+  const candidates = files.filter((f) => IMAGE_EXT_RE.test(f.fileName) && !f.mergedIntoDocumentId && !primaries.has(f.id));
   if (candidates.length < 2) return [];
 
   const suggestions: MergeSuggestion[] = [];
@@ -191,7 +193,7 @@ export function suggestDocumentMergeGroups(files: SuggestInput[]): MergeSuggesti
     const ordered = [...run].sort((a, b) => naturalCompare(a.fileName, b.fileName));
     suggestions.push({
       documentIds: ordered.map((f) => f.id),
-      reason: `${run.length} immagini caricate insieme — controlla che siano pagine dello stesso referto`,
+      reason: `${run.length} immagini caricate insieme — controlla che siano davvero pagine dello stesso referto`,
     });
   }
 

@@ -170,6 +170,18 @@ describe('suggestDocumentMergeGroups — immagini caricate insieme (collaudo 202
   });
 });
 
+describe('suggestDocumentMergeGroups — documenti già uniti', () => {
+  it('il capofila di un gruppo già unito non viene riproposto con altre foto caricate insieme', () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 8, 18, 8, 32, s)).toISOString();
+    const out = suggestDocumentMergeGroups([
+      { id: 'a', fileName: 'foto-1.jpg', uploadedAt: at(1) },
+      { id: 'b', fileName: 'foto-2.jpg', uploadedAt: at(2), mergedIntoDocumentId: 'a' },
+      { id: 'c', fileName: 'foto-3.jpg', uploadedAt: at(3) },
+    ]);
+    expect(out).toHaveLength(0);
+  });
+});
+
 describe('pendingMergeSuggestions — cosa resta da decidere prima di proseguire', () => {
   const at = (s: number) => new Date(Date.UTC(2026, 8, 18, 8, 32, s)).toISOString();
   it('una proposta ignorata non è più pendente; una non decisa sì', () => {

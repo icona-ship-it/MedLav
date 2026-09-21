@@ -476,7 +476,7 @@ export function collapsePsEpisodes(events: WorkEvent[]): WorkEvent[] {
 // non spese. Tornano nella cronistoria clinica col tipo giusto.
 // ---------------------------------------------------------------------------
 
-const AMOUNT_RE = /((€|\beur\b|\beuro\b)\s*\d|\d\s*(€|\beur\b|\beuro\b)|\d{1,3}(?:[ .]\d{3})*,\d{2}\b|\bimporto\b|\btotale\b)/i;
+const AMOUNT_RE = /((€|\beur\b|\beuro\b)\s*\d|\d\s*(€|\beur\b|\beuro\b)|\d{1,3}(?:[ .]\d{3})*[.,]\d{2}\b(?![./]\d)|\b(importo|totale)\b[^\n\d]{0,20}\d+[.,]\d{2})/i;
 const FISCAL_LEXICON_RE = /(fattur|ricevut|scontrin|pagat|pagamento|\biva\b|bollo|parcell|ticket|quietanz|onorari|rimbors)/i;
 const THERAPY_LEXICON_RE = /(sedut[ae]|fisioterap|fisiochinesi|riabilitaz|trattament[oi] manual|massoterap|tecar|laser|ultrasuon|magnetoterap|kinesi|osteopat|esercizi|infiltrazion|medicazion)/i;
 const VISIT_LEXICON_RE = /(visita|controllo|valutazione|consulenza)/i;
@@ -498,8 +498,9 @@ export function reclassifyPricelessExpenseEvents(events: WorkEvent[]): WorkEvent
     return {
       ...e,
       eventType: newType,
-      // Una spesa non ha ambito temporale: lo storico che elenca le prestazioni ne è la fonte.
-      temporalScope: 'corrente',
+      // L'ambito temporale scelto dal modello resta (una seduta «programmata» non
+      // diventa avvenuta): solo un valore assente diventa «corrente».
+      temporalScope: e.temporalScope ?? 'corrente',
       reliabilityNotes: prev.includes(RECLASSIFIED_EXPENSE_NOTE) ? prev : prev ? `${prev} | ${RECLASSIFIED_EXPENSE_NOTE}` : RECLASSIFIED_EXPENSE_NOTE,
       mutated: true,
     };
