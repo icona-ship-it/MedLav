@@ -148,6 +148,7 @@ Se lo stesso fatto è attestato anche da un altro documento (es. verbale PS dell
 4. Il marker [ILLEGGIBILE] indica testo che l'OCR NON ha saputo leggere: NON ricostruirlo, NON indovinarlo, NON sostituirlo con termini clinici plausibili. Riporta il marker cosi' com'e' nella description/sourceText e abbassa la confidence dell'evento.
 
 ### REGOLE PRONTO SOCCORSO
+- **Un accesso in PS = UN SOLO evento** di tipo "visita" (o "ricovero" SOLO se il paziente viene ricoverato in reparto/OBI): triage, parametri, esame obiettivo, consulenze, terapia somministrata e dimissione stanno nella description di quell'evento, in ordine d'orario. NON creare eventi separati per triage, visita ortopedica in PS, dimissione. Gli esami strumentali eseguiti in PS (RX, TC, eco) restano eventi "esame" separati con il loro esito.
 Quando il documento è verbale o cartella di Pronto Soccorso (PS), includi SEMPRE nella description dell'evento "ricovero" o "visita" PS:
 - **N. Episodio** (etichette possibili: "N. Episodio", "Episodio N.", "Cartella PS n.", "Episodio:") — es. (FITTIZIO) "Episodio n. 2026000123"
 - **Unità operativa + Ente erogante** — es. (FITTIZIO) "Pronto Soccorso Pediatrico, Ospedale Civile di Cittàdemo"
@@ -185,11 +186,11 @@ Output:
 {
   "events": [
     {
-      "extraction_reasoning": "Pagina 1: data 15.03.2024 con ricovero PS e diagnosi esplicita frattura piatto tibiale",
+      "extraction_reasoning": "Pagina 1: data 15.03.2024, accesso in PS (un solo evento per l'intero accesso) con diagnosi esplicita frattura piatto tibiale",
       "eventDate": "2024-03-15",
       "datePrecision": "giorno",
-      "eventType": "ricovero",
-      "title": "Ricovero PS per trauma ginocchio destro post caduta",
+      "eventType": "visita",
+      "title": "Accesso in Pronto Soccorso per trauma ginocchio destro post caduta",
       "description": "Paziente maschio 52 anni giunge per trauma al ginocchio destro a seguito di caduta accidentale durante attivita' sportiva. In anamnesi patologica remota: pregressa meniscectomia del ginocchio destro (2019). All'ingresso: PA (pressione arteriosa) 140/85 mmHg, FC (frequenza cardiaca) 88 bpm, SpO2 (saturazione periferica) 98%. Esame obiettivo: tumefazione al ginocchio destro con dolore e limitazione funzionale. RX ginocchio destro: frattura composta del piatto tibiale destro. Ricoverato per osservazione clinica.",
       "sourceType": "cartella_clinica",
       "diagnosis": "Frattura composta piatto tibiale destro",
@@ -373,7 +374,11 @@ ERRORI COMUNI: Perdere la terapia alla dimissione, non distinguere diagnosi ingr
 
   certificato: `ISTRUZIONI SPECIFICHE PER CERTIFICATO:
 CAMPI CRITICI: Tipo certificato (medico, INAIL, invalidità, malattia, idoneità), data emissione, ente/medico emittente, contenuto, periodi di inabilità con date precise, percentuali di invalidità se presenti.
-ERRORI COMUNI: Non distinguere tra certificato iniziale e di continuazione INAIL, perdere le date di prognosi.`,
+REGOLE:
+- L'evento "certificato" ha eventDate = DATA DI EMISSIONE del certificato (non l'inizio della prognosi né la data dell'infortunio).
+- Prognosi e periodi di inabilità ("giorni 40 s.c. dal 18/04") vanno nella description dell'evento "certificato": MAI un evento separato per la prognosi.
+- L'infortunio o la visita che il certificato CITA (es. "valutato in PS il 18/04") può essere un evento "retrospettivo" con la sua data.
+ERRORI COMUNI: Non distinguere tra certificato iniziale e di continuazione INAIL, perdere le date di prognosi, datare il certificato all'inizio della prognosi.`,
 
   spese_mediche: `ISTRUZIONI SPECIFICHE PER SPESE MEDICHE:
 REGOLA CRITICA: UNA SOLA VOCE PER DOCUMENTO FISCALE, IMPORTO LORDO (direttiva del perito 2026-08-19 — SOSTITUISCE ogni precedente regola di scorporo):
