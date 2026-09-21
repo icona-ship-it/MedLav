@@ -3,6 +3,8 @@ import {
   partitionMergeGroups,
   suggestDocumentMergeGroups,
   type MergeableDocument,
+  pendingMergeSuggestions,
+  mergeSuggestionKey,
 } from './document-merge';
 
 /** Dati FITTIZI. */
@@ -165,5 +167,20 @@ describe('suggestDocumentMergeGroups — immagini caricate insieme (collaudo 202
       { id: 'c', fileName: 'altro.jpg', uploadedAt: at(2) },
     ]);
     expect(groups.map((g) => g.documentIds)).toEqual([['a', 'b']]);
+  });
+});
+
+describe('pendingMergeSuggestions — cosa resta da decidere prima di proseguire', () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 8, 18, 8, 32, s)).toISOString();
+  it('una proposta ignorata non è più pendente; una non decisa sì', () => {
+    const files = [
+      { id: 'a', fileName: 'foto-1.jpg', uploadedAt: at(1) }, { id: 'b', fileName: 'foto-2.jpg', uploadedAt: at(2) },
+      { id: 'c', fileName: 'IMG_0001.jpg', uploadedAt: at(900) }, { id: 'd', fileName: 'IMG_0002.jpg', uploadedAt: at(901) },
+    ];
+    const all = pendingMergeSuggestions(files, new Set());
+    expect(all).toHaveLength(2);
+    const rest = pendingMergeSuggestions(files, new Set([mergeSuggestionKey(all[0]!)]));
+    expect(rest).toHaveLength(1);
+    expect(rest[0]!.documentIds).toEqual(all[1]!.documentIds);
   });
 });

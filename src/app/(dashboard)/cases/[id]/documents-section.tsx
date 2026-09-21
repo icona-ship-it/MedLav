@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Trash2, RotateCcw, Loader2, CheckCircle2, FileText,
@@ -22,7 +22,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { FileUpload } from '@/components/file-upload';
-import { MergeDocumentsBanner } from './merge-documents-banner';
+import { MergeDocumentsBanner, mergeDocumentGroup } from './merge-documents-banner';
+import { pendingMergeSuggestions, mergeSuggestionKey } from '@/services/documents/document-merge';
 import { deleteDocument, retryDocument, updateDocumentType } from '../../actions';
 import { toUserMessage } from '@/lib/user-error-messages';
 import { formatFileSize, getFileIcon } from '@/lib/format';
@@ -123,6 +124,45 @@ export function DocumentsSection({
   const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [classifyingDocId, setClassifyingDocId] = useState<string | null>(null);
+  // Cancello «Prosegui» (collaudo 2026-09-18): se ci sono foto che sembrano pagine
+  // dello stesso referto e il medico non ha ancora deciso, glielo si chiede PRIMA di
+  // proseguire — tre foto separate = la stessa visita tre volte in cronistoria.
+  const [mergeDecided, setMergeDecided] = useState<Set<string>>(new Set());
+  const [mergeGateOpen, setMergeGateOpen] = useState(false);
+  const [mergingAll, setMergingAll] = useState(false);
+  const pendingMerges = useMemo(
+    () => pendingMergeSuggestions(
+      documents.map((doc) => ({ id: doc.id, fileName: doc.file_name, mergedIntoDocumentId: doc.merged_into_document_id ?? null, uploadedAt: doc.created_at ?? null })),
+      mergeDecided,
+    ),
+    [documents, mergeDecided],
+  );
+  const markMergeDecided = useCallback((key: string) => setMergeDecided((prev) => new Set(prev).add(key)), []);
+  const handleProceed = () => {
+    if (pendingMerges.length > 0) setMergeGateOpen(true);
+    else onProceedToNext();
+  };
+  const proceedWithoutMerging = () => {
+    setMergeDecided((prev) => { const next = new Set(prev); for (const s of pendingMerges) next.add(mergeSuggestionKey(s)); return next; });
+    setMergeGateOpen(false);
+    onProceedToNext();
+  };
+  const mergeAllAndProceed = async () => {
+    setMergingAll(true);
+    try {
+      for (const s of pendingMerges) {
+        const result = await mergeDocumentGroup(caseId, s.documentIds);
+        if (!result.ok) { toast.error(result.error ?? 'Errore durante l\'unione dei documenti'); return; }
+        markMergeDecided(mergeSuggestionKey(s));
+      }
+      toast.success('Foto unite: ogni referto sarà letto come un unico documento.');
+      setMergeGateOpen(false);
+      router.refresh();
+      onProceedToNext();
+    } finally {
+      setMergingAll(false);
+    }
+  };
   const [classifyingAll, setClassifyingAll] = useState(false);
   // True between the "Categorizza tutti" dispatch and the FIRST server-side
   // progress write: the user must see feedback INSTANTLY, not after ~10s.
@@ -576,6 +616,7 @@ export function DocumentsSection({
               caseId={caseId}
               documents={documents}
               hasBeenProcessed={completedCount > 0}
+              onDecided={markMergeDecided}
             />
 
             {/* Document cards with inline type + actions */}
@@ -792,13 +833,35 @@ export function DocumentsSection({
             size="lg"
             className="w-full text-base py-6"
             variant="default"
-            onClick={onProceedToNext}
+            onClick={handleProceed}
           >
             Ho caricato tutti i documenti — Prosegui
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>
       )}
+
+      {/* Cancello: foto da unire prima di proseguire */}
+      <AlertDialog open={mergeGateOpen} onOpenChange={(open) => { if (!open && !mergingAll) setMergeGateOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unire le foto prima di proseguire?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingMerges.length === 1
+                ? `${pendingMerges[0]?.documentIds.length ?? 0} immagini sembrano pagine dello stesso referto.`
+                : `${pendingMerges.length} gruppi di immagini sembrano pagine dello stesso referto.`}
+              {' '}Se le lasci separate, la stessa visita può comparire più volte nella cronistoria.
+              Unirle è consigliato: l&apos;AI le leggerà come un unico documento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={proceedWithoutMerging} disabled={mergingAll}>Prosegui senza unire</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); void mergeAllAndProceed(); }} disabled={mergingAll}>
+              {mergingAll ? 'Unione in corso…' : 'Unisci e prosegui'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>

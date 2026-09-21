@@ -22,9 +22,26 @@ interface MergeDocumentsBannerProps {
   /** true se il caso ha già un'elaborazione alle spalle: dopo l'unione serve
    * rielaborare perché l'unione abbia effetto. */
   hasBeenProcessed: boolean;
+  /** Il medico ha deciso su una proposta (unita o ignorata): la pagina non gliela richiede. */
+  onDecided?: (key: string) => void;
 }
 
-export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: MergeDocumentsBannerProps) {
+/** Unione di un gruppo di documenti (API): riusata dal banner e dal cancello «Prosegui». */
+export async function mergeDocumentGroup(caseId: string, documentIds: string[]): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/documents/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ caseId, documentIds }),
+    });
+    const data = await res.json() as { success: boolean; error?: string };
+    return data.success ? { ok: true } : { ok: false, error: data.error };
+  } catch {
+    return { ok: false, error: 'Errore di rete durante l\'unione dei documenti. Riprova.' };
+  }
+}
+
+export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed, onDecided }: MergeDocumentsBannerProps) {
   const router = useRouter();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [mergingKey, setMergingKey] = useState<string | null>(null);
@@ -49,16 +66,12 @@ export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: Me
     const key = suggestion.documentIds.join('|');
     setMergingKey(key);
     try {
-      const res = await fetch('/api/documents/merge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-        body: JSON.stringify({ caseId, documentIds: suggestion.documentIds }),
-      });
-      const data = await res.json() as { success: boolean; error?: string };
-      if (!data.success) {
-        toast.error(data.error ?? 'Errore durante l\'unione dei documenti');
+      const result = await mergeDocumentGroup(caseId, suggestion.documentIds);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Errore durante l\'unione dei documenti');
         return;
       }
+      onDecided?.(key);
       toast.success(
         hasBeenProcessed
           ? 'Documenti uniti. Riavvia l\'elaborazione perché l\'unione abbia effetto.'
@@ -66,11 +79,13 @@ export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: Me
         { duration: 8000 },
       );
       router.refresh();
-    } catch {
-      toast.error('Errore durante l\'unione dei documenti. Riprova.');
     } finally {
       setMergingKey(null);
     }
+  };
+  const dismiss = (key: string) => {
+    setDismissed((prev) => new Set(prev).add(key));
+    onDecided?.(key);
   };
 
   return (
@@ -101,7 +116,7 @@ export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: Me
                 className="shrink-0 rounded p-1 text-blue-400 hover:text-blue-700 dark:hover:text-blue-200"
                 title="No, sono documenti separati"
                 aria-label="Ignora la proposta di unione"
-                onClick={() => setDismissed((prev) => new Set(prev).add(key))}
+                onClick={() => dismiss(key)}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -114,7 +129,7 @@ export function MergeDocumentsBanner({ caseId, documents, hasBeenProcessed }: Me
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setDismissed((prev) => new Set(prev).add(key))}
+                onClick={() => dismiss(key)}
                 disabled={isMerging}
               >
                 No, sono documenti separati

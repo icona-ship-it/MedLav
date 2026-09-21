@@ -197,3 +197,13 @@ export function suggestDocumentMergeGroups(files: SuggestInput[]): MergeSuggesti
 
   return suggestions;
 }
+
+/** Proposte di unione ancora aperte (non unite, non ignorate): servono a chiedere
+ * al medico PRIMA di proseguire (collaudo 2026-09-18: tre foto ignorate = tre visite). */
+export function pendingMergeSuggestions(files: SuggestInput[], dismissedKeys: ReadonlySet<string>): MergeSuggestion[] {
+  return suggestDocumentMergeGroups(files).filter((s) => !dismissedKeys.has(mergeSuggestionKey(s)));
+}
+
+export function mergeSuggestionKey(s: MergeSuggestion): string {
+  return s.documentIds.join('|');
+}
