@@ -285,6 +285,16 @@ function dedupWithinSameDocument(events: WorkEvent[]): WorkEvent[] {
  * diagnosi ereditata se il vincitore non ce l'ha. Mai perdere un flag di sicurezza. */
 function absorbDuplicate(winner: WorkEvent, loser: WorkEvent): void {
   absorb(winner, loser);
+  // Ora che il doppione sparisce anche dal DB (non solo dalla perizia), la sua
+  // descrizione — se dice qualcosa in più — resta nel vincitore: mai perdere un fatto.
+  const extra = (loser.description ?? '').trim();
+  if (extra && !(winner.description ?? '').includes(extra) && !extra.includes((winner.description ?? '').trim())) {
+    winner.description = `${winner.description}\n\n${extra}`;
+    winner.mutated = true;
+  } else if (extra && extra.length > (winner.description ?? '').trim().length && extra.includes((winner.description ?? '').trim())) {
+    winner.description = extra;
+    winner.mutated = true;
+  }
   const pages = dedupSortPages([...(winner.sourcePages ?? []), ...(loser.sourcePages ?? [])]);
   if (pages.length !== (winner.sourcePages ?? []).length) { winner.sourcePages = pages; winner.mutated = true; }
   if (loser.requiresVerification && !winner.requiresVerification) { winner.requiresVerification = true; winner.mutated = true; }

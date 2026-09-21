@@ -1028,6 +1028,15 @@ describe('identità delle righe (collaudo 2026-09-18): ogni decisione del consol
     expect(twin).toHaveLength(1);
     expect(twin[0].absorbedRowIds).toEqual(['b']);
     expect(twin[0].mutated).toBe(false);
+    // Doppione con descrizione DIVERSA: la sua descrizione resta nel vincitore (mai perdere un fatto).
+    const richer = consolidateEvents([{ documentId: 'doc1', events: [
+      { ...makeEvent({ title: 'Medicazione ferita chirurgica', description: 'Medicazione eseguita, ferita in ordine.' }), rowId: 'a' },
+      { ...makeEvent({ title: 'Medicazione ferita chirurgica', description: 'Rimozione punti alterni.' }), rowId: 'b' },
+    ] }]);
+    expect(richer).toHaveLength(1);
+    expect(richer[0].description).toContain('ferita in ordine');
+    expect(richer[0].description).toContain('Rimozione punti alterni');
+    expect(richer[0].mutated).toBe(true);
   });
   it('eventi distinti non assorbono nulla e non risultano mutati', () => {
     const out = consolidateEvents([{ documentId: 'doc1', events: [
