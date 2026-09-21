@@ -89,3 +89,23 @@ export function planConsolidationPersistence(
   }
   return { deleteIds, updates };
 }
+
+/** Righe grezze sopravvissute, con i campi che il piano riscrive già applicati:
+ * l'assegnazione degli order_number cerca la riga per (documento, data, TIPO) e
+ * un sopravvissuto cambiato di tipo (PS: ricovero → visita; prestazione:
+ * spesa → terapia) altrimenti non veniva più trovato e restava col numero
+ * vecchio (giro avversariale 2026-09-21). */
+export function applyPlanToRows<T extends { id: string; event_type: string; title: string }>(
+  rows: ReadonlyArray<T>,
+  plan: ConsolidationPersistencePlan,
+): T[] {
+  const deleted = new Set(plan.deleteIds);
+  const byId = new Map(plan.updates.map((u) => [u.id, u.fields]));
+  return rows
+    .filter((r) => !deleted.has(r.id))
+    .map((r) => {
+      const f = byId.get(r.id);
+      if (!f) return r;
+      return { ...r, ...(f.event_type !== undefined ? { event_type: f.event_type } : {}), ...(f.title !== undefined ? { title: f.title } : {}) };
+    });
+}

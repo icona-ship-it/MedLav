@@ -4,7 +4,7 @@ import { consolidateEvents, type DocumentEvents } from '@/services/consolidation
 import { safeJsonParse } from '@/lib/format';
 import type { ExtractionResult, ConsolidationStepResult } from './types';
 import { buildOrderUpdates } from './order-mapping';
-import { planConsolidationPersistence, type ConsolidationPersistencePlan, type RawEventRowForPersistence } from './consolidation-persistence';
+import { applyPlanToRows, planConsolidationPersistence, type ConsolidationPersistencePlan, type RawEventRowForPersistence } from './consolidation-persistence';
 import { logger } from '@/lib/logger';
 import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { documentTypeLabels } from '@/lib/constants';
@@ -180,8 +180,12 @@ export async function consolidateEventsStep(
   const BATCH_SIZE = 500;
   const plan = planConsolidationPersistence(allEvents, (existingRaw ?? []).map(rowForPersistence));
   await applyConsolidationPersistence(supabase, plan, BATCH_SIZE);
-  const deletedIds = new Set(plan.deleteIds);
-  const survivingRaw = (existingRaw ?? []).filter((e) => !deletedIds.has(e.id as string));
+  // Le righe come saranno DOPO il piano (tipo/titolo riscritti): la chiave di
+  // assegnazione dell'ordine deve combaciare con gli eventi consolidati.
+  const survivingRaw = applyPlanToRows(
+    (existingRaw ?? []).map((e) => ({ ...e, id: e.id as string, event_type: e.event_type as string, title: e.title as string })),
+    plan,
+  );
 
   // Update order numbers in DB (batched for scalability). Map consolidated
   // events back to raw rows by STABLE IDENTITY — consolidateEvents() dedups and

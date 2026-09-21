@@ -36,3 +36,27 @@ describe('planConsolidationPersistence — il DB riflette le decisioni del conso
     expect(plan).toEqual({ deleteIds: [], updates: [] });
   });
 });
+
+import { applyPlanToRows } from './consolidation-persistence';
+import { buildOrderUpdates } from './order-mapping';
+
+describe('applyPlanToRows — l’ordine si assegna sulle righe come saranno dopo il piano', () => {
+  it('un sopravvissuto cambiato di tipo (ricovero → visita) riceve comunque il suo order_number; le righe assorbite spariscono', () => {
+    const plan = { deleteIds: ['r2'], updates: [{ id: 'r1', fields: { event_type: 'visita', title: 'Accesso in Pronto Soccorso: trauma' } }] };
+    const raw = [
+      { id: 'r1', document_id: 'd', event_date: '2026-04-18', event_type: 'ricovero', title: 'Accesso PS' },
+      { id: 'r2', document_id: 'd', event_date: '2026-04-18', event_type: 'visita', title: 'Triage' },
+      { id: 'r3', document_id: 'd', event_date: '2026-04-18', event_type: 'esame', title: 'RX' },
+    ];
+    const rows = applyPlanToRows(raw, plan);
+    expect(rows.map((r) => r.id)).toEqual(['r1', 'r3']);
+    const orders = buildOrderUpdates(
+      [
+        { documentId: 'd', eventDate: '2026-04-18', eventType: 'visita', title: 'Accesso in Pronto Soccorso: trauma', orderNumber: 1 },
+        { documentId: 'd', eventDate: '2026-04-18', eventType: 'esame', title: 'RX', orderNumber: 2 },
+      ],
+      rows,
+    );
+    expect(orders).toEqual([{ id: 'r1', order_number: 1 }, { id: 'r3', order_number: 2 }]);
+  });
+});
