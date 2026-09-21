@@ -395,8 +395,12 @@ function generateExpenseTableHtml(params: {
     const exclusionNote = isExcluded
       ? `<div class="exclusion">Non sommata al totale${typeof item.exclusionReason === 'string' ? ` — ${escapeHtml(item.exclusionReason)}` : ''}</div>`
       : '';
+    const dateNote = item.dateNotInSource === true
+      ? '<div class="exclusion">Data da verificare: non compare nel documento di origine</div>'
+      : '';
     const notesCell = [
       exclusionNote,
+      dateNote,
       item.notes ? escapeHtml(String(item.notes)) : (isExcluded ? '' : '—'),
     ].filter(Boolean).join('') || '—';
 

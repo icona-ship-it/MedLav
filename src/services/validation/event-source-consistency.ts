@@ -1,3 +1,4 @@
+import { dateAppearsInText, textHasAnyFullDate } from '@/lib/date-in-text';
 /**
  * RETE A — Coerenza estratto ↔ fonte.
  *
@@ -52,6 +53,9 @@ export interface ConsistencyEvent {
   title?: string | null;
   description?: string | null;
   source_text?: string | null;
+  /** F8: data e tipo della voce (solo per le spese si controlla la data contro la fonte). */
+  event_date?: string | null;
+  event_type?: string | null;
 }
 
 export interface ConsistencyResult {
@@ -96,6 +100,14 @@ function lateralityContradiction(st: Set<Side>, src: Set<Side>): string | null {
 export function checkEventSourceConsistency(event: ConsistencyEvent): ConsistencyResult {
   const source = String(event.source_text ?? '');
   if (source.trim().length === 0) return { flagged: false };
+
+  // 0. Voce di spesa datata: se la frase di origine riporta una data e non è
+  // quella della voce, la data viene da un altro punto del fascicolo (F8,
+  // feedback 2026-08-19: consulenza datata dalla perizia, non dalla ricevuta).
+  if (event.event_type === 'spesa_medica' && event.event_date && /^\d{4}-\d{2}-\d{2}$/.test(event.event_date)
+    && textHasAnyFullDate(source) && dateAppearsInText(event.event_date, source) === false) {
+    return { flagged: true, reason: 'Data della voce di spesa assente dalla frase di origine, che riporta un\'altra data: verificare sul giustificativo' };
+  }
 
   const structuredWords = toWords(`${event.title ?? ''} ${event.description ?? ''}`);
   const sourceWords = toWords(source);

@@ -165,3 +165,14 @@ describe('lateralità con abbreviazioni latine (audit 2026-09-10, I12)', () => {
     expect(notFlagged.flagged).toBe(false);
   });
 });
+
+describe('Rete A — data della voce di spesa (F8, 2026-09-21)', () => {
+  it('spesa datata 28.04 con frase di origine che riporta 18/10/2025 → segnalata; data coincidente o frase senza date → no', () => {
+    const base = { title: 'Consulenza medico legale', description: 'Ricevuta consulenza', event_type: 'spesa_medica' };
+    expect(checkEventSourceConsistency({ ...base, event_date: '2025-04-28', source_text: 'Ricevuta n. 4 del 18/10/2025 — consulenza — 300,00' }).flagged).toBe(true);
+    expect(checkEventSourceConsistency({ ...base, event_date: '2025-10-18', source_text: 'Ricevuta n. 4 del 18/10/2025 — consulenza — 300,00' }).flagged).toBe(false);
+    expect(checkEventSourceConsistency({ ...base, event_date: '2025-04-28', source_text: 'Consulenza medico legale € 300,00' }).flagged).toBe(false);
+    // Per gli eventi clinici la data non viene controllata contro i 200 caratteri di origine.
+    expect(checkEventSourceConsistency({ ...base, event_type: 'visita', event_date: '2025-04-28', source_text: 'Visita del 18/10/2025' }).flagged).toBe(false);
+  });
+});

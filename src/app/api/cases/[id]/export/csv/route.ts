@@ -190,7 +190,8 @@ function generateExpenseCsv(items: Array<Record<string, unknown>>): string {
     const exclusionNote = isExcludedFromTotal
       ? `NON SOMMATA AL TOTALE${typeof item.exclusionReason === 'string' ? ` — ${item.exclusionReason}` : ''}`
       : null;
-    const notesWithExclusion = [exclusionNote, typeof item.notes === 'string' ? item.notes : null]
+    const dateNote = item.dateNotInSource === true ? 'DATA DA VERIFICARE — non compare nel documento di origine' : null;
+    const notesWithExclusion = [exclusionNote, dateNote, typeof item.notes === 'string' ? item.notes : null]
       .filter(Boolean)
       .join(' | ');
 

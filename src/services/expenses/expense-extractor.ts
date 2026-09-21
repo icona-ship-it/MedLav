@@ -16,6 +16,7 @@ import {
 } from '@/lib/mistral/client';
 import type { ExpenseCategory } from './expense-analyzer';
 import { reconcileExpenseItems } from './expense-reconciler';
+import { flagExpenseDatesNotInSource } from './expense-date-check';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
 import type { MistralResponseFormat } from '@/lib/mistral/client';
@@ -55,6 +56,9 @@ export interface ExtractedExpenseItem {
   excludedFromTotal?: boolean;
   /** Motivazione mostrata al perito quando excludedFromTotal è true. */
   exclusionReason?: string | null;
+  /** true = la data della voce NON compare nel documento di origine (F8): la voce
+   * resta con la data, ma marcata «da verificare». Solo la rete deterministica lo setta. */
+  dateNotInSource?: boolean;
 }
 
 export interface ExpenseExtractionResult {
@@ -249,7 +253,11 @@ export async function extractExpensesFromOcr(
     logger.info('expense-extractor', `Reconciled expense items: ${parsed.items.length} → ${reconciled.items.length} (${reconciled.stats.mergedGroups} merged groups, ${reconciled.stats.anchoredAmounts} anchored amounts, ${reconciled.stats.excludedDeposits} deposits excluded from total)`);
   }
 
-  return { items: reconciled.items, totalAmount: reconciled.totalAmount, currency: parsed.currency, usage: result.usage };
+  const checked = flagExpenseDatesNotInSource(reconciled.items, trimmedOcr);
+  const dateFlags = checked.filter((i) => i.dateNotInSource).length;
+  if (dateFlags > 0) logger.info('expense-extractor', `${dateFlags} expense items flagged: date not found in source document`);
+
+  return { items: checked, totalAmount: reconciled.totalAmount, currency: parsed.currency, usage: result.usage };
 }
 
 // ── Response parsing ──────────────────────────────────────────────────

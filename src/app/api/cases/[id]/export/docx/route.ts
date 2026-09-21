@@ -146,7 +146,7 @@ export async function GET(
     let expenseItemsForDocx: Array<{
       date: string; description: string; amount: number | null;
       receiptNumber: string | null; facility: string | null; notes: string | null;
-      excludedFromTotal?: boolean; exclusionReason?: string | null;
+      excludedFromTotal?: boolean; exclusionReason?: string | null; dateNotInSource?: boolean;
     }> | null = null;
     if (pipelineModeDocx === 'expenses_only') {
       const expenseExtraction = (data.periziaMetadata as Record<string, unknown> | null)?.expenseExtraction as {
@@ -166,6 +166,7 @@ export async function GET(
         notes: anonStr(item.notes),
         excludedFromTotal: item.excludedFromTotal === true,
         exclusionReason: typeof item.exclusionReason === 'string' ? item.exclusionReason : null,
+        dateNotInSource: item.dateNotInSource === true,
       }));
     }
 

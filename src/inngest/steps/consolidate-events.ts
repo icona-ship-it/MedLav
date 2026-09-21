@@ -28,6 +28,8 @@ async function flagInconsistentEvents(
       title: (e.title ?? null) as string | null,
       description: (e.description ?? null) as string | null,
       source_text: (e.source_text ?? null) as string | null,
+      event_date: (e.event_date ?? null) as string | null,
+      event_type: (e.event_type ?? null) as string | null,
     });
     if (!res.flagged || !res.reason) continue;
     const prev = (e.reliability_notes ?? null) as string | null;

@@ -31,6 +31,8 @@ export interface ExpenseDocxItem {
   notes: string | null;
   excludedFromTotal?: boolean;
   exclusionReason?: string | null;
+  /** F8: la data non compare nel documento di origine → «(da verificare)». */
+  dateNotInSource?: boolean;
 }
 
 export interface ExpenseFacilityGroup {
@@ -138,7 +140,7 @@ function buildItemRow(item: ExpenseDocxItem): TableRow {
 
   return new TableRow({
     children: [
-      textCell(formatDate(item.date), { color: excluded ? '777777' : undefined }),
+      textCell(`${formatDate(item.date)}${item.dateNotInSource ? ' (da verificare)' : ''}`, { color: excluded ? '777777' : undefined }),
       new TableCell({ children: descChildren }),
       textCell(item.receiptNumber ?? '—', { color: excluded ? '777777' : undefined }),
       textCell(item.amount !== null ? formatEuroDocx(item.amount) : '—', {

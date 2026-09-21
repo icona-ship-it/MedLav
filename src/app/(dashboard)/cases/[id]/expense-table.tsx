@@ -120,7 +120,12 @@ export function ExpenseTable({ items, totalAmount, caseId }: ExpenseTableProps) 
             {filteredItems.map((item, idx) => (
               <tr key={idx} className={`border-b last:border-b-0 hover:bg-muted/30 ${item.excludedFromTotal ? 'opacity-70' : ''}`}>
                 <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{formatDate(item.date)}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {formatDate(item.date)}
+                  {item.dateNotInSource && (
+                    <span className="block text-xs text-amber-700 dark:text-amber-400 italic" title="La data non compare nel documento di origine">data da verificare</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 max-w-[250px]">
                   {item.description}
                   {item.excludedFromTotal && (
