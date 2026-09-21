@@ -186,3 +186,52 @@ describe('collapsePsEpisodes — un accesso in Pronto Soccorso = una voce (colla
     expect(out[0].title).toBe('Accesso in Pronto Soccorso — trauma ginocchio destro post caduta');
   });
 });
+
+import { reclassifyPricelessExpenseEvents, foldPrognosisIntoCertificate, RECLASSIFIED_EXPENSE_NOTE } from './event-merges';
+
+describe('reclassifyPricelessExpenseEvents — prestazioni senza importo non sono spese', () => {
+  it('seduta di fisioterapia senza importo → «terapia» corrente con nota; visita senza importo → «visita»', () => {
+    const out = reclassifyPricelessExpenseEvents([
+      ev({ documentId: 'st', rowId: 'a', eventType: 'spesa_medica', temporalScope: 'retrospettivo', title: 'Seduta riabilitazione fisiochinesiterapia 90 minuti', description: 'Seduta del 15/05/2026 alle 15:30 presso il Centro Fisioterapico Esempi S.R.L.', sourceText: '1. Seduta di riabilitazione fisiochinesiterapia (90 minuti) del 15/05/2026 15:30' }),
+      ev({ documentId: 'st', rowId: 'b', eventType: 'spesa_medica', title: 'Visita di controllo ortopedica', description: 'Controllo del 03/06/2026.', sourceText: 'Visita di controllo 03/06/2026' }),
+    ]);
+    expect(out.map((e) => [e.eventType, e.temporalScope, e.mutated])).toEqual([['terapia', 'corrente', true], ['visita', 'corrente', true]]);
+    expect(out[0].reliabilityNotes).toBe(RECLASSIFIED_EXPENSE_NOTE);
+  });
+  it('MAI riclassificare: importo presente, lessico fiscale presente, o nessun lessico di prestazione', () => {
+    const keep = reclassifyPricelessExpenseEvents([
+      ev({ documentId: 'f', rowId: 'a', eventType: 'spesa_medica', title: 'Seduta fisioterapia', description: 'Ricevuta n. 12', sourceText: 'Seduta fisioterapia € 45,00' }),
+      ev({ documentId: 'f', rowId: 'b', eventType: 'spesa_medica', title: 'Trattamento manuale', description: 'Fattura 3/2026 pagata', sourceText: 'Trattamento manuale — fattura' }),
+      ev({ documentId: 'f', rowId: 'c', eventType: 'spesa_medica', title: 'Plantare su misura', description: 'Ordine plantare', sourceText: 'plantare su misura' }),
+      ev({ documentId: 'f', rowId: 'd', eventType: 'spesa_medica', title: 'Sedute fisioterapia', description: 'Totale 10 sedute', sourceText: 'Totale sedute 10' }),
+    ]);
+    expect(keep.every((e) => e.eventType === 'spesa_medica' && !e.mutated)).toBe(true);
+  });
+});
+
+describe('foldPrognosisIntoCertificate — la prognosi sta nel certificato, non è un evento datato all’inizio del periodo', () => {
+  it('«Prognosi di 40 giorni» (altro, 18.04) entra nel certificato del 20.04 dello stesso documento', () => {
+    const out = foldPrognosisIntoCertificate([
+      ev({ documentId: 'c', rowId: 'p', eventType: 'altro', eventDate: '2026-04-18', title: 'Prognosi di 40 giorni di inabilità temporanea post trauma', description: 'Prognosi di 40 giorni a decorrere dal 18/04/2026.', sourceText: "Prognosi giorni s.c. 40 giorni (quaranta) dall'incidente.", sourcePages: [1] }),
+      ev({ documentId: 'c', rowId: 'k', eventType: 'certificato', eventDate: '2026-04-20', title: 'Certificato medico per trauma distorsivo', description: 'Certificato emesso il 20/04/2026.', sourcePages: [1] }),
+      ev({ documentId: 'c2', rowId: 'k2', eventType: 'certificato', eventDate: '2026-06-30', title: 'Certificato definitivo', description: 'Guarigione.' }),
+    ]);
+    expect(out.map((e) => e.rowId)).toEqual(['k', 'k2']);
+    expect(out[0].description).toContain("Prognosi: Prognosi giorni s.c. 40 giorni (quaranta) dall'incidente.");
+    expect(out[0].absorbedRowIds).toEqual(['p']);
+    expect(out[0].mutated).toBe(true);
+  });
+  it('senza un certificato nello stesso documento (o con certificato precedente) la voce resta; una prognosi già nel testo non viene ripetuta', () => {
+    const alone = foldPrognosisIntoCertificate([
+      ev({ documentId: 'ps', rowId: 'p', eventType: 'altro', title: 'Prognosi 7 giorni' }),
+      ev({ documentId: 'ps', rowId: 'k', eventType: 'certificato', eventDate: '2026-04-10', title: 'Certificato precedente' }),
+    ]);
+    expect(alone).toHaveLength(2);
+    const dup = foldPrognosisIntoCertificate([
+      ev({ documentId: 'c', rowId: 'p', eventType: 'altro', title: 'Prognosi 40 giorni', sourceText: 'Prognosi giorni s.c. 40 giorni', sourcePages: [1] }),
+      ev({ documentId: 'c', rowId: 'k', eventType: 'certificato', eventDate: '2026-04-20', title: 'Certificato', description: 'Prognosi giorni s.c. 40 giorni (quaranta).', sourcePages: [1] }),
+    ]);
+    expect(dup).toHaveLength(1);
+    expect(dup[0].description).toBe('Prognosi giorni s.c. 40 giorni (quaranta).');
+  });
+});

@@ -55,6 +55,23 @@ describe('document-classifier', () => {
     });
   });
 
+  describe('classifyDocument — guardia «spese mediche» senza segnale fiscale (collaudo 2026-09-18)', () => {
+    it('storico di sedute senza importi classificato spese → «altro» con il motivo, confidence ≤ 40', async () => {
+      mockChat(JSON.stringify({ documentType: 'spese_mediche', confidence: 90, reasoning: 'Elenco prestazioni' }));
+      const text = 'CENTRO FISIOTERAPICO ESEMPI S.R.L. - STORICO APPUNTAMENTI. 1 Seduta di riabilitazione fisiochinesiterapia (90 minuti) del 15/05/2026 15:30. 2 Trattamento manuale di fisiochinesiterapia (30 minuti) del 19/05/2026 13:45.';
+      const result = await classifyDocument(text, 'storico-fisioterapia.pdf');
+      expect(result.documentType).toBe('altro');
+      expect(result.confidence).toBeLessThanOrEqual(40);
+      expect(result.reasoning).toContain('alcun importo');
+    });
+    it('fattura con importi resta «spese mediche»', async () => {
+      mockChat(JSON.stringify({ documentType: 'spese_mediche', confidence: 90, reasoning: 'Fattura' }));
+      const result = await classifyDocument('FATTURA N. 12/2026 — Visita ortopedica — Totale euro 120,00 — IVA esente art. 10', 'fattura.pdf');
+      expect(result.documentType).toBe('spese_mediche');
+      expect(result.confidence).toBe(90);
+    });
+  });
+
   describe('classifyDocument', () => {
     it('should return correct type for valid JSON response with high confidence', async () => {
       // Arrange

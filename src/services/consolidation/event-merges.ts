@@ -328,3 +328,74 @@ export function collapsePsEpisodes(events: WorkEvent[]): WorkEvent[] {
   if (replacement.size === 0) return events;
   return events.map((e, i) => replacement.get(i) ?? e).filter((_, i) => !dropped.has(i));
 }
+
+// ---------------------------------------------------------------------------
+// Voci «spesa» senza importo né lessico fiscale ma con lessico di prestazione
+// (collaudo 2026-09-18, P-1): sono prestazioni (sedute, trattamenti, visite),
+// non spese. Tornano nella cronistoria clinica col tipo giusto.
+// ---------------------------------------------------------------------------
+
+const AMOUNT_RE = /((€|\beur\b|\beuro\b)\s*\d|\d\s*(€|\beur\b|\beuro\b)|\d{1,3}(?:[ .]\d{3})*,\d{2}\b|\bimporto\b|\btotale\b)/i;
+const FISCAL_LEXICON_RE = /(fattur|ricevut|scontrin|pagat|pagamento|\biva\b|bollo|parcell|ticket|quietanz|onorari|rimbors)/i;
+const THERAPY_LEXICON_RE = /(sedut[ae]|fisioterap|fisiochinesi|riabilitaz|trattament[oi] manual|massoterap|tecar|laser|ultrasuon|magnetoterap|kinesi|osteopat|esercizi|infiltrazion|medicazion)/i;
+const VISIT_LEXICON_RE = /(visita|controllo|valutazione|consulenza)/i;
+
+export const RECLASSIFIED_EXPENSE_NOTE =
+  'Riclassificato dal sistema: nessun importo né riferimento fiscale nel testo — è una prestazione, non una spesa';
+
+export function reclassifyPricelessExpenseEvents(events: WorkEvent[]): WorkEvent[] {
+  return events.map((e) => {
+    if (e.eventType !== 'spesa_medica') return e;
+    // Una «spesa» senza data né importo è troppo ambigua per cambiarle tipo
+    // (regola Lavini: le voci di spesa senza data non si perdono mai).
+    if (!e.eventDate || e.eventDate === SENTINEL_DATE) return e;
+    const text = `${e.title} ${e.description} ${e.sourceText ?? ''}`;
+    if (AMOUNT_RE.test(text) || FISCAL_LEXICON_RE.test(text)) return e;
+    const newType = THERAPY_LEXICON_RE.test(text) ? 'terapia' : VISIT_LEXICON_RE.test(text) ? 'visita' : null;
+    if (!newType) return e;
+    const prev = e.reliabilityNotes ?? '';
+    return {
+      ...e,
+      eventType: newType,
+      // Una spesa non ha ambito temporale: lo storico che elenca le prestazioni ne è la fonte.
+      temporalScope: 'corrente',
+      reliabilityNotes: prev.includes(RECLASSIFIED_EXPENSE_NOTE) ? prev : prev ? `${prev} | ${RECLASSIFIED_EXPENSE_NOTE}` : RECLASSIFIED_EXPENSE_NOTE,
+      mutated: true,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// La prognosi di un certificato non è un evento a sé (collaudo 2026-09-18,
+// P-11): «Prognosi di 40 giorni» datata all'inizio del periodo faceva scrivere
+// all'Epicrisi «certificato del 18.04» per un certificato del 20.04. La riga
+// entra nella descrizione del certificato dello stesso documento.
+// ---------------------------------------------------------------------------
+
+const PROGNOSIS_TITLE_RE = /(prognosi|inabilit|giorni di malattia|\bs\.c\.|salvo complicaz)/i;
+
+export function foldPrognosisIntoCertificate(events: WorkEvent[]): WorkEvent[] {
+  const dropped = new Set<number>();
+  for (let i = 0; i < events.length; i++) {
+    const x = events[i];
+    if (x.eventType !== 'altro' || !PROGNOSIS_TITLE_RE.test(x.title)) continue;
+    const candidates = events
+      .map((e, j) => ({ e, j }))
+      .filter(({ e, j }) => j !== i && !dropped.has(j) && e.documentId === x.documentId && e.eventType === 'certificato' && e.eventDate >= x.eventDate);
+    if (candidates.length === 0) continue;
+    candidates.sort((a, b) => a.e.eventDate.localeCompare(b.e.eventDate));
+    const cert = candidates[0].e;
+    const line = (x.sourceText?.trim() || x.description.trim());
+    const key = line.slice(0, 30).toLowerCase();
+    if (line && !cert.description.toLowerCase().includes(key)) {
+      cert.description = `${cert.description}\n\nPrognosi: ${line}`;
+    }
+    if (!cert.diagnosis && x.diagnosis) cert.diagnosis = x.diagnosis;
+    if (x.requiresVerification) cert.requiresVerification = true;
+    cert.sourcePages = unionPages(cert.sourcePages, x.sourcePages);
+    absorb(cert, x);
+    cert.mutated = true;
+    dropped.add(i);
+  }
+  return dropped.size === 0 ? events : events.filter((_, i) => !dropped.has(i));
+}

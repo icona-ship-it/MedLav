@@ -1,6 +1,7 @@
 import { streamMistralChat, MISTRAL_MODELS, DETERMINISTIC_SEED, assertNotTruncated } from '@/lib/mistral/client';
 import type { TokenUsage } from '@/services/cost-tracking/cost-calculator';
 import { logger } from '@/lib/logger';
+import { hasFiscalSignal, NO_FISCAL_SIGNAL_REASON } from './fiscal-signal';
 
 const VALID_DOCUMENT_TYPES = new Set([
   'cartella_clinica',
@@ -135,6 +136,14 @@ export async function classifyDocument(
   const { content: raw, usage } = result_;
 
   const result = parseClassificationResponse(raw, fileName);
+  // Guardia deterministica (collaudo 2026-09-18, P-1): «spese mediche» senza
+  // alcun importo o lessico fiscale nel testo è quasi sempre un elenco di
+  // prestazioni (storico sedute): torna «altro» con il motivo, così il medico
+  // sceglie la categoria e le prestazioni non spariscono dalla cronistoria.
+  if (result.documentType === 'spese_mediche' && !hasFiscalSignal(text)) {
+    logger.info('classification', `spese_mediche without fiscal signal for ${safeFileName} → altro`);
+    return { documentType: 'altro', confidence: Math.min(result.confidence, 40), reasoning: NO_FISCAL_SIGNAL_REASON, usage };
+  }
   return { ...result, usage };
 }
 
