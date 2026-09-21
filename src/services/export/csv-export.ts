@@ -35,8 +35,11 @@ interface CsvEvent {
 export function generateCsvExport(events: CsvEvent[]): string {
   const rows = events
     .filter((e) => !NON_CLINICAL_EVENT_TYPES.has(e.event_type))
-    .map((e) => ({
-      Ordine: e.order_number,
+    // «Ordine» = posizione nella cronistoria esportata (1, 2, 3…): l'order_number
+    // interno può ripetersi (doppioni uniti, eventi senza data) e confondeva Excel
+    // (collaudo 2026-09-18, P-18).
+    .map((e, index) => ({
+      Ordine: index + 1,
       Tipo: e.event_type,
       Data: formatDate(e.event_date),
       Precisione: e.date_precision,

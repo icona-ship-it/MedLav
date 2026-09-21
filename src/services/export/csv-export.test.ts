@@ -59,3 +59,16 @@ describe('colonna Pagine (2026-09-06)', () => {
     expect(csv).toContain('pag. 3');
   });
 });
+
+describe('colonna Ordine (collaudo 2026-09-18, P-18)', () => {
+  it('è progressiva 1..N nel file esportato anche se order_number si ripete o è fuori sequenza', () => {
+    const baseEvent = { order_number: 1, event_date: '2026-05-22', date_precision: 'giorno', event_type: 'visita', title: 'V', description: 'd', source_type: 'referto_controllo', diagnosis: null, doctor: null, facility: null, confidence: 90, requires_verification: false };
+    const csv = generateCsvExport([
+      { ...baseEvent, order_number: 1, title: 'A' },
+      { ...baseEvent, order_number: 1, title: 'B' },
+      { ...baseEvent, order_number: 7, title: 'C' },
+    ]);
+    const ordini = csv.split('\n').slice(1).filter(Boolean).map((line) => line.split(';')[0]);
+    expect(ordini).toEqual(['1', '2', '3']);
+  });
+});
