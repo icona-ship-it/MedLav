@@ -12,11 +12,35 @@ export interface ConsolidatedEvent extends ExtractedEvent {
   discrepancyNote: string | null;
   /** Deterministic clinical-relevance tier (T1/T2/T3). */
   relevanceTier?: RelevanceTier;
+  /** Riga DB da cui viene l'evento (se nota): identità stabile per la persistenza. */
+  rowId?: string;
+  /** Righe DB assorbite in questo evento (doppioni, aggregati, fusioni): il passo
+   * Inngest le elimina, così il medico vede la stessa cronistoria della perizia. */
+  absorbedRowIds?: string[];
+  /** True se titolo/descrizione/tipo/note sono cambiati rispetto alla riga: da riscrivere. */
+  mutated?: boolean;
 }
+
+/** Evento in ingresso: l'estratto più l'identità della riga DB (opzionale). */
+export type SourcedEvent = ExtractedEvent & { rowId?: string };
 
 export interface DocumentEvents {
   documentId: string;
-  events: ExtractedEvent[];
+  events: SourcedEvent[];
+}
+
+/** Evento in lavorazione dentro consolidateEvents. */
+export type WorkEvent = ExtractedEvent & {
+  documentId: string;
+  rowId?: string;
+  absorbedRowIds?: string[];
+  mutated?: boolean;
+};
+
+/** `b` viene assorbito da `a`: le righe di `b` (e quelle già assorbite) passano ad `a`. */
+export function absorb(a: WorkEvent, b: WorkEvent): void {
+  const ids = [...(b.rowId ? [b.rowId] : []), ...(b.absorbedRowIds ?? [])];
+  a.absorbedRowIds = [...(a.absorbedRowIds ?? []), ...ids];
 }
 
 export interface ConsolidationResult {
@@ -102,7 +126,7 @@ export function consolidateEvents(
   documentsEvents: DocumentEvents[],
 ): ConsolidatedEvent[] {
   // Flatten all events with their document ID
-  const allEvents: Array<ExtractedEvent & { documentId: string }> = [];
+  const allEvents: WorkEvent[] = [];
   let droppedSentinel = 0;
   let droppedBroken = 0;
 
@@ -185,6 +209,8 @@ export function consolidateEvents(
     ...event,
     orderNumber: index + 1,
     relevanceTier: computeRelevanceTier(event),
+    absorbedRowIds: event.absorbedRowIds ?? [],
+    mutated: event.mutated ?? false,
   }));
 }
 
@@ -200,10 +226,8 @@ function sideText(e: Pick<ExtractedEvent, 'title' | 'diagnosis'>): string {
   return `${e.title ?? ''} ${e.diagnosis ?? ''}`;
 }
 
-function dedupWithinSameDocument(
-  events: Array<ExtractedEvent & { documentId: string }>,
-): Array<ExtractedEvent & { documentId: string }> {
-  const kept: Array<ExtractedEvent & { documentId: string }> = [];
+function dedupWithinSameDocument(events: WorkEvent[]): WorkEvent[] {
+  const kept: WorkEvent[] = [];
   const droppedIndices = new Set<number>();
 
   for (let i = 0; i < events.length; i++) {
@@ -236,9 +260,11 @@ function dedupWithinSameDocument(
       const bWins = rankB < rankA || (rankB === rankA && (b.confidence ?? 0) > (a.confidence ?? 0));
       if (bWins) {
         droppedIndices.add(i);
+        absorbDuplicate(b, a);
         break; // a is dropped, move on
       } else {
         droppedIndices.add(j);
+        absorbDuplicate(a, b);
       }
     }
 
@@ -246,6 +272,16 @@ function dedupWithinSameDocument(
   }
 
   return kept;
+}
+
+/** Il doppione `loser` sparisce dentro `winner`: pagine unite, «da verificare» in OR,
+ * diagnosi ereditata se il vincitore non ce l'ha. Mai perdere un flag di sicurezza. */
+function absorbDuplicate(winner: WorkEvent, loser: WorkEvent): void {
+  absorb(winner, loser);
+  const pages = dedupSortPages([...(winner.sourcePages ?? []), ...(loser.sourcePages ?? [])]);
+  if (pages.length !== (winner.sourcePages ?? []).length) { winner.sourcePages = pages; winner.mutated = true; }
+  if (loser.requiresVerification && !winner.requiresVerification) { winner.requiresVerification = true; winner.mutated = true; }
+  if (!winner.diagnosis && loser.diagnosis) { winner.diagnosis = loser.diagnosis; winner.mutated = true; }
 }
 
 /**
@@ -272,9 +308,7 @@ const AGGREGABLE_EXAM_TYPES = new Set([
   'esame_ematochimico',
 ]);
 
-function aggregateIdenticalEventsPerDay(
-  events: Array<ExtractedEvent & { documentId: string }>,
-): Array<ExtractedEvent & { documentId: string }> {
+function aggregateIdenticalEventsPerDay(events: WorkEvent[]): WorkEvent[] {
   if (events.length < 3) return events;
 
   // Group by (eventDate, eventType, sourceType, documentId)
@@ -301,7 +335,7 @@ function aggregateIdenticalEventsPerDay(
   // exams → 1, dropping findings); at 0.5 only near-identical titles (≈1.0)
   // aggregate, so distinct-district AND distinct-modality exams stay separate.
   const aggregatedIndices = new Set<number>();
-  const replacements: Array<{ insertAt: number; event: ExtractedEvent & { documentId: string } }> = [];
+  const replacements: Array<{ insertAt: number; event: WorkEvent }> = [];
 
   for (const [, indices] of groups) {
     if (indices.length < 3) continue;
@@ -329,8 +363,13 @@ function aggregateIdenticalEventsPerDay(
     const diagnosisSuffix = memberDiagnoses.length > 0
       ? ` | Diagnosi/reperti: ${Array.from(new Set(memberDiagnoses)).join('; ')}`
       : '';
-    const aggregated: ExtractedEvent & { documentId: string } = {
+    const aggregated: WorkEvent = {
       ...sample,
+      mutated: true,
+      absorbedRowIds: [
+        ...(sample.absorbedRowIds ?? []),
+        ...indices.slice(1).flatMap((i) => [...(events[i].rowId ? [events[i].rowId as string] : []), ...(events[i].absorbedRowIds ?? [])]),
+      ],
       title: `${eventTypeLabel} routinari (${indices.length} esami raggruppati)`,
       description: `Aggregato da ${indices.length} esami originari: ${indices.map((i) => events[i].title ?? events[i].description ?? '').filter(Boolean).join(' | ')}${diagnosisSuffix}`,
       requiresVerification: indices.some((i) => events[i].requiresVerification),
@@ -346,10 +385,10 @@ function aggregateIdenticalEventsPerDay(
 
   // Build result: skip indices in aggregatedIndices, insert aggregated events
   // at the position of their first member to keep chronological ordering stable.
-  const insertMap = new Map<number, ExtractedEvent & { documentId: string }>();
+  const insertMap = new Map<number, WorkEvent>();
   for (const r of replacements) insertMap.set(r.insertAt, r.event);
 
-  const result: Array<ExtractedEvent & { documentId: string }> = [];
+  const result: WorkEvent[] = [];
   for (let i = 0; i < events.length; i++) {
     if (insertMap.has(i)) result.push(insertMap.get(i)!);
     else if (!aggregatedIndices.has(i)) result.push(events[i]);
@@ -396,8 +435,8 @@ function dedupSortPages(pages: number[]): number[] {
  * k = average group size (typically 2-5 events share the same date+type).
  */
 function markDiscrepancies(
-  events: Array<ExtractedEvent & { documentId: string }>,
-): Array<ExtractedEvent & { documentId: string; discrepancyNote: string | null }> {
+  events: WorkEvent[],
+): Array<WorkEvent & { discrepancyNote: string | null }> {
   // Index events by date|eventType for O(1) peer lookup.
   // Events with null/undefined date get unique keys to avoid false grouping.
   const groups = new Map<string, number[]>();

@@ -993,3 +993,45 @@ describe('temporalScope — discordanze fra menzione e fonte primaria (giro avve
     expect(primary.requiresVerification).toBe(false);
   });
 });
+
+describe('identità delle righe (collaudo 2026-09-18): ogni decisione del consolidatore è tracciata', () => {
+  it('dedup nello stesso documento: il vincitore assorbe la riga del perdente, unisce le pagine ed eredita «da verificare»', () => {
+    const out = consolidateEvents([{
+      documentId: 'doc1',
+      events: [
+        { ...makeEvent({ title: 'Spondilodesi D11-L3 per frattura', eventType: 'intervento', confidence: 95, sourcePages: [3] }), rowId: 'r1' },
+        { ...makeEvent({ title: 'Spondilodesi D11-L3 per frattura', eventType: 'intervento', confidence: 80, sourcePages: [4], requiresVerification: true }), rowId: 'r2' },
+      ],
+    }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].rowId).toBe('r1');
+    expect(out[0].absorbedRowIds).toEqual(['r2']);
+    expect(out[0].sourcePages).toEqual([3, 4]);
+    expect(out[0].requiresVerification).toBe(true);
+    expect(out[0].mutated).toBe(true);
+  });
+  it('aggregazione esami: il campione sopravvive, gli altri membri sono assorbiti, l’evento è mutato', () => {
+    const lab = (i: number, title: string) => ({ ...makeEvent({ eventType: 'esame_ematochimico', title, sourceType: 'esame_ematochimico', description: title }), rowId: `r${i}` });
+    const out = consolidateEvents([{ documentId: 'doc1', events: [lab(1, 'Emocromo'), lab(2, 'Creatinina'), lab(3, 'Glicemia')] }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toContain('raggruppati');
+    expect([out[0].rowId, ...(out[0].absorbedRowIds ?? [])].sort()).toEqual(['r1', 'r2', 'r3']);
+    expect(out[0].absorbedRowIds).not.toContain(out[0].rowId);
+    expect(out[0].mutated).toBe(true);
+    // Un doppione puro (stessi campi) è assorbito ma il vincitore NON è mutato: nessuna riscrittura inutile.
+    const twin = consolidateEvents([{ documentId: 'doc1', events: [
+      { ...makeEvent({ title: 'Emocromo', eventType: 'esame' }), rowId: 'a' },
+      { ...makeEvent({ title: 'Emocromo', eventType: 'esame' }), rowId: 'b' },
+    ] }]);
+    expect(twin).toHaveLength(1);
+    expect(twin[0].absorbedRowIds).toEqual(['b']);
+    expect(twin[0].mutated).toBe(false);
+  });
+  it('eventi distinti non assorbono nulla e non risultano mutati', () => {
+    const out = consolidateEvents([{ documentId: 'doc1', events: [
+      { ...makeEvent({ title: 'RX torace' , eventType: 'esame' }), rowId: 'r1' },
+      { ...makeEvent({ title: 'Visita cardiologica', eventType: 'visita' }), rowId: 'r2' },
+    ] }]);
+    expect(out.map((e) => [e.rowId, e.absorbedRowIds, e.mutated]).sort()).toEqual([['r1', [], false], ['r2', [], false]]);
+  });
+});

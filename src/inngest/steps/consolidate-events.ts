@@ -4,6 +4,7 @@ import { consolidateEvents, type DocumentEvents } from '@/services/consolidation
 import { safeJsonParse } from '@/lib/format';
 import type { ExtractionResult, ConsolidationStepResult } from './types';
 import { buildOrderUpdates } from './order-mapping';
+import { planConsolidationPersistence, type ConsolidationPersistencePlan, type RawEventRowForPersistence } from './consolidation-persistence';
 import { logger } from '@/lib/logger';
 import { normalizeTemporalScope } from '@/lib/temporal-scope';
 import { checkEventSourceConsistency } from '@/services/validation/event-source-consistency';
@@ -19,7 +20,7 @@ import { checkEventSourceConsistency } from '@/services/validation/event-source-
 async function flagInconsistentEvents(
   supabase: ReturnType<typeof createAdminClient>,
   rows: ReadonlyArray<Record<string, unknown>>,
-): Promise<void> {
+): Promise<Array<{ id: string; reliability_notes: string }>> {
   const updates: Array<{ id: string; reliability_notes: string }> = [];
   for (const e of rows) {
     const res = checkEventSourceConsistency({
@@ -32,7 +33,7 @@ async function flagInconsistentEvents(
     if (prev && prev.includes(res.reason)) continue; // idempotenza
     updates.push({ id: e.id as string, reliability_notes: prev ? `${prev} | ${res.reason}` : res.reason });
   }
-  if (updates.length === 0) return;
+  if (updates.length === 0) return updates;
   const BATCH = 500;
   for (let i = 0; i < updates.length; i += BATCH) {
     await Promise.allSettled(
@@ -44,6 +45,7 @@ async function flagInconsistentEvents(
     );
   }
   logger.info('pipeline', ` Rete A (coerenza estratto↔fonte): ${updates.length} eventi marcati da verificare`);
+  return updates;
 }
 
 /**
@@ -94,6 +96,7 @@ export async function fetchAllEventsForCase(caseId: string): Promise<Consolidate
       sourceText: (e.source_text ?? '') as string,
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
       temporalScope: normalizeTemporalScope(e.temporal_scope),
+      rowId: e.id as string,
     });
   }
 
@@ -126,7 +129,15 @@ export async function consolidateEventsStep(
     .order('id', { ascending: true });
 
   // RETE A: marca "da verificare" gli eventi che contraddicono la propria fonte.
-  await flagInconsistentEvents(supabase, existingRaw ?? []);
+  // Le note scritte vengono riportate anche sulle righe in memoria: la persistenza
+  // del consolidamento confronta e riscrive a partire da QUESTE, mai da una copia
+  // vecchia (altrimenti una fusione sovrascriverebbe la nota della Rete A).
+  const reteAUpdates = await flagInconsistentEvents(supabase, existingRaw ?? []);
+  const reteAById = new Map(reteAUpdates.map((u) => [u.id, u.reliability_notes]));
+  for (const e of existingRaw ?? []) {
+    const note = reteAById.get(e.id as string);
+    if (note !== undefined) { e.reliability_notes = note; e.requires_verification = true; }
+  }
 
   // Group events by document for cross-document deduplication
   const docEventsMap = new Map<string, DocumentEvents>();
@@ -151,6 +162,7 @@ export async function consolidateEventsStep(
       sourceText: (e.source_text ?? '') as string,
       sourcePages: e.source_pages ? safeJsonParse<number[]>(e.source_pages as string, []) : [],
       temporalScope: normalizeTemporalScope(e.temporal_scope),
+      rowId: e.id as string,
     });
   }
 
@@ -159,10 +171,18 @@ export async function consolidateEventsStep(
     ? consolidateEvents([...docEventsMap.values()])
     : [];
 
+  // Persistenza delle decisioni del consolidatore (collaudo 2026-09-18): le righe
+  // assorbite (doppioni, aggregati, fusioni) spariscono dal DB e i sopravvissuti
+  // riscritti, così la cronistoria che il medico vede è la stessa della perizia.
+  const BATCH_SIZE = 500;
+  const plan = planConsolidationPersistence(allEvents, (existingRaw ?? []).map(rowForPersistence));
+  await applyConsolidationPersistence(supabase, plan, BATCH_SIZE);
+  const deletedIds = new Set(plan.deleteIds);
+  const survivingRaw = (existingRaw ?? []).filter((e) => !deletedIds.has(e.id as string));
+
   // Update order numbers in DB (batched for scalability). Map consolidated
   // events back to raw rows by STABLE IDENTITY — consolidateEvents() dedups and
   // aggregates, so a positional (index) mapping would mis-assign order_number.
-  const BATCH_SIZE = 500;
   const orderUpdates = buildOrderUpdates(
     allEvents.map((event) => ({
       documentId: event.documentId,
@@ -171,7 +191,7 @@ export async function consolidateEventsStep(
       title: event.title,
       orderNumber: event.orderNumber,
     })),
-    (existingRaw ?? []).map((e) => ({
+    survivingRaw.map((e) => ({
       id: e.id as string,
       document_id: (e.document_id ?? null) as string | null,
       event_date: e.event_date as string,
@@ -216,4 +236,47 @@ export async function consolidateEventsStep(
   // allEvents can be 25MB+ for large cases, exceeding Inngest's 4MB step output limit.
   // Downstream steps re-read events from DB via fetchAllEventsForCase().
   return { newEventsCount: allEvents.length, totalEventsCount: allEvents.length };
+}
+
+function rowForPersistence(e: Record<string, unknown>): RawEventRowForPersistence {
+  return {
+    id: e.id as string,
+    title: e.title as string,
+    description: e.description as string,
+    event_type: e.event_type as string,
+    diagnosis: (e.diagnosis ?? null) as string | null,
+    doctor: (e.doctor ?? null) as string | null,
+    facility: (e.facility ?? null) as string | null,
+    confidence: e.confidence as number,
+    requires_verification: e.requires_verification as boolean,
+    reliability_notes: (e.reliability_notes ?? null) as string | null,
+    source_pages: (e.source_pages ?? null) as string | null,
+    temporal_scope: (e.temporal_scope ?? null) as string | null,
+  };
+}
+
+/** Applica il piano: delete a lotti delle righe assorbite, update dei sopravvissuti.
+ * Un fallimento qui non blocca il caso (torna il comportamento vecchio: doppioni
+ * visibili), ma viene registrato. */
+async function applyConsolidationPersistence(
+  supabase: ReturnType<typeof createAdminClient>,
+  plan: ConsolidationPersistencePlan,
+  batchSize: number,
+): Promise<void> {
+  for (let i = 0; i < plan.deleteIds.length; i += batchSize) {
+    const batch = plan.deleteIds.slice(i, i + batchSize);
+    const { error } = await supabase.from('events').delete().in('id', batch);
+    if (error) logger.warn('pipeline', `consolidation: delete of ${batch.length} absorbed rows failed: ${error.message}`);
+  }
+  for (let i = 0; i < plan.updates.length; i += batchSize) {
+    const batch = plan.updates.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((u) => supabase.from('events').update({ ...u.fields, updated_at: new Date().toISOString() }).eq('id', u.id)),
+    );
+    const failures = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)).length;
+    if (failures > 0) logger.warn('pipeline', `consolidation: ${failures}/${batch.length} survivor updates failed`);
+  }
+  if (plan.deleteIds.length > 0 || plan.updates.length > 0) {
+    logger.info('pipeline', ` Step 4: consolidation persisted — ${plan.deleteIds.length} absorbed rows deleted, ${plan.updates.length} survivors updated`);
+  }
 }
