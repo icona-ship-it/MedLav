@@ -131,14 +131,14 @@ export function isSameFactAcrossDocuments(a: WorkEvent, b: WorkEvent): boolean {
   if (fa !== fb && !mentionCanJoinPrimary(a, b) && !mentionCanJoinPrimary(b, a)) return false;
   if (hasConflictingTimeMarker(a, b)) return false;
   if (haveOppositeSides(sideText(a), sideText(b))) return false;
-  // Diagnosi discordanti = mai fondere; ma «Trauma distorsico tibio-tarsico destro»
-  // (refuso OCR, genere) e «Trauma distorsivo tibio-tarsica destra» sono la stessa
-  // diagnosi: vale il nucleo clinico, non il confronto letterale.
-  if (
-    a.diagnosis && b.diagnosis &&
-    !isDiagnosisSubset(a.diagnosis, b.diagnosis) && !isDiagnosisSubset(b.diagnosis, a.diagnosis) &&
-    !clinicalCoreMatch(a.diagnosis, b.diagnosis)
-  ) return false;
+  // Un accesso in PS e l'ammissione in reparto sono due fatti (come per i calcoli):
+  // il «Ricovero in Ortopedia» della lettera non rientra nell'accesso del verbale.
+  if ((isWardAdmissionTitle(a) && mentionsPs(b)) || (isWardAdmissionTitle(b) && mentionsPs(a))) return false;
+  // Diagnosi discordanti = mai fondere. Fra due fonti PRIMARIE basta una parola
+  // («composta» vs «scomposta», «peroneale» vs «tibiale») per restare separate e
+  // lasciare la ⚠ a markDiscrepancies (giro avversariale 2026-09-21). Con una
+  // MENZIONE (che spesso ha refusi OCR: «distorsico») vale il nucleo clinico.
+  if (a.diagnosis && b.diagnosis && !diagnosesCompatible(a, b)) return false;
   // Medici diversi bloccano solo fra due fonti PRIMARIE: il «medico» di una
   // menzione è di regola l'autore del documento che cita (il curante che scrive
   // il certificato), non chi ha fatto l'atto.
@@ -152,12 +152,57 @@ export function isSameFactAcrossDocuments(a: WorkEvent, b: WorkEvent): boolean {
 
 const GENERIC_MENTION_FAMILIES = new Set(['altro', 'complicanza', 'diagnosi']);
 
+function sameCore(a: string, b: string): boolean {
+  const ca = clinicalCore(a);
+  const cb = clinicalCore(b);
+  if (ca.size !== cb.size || ca.size === 0) return false;
+  for (const w of ca) if (!cb.has(w)) return false;
+  return true;
+}
+
+/** True se le due diagnosi possono descrivere lo stesso fatto. */
+export function diagnosesCompatible(a: WorkEvent, b: WorkEvent): boolean {
+  const da = a.diagnosis ?? '';
+  const db = b.diagnosis ?? '';
+  if (!da || !db) return true;
+  if (isDiagnosisSubset(da, db) || isDiagnosisSubset(db, da)) return true;
+  if (isMention(a) || isMention(b)) return clinicalCoreMatch(da, db);
+  return sameCore(da, db);
+}
+
+/** «Mai perdere una diagnosi»: la diagnosi di un evento assorbito, se diversa e non
+ * contenuta, resta nella descrizione del sopravvissuto; se i nuclei divergono, la
+ * voce va in coda «da verificare» con il motivo. */
+export function carryDiagnosis(target: WorkEvent, member: WorkEvent, memberLabel: string, opts: { strict: boolean } = { strict: true }): void {
+  const d = (member.diagnosis ?? '').trim();
+  if (!d) return;
+  const t = (target.diagnosis ?? '').trim();
+  if (!t) { target.diagnosis = d; target.mutated = true; return; }
+  if (isDiagnosisSubset(d, t) || isDiagnosisSubset(t, d) || t.toLowerCase() === d.toLowerCase()) return;
+  const line = `Diagnosi (${memberLabel}): ${d}`;
+  if (!target.description.includes(line)) target.description = `${target.description}\n\n${line}`;
+  target.mutated = true;
+  // Fra fonti primarie (stesso documento, due referti) basta una parola («composta»
+  // vs «scomposta») per andare in coda; con una menzione (refusi OCR) vale il nucleo.
+  const compatible = opts.strict ? sameCore(t, d) : clinicalCoreMatch(t, d);
+  if (!compatible) {
+    target.requiresVerification = true;
+    appendNote(target, `⚠ Diagnosi discordanti nella stessa voce: «${t}» vs «${d}» (${memberLabel}) — verificare sul documento`);
+  }
+}
+
 function mentionCanJoinPrimary(mention: WorkEvent, primary: WorkEvent): boolean {
   return isMention(mention) && !isMention(primary) && GENERIC_MENTION_FAMILIES.has(clinicalFamily(mention.eventType) ?? '');
 }
 
 function label(e: WorkEvent): string {
   return e.documentLabel ?? sourceLabels[e.sourceType] ?? e.sourceType.replace(/_/g, ' ');
+}
+
+function mergeNotes(a: string | null | undefined, b: string | null | undefined): string | null {
+  const segs = [...(a ?? '').split(' | '), ...(b ?? '').split(' | ')].map((s) => s.trim()).filter(Boolean);
+  const uniq = [...new Set(segs)];
+  return uniq.length > 0 ? uniq.join(' | ') : null;
 }
 
 function appendNote(e: WorkEvent, note: string): void {
@@ -184,10 +229,19 @@ function mergeInto(s: WorkEvent, a: WorkEvent): void {
       s.description = `${s.description}\n\n[${label(a)}] ${a.description}`;
     }
   }
-  if (!s.diagnosis && a.diagnosis) s.diagnosis = a.diagnosis;
-  if (!s.doctor && a.doctor) s.doctor = a.doctor;
-  if (!s.facility && a.facility) s.facility = a.facility;
+  carryDiagnosis(s, a, label(a), { strict: !aMention });
+  if (aMention && !sMention) {
+    // Il medico/struttura di una menzione è di regola l'autore del documento che
+    // cita (il curante del certificato): non diventa il medico dell'atto.
+    if (a.doctor) appendNote(s, `${label(a)} firmato da ${a.doctor}`);
+  } else {
+    if (!s.doctor && a.doctor) s.doctor = a.doctor;
+    if (!s.facility && a.facility) s.facility = a.facility;
+  }
   if (a.requiresVerification && !s.requiresVerification) s.requiresVerification = true;
+  // La ragione di un «da verificare» viaggia con il flag: le note del perdente restano.
+  const merged = mergeNotes(s.reliabilityNotes, a.reliabilityNotes);
+  if (merged !== (s.reliabilityNotes ?? null)) s.reliabilityNotes = merged;
   if (!aMention && (a.confidence ?? 0) > (s.confidence ?? 0)) s.confidence = a.confidence;
 }
 
@@ -237,7 +291,20 @@ export function mergeCrossDocumentDuplicates(events: WorkEvent[]): WorkEvent[] {
 // ---------------------------------------------------------------------------
 
 const PS_LEXICON_RE = /(pronto soccorso|\bp\.?\s?s\.?\b|\bdea\b|\bobi\b|osservazione breve)/i;
-const WARD_ADMISSION_RE = /(ricoverat[oa] (in|presso|nel)|ricovero (in|presso|nel|ordinario)|trasferit[oa] (in|presso|nel)|si ricovera|viene ricoverat|regime ordinario|degenza in)/i;
+/** Esito di ammissione in reparto attestato dal testo. */
+const ADMISSION_OUTCOME_RE = /(esito\s*:?\s*ricover|viene ricoverat|si ricovera|ricoverat[oa] (in|presso|nel)|ricovero (in|presso|nel|ordinario)|trasferit[oa] (in|presso|nel)|destinazione\s*:?\s*(reparto|ricovero)|regime ordinario|degenza in)/i;
+/** Ricovero solo proposto, consigliato, rifiutato o negato: NON è un'ammissione. */
+const ADMISSION_REFUSAL_RE = /(rifiut|propost[oa] (il )?ricover|consigli\w* (il |di |un )?ricover|contro (il )?parere|non necessit|non (si |viene )?ricover|senza ricovero|non ricoverat|dimission[ei] volontari|lascia (il|lo) (ps|pronto soccorso)|abbandon)/i;
+const DISCHARGE_HOME_RE = /(dimission\w* (a|al|verso il) domicilio|dimess[oa] (a|al) domicilio|dimess[oa] a casa|si dimette|rientra a domicilio)/i;
+/** Titolo di ammissione in REPARTO (non un passaggio in PS). */
+const WARD_TITLE_RE = /(\breparto\b|\bu\.?\s?o\.?\s?c?\b|degenza|ricovero ordinario|(ricover\w*|trasferi\w*|ammission\w*|ammess[oa])\s+(in|presso|nel|nella|al|alla)\b|(ricover\w*|trasferi\w*|ammess[oa])[^.\n]{0,25}(ortoped|chirurg|medicina|geriatr|neurolog|cardiolog|rianimazion|terapia intensiva))/i;
+/** Àncora di un accesso: PS nel titolo/struttura SENZA parole di cornice (una visita di
+ * controllo «post accesso in PS» non è un accesso). */
+const FRAMING_BEFORE_PS_RE = /(controllo|post|dopo|successiv|esiti|pregress|riferit|per esiti|in seguito a|a seguito di|conseguent)\S*\s+(?:\S+\s+){0,4}(pronto soccorso|\bp\.?\s?s\.?\b)/i;
+
+function isWardAdmissionTitle(e: WorkEvent): boolean {
+  return WARD_TITLE_RE.test(e.title) && !PS_LEXICON_RE.test(e.title);
+}
 const ACCESS_TITLE_RE = /(accesso|ricover|accettazion|ingresso|giunge|arriv|triage)/i;
 const EPISODE_MEMBER_TYPES = new Set(['visita', 'ricovero', 'referto', 'diagnosi', 'follow-up', 'terapia', 'prescrizione']);
 
@@ -253,8 +320,19 @@ function mentionsPs(e: WorkEvent): boolean {
   return PS_LEXICON_RE.test(`${e.title} ${e.facility ?? ''}`);
 }
 
+/** Vero accesso in PS: PS nel titolo/struttura, tipo di episodio, senza cornice
+ * («Visita di controllo post accesso in PS» NON è un'àncora). */
+function isPsAnchor(e: WorkEvent): boolean {
+  if (!mentionsPs(e)) return false;
+  if (!['visita', 'ricovero', 'referto', 'diagnosi'].includes(e.eventType)) return false;
+  if (FRAMING_BEFORE_PS_RE.test(e.title)) return false;
+  return true;
+}
+
 function isEpisodeMember(e: WorkEvent): boolean {
   if (e.temporalScope !== 'corrente') return false;
+  // L'ammissione in reparto («Ricovero in Ortopedia») è un altro fatto: resta fuori.
+  if (isWardAdmissionTitle(e)) return false;
   if (EPISODE_MEMBER_TYPES.has(e.eventType)) return true;
   return e.eventType === 'altro' && PS_LEXICON_RE.test(e.title);
 }
@@ -263,14 +341,9 @@ function unionPages(a: ReadonlyArray<number> | undefined, b: ReadonlyArray<numbe
   return [...new Set([...(a ?? []), ...(b ?? [])])].sort((x, y) => x - y);
 }
 
-function mergeNotes(a: string | null | undefined, b: string | null | undefined): string | null {
-  const segs = [...(a ?? '').split(' | '), ...(b ?? '').split(' | ')].map((s) => s.trim()).filter(Boolean);
-  const uniq = [...new Set(segs)];
-  return uniq.length > 0 ? uniq.join(' | ') : null;
-}
 
 function collapseGroup(members: WorkEvent[]): WorkEvent {
-  const anchors = members.filter(mentionsPs);
+  const anchors = members.filter(isPsAnchor);
   const byAccess = anchors.filter((e) => ACCESS_TITLE_RE.test(e.title));
   const pool = byAccess.length > 0 ? byAccess : anchors;
   const survivor = [...pool].sort((x, y) => {
@@ -300,17 +373,68 @@ function collapseGroup(members: WorkEvent[]): WorkEvent {
     if (!merged.doctor && o.doctor) merged.doctor = o.doctor;
     if (!merged.facility && o.facility) merged.facility = o.facility;
   }
-  // La diagnosi: quella di dimissione se c'è, altrimenti la prima disponibile.
+  // La diagnosi principale: quella di dimissione se c'è, altrimenti quella del
+  // sopravvissuto; le altre diagnosi dei membri restano nella descrizione (mai
+  // perdere una diagnosi) e, se discordanti, mandano la voce in coda.
   const discharge = others.find((o) => /dimission/i.test(o.title) && o.diagnosis);
-  merged.diagnosis = discharge?.diagnosis ?? survivor.diagnosis ?? others.find((o) => o.diagnosis)?.diagnosis ?? null;
+  merged.diagnosis = discharge?.diagnosis ?? survivor.diagnosis ?? null;
+  for (const o of [survivor, ...others]) carryDiagnosis(merged, o, o.title);
+  for (const o of others) {
+    if (o.doctor && merged.doctor && normalizedDoctor(o.doctor) !== normalizedDoctor(merged.doctor)) {
+      appendNote(merged, `${o.title}: ${o.doctor}`);
+    }
+  }
   const fullText = `${merged.title} ${merged.description}`;
-  merged.eventType = WARD_ADMISSION_RE.test(fullText) ? 'ricovero' : 'visita';
+  const modelSaidAdmission = members.some((m) => m.eventType === 'ricovero');
+  const refusal = ADMISSION_REFUSAL_RE.test(fullText);
+  const outcome = !refusal && ADMISSION_OUTCOME_RE.test(fullText);
+  const home = DISCHARGE_HOME_RE.test(fullText);
+  // Tipo: «ricovero» solo se il testo attesta l'ammissione (esito/ricoverato in…) o
+  // il modello l'ha tipizzata così senza rifiuto né dimissione a domicilio; un
+  // ricovero proposto/rifiutato non apre mai una degenza (giro avversariale 2026-09-21).
+  if (refusal) {
+    merged.eventType = 'visita';
+    if (modelSaidAdmission) {
+      merged.requiresVerification = true;
+      appendNote(merged, 'Ricovero proposto o rifiutato secondo il testo: registrato come accesso in PS senza degenza, da confermare');
+    }
+  } else if (outcome) {
+    merged.eventType = 'ricovero';
+  } else {
+    // Senza esito di ammissione nel testo un accesso in PS non apre una degenza,
+    // anche se il modello l'aveva tipizzato «ricovero» (la degenza vera la porta
+    // la cartella di reparto).
+    merged.eventType = 'visita';
+    if (modelSaidAdmission && !home) {
+      appendNote(merged, 'Tipizzato «ricovero» dal modello senza esito di ammissione nel testo: registrato come accesso in PS senza degenza');
+    }
+  }
   if (!/accesso in pronto soccorso/i.test(merged.title)) {
-    merged.title = merged.diagnosis
-      ? `Accesso in Pronto Soccorso: ${merged.diagnosis}`
-      : `Accesso in Pronto Soccorso — ${survivor.title.replace(/^(accesso|ricovero|visita|valutazione)\s+(in\s+|al\s+|presso\s+(il\s+)?)?(pronto soccorso|p\.?s\.?)\s*(per\s+)?/i, '')}`;
+    const rest = merged.diagnosis ?? survivor.title.replace(/^(accesso|ricovero|visita|valutazione)\s+(in\s+|al\s+|presso\s+(il\s+)?)?(pronto soccorso|p\.?s\.?)\s*(per\s+)?/i, '');
+    // Con ricovero: «reparto» nel titolo, così i calcoli lo leggono come ammissione e non come passaggio in PS.
+    merged.title = merged.eventType === 'ricovero'
+      ? `Accesso in Pronto Soccorso con ricovero in reparto${merged.diagnosis ? ': ' : ' — '}${rest}`
+      : `Accesso in Pronto Soccorso${merged.diagnosis ? ': ' : ' — '}${rest}`;
   }
   return merged;
+}
+
+/** Più accessi in PS nello stesso giorno (ritorno in PS): un episodio per àncora,
+ * i membri vanno all'àncora con l'orario immediatamente precedente. */
+function splitEpisodes(members: WorkEvent[]): WorkEvent[][] {
+  const anchors = members.filter(isPsAnchor).filter((a) => ACCESS_TITLE_RE.test(a.title));
+  const timed = anchors.map((a) => ({ a, t: timeMinutes(a) })).filter((x): x is { a: WorkEvent; t: number } => x.t !== null).sort((x, y) => x.t - y.t);
+  const distinct = timed.filter((x, i) => i === 0 || x.t - timed[i - 1].t >= 60);
+  if (distinct.length < 2) return [members];
+  const groups: WorkEvent[][] = distinct.map(() => []);
+  for (const m of members) {
+    const t = timeMinutes(m);
+    let idx = 0;
+    if (distinct.some((d) => d.a === m)) idx = distinct.findIndex((d) => d.a === m);
+    else if (t !== null) { for (let i = 0; i < distinct.length; i++) if (distinct[i].t <= t) idx = i; }
+    groups[idx].push(m);
+  }
+  return groups.filter((g) => g.length > 0);
 }
 
 /**
@@ -333,17 +457,17 @@ export function collapsePsEpisodes(events: WorkEvent[]): WorkEvent[] {
     else groups.set(key, [i]);
   }
   const dropped = new Set<number>();
-  const replacement = new Map<number, WorkEvent>();
+  const replacement = new Map<number, WorkEvent[]>();
   for (const indices of groups.values()) {
     if (indices.length < 2) continue;
     const members = indices.map((i) => events[i]);
-    if (!members.some(mentionsPs)) continue;
-    const merged = collapseGroup(members);
-    replacement.set(indices[0], merged);
+    if (!members.some(isPsAnchor)) continue;
+    const episodes = splitEpisodes(members).map((g) => (g.length >= 2 && g.some(isPsAnchor) ? [collapseGroup(g)] : g)).flat();
+    replacement.set(indices[0], episodes);
     for (const i of indices.slice(1)) dropped.add(i);
   }
   if (replacement.size === 0) return events;
-  return events.map((e, i) => replacement.get(i) ?? e).filter((_, i) => !dropped.has(i));
+  return events.flatMap((e, i) => (dropped.has(i) ? [] : (replacement.get(i) ?? [e])));
 }
 
 // ---------------------------------------------------------------------------

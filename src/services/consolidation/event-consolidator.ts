@@ -3,7 +3,7 @@ import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance'
 import { logger } from '@/lib/logger';
 import { temporalScopeRank } from '@/lib/temporal-scope';
 import { haveOppositeSides, mixOppositeSides } from '@/lib/laterality';
-import { collapsePsEpisodes, foldPrescriptionsIntoVisit, foldPrognosisIntoCertificate, mergeCrossDocumentDuplicates, reclassifyPricelessExpenseEvents } from './event-merges';
+import { carryDiagnosis, collapsePsEpisodes, foldPrescriptionsIntoVisit, foldPrognosisIntoCertificate, mergeCrossDocumentDuplicates, reclassifyPricelessExpenseEvents } from './event-merges';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -298,7 +298,11 @@ function absorbDuplicate(winner: WorkEvent, loser: WorkEvent): void {
   const pages = dedupSortPages([...(winner.sourcePages ?? []), ...(loser.sourcePages ?? [])]);
   if (pages.length !== (winner.sourcePages ?? []).length) { winner.sourcePages = pages; winner.mutated = true; }
   if (loser.requiresVerification && !winner.requiresVerification) { winner.requiresVerification = true; winner.mutated = true; }
-  if (!winner.diagnosis && loser.diagnosis) { winner.diagnosis = loser.diagnosis; winner.mutated = true; }
+  // La ragione del «da verificare» e la diagnosi del perdente non si perdono.
+  const notes = [...(winner.reliabilityNotes ?? '').split(' | '), ...(loser.reliabilityNotes ?? '').split(' | ')].map((x) => x.trim()).filter(Boolean);
+  const uniqNotes = [...new Set(notes)].join(' | ') || null;
+  if (uniqNotes !== (winner.reliabilityNotes ?? null)) { winner.reliabilityNotes = uniqNotes; winner.mutated = true; }
+  carryDiagnosis(winner, loser, loser.title);
 }
 
 /**

@@ -293,3 +293,114 @@ describe('foldPrescriptionsIntoVisit — le prescrizioni date in visita stanno n
     expect(foldPrescriptionsIntoVisit(untouched).map((e) => e.rowId)).toEqual(['v1', 'v2', 'p', 't', 'v3', 'm']);
   });
 });
+
+import { consolidateEvents } from './event-consolidator';
+
+describe('giro avversariale 2026-09-21 — diagnosi mai perse né fuse in silenzio', () => {
+  it('due fonti PRIMARIE con diagnosi diverse per una parola («composta» vs «scomposta») restano separate e la ⚠ resta', () => {
+    const out = consolidateEvents([
+      { documentId: 'ps', events: [{ ...ev({ documentId: 'ps', rowId: 'a', eventType: 'esame', title: 'RX caviglia destra', diagnosis: 'Frattura composta malleolo peroneale destro' }) }] },
+      { documentId: 'rad', events: [{ ...ev({ documentId: 'rad', rowId: 'b', eventType: 'esame', title: 'RX caviglia destra', diagnosis: 'Frattura scomposta malleolo peroneale destro', sourceType: 'esame_strumentale' }) }] },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.every((e) => (e.discrepancyNote ?? '').includes('DIAGNOSI DISCORDANTE'))).toBe(true);
+    const tib = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'a', rowId: 'a', eventType: 'esame', title: 'RX caviglia destra', diagnosis: 'Frattura malleolo peroneale destro' }),
+      ev({ documentId: 'b', rowId: 'b', eventType: 'esame', title: 'RX caviglia destra', diagnosis: 'Frattura malleolo tibiale destro' }),
+    ]);
+    expect(tib).toHaveLength(2);
+  });
+  it('una MENZIONE con refuso OCR nella diagnosi si fonde, la sua diagnosi resta scritta, il suo medico NON diventa il medico dell’atto', () => {
+    const out = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'ps', rowId: 'p', title: 'Accesso in Pronto Soccorso per trauma distorsivo caviglia destra', diagnosis: 'Trauma distorsivo tibio-tarsica destra' }),
+      ev({ documentId: 'c', rowId: 'c', temporalScope: 'retrospettivo', title: 'Valutazione in Pronto Soccorso per trauma distorsivo caviglia destra', diagnosis: 'Trauma distorsico tibio-tarsico destro', doctor: 'Dott. Nicolò Demprova', documentLabel: 'Certificato Medico' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].doctor).toBeNull();
+    expect(out[0].reliabilityNotes).toContain('Certificato Medico firmato da Dott. Nicolò Demprova');
+    expect(out[0].description).toContain('Diagnosi (Certificato Medico): Trauma distorsico tibio-tarsico destro');
+    expect(out[0].requiresVerification).toBe(false);
+  });
+  it('nel collasso PS la diagnosi della consulenza resta scritta; se discorda da quella di dimissione la voce va in coda', () => {
+    const out = collapsePsEpisodes([
+      ev({ documentId: 'v', rowId: 'acc', eventType: 'ricovero', title: 'Accesso PS per trauma polso', description: 'Ore 10:00 giunge.' }),
+      ev({ documentId: 'v', rowId: 'ort', eventType: 'referto', title: 'Consulenza ortopedica', description: 'Valutato.', diagnosis: 'Frattura scomposta radio distale', doctor: 'Dott. Rossi Esempi' }),
+      ev({ documentId: 'v', rowId: 'dim', eventType: 'referto', title: 'Dimissione da PS', description: 'Dimesso a domicilio ore 13:00.', diagnosis: 'Frattura composta radio distale', doctor: 'Dott.ssa Bianchi Esempi' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].diagnosis).toBe('Frattura composta radio distale');
+    expect(out[0].description).toContain('Diagnosi (Consulenza ortopedica): Frattura scomposta radio distale');
+    expect(out[0].requiresVerification).toBe(true);
+    expect(out[0].reliabilityNotes).toContain('Diagnosi discordanti');
+    expect(out[0].reliabilityNotes).toContain('Consulenza ortopedica: Dott. Rossi Esempi');
+  });
+  it('dedup nello stesso documento: la ragione del «da verificare» del perdente resta nelle note', () => {
+    const out = consolidateEvents([{ documentId: 'd', events: [
+      { ...ev({ documentId: 'd', rowId: 'a', title: 'Visita ortopedica', confidence: 95 }) },
+      { ...ev({ documentId: 'd', rowId: 'b', title: 'Visita ortopedica', confidence: 80, requiresVerification: true, reliabilityNotes: 'Data letta male dall\'OCR' }) },
+    ] }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].requiresVerification).toBe(true);
+    expect(out[0].reliabilityNotes).toContain('Data letta male');
+  });
+});
+
+describe('giro avversariale 2026-09-21 — accesso in PS: tipo, reparto, due accessi', () => {
+  const ps = (o: Partial<WorkEvent> & { rowId: string }) => ev({ documentId: 'verbale', ...o });
+  it('ricovero solo PROPOSTO e rifiutato → «visita» da confermare, mai una degenza', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'visita', title: 'Accesso in PS per trauma cranico', description: 'Ore 22:10 giunge in PS.' }),
+      ps({ rowId: 'es', eventType: 'referto', title: 'Esito PS', description: 'Proposto ricovero in Neurochirurgia per osservazione: il paziente rifiuta e lascia il PS contro parere medico.' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].eventType).toBe('visita');
+    const typed = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'ricovero', title: 'Ricovero PS per trauma cranico', description: 'Ore 22:10 giunge in PS.' }),
+      ps({ rowId: 'es', eventType: 'referto', title: 'Esito PS', description: 'Si consiglia ricovero in Neurochirurgia; il paziente rifiuta.' }),
+    ]);
+    expect(typed[0].eventType).toBe('visita');
+    expect(typed[0].requiresVerification).toBe(true);
+    expect(typed[0].reliabilityNotes).toContain('proposto o rifiutato');
+  });
+  it('«Esito: RICOVERO. Reparto: Ortopedia» → resta «ricovero» e il titolo porta il reparto (i calcoli aprono la degenza)', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'ricovero', title: 'Accesso in PS per frattura femore', description: 'Ore 08:00 giunge. Esito: RICOVERO. Reparto: Ortopedia.', diagnosis: 'Frattura collo femore sinistro' }),
+      ps({ rowId: 'tri', eventType: 'visita', title: 'Triage', description: 'Codice giallo.' }),
+    ]);
+    expect(out[0].eventType).toBe('ricovero');
+    expect(out[0].title).toBe('Accesso in Pronto Soccorso con ricovero in reparto: Frattura collo femore sinistro');
+  });
+  it('l’ammissione in reparto («Ricovero in Ortopedia») non entra nell’accesso PS, né nello stesso documento né fra documenti', () => {
+    const same = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'visita', title: 'Accesso in PS per frattura femore', description: 'Ore 08:00.' }),
+      ps({ rowId: 'tri', eventType: 'visita', title: 'Triage', description: 'Codice giallo.' }),
+      ps({ rowId: 'ric', eventType: 'ricovero', title: 'Ricovero in Ortopedia', description: 'Ammesso in reparto.' }),
+    ]);
+    expect(same.map((e) => e.rowId).sort()).toEqual(['acc', 'ric']);
+    const cross = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'ps', rowId: 'p', eventType: 'visita', title: 'Accesso in Pronto Soccorso per frattura femore sinistro' }),
+      ev({ documentId: 'lettera', rowId: 'l', eventType: 'ricovero', title: 'Ricovero in Ortopedia per frattura femore sinistro', sourceType: 'cartella_clinica' }),
+    ]);
+    expect(cross).toHaveLength(2);
+  });
+  it('una visita «di controllo post accesso in PS» non è un’àncora: nessun collasso', () => {
+    const out = collapsePsEpisodes([
+      ev({ documentId: 'r', rowId: 'v', eventType: 'visita', title: 'Visita di controllo post accesso in PS', description: 'Controllo.' }),
+      ev({ documentId: 'r', rowId: 'p', eventType: 'prescrizione', title: 'Prescrizione tutore', description: 'Si prescrive.' }),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('Visita di controllo post accesso in PS');
+  });
+  it('due accessi in PS nello stesso giorno (mattina e sera) restano due voci, ciascuna con i propri membri', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'a1', eventType: 'visita', title: 'Accesso in PS per caduta', description: 'Ore 09:00 giunge.', diagnosis: 'Contusione gomito' }),
+      ps({ rowId: 'd1', eventType: 'referto', title: 'Dimissione da PS', description: 'Ore 11:00 dimesso a domicilio.' }),
+      ps({ rowId: 'a2', eventType: 'visita', title: 'Accesso in PS per dolore toracico', description: 'Ore 18:30 giunge.', diagnosis: 'Dolore toracico aspecifico' }),
+      ps({ rowId: 'd2', eventType: 'referto', title: 'Dimissione da PS', description: 'Ore 22:00 dimesso a domicilio.' }),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].absorbedRowIds).toEqual(['d1']);
+    expect(out[1].absorbedRowIds).toEqual(['d2']);
+    expect(out[1].diagnosis).toBe('Dolore toracico aspecifico');
+  });
+});
