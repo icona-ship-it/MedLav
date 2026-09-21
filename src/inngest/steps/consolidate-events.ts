@@ -7,6 +7,7 @@ import { buildOrderUpdates } from './order-mapping';
 import { planConsolidationPersistence, type ConsolidationPersistencePlan, type RawEventRowForPersistence } from './consolidation-persistence';
 import { logger } from '@/lib/logger';
 import { normalizeTemporalScope } from '@/lib/temporal-scope';
+import { documentTypeLabels } from '@/lib/constants';
 import { checkEventSourceConsistency } from '@/services/validation/event-source-consistency';
 
 /**
@@ -74,11 +75,12 @@ export async function fetchAllEventsForCase(caseId: string): Promise<Consolidate
   if (!rows || rows.length === 0) return [];
 
   // Group by document and re-run consolidation to compute discrepancyNote + confidence caps
+  const docLabels = await fetchDocumentLabels(supabase, caseId);
   const docEventsMap = new Map<string, DocumentEvents>();
   for (const e of rows) {
     const docId = (e.document_id ?? '') as string;
     if (!docEventsMap.has(docId)) {
-      docEventsMap.set(docId, { documentId: docId, events: [] });
+      docEventsMap.set(docId, { documentId: docId, events: [], documentLabel: docLabels.get(docId) });
     }
     docEventsMap.get(docId)!.events.push({
       eventDate: e.event_date as string,
@@ -140,11 +142,12 @@ export async function consolidateEventsStep(
   }
 
   // Group events by document for cross-document deduplication
+  const docLabels = await fetchDocumentLabels(supabase, caseId);
   const docEventsMap = new Map<string, DocumentEvents>();
   for (const e of existingRaw ?? []) {
     const docId = (e.document_id ?? '') as string;
     if (!docEventsMap.has(docId)) {
-      docEventsMap.set(docId, { documentId: docId, events: [] });
+      docEventsMap.set(docId, { documentId: docId, events: [], documentLabel: docLabels.get(docId) });
     }
     docEventsMap.get(docId)!.events.push({
       eventDate: e.event_date as string,
@@ -279,4 +282,18 @@ async function applyConsolidationPersistence(
   if (plan.deleteIds.length > 0 || plan.updates.length > 0) {
     logger.info('pipeline', ` Step 4: consolidation persisted — ${plan.deleteIds.length} absorbed rows deleted, ${plan.updates.length} survivors updated`);
   }
+}
+
+/** Etichetta per documento (tipo leggibile): per le note «Citato anche in: Certificato». */
+async function fetchDocumentLabels(
+  supabase: ReturnType<typeof createAdminClient>,
+  caseId: string,
+): Promise<Map<string, string>> {
+  const { data } = await supabase.from('documents').select('id, document_type').eq('case_id', caseId);
+  const out = new Map<string, string>();
+  for (const d of data ?? []) {
+    const type = (d.document_type ?? 'altro') as string;
+    out.set(d.id as string, type !== 'altro' ? (documentTypeLabels[type] ?? type) : 'altro documento');
+  }
+  return out;
 }

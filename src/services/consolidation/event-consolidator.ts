@@ -3,6 +3,7 @@ import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance'
 import { logger } from '@/lib/logger';
 import { temporalScopeRank } from '@/lib/temporal-scope';
 import { haveOppositeSides, mixOppositeSides } from '@/lib/laterality';
+import { mergeCrossDocumentDuplicates } from './event-merges';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -27,11 +28,14 @@ export type SourcedEvent = ExtractedEvent & { rowId?: string };
 export interface DocumentEvents {
   documentId: string;
   events: SourcedEvent[];
+  /** Etichetta leggibile del documento (tipo), per le note «Citato anche in: …». */
+  documentLabel?: string;
 }
 
 /** Evento in lavorazione dentro consolidateEvents. */
 export type WorkEvent = ExtractedEvent & {
   documentId: string;
+  documentLabel?: string;
   rowId?: string;
   absorbedRowIds?: string[];
   mutated?: boolean;
@@ -152,7 +156,7 @@ export function consolidateEvents(
         droppedBroken++;
         continue;
       }
-      allEvents.push({ ...event, documentId: doc.documentId });
+      allEvents.push({ ...event, documentId: doc.documentId, ...(doc.documentLabel ? { documentLabel: doc.documentLabel } : {}) });
     }
   }
 
@@ -197,12 +201,13 @@ export function consolidateEvents(
   // never aggregated.
   const aggregated = aggregateIdenticalEventsPerDay(dedupedSameDoc);
 
-  // Detect duplicates/discrepancies across documents (annotates; never merges).
-  // NB: il merge cross-documento è disattivato — rompeva la persistenza
-  // (consolidateEventsStep assume 1:1 tra output e righe DB per gli order_number).
-  // Va reintrodotto con soft-delete + rinumerazione nel passo Inngest (progetto
-  // selettivo sicuro). Il tier resta come fondamenta deterministiche.
-  const consolidated = markDiscrepancies(aggregated);
+  // Lo stesso fatto in documenti diversi = una voce (collaudo 2026-09-18): la
+  // fonte primaria vince sulla menzione, le fonti citate restano nelle note; le
+  // righe assorbite sono tracciate e il passo Inngest le persiste (delete).
+  const merged = mergeCrossDocumentDuplicates(aggregated);
+
+  // Detect discrepancies across documents on what is left (annotates; never merges).
+  const consolidated = markDiscrepancies(merged);
 
   // Assign sequential order numbers + deterministic relevance tier.
   return consolidated.map((event, index) => ({
@@ -222,7 +227,7 @@ export function consolidateEvents(
  * is preserved among non-duplicates.
  */
 /** Testo su cui leggere il lato di un evento (titolo + diagnosi). */
-function sideText(e: Pick<ExtractedEvent, 'title' | 'diagnosis'>): string {
+export function sideText(e: Pick<ExtractedEvent, 'title' | 'diagnosis'>): string {
   return `${e.title ?? ''} ${e.diagnosis ?? ''}`;
 }
 
@@ -478,7 +483,7 @@ interface DiscrepancyResult {
 }
 
 /** True se una diagnosi è contenuta nell'altra (normalizzate): impoverimento, non conflitto. */
-function isDiagnosisSubset(a: string, b: string): boolean {
+export function isDiagnosisSubset(a: string, b: string): boolean {
   const norm = (t: string): string => t.toLowerCase().replace(/\s+/g, ' ').trim();
   const na = norm(a);
   const nb = norm(b);
@@ -638,7 +643,7 @@ function getTimeBucket(event: ExtractedEvent): 'am' | 'pm' | null {
 }
 
 /** A5: true when both events carry a time marker and the markers disagree. */
-function hasConflictingTimeMarker(a: ExtractedEvent, b: ExtractedEvent): boolean {
+export function hasConflictingTimeMarker(a: ExtractedEvent, b: ExtractedEvent): boolean {
   const ta = getTimeBucket(a);
   const tb = getTimeBucket(b);
   return ta !== null && tb !== null && ta !== tb;

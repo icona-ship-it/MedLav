@@ -804,14 +804,15 @@ describe('consolidateEvents — Schönweger regression (CASO-2026-160)', () => {
     expect(result[0].confidence).toBe(95); // higher-confidence twin survives
   });
 
-  it('preserves cross-document duplicates (annotated by markDiscrepancies, not merged)', () => {
-    // Cross-doc merge is currently disabled (it broke order_number persistence);
-    // duplicates are annotated, not collapsed.
+  it('lo stesso fatto in due documenti diventa UNA voce che cita entrambe le fonti (collaudo 2026-09-18)', () => {
     const result = consolidateEvents([
-      { documentId: 'doc-A', events: [makeEvent({ title: 'Visita ortopedica' })] },
-      { documentId: 'doc-B', events: [makeEvent({ title: 'Visita ortopedica' })] },
+      { documentId: 'doc-A', events: [{ ...makeEvent({ title: 'Visita ortopedica' }), rowId: 'a' }] },
+      { documentId: 'doc-B', events: [{ ...makeEvent({ title: 'Visita ortopedica' }), rowId: 'b' }] },
     ]);
-    expect(result.length).toBe(2);
+    expect(result.length).toBe(1);
+    expect(result[0].absorbedRowIds).toHaveLength(1);
+    expect(result[0].reliabilityNotes).toContain('Documentato anche in');
+    expect(result[0].discrepancyNote).toBeNull();
   });
 });
 
@@ -949,13 +950,14 @@ describe('temporalScope nel consolidamento (collaudo 2026-09-04: referto esploso
       { documentId: 'cartella-operatoria', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale', diagnosis: 'Carcinoma lobulare infiltrante G2 mm 7, DCIS diffuso', confidence: 95, temporalScope: 'corrente' })] },
       { documentId: 'referto-oncologico', events: [makeEvent({ eventDate: '2026-04-14', eventType: 'intervento', title: 'Mastectomia nipple sparing bilaterale', diagnosis: 'Carcinoma lobulare', confidence: 90, temporalScope: 'retrospettivo' })] },
     ]);
-    const primary = result.find((e) => e.documentId === 'cartella-operatoria')!;
-    const mention = result.find((e) => e.documentId === 'referto-oncologico')!;
+    // Menzione con diagnosi più povera = stesso fatto: viene assorbita dalla fonte
+    // primaria, che resta a 95 e non va in coda; la fonte citata resta nelle note.
+    expect(result).toHaveLength(1);
+    const primary = result[0];
+    expect(primary.documentId).toBe('cartella-operatoria');
     expect(primary.confidence).toBe(95);
     expect(primary.requiresVerification).toBe(false);
-    expect(primary.discrepancyNote).toContain('anamnesi');
-    expect(mention.discrepancyNote).toContain('fonte primaria');
-    expect(mention.confidence).toBe(90);
+    expect(primary.reliabilityNotes).toContain('Citato anche in');
   });
 
   it('discrepanze fra due fonti primarie restano escalate come prima (mai auto-risolte)', () => {
