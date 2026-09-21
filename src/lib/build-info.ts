@@ -17,7 +17,7 @@ export const BUILD_TIME: string | undefined = process.env.NEXT_PUBLIC_BUILD_TIME
  */
 // 2026-09-11: audit pre-test medici (default rubriche, spese, reti narrative, prompt).
 // TODO founder: allineare all'ORA REALE del deploy in produzione (UTC) prima del push su main.
-export const PIPELINE_CHANGED_AT = '2026-09-22T06:00:00.000Z';
+export const PIPELINE_CHANGED_AT = '2026-09-21T23:30:00.000Z';
 
 function parseIso(value: string | null | undefined): number | null {
   if (!value) return null;
