@@ -3,7 +3,7 @@ import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance'
 import { logger } from '@/lib/logger';
 import { temporalScopeRank } from '@/lib/temporal-scope';
 import { haveOppositeSides, mixOppositeSides } from '@/lib/laterality';
-import { collapsePsEpisodes, foldPrognosisIntoCertificate, mergeCrossDocumentDuplicates, reclassifyPricelessExpenseEvents } from './event-merges';
+import { collapsePsEpisodes, foldPrescriptionsIntoVisit, foldPrognosisIntoCertificate, mergeCrossDocumentDuplicates, reclassifyPricelessExpenseEvents } from './event-merges';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -192,7 +192,7 @@ export function consolidateEvents(
   // copies of "Esami ematochimici - Tabella N" were extracted from the same doc.
   // Prestazioni senza importo tipizzate «spesa» tornano voci cliniche; la prognosi
   // di un certificato rientra nel certificato; un accesso in PS è una voce sola.
-  const dedupedSameDoc = foldPrognosisIntoCertificate(collapsePsEpisodes(dedupWithinSameDocument(reclassifyPricelessExpenseEvents(allEvents))));
+  const dedupedSameDoc = foldPrescriptionsIntoVisit(foldPrognosisIntoCertificate(collapsePsEpisodes(dedupWithinSameDocument(reclassifyPricelessExpenseEvents(allEvents)))));
 
   // Sprint 1 S1.4 (Lavini quality, 2026-05-17): aggregate 3+ similar lab/imaging
   // exams on the same date into a single event. Reduces report verbosity:

@@ -416,3 +416,50 @@ export function foldPrognosisIntoCertificate(events: WorkEvent[]): WorkEvent[] {
   }
   return dropped.size === 0 ? events : events.filter((_, i) => !dropped.has(i));
 }
+
+// ---------------------------------------------------------------------------
+// Le prescrizioni date in visita stanno nella visita (misura sulle foto vere
+// 2026-09-21: una visita + «Prescrizione …» + «Prescrizione terapia …» lo
+// stesso giorno nello stesso referto = tre schede per un atto). Nello stesso
+// documento e giorno, con UNA sola visita corrente, gli eventi prescrizione/
+// terapia con lessico di prescrizione entrano nella descrizione della visita.
+// ---------------------------------------------------------------------------
+
+const PRESCRIPTION_LEXICON_RE = /(prescri|consigli|indicazion|si programma|si suggerisce|terapia domiciliare|posologia|da assumere|raccomand)/i;
+const VISIT_CONTAINER_TYPES = new Set(['visita', 'follow-up']);
+
+export function foldPrescriptionsIntoVisit(events: WorkEvent[]): WorkEvent[] {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (!e.eventDate || e.eventDate === SENTINEL_DATE || (e.datePrecision ?? 'giorno') !== 'giorno' || e.temporalScope !== 'corrente') continue;
+    const key = `${e.documentId}|${e.eventDate}`;
+    const g = groups.get(key);
+    if (g) g.push(i);
+    else groups.set(key, [i]);
+  }
+  const dropped = new Set<number>();
+  for (const indices of groups.values()) {
+    const visits = indices.filter((i) => VISIT_CONTAINER_TYPES.has(events[i].eventType));
+    if (visits.length !== 1) continue;
+    const visit = events[visits[0]];
+    const rx = indices.filter((i) => {
+      const e = events[i];
+      return (e.eventType === 'prescrizione' || e.eventType === 'terapia') && PRESCRIPTION_LEXICON_RE.test(`${e.title} ${e.description.slice(0, 120)}`);
+    });
+    if (rx.length === 0) continue;
+    for (const i of rx) {
+      const p = events[i];
+      absorb(visit, p);
+      if (p.description.trim() && !visit.description.includes(p.description)) {
+        visit.description = `${visit.description}\n\n${p.title}: ${p.description}`;
+      }
+      visit.sourcePages = unionPages(visit.sourcePages, p.sourcePages);
+      visit.reliabilityNotes = mergeNotes(visit.reliabilityNotes, p.reliabilityNotes);
+      if (p.requiresVerification) visit.requiresVerification = true;
+      visit.mutated = true;
+      dropped.add(i);
+    }
+  }
+  return dropped.size === 0 ? events : events.filter((_, i) => !dropped.has(i));
+}

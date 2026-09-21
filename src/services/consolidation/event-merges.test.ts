@@ -266,3 +266,30 @@ describe('mergeCrossDocumentDuplicates — menzioni (misura locale 2026-09-21)',
     expect(out).toHaveLength(2);
   });
 });
+
+import { foldPrescriptionsIntoVisit } from './event-merges';
+
+describe('foldPrescriptionsIntoVisit — le prescrizioni date in visita stanno nella visita', () => {
+  it('visita + prescrizione esami + prescrizione terapia dello stesso giorno e documento → una voce', () => {
+    const out = foldPrescriptionsIntoVisit([
+      ev({ documentId: 'r', rowId: 'v', eventDate: '2026-05-22', eventType: 'visita', title: 'Visita oncologica di controllo', description: 'EO nella norma.' }),
+      ev({ documentId: 'r', rowId: 'p1', eventDate: '2026-05-22', eventType: 'prescrizione', title: 'Prescrizione esami di stadiazione', description: 'Si prescrive scintigrafia ossea.' }),
+      ev({ documentId: 'r', rowId: 'p2', eventDate: '2026-05-22', eventType: 'terapia', title: 'Prescrizione terapia ormonale', description: 'Si prescrive letrozolo 2,5 mg/die.' }),
+    ]);
+    expect(out.map((e) => e.rowId)).toEqual(['v']);
+    expect(out[0].description).toContain('Prescrizione esami di stadiazione: Si prescrive scintigrafia ossea.');
+    expect(out[0].description).toContain('letrozolo');
+    expect(out[0].absorbedRowIds).toEqual(['p1', 'p2']);
+  });
+  it('MAI piegare: due visite lo stesso giorno (ambiguo), terapia eseguita (seduta) senza lessico di prescrizione, documento o giorno diversi, menzioni', () => {
+    const untouched = [
+      ev({ documentId: 'r', rowId: 'v1', eventDate: '2026-05-22', eventType: 'visita', title: 'Visita ortopedica' }),
+      ev({ documentId: 'r', rowId: 'v2', eventDate: '2026-05-22', eventType: 'visita', title: 'Visita fisiatrica' }),
+      ev({ documentId: 'r', rowId: 'p', eventDate: '2026-05-22', eventType: 'prescrizione', title: 'Prescrizione plantari', description: 'Si prescrivono plantari.' }),
+      ev({ documentId: 's', rowId: 't', eventDate: '2026-05-23', eventType: 'terapia', title: 'Seduta di fisioterapia', description: 'Seduta eseguita.' }),
+      ev({ documentId: 's', rowId: 'v3', eventDate: '2026-05-23', eventType: 'visita', title: 'Visita fisiatrica' }),
+      ev({ documentId: 'c', rowId: 'm', eventDate: '2026-05-23', eventType: 'prescrizione', title: 'Prescrizione riferita', temporalScope: 'retrospettivo' }),
+    ];
+    expect(foldPrescriptionsIntoVisit(untouched).map((e) => e.rowId)).toEqual(['v1', 'v2', 'p', 't', 'v3', 'm']);
+  });
+});
