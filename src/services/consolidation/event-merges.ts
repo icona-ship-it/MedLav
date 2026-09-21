@@ -111,8 +111,10 @@ function sourceRank(family: string, sourceType: string): number {
   return sourceType === 'cartella_clinica' ? 0 : sourceType === 'referto_controllo' ? 1 : 2;
 }
 
+/** Il nucleo si legge dal TITOLO: la diagnosi ha la sua guardia a parte (un
+ * refuso OCR nella diagnosi non deve diluire il confronto dei titoli). */
 function coreText(e: WorkEvent): string {
-  return `${e.title} ${e.diagnosis ?? ''}`;
+  return e.title;
 }
 
 /** True se a e b sono lo stesso fatto raccontato da due documenti diversi. */
@@ -122,7 +124,11 @@ export function isSameFactAcrossDocuments(a: WorkEvent, b: WorkEvent): boolean {
   if ((a.datePrecision ?? 'giorno') !== (b.datePrecision ?? 'giorno')) return false;
   const fa = clinicalFamily(a.eventType);
   const fb = clinicalFamily(b.eventType);
-  if (!fa || !fb || fa !== fb) return false;
+  if (!fa || !fb) return false;
+  // Famiglie diverse solo quando una MENZIONE generica (altro/complicanza/diagnosi:
+  // «Incidente stradale con trauma distorsivo…» nel certificato) cita il fatto
+  // documentato da una fonte primaria: la menzione rientra nella fonte.
+  if (fa !== fb && !mentionCanJoinPrimary(a, b) && !mentionCanJoinPrimary(b, a)) return false;
   if (hasConflictingTimeMarker(a, b)) return false;
   if (haveOppositeSides(sideText(a), sideText(b))) return false;
   // Diagnosi discordanti = mai fondere; ma «Trauma distorsico tibio-tarsico destro»
@@ -133,10 +139,21 @@ export function isSameFactAcrossDocuments(a: WorkEvent, b: WorkEvent): boolean {
     !isDiagnosisSubset(a.diagnosis, b.diagnosis) && !isDiagnosisSubset(b.diagnosis, a.diagnosis) &&
     !clinicalCoreMatch(a.diagnosis, b.diagnosis)
   ) return false;
-  const da = normalizedDoctor(a.doctor);
-  const db = normalizedDoctor(b.doctor);
-  if (da && db && da !== db) return false;
+  // Medici diversi bloccano solo fra due fonti PRIMARIE: il «medico» di una
+  // menzione è di regola l'autore del documento che cita (il curante che scrive
+  // il certificato), non chi ha fatto l'atto.
+  if (!isMention(a) && !isMention(b)) {
+    const da = normalizedDoctor(a.doctor);
+    const db = normalizedDoctor(b.doctor);
+    if (da && db && da !== db) return false;
+  }
   return clinicalCoreMatch(coreText(a), coreText(b));
+}
+
+const GENERIC_MENTION_FAMILIES = new Set(['altro', 'complicanza', 'diagnosi']);
+
+function mentionCanJoinPrimary(mention: WorkEvent, primary: WorkEvent): boolean {
+  return isMention(mention) && !isMention(primary) && GENERIC_MENTION_FAMILIES.has(clinicalFamily(mention.eventType) ?? '');
 }
 
 function label(e: WorkEvent): string {

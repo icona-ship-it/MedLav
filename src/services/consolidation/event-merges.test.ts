@@ -235,3 +235,34 @@ describe('foldPrognosisIntoCertificate — la prognosi sta nel certificato, non 
     expect(dup[0].description).toBe('Prognosi giorni s.c. 40 giorni (quaranta).');
   });
 });
+
+describe('mergeCrossDocumentDuplicates — menzioni (misura locale 2026-09-21)', () => {
+  it('il «medico» di una menzione è l’autore del certificato: non blocca la fusione con la fonte primaria', () => {
+    const out = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'ps', rowId: 'p', title: 'Accesso in Pronto Soccorso per trauma contusivo-distorsivo caviglia destra post incidente stradale', doctor: 'Dott.ssa Maria Esempi', diagnosis: 'Trauma distorsivo tibio-tarsica destra' }),
+      ev({ documentId: 'cert', rowId: 'c', temporalScope: 'retrospettivo', title: 'Valutazione in Pronto Soccorso per trauma distorsivo tibio-tarsico destro', doctor: 'Dott. Nicolò Demprova', diagnosis: 'Trauma distorsico tibio-tarsico destro', documentLabel: 'Certificato Medico' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].rowId).toBe('p');
+    expect(out[0].doctor).toBe('Dott.ssa Maria Esempi');
+  });
+  it('una menzione generica («altro»: incidente stradale con trauma…) rientra nell’accesso in PS dello stesso giorno; due primarie di famiglia diversa no', () => {
+    const out = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'ps', rowId: 'p', title: 'Accesso in Pronto Soccorso per trauma contusivo-distorsivo caviglia destra post incidente stradale' }),
+      ev({ documentId: 'cert', rowId: 'c', eventType: 'altro', temporalScope: 'retrospettivo', title: 'Incidente stradale con trauma distorsivo tibio-tarsico destro' }),
+    ]);
+    expect(out.map((e) => e.rowId)).toEqual(['p']);
+    const keep = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'ps', rowId: 'p', title: 'Visita ortopedica caviglia destra' }),
+      ev({ documentId: 'rad', rowId: 'r', eventType: 'esame', title: 'RX caviglia destra' }),
+    ]);
+    expect(keep).toHaveLength(2);
+  });
+  it('due fonti primarie con medici diversi restano separate', () => {
+    const out = mergeCrossDocumentDuplicates([
+      ev({ documentId: 'a', rowId: 'a', title: 'Visita ortopedica caviglia destra', doctor: 'Dott. Rossi Esempi' }),
+      ev({ documentId: 'b', rowId: 'b', title: 'Visita ortopedica caviglia destra', doctor: 'Dott.ssa Bianchi Esempi' }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+});
