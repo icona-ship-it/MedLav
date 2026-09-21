@@ -3,7 +3,7 @@ import { computeRelevanceTier, type RelevanceTier } from '@/lib/event-relevance'
 import { logger } from '@/lib/logger';
 import { temporalScopeRank } from '@/lib/temporal-scope';
 import { haveOppositeSides, mixOppositeSides } from '@/lib/laterality';
-import { mergeCrossDocumentDuplicates } from './event-merges';
+import { collapsePsEpisodes, mergeCrossDocumentDuplicates } from './event-merges';
 
 export { computeRelevanceTier, type RelevanceTier };
 
@@ -190,7 +190,7 @@ export function consolidateEvents(
   // one. Trigger: Schönweger case — "Spondilodesi D11-L3" appeared twice (events
   // 13+14), "Glasgow Coma Scale 15/15" appeared twice (events 23+50), and 8
   // copies of "Esami ematochimici - Tabella N" were extracted from the same doc.
-  const dedupedSameDoc = dedupWithinSameDocument(allEvents);
+  const dedupedSameDoc = collapsePsEpisodes(dedupWithinSameDocument(allEvents));
 
   // Sprint 1 S1.4 (Lavini quality, 2026-05-17): aggregate 3+ similar lab/imaging
   // exams on the same date into a single event. Reduces report verbosity:

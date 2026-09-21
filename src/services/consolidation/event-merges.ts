@@ -211,3 +211,120 @@ export function mergeCrossDocumentDuplicates(events: WorkEvent[]): WorkEvent[] {
   }
   return events.filter((_, i) => !dropped.has(i));
 }
+
+// ---------------------------------------------------------------------------
+// Accesso in Pronto Soccorso = UNA voce (collaudo 2026-09-18: il verbale di PS
+// dava 5 schede lo stesso giorno — accesso, triage, visita ortopedica, RX,
+// dimissione). Triage, valutazioni, terapie e dimissione dell'episodio finiscono
+// nella descrizione dell'accesso; gli esami strumentali restano voci proprie.
+// ---------------------------------------------------------------------------
+
+const PS_LEXICON_RE = /(pronto soccorso|\bp\.?\s?s\.?\b|\bdea\b|\bobi\b|osservazione breve)/i;
+const WARD_ADMISSION_RE = /(ricoverat[oa] (in|presso|nel)|ricovero (in|presso|nel|ordinario)|trasferit[oa] (in|presso|nel)|si ricovera|viene ricoverat|regime ordinario|degenza in)/i;
+const ACCESS_TITLE_RE = /(accesso|ricover|accettazion|ingresso|giunge|arriv|triage)/i;
+const EPISODE_MEMBER_TYPES = new Set(['visita', 'ricovero', 'referto', 'diagnosi', 'follow-up', 'terapia', 'prescrizione']);
+
+function timeMinutes(e: WorkEvent): number | null {
+  const m = `${e.title} ${e.description}`.match(/\b(?:ore|alle)\s*(\d{1,2})(?:[:.](\d{2}))?\b/i);
+  if (!m) return null;
+  const h = Number(m[1]);
+  if (h > 23) return null;
+  return h * 60 + Number(m[2] ?? 0);
+}
+
+function mentionsPs(e: WorkEvent): boolean {
+  return PS_LEXICON_RE.test(`${e.title} ${e.facility ?? ''}`);
+}
+
+function isEpisodeMember(e: WorkEvent): boolean {
+  if (e.temporalScope !== 'corrente') return false;
+  if (EPISODE_MEMBER_TYPES.has(e.eventType)) return true;
+  return e.eventType === 'altro' && PS_LEXICON_RE.test(e.title);
+}
+
+function unionPages(a: ReadonlyArray<number> | undefined, b: ReadonlyArray<number> | undefined): number[] {
+  return [...new Set([...(a ?? []), ...(b ?? [])])].sort((x, y) => x - y);
+}
+
+function mergeNotes(a: string | null | undefined, b: string | null | undefined): string | null {
+  const segs = [...(a ?? '').split(' | '), ...(b ?? '').split(' | ')].map((s) => s.trim()).filter(Boolean);
+  const uniq = [...new Set(segs)];
+  return uniq.length > 0 ? uniq.join(' | ') : null;
+}
+
+function collapseGroup(members: WorkEvent[]): WorkEvent {
+  const anchors = members.filter(mentionsPs);
+  const byAccess = anchors.filter((e) => ACCESS_TITLE_RE.test(e.title));
+  const pool = byAccess.length > 0 ? byAccess : anchors;
+  const survivor = [...pool].sort((x, y) => {
+    const tx = timeMinutes(x);
+    const ty = timeMinutes(y);
+    if (tx !== null && ty !== null && tx !== ty) return tx - ty;
+    return (y.confidence ?? 0) - (x.confidence ?? 0);
+  })[0];
+  const others = members.filter((e) => e !== survivor).sort((x, y) => {
+    const tx = timeMinutes(x);
+    const ty = timeMinutes(y);
+    if (tx !== null && ty !== null) return tx - ty;
+    if (tx !== null) return -1;
+    if (ty !== null) return 1;
+    return 0;
+  });
+  const merged: WorkEvent = { ...survivor, absorbedRowIds: [...(survivor.absorbedRowIds ?? [])], mutated: true };
+  for (const o of others) {
+    absorb(merged, o);
+    if (o.description.trim() && !merged.description.includes(o.description)) {
+      merged.description = `${merged.description}\n\n${o.title}: ${o.description}`;
+    }
+    merged.sourcePages = unionPages(merged.sourcePages, o.sourcePages);
+    merged.reliabilityNotes = mergeNotes(merged.reliabilityNotes, o.reliabilityNotes);
+    if (o.requiresVerification) merged.requiresVerification = true;
+    if ((o.confidence ?? 0) > (merged.confidence ?? 0)) merged.confidence = o.confidence;
+    if (!merged.doctor && o.doctor) merged.doctor = o.doctor;
+    if (!merged.facility && o.facility) merged.facility = o.facility;
+  }
+  // La diagnosi: quella di dimissione se c'è, altrimenti la prima disponibile.
+  const discharge = others.find((o) => /dimission/i.test(o.title) && o.diagnosis);
+  merged.diagnosis = discharge?.diagnosis ?? survivor.diagnosis ?? others.find((o) => o.diagnosis)?.diagnosis ?? null;
+  const fullText = `${merged.title} ${merged.description}`;
+  merged.eventType = WARD_ADMISSION_RE.test(fullText) ? 'ricovero' : 'visita';
+  if (!/accesso in pronto soccorso/i.test(merged.title)) {
+    merged.title = merged.diagnosis
+      ? `Accesso in Pronto Soccorso: ${merged.diagnosis}`
+      : `Accesso in Pronto Soccorso — ${survivor.title.replace(/^(accesso|ricovero|visita|valutazione)\s+(in\s+|al\s+|presso\s+(il\s+)?)?(pronto soccorso|p\.?s\.?)\s*(per\s+)?/i, '')}`;
+  }
+  return merged;
+}
+
+/**
+ * Nello stesso documento e nello stesso giorno, gli eventi «correnti» di un
+ * accesso in PS (accesso/ricovero PS, triage, visite e consulenze, diagnosi,
+ * terapie, dimissione) collassano in UNA voce. Tipo: 'ricovero' solo se il
+ * testo attesta il ricovero in reparto, altrimenti 'visita' (un passaggio in PS
+ * non è una degenza). Serve un evento-àncora con «Pronto Soccorso»/PS nel
+ * titolo o nella struttura. Gli esami restano fuori.
+ */
+export function collapsePsEpisodes(events: WorkEvent[]): WorkEvent[] {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (!e.eventDate || e.eventDate === SENTINEL_DATE || (e.datePrecision ?? 'giorno') !== 'giorno') continue;
+    if (!isEpisodeMember(e)) continue;
+    const key = `${e.documentId}|${e.eventDate}`;
+    const g = groups.get(key);
+    if (g) g.push(i);
+    else groups.set(key, [i]);
+  }
+  const dropped = new Set<number>();
+  const replacement = new Map<number, WorkEvent>();
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+    const members = indices.map((i) => events[i]);
+    if (!members.some(mentionsPs)) continue;
+    const merged = collapseGroup(members);
+    replacement.set(indices[0], merged);
+    for (const i of indices.slice(1)) dropped.add(i);
+  }
+  if (replacement.size === 0) return events;
+  return events.map((e, i) => replacement.get(i) ?? e).filter((_, i) => !dropped.has(i));
+}

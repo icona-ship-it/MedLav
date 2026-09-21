@@ -130,3 +130,59 @@ describe('mergeCrossDocumentDuplicates — giro avversariale', () => {
     expect(out).toHaveLength(2);
   });
 });
+
+import { collapsePsEpisodes } from './event-merges';
+
+describe('collapsePsEpisodes — un accesso in Pronto Soccorso = una voce (collaudo 2026-09-18)', () => {
+  const ps = (o: Partial<WorkEvent> & { rowId: string }) => ev({ documentId: 'verbale', ...o });
+  it('accesso + triage + visita ortopedica + dimissione → una «visita» che contiene tutto; la RX resta voce propria', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'ricovero', title: 'Accesso PS per incidente stradale – trauma distorsivo caviglia destra', description: 'Giunge in Pronto Soccorso il 18/04/2026 alle ore 17:56 per incidente stradale.', confidence: 50, doctor: 'Dott.ssa Maria Esempi', requiresVerification: true }),
+      ps({ rowId: 'tri', eventType: 'visita', title: 'Triage e gestione iniziale in PS', description: 'Ore 18:05: paziente vigile. Applicato ghiaccio.' }),
+      ps({ rowId: 'rx', eventType: 'esame', title: 'RX caviglia destra in PS', description: 'Ore 19:20: eseguita RX, non lesioni ossee.' }),
+      ps({ rowId: 'ort', eventType: 'referto', title: 'Valutazione ortopedica per trauma distorsivo caviglia destra', description: 'ROM conservato, si lascia libero.', diagnosis: 'Trauma distorsivo tibio-tarsica destra' }),
+      ps({ rowId: 'dim', eventType: 'referto', title: 'Dimissione da PS con diagnosi di trauma distorsivo tibio-tarsica destra', description: 'Dimissione a domicilio alle ore 20:57.', diagnosis: 'Trauma distorsivo tibio-tarsica destra', confidence: 90 }),
+    ]);
+    expect(out.map((e) => e.rowId)).toEqual(['acc', 'rx']);
+    const acc = out[0];
+    expect(acc.eventType).toBe('visita');
+    expect(acc.title).toBe('Accesso in Pronto Soccorso: Trauma distorsivo tibio-tarsica destra');
+    expect(acc.absorbedRowIds?.sort()).toEqual(['dim', 'ort', 'tri']);
+    expect(acc.description).toContain('alle ore 17:56');
+    expect(acc.description).toContain('Triage e gestione iniziale in PS: Ore 18:05');
+    expect(acc.description).toContain('ROM conservato');
+    expect(acc.description).toContain('Dimissione a domicilio alle ore 20:57');
+    expect(acc.description.indexOf('18:05')).toBeLessThan(acc.description.indexOf('20:57'));
+    expect(acc.requiresVerification).toBe(true);
+    expect(acc.confidence).toBe(90);
+    expect(acc.doctor).toBe('Dott.ssa Maria Esempi');
+    expect(acc.mutated).toBe(true);
+  });
+  it('se il testo attesta il ricovero in reparto, la voce resta «ricovero»', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'ricovero', title: 'Accesso in PS per trauma cranico', description: 'Ore 22:10 giunge in PS.' }),
+      ps({ rowId: 'dim', eventType: 'referto', title: 'Esito PS', description: 'Viene ricoverato in reparto di Neurochirurgia per osservazione.' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].eventType).toBe('ricovero');
+  });
+  it('MAI collassare: giorni diversi, cartella di reparto senza PS, menzioni anamnestiche, documenti diversi', () => {
+    const untouched = [
+      ps({ rowId: 'a', eventType: 'ricovero', title: 'Accesso PS per trauma', eventDate: '2026-04-18' }),
+      ps({ rowId: 'b', eventType: 'referto', title: 'Dimissione dal PS', eventDate: '2026-04-19' }),
+      ev({ documentId: 'cartella', rowId: 'c', eventType: 'ricovero', title: 'Ricovero in Ortopedia', eventDate: '2026-05-10' }),
+      ev({ documentId: 'cartella', rowId: 'd', eventType: 'visita', title: 'Visita anestesiologica preoperatoria', eventDate: '2026-05-10' }),
+      ev({ documentId: 'cert', rowId: 'e', eventType: 'ricovero', title: 'Valutazione presso PS', temporalScope: 'retrospettivo' }),
+      ev({ documentId: 'cert', rowId: 'f', eventType: 'diagnosi', title: 'Trauma distorsivo (riferito)', temporalScope: 'retrospettivo' }),
+      ev({ documentId: 'altro-doc', rowId: 'g', eventType: 'visita', title: 'Consulenza ortopedica in PS' }),
+    ];
+    expect(collapsePsEpisodes(untouched).map((e) => e.rowId)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+  });
+  it('senza diagnosi il titolo resta descrittivo e non perde il distretto', () => {
+    const out = collapsePsEpisodes([
+      ps({ rowId: 'acc', eventType: 'ricovero', title: 'Ricovero PS per trauma ginocchio destro post caduta', description: 'Ore 9:00 giunge.' }),
+      ps({ rowId: 'tri', eventType: 'visita', title: 'Triage', description: 'Codice verde.' }),
+    ]);
+    expect(out[0].title).toBe('Accesso in Pronto Soccorso — trauma ginocchio destro post caduta');
+  });
+});
