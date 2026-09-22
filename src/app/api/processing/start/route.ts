@@ -7,6 +7,7 @@ import { validateCsrfToken } from '@/lib/csrf';
 import { validateCaseForProcessing } from '@/lib/pipeline-limits';
 import { getBalance, deductCredits, refundCredits } from '@/services/credits/credit-service';
 import { getElaborationCost } from '@/services/credits/credit-costs';
+import { cleanupCaseDataForReprocess } from '@/services/processing/reprocess-cleanup';
 import { processingPausedResponse } from '@/lib/processing-guard';
 import { logger } from '@/lib/logger';
 import { resolveDocSanitariaModeForStart } from '@/lib/doc-sanitaria-mode';
@@ -252,23 +253,18 @@ export async function POST(request: NextRequest) {
       // Wait for Inngest to propagate cancellation before cleanup
       // Without this, in-flight steps can write data AFTER cleanup deletes it
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      const cleanupResults = await Promise.allSettled([
-        supabase.from('events').delete().eq('case_id', caseId),
-        supabase.from('anomalies').delete().eq('case_id', caseId),
-        supabase.from('missing_documents').delete().eq('case_id', caseId),
-        supabase.from('reports').delete().eq('case_id', caseId),
-        supabase.from('event_images').delete().eq('case_id', caseId),
-      ]);
-      const cleanupFailures = cleanupResults.filter((r) =>
-        r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error),
-      );
-      if (cleanupFailures.length > 0) {
-        logger.error('processing/start', `Re-processing cleanup: ${cleanupFailures.length}/5 deletes failed`);
+      // event_images non ha case_id: cancellazione per event_id, in ordine, con
+      // errori raccolti (fix 2026-09-22: la delete per case_id falliva SEMPRE e il
+      // caso restava svuotato e bloccato in «elaborazione»).
+      const cleanup = await cleanupCaseDataForReprocess(supabase, caseId);
+      if (cleanup.failures.length > 0) {
+        logger.error('processing/start', `Re-processing cleanup failed: ${cleanup.failures.join(' | ')}`);
 
-        // Refund credits since we can't proceed
+        // Refund credits and release the lock since we can't proceed
         await refundCredits(user.id, creditCost, 'elaborazione', caseId, {
           reason: 'cleanup_failed_during_reprocessing',
         });
+        await releaseProcessingLock(supabase, caseId, caseData.processing_stage as string);
 
         return NextResponse.json(
           { success: false, error: 'Errore durante la pulizia dei dati precedenti. Riprova.' },
