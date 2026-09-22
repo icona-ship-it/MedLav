@@ -5,7 +5,7 @@ test.describe('Authentication', () => {
     await page.goto('/');
     // Should redirect to landing
     await expect(page).toHaveURL(/landing/);
-    await expect(page.locator('text=MedLav')).toBeVisible();
+    await expect(page.locator('text=LegMed')).toBeVisible();
   });
 
   test('should show login page with email and password fields', async ({ page }) => {
